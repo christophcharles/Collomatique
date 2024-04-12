@@ -81,6 +81,37 @@ pub struct ConfigRepr<'a, 'b: 'a> {
     values: Array1<i32>,
 }
 
+impl<'a, 'b: 'a> Ord for ConfigRepr<'a, 'b> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let p1: *const MatRepr<'a> = &*self.mat_repr;
+        let p2: *const MatRepr<'a> = &*other.mat_repr;
+
+        let mat_repr_ord = p1.cmp(&p2);
+        if mat_repr_ord != std::cmp::Ordering::Equal {
+            return mat_repr_ord;
+        }
+
+        let l1 = self.values.len();
+        let l2 = other.values.len();
+
+        assert_eq!(l1, l2);
+
+        for i in 0..l1 {
+            let ord = self.values[i].cmp(&other.values[i]);
+            if ord != std::cmp::Ordering::Equal {
+                return ord;
+            }
+        }
+        return std::cmp::Ordering::Equal;
+    }
+}
+
+impl<'a, 'b: 'a> PartialOrd for ConfigRepr<'a, 'b> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl<'a, 'b: 'a> From<ConfigRepr<'a, 'b>> for Config {
     fn from(value: ConfigRepr<'a, 'b>) -> Self {
         let mut config = Config::new();
