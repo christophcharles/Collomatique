@@ -30,15 +30,16 @@ impl<'a> FeasabilitySolver for Solver<'a> {
 
         use std::collections::VecDeque;
 
-        let mut explored_configs: BTreeSet<ConfigRepr<'_, '_>> = exclude_list
+        let exclude_configs: BTreeSet<ConfigRepr<'_, '_>> = exclude_list
             .iter()
             .map(|x| self.mat_repr.config(&Config::from(*x)))
             .collect();
+        let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();
         config_queue.push_back(config_repr);
 
         while let Some(candidate) = config_queue.pop_front() {
-            if candidate.is_feasable() && !explored_configs.contains(&candidate) {
+            if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
                 return Some(
                     self.problem
                         .into_feasable(&candidate.into())
