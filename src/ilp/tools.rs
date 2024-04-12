@@ -5,7 +5,7 @@ use super::*;
 
 use ndarray::{Array, Array1, Array2, ArrayView};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct MatRepr<'a> {
     problem: &'a Problem,
     leq_mat: Array2<i32>,
@@ -75,11 +75,19 @@ impl<'a> MatRepr<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ConfigRepr<'a, 'b: 'a> {
     mat_repr: &'b MatRepr<'a>,
     values: Array1<i32>,
 }
+
+impl<'a, 'b: 'a> PartialEq for ConfigRepr<'a, 'b> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+
+impl<'a, 'b: 'a> Eq for ConfigRepr<'a, 'b> {}
 
 impl<'a, 'b: 'a> Ord for ConfigRepr<'a, 'b> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
