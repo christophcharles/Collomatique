@@ -52,13 +52,15 @@ impl<'a> Optimizer<'a> {
     }
 }
 
+use std::rc::Rc;
+
 #[derive(Debug)]
 pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> {
     optimizer: &'b Optimizer<'a>,
     solver: S,
     random_gen: &'c mut R,
 
-    previous_config: Option<(FeasableConfig<'a>, f64)>,
+    previous_config: Option<(Rc<FeasableConfig<'a>>, f64)>,
     current_config: Config,
 
     k: usize,
@@ -68,22 +70,23 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
     for OptimizerIterator<'b, 'a, 'c, R, S>
 {
-    type Item = (FeasableConfig<'a>, f64);
+    type Item = (Rc<FeasableConfig<'a>>, f64);
 
     fn next(&mut self) -> Option<Self::Item> {
         use std::collections::BTreeSet;
         let exclude_list = match &self.previous_config {
-            Some((c, _)) => BTreeSet::from([c]),
+            Some((c, _)) => BTreeSet::from([c.as_ref()]),
             None => BTreeSet::new(),
         };
 
         // If we can't restore then the iterator stops
         // So "None" should be propagated upwards
-        let config = self
-            .solver
-            .restore_feasability_exclude(&self.current_config, &exclude_list)?;
+        let config = Rc::new(
+            self.solver
+                .restore_feasability_exclude(&self.current_config, &exclude_list)?,
+        );
 
-        let config_cost = (self.optimizer.problem.eval_fn)(&config);
+        let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
 
         let acceptance = match self.previous_config {
             Some((_, old_cost)) => {
@@ -96,17 +99,18 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
         self.current_config = self
             .optimizer
             .problem
-            .random_neighbour(&Config::from(&config), self.random_gen);
+            .random_neighbour(&Config::from(config.as_ref()), self.random_gen);
         self.k += 1;
         if acceptance >= self.random_gen.random() {
             self.previous_config = Some((config, config_cost));
         }
+
         self.previous_config.clone()
     }
 }
 
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> OptimizerIterator<'b, 'a, 'c, R, S> {
-    pub fn best_in(self, max_iter: usize) -> Option<(FeasableConfig<'a>, f64)> {
+    pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a>>, f64)> {
         self.take(max_iter)
             .min_by(|x, y| x.1.partial_cmp(&y.1).expect("Non NaN"))
     }
