@@ -208,3 +208,32 @@ fn invalid_subject_number() {
         Err(Error::InvalidSubjectNumber)
     );
 }
+
+#[test]
+fn invalid_incompatibility_number() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+    };
+
+    let subjects = SubjectList::new();
+    let incompatibilities = vec![Incompatibility {
+        slots: vec![Slot {
+            duration: NonZeroU32::new(60).unwrap(),
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(23, 0).unwrap(),
+            },
+        }],
+    }];
+    let students = vec![Student {
+        subjects: BTreeSet::new(),
+        incompatibilities: BTreeSet::from([1]),
+    }];
+
+    assert_eq!(
+        ValidatedData::new(general, subjects, incompatibilities, students),
+        Err(Error::InvalidIncompatibilityNumber)
+    );
+}
