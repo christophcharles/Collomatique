@@ -141,3 +141,81 @@ fn test_neighbours() {
 
     assert_eq!(neighbours, neighbours_expected);
 }
+
+#[test]
+fn test_cfg_repr_ord() {
+    use crate::ilp::linexpr::Expr;
+
+    let a = Expr::var("a");
+    let b = Expr::var("b");
+    let c = Expr::var("c");
+
+    let pb = crate::ilp::ProblemBuilder::new()
+        .add((&a + &b).leq(&Expr::constant(1)))
+        .add((&c + &b).leq(&Expr::constant(1)))
+        .build();
+
+    let mat_repr = MatRepr::new(&pb);
+
+    let config_0 = Config::from_iter::<[&str; 0]>([]);
+    let config_1 = Config::from_iter(["a"]);
+    let config_2 = Config::from_iter(["b"]);
+    let config_3 = Config::from_iter(["a", "b"]);
+    let config_4 = Config::from_iter(["c"]);
+    let config_5 = Config::from_iter(["a", "c"]);
+    let config_6 = Config::from_iter(["b", "c"]);
+    let config_7 = Config::from_iter(["a", "b", "c"]);
+
+    let cfg_repr_0 = mat_repr.config(&config_0);
+    let cfg_repr_1 = mat_repr.config(&config_1);
+    let cfg_repr_2 = mat_repr.config(&config_2);
+    let cfg_repr_3 = mat_repr.config(&config_3);
+    let cfg_repr_4 = mat_repr.config(&config_4);
+    let cfg_repr_5 = mat_repr.config(&config_5);
+    let cfg_repr_6 = mat_repr.config(&config_6);
+    let cfg_repr_7 = mat_repr.config(&config_7);
+
+    assert_eq!(cfg_repr_0.cmp(&cfg_repr_0), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_0 < cfg_repr_1);
+    assert!(cfg_repr_0 < cfg_repr_2);
+    assert!(cfg_repr_0 < cfg_repr_3);
+    assert!(cfg_repr_0 < cfg_repr_4);
+    assert!(cfg_repr_0 < cfg_repr_5);
+    assert!(cfg_repr_0 < cfg_repr_6);
+    assert!(cfg_repr_0 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_1.cmp(&cfg_repr_1), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_1 > cfg_repr_2);
+    assert!(cfg_repr_1 < cfg_repr_3);
+    assert!(cfg_repr_1 > cfg_repr_4);
+    assert!(cfg_repr_1 < cfg_repr_5);
+    assert!(cfg_repr_1 > cfg_repr_6);
+    assert!(cfg_repr_1 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_2.cmp(&cfg_repr_2), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_2 < cfg_repr_3);
+    assert!(cfg_repr_2 > cfg_repr_4);
+    assert!(cfg_repr_2 < cfg_repr_5);
+    assert!(cfg_repr_2 < cfg_repr_6);
+    assert!(cfg_repr_2 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_3.cmp(&cfg_repr_3), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_3 > cfg_repr_4);
+    assert!(cfg_repr_3 > cfg_repr_5);
+    assert!(cfg_repr_3 > cfg_repr_6);
+    assert!(cfg_repr_3 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_4.cmp(&cfg_repr_4), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_4 < cfg_repr_5);
+    assert!(cfg_repr_4 < cfg_repr_6);
+    assert!(cfg_repr_4 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_5.cmp(&cfg_repr_5), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_5 > cfg_repr_6);
+    assert!(cfg_repr_5 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_6.cmp(&cfg_repr_6), std::cmp::Ordering::Equal);
+    assert!(cfg_repr_6 < cfg_repr_7);
+
+    assert_eq!(cfg_repr_7.cmp(&cfg_repr_7), std::cmp::Ordering::Equal);
+}
