@@ -30,6 +30,9 @@ fn test_sa() {
     // We represent this with 8 boolean variables.
     // The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
     // The same pattern is used for yij.
+    //
+    // We add a cost function: putting y on the first course of the second week costs "1.0".
+    // So, the prefered solution should be : ["x12", "y11", "y22", "x21"]
 
     let x11 = Expr::var("x11");
     let x12 = Expr::var("x12");
