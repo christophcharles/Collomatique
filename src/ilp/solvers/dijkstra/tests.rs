@@ -1,8 +1,8 @@
-use collomatique::eval_fn;
-use collomatique::ilp::linexpr::Expr;
-use collomatique::ilp::{Config, ProblemBuilder};
+#[test]
+fn test_dijkstra() {
+    use crate::ilp::linexpr::Expr;
+    use crate::ilp::{Config, ProblemBuilder};
 
-fn main() {
     // We test on a simple scheduling problem.
     //
     // We have two student groups x and y.
@@ -59,19 +59,17 @@ fn main() {
         .add((&x21 + &x22).eq(&one))
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
-        // eval func
-        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1.0 } else { 0.0 }))
         .build();
+    let config = Config::from_iter(["x11", "y12", "y21"]);
 
-    let dijkstra_solver = collomatique::ilp::solvers::dijkstra::Solver::new(&pb);
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb, dijkstra_solver);
+    let dijkstra_solver = super::Solver::new(&pb);
 
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    use crate::ilp::solvers::FeasabilitySolver;
 
-    sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
-    sa_optimizer.set_max_iter(10);
+    let solution = dijkstra_solver.restore_feasability(&config);
 
-    let solution = sa_optimizer.optimize(&mut random_gen);
-
-    println!("{:?}", Config::from(solution.unwrap()));
+    assert_eq!(
+        Config::from(solution.expect("Solution found")),
+        Config::from_iter(["x11", "y12", "y21", "x22"])
+    );
 }
