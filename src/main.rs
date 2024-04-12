@@ -1,4 +1,3 @@
-use collomatique::eval_fn;
 use collomatique::ilp::linexpr::Expr;
 use collomatique::ilp::{Config, ProblemBuilder};
 
@@ -60,7 +59,11 @@ fn main() {
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
         // eval func
-        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1000.0 } else { 0.0 }))
+        .eval_fn(collomatique::debuggable!(|x| if x.get("y12") {
+            1000.0
+        } else {
+            0.0
+        }))
         .build();
 
     let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb);
