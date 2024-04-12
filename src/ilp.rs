@@ -34,6 +34,12 @@ macro_rules! eval_fn {
     };
 }
 
+impl Default for EvalFn {
+    fn default() -> Self {
+        eval_fn!(|_x| 0.)
+    }
+}
+
 impl std::fmt::Debug for EvalFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.debug_payload)
@@ -50,7 +56,7 @@ impl std::ops::Deref for EvalFn {
 #[derive(Debug, Default, Clone)]
 pub struct ProblemBuilder {
     constraints: Vec<linexpr::Constraint>,
-    eval_fn: Option<EvalFn>,
+    eval_fn: EvalFn,
 }
 
 impl ProblemBuilder {
@@ -64,7 +70,7 @@ impl ProblemBuilder {
     }
 
     pub fn eval_fn(mut self, func: EvalFn) -> Self {
-        self.eval_fn = Some(func);
+        self.eval_fn = func;
         self
     }
 
@@ -93,7 +99,7 @@ use std::collections::BTreeSet;
 pub struct Problem {
     variables: BTreeSet<String>,
     constraints: Vec<linexpr::Constraint>,
-    eval_fn: Option<EvalFn>,
+    eval_fn: EvalFn,
 }
 
 impl std::fmt::Display for Problem {
