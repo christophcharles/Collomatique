@@ -66,11 +66,20 @@ fn test_sa() {
     let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
     let mut sa_optimizer = super::Optimizer::new(&pb, dijkstra_solver);
 
-    let mut random_gen = crate::ilp::random::DefaultRndGen::new();
-
-    sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
+    let config = Config::from_iter(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
+    sa_optimizer.set_init_config(config);
     sa_optimizer.set_max_iter(1); // There are only two solutions so only one iteration should even be enough to find the optimal one
 
+    let mut random_gen = crate::ilp::random::DefaultRndGen::new();
+    let solution = sa_optimizer.optimize(&mut random_gen);
+
+    assert_eq!(
+        Config::from(solution.expect("Solution found")),
+        Config::from_iter(["x12", "y11", "y22", "x21"])
+    );
+
+    let config = Config::from_iter(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
+    sa_optimizer.set_init_config(config);
     let solution = sa_optimizer.optimize(&mut random_gen);
 
     assert_eq!(
