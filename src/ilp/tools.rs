@@ -93,3 +93,22 @@ impl<'a,'b: 'a> From<ConfigRepr<'a,'b>> for Config {
         config
     }
 }
+
+impl<'a, 'b: 'a> ConfigRepr<'a,'b> {
+    pub fn is_feasable(&self) -> bool {
+        let leq_column = self.mat_repr.leq_mat.dot(&self.values) + &self.mat_repr.leq_constants;
+        let eq_column = self.mat_repr.eq_mat.dot(&self.values) + &self.mat_repr.eq_constants;
+
+        for v in &leq_column {
+            if *v > 0 {
+                return false;
+            }
+        }
+        for v in &eq_column {
+            if *v == 0 {
+                return false;
+            }
+        }
+        true
+    }
+}
