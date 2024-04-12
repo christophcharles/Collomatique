@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 ndarray = { version = "0.15.6" }
 rand = "0.8"
+thiserror = "1.0.58"
 
 [features]
