@@ -204,6 +204,14 @@ impl ValidatedData {
             }
         }
 
+        for (i, grouping_incompat) in grouping_incompats.iter().enumerate() {
+            for &grouping in &grouping_incompat.groupings {
+                if grouping >= slot_groupings.len() {
+                    return Err(Error::GroupingIncompatWithInvalidSlotGrouping(i, grouping));
+                }
+            }
+        }
+
         Ok(ValidatedData {
             general,
             subjects,
