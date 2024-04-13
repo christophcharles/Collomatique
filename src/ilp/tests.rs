@@ -7,19 +7,32 @@ fn test_config_from_iterator() {
         .build()
         .unwrap();
 
-    let config = pb.config_from(["x", "y", "z"]);
+    let config = pb.config_from(["x", "y", "z"]).unwrap();
 
-    let expected_config = Config {
-        problem: &pb,
-        variables: BTreeMap::from([
-            ("x".into(), true),
-            ("y".into(), true),
-            ("z".into(), true),
-            ("t".into(), false),
-        ]),
-    };
+    assert_eq!(config.get("x"), Ok(true));
+    assert_eq!(config.get("y"), Ok(true));
+    assert_eq!(config.get("z"), Ok(true));
+    assert_eq!(config.get("t"), Ok(false));
 
-    assert_eq!(config, expected_config);
+    assert_eq!(
+        config.get("w"),
+        Err(Error::InvalidVariable(String::from("w")))
+    );
+}
+
+#[test]
+fn invalid_variable_in_config() {
+    let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["x", "y", "z", "t"])
+        .build()
+        .unwrap();
+
+    let config = pb.config_from(["x", "y", "w"]);
+
+    assert_eq!(
+        config.err(),
+        Some(Error::InvalidVariable(String::from("w")))
+    );
 }
 
 #[test]
@@ -43,21 +56,21 @@ fn test_is_feasable() {
         .unwrap();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]);
-    let config_2 = pb.config_from(["b"]);
-    let config_3 = pb.config_from(["a", "b"]);
-    let config_4 = pb.config_from(["c"]);
-    let config_5 = pb.config_from(["a", "c"]);
-    let config_6 = pb.config_from(["b", "c"]);
-    let config_7 = pb.config_from(["a", "b", "c"]);
-    let config_8 = pb.config_from(["d"]);
-    let config_9 = pb.config_from(["a", "d"]);
-    let config_a = pb.config_from(["b", "d"]);
-    let config_b = pb.config_from(["a", "b", "d"]);
-    let config_c = pb.config_from(["c", "d"]);
-    let config_d = pb.config_from(["a", "c", "d"]);
-    let config_e = pb.config_from(["b", "c", "d"]);
-    let config_f = pb.config_from(["a", "b", "c", "d"]);
+    let config_1 = pb.config_from(["a"]).unwrap();
+    let config_2 = pb.config_from(["b"]).unwrap();
+    let config_3 = pb.config_from(["a", "b"]).unwrap();
+    let config_4 = pb.config_from(["c"]).unwrap();
+    let config_5 = pb.config_from(["a", "c"]).unwrap();
+    let config_6 = pb.config_from(["b", "c"]).unwrap();
+    let config_7 = pb.config_from(["a", "b", "c"]).unwrap();
+    let config_8 = pb.config_from(["d"]).unwrap();
+    let config_9 = pb.config_from(["a", "d"]).unwrap();
+    let config_a = pb.config_from(["b", "d"]).unwrap();
+    let config_b = pb.config_from(["a", "b", "d"]).unwrap();
+    let config_c = pb.config_from(["c", "d"]).unwrap();
+    let config_d = pb.config_from(["a", "c", "d"]).unwrap();
+    let config_e = pb.config_from(["b", "c", "d"]).unwrap();
+    let config_f = pb.config_from(["a", "b", "c", "d"]).unwrap();
 
     assert_eq!(config_0.is_feasable(), false);
     assert_eq!(config_1.is_feasable(), true);
@@ -85,9 +98,9 @@ fn test_is_feasable_no_constraint() {
         .unwrap();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]);
-    let config_2 = pb.config_from(["b"]);
-    let config_3 = pb.config_from(["a", "b"]);
+    let config_1 = pb.config_from(["a"]).unwrap();
+    let config_2 = pb.config_from(["b"]).unwrap();
+    let config_3 = pb.config_from(["a", "b"]).unwrap();
 
     assert_eq!(config_0.is_feasable(), true);
     assert_eq!(config_1.is_feasable(), true);

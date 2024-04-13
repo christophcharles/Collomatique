@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::ndtools::{ConfigRepr, FeasableConfigRepr};
+use crate::ilp::{Config, FeasableConfig};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Default)]
@@ -12,14 +12,14 @@ impl Solver {
         Solver {}
     }
 
-    fn distance_heuristic(&self, _config: &ConfigRepr) -> f32 {
+    fn distance_heuristic(&self, _config: &Config) -> f32 {
         0.
     }
 
     fn min_f_score<'a>(
-        open_nodes: &mut BTreeSet<ConfigRepr<'a>>,
-        f_scores: &BTreeMap<ConfigRepr<'a>, f32>,
-    ) -> Option<ConfigRepr<'a>> {
+        open_nodes: &mut BTreeSet<Config<'a>>,
+        f_scores: &BTreeMap<Config<'a>, f32>,
+    ) -> Option<Config<'a>> {
         use ordered_float::OrderedFloat;
         let min_config = open_nodes
             .iter()
@@ -41,13 +41,13 @@ use super::FeasabilitySolver;
 impl FeasabilitySolver for Solver {
     fn restore_feasability_exclude<'a>(
         &self,
-        config: &ConfigRepr<'a>,
-        exclude_list: &BTreeSet<&FeasableConfigRepr<'a>>,
-    ) -> Option<FeasableConfigRepr<'a>> {
+        config: &Config<'a>,
+        exclude_list: &BTreeSet<&FeasableConfig<'a>>,
+    ) -> Option<FeasableConfig<'a>> {
         let init_g_score = 0.0f32;
         let init_f_score = init_g_score + self.distance_heuristic(config);
 
-        let exclude_configs: BTreeSet<ConfigRepr<'_>> =
+        let exclude_configs: BTreeSet<Config<'_>> =
             exclude_list.iter().map(|x| x.inner().clone()).collect();
 
         let mut g_scores = BTreeMap::from([(config.clone(), init_g_score)]);
