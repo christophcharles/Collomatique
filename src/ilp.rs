@@ -1,9 +1,10 @@
 pub mod dbg;
 pub mod linexpr;
-pub mod ndtools;
 pub mod optimizers;
 pub mod random;
 pub mod solvers;
+
+mod ndtools;
 
 #[cfg(test)]
 mod tests;
@@ -14,6 +15,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("Variable {1} is used in constraint {0} but not explicitly declared")]
     UndeclaredVariable(usize, String),
+    #[error("Variable {0} is not valid for this problem")]
+    InvalidVariable(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -75,11 +78,18 @@ impl ProblemBuilder {
             }
         }
 
-        let variables_vec = self.variables.iter().cloned().collect();
+        let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
+
+        let mut variables_lookup = BTreeMap::new();
+        for (i, var) in variables_vec.iter().enumerate() {
+            variables_lookup.insert(var.clone(), i);
+        }
+
         let mat_repr = ndtools::MatRepr::new(&variables_vec, &self.constraints);
         Ok(Problem {
             variables: self.variables,
             variables_vec,
+            variables_lookup,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
             mat_repr,
@@ -93,6 +103,7 @@ use std::collections::BTreeSet;
 pub struct Problem {
     variables: BTreeSet<String>,
     variables_vec: Vec<String>,
+    variables_lookup: BTreeMap<String, usize>,
     constraints: Vec<linexpr::Constraint>,
     eval_fn: EvalFn,
     mat_repr: ndtools::MatRepr,
@@ -120,33 +131,29 @@ impl std::fmt::Display for Problem {
 impl Problem {
     pub fn default_config<'a>(&'a self) -> Config<'a> {
         Config {
-            variables: self.variables.iter().map(|x| (x.clone(), false)).collect(),
             problem: self,
+            repr: self.mat_repr.default_config_repr(),
         }
     }
 
     pub fn config_from<'a, U: Into<String>, T: IntoIterator<Item = U>>(
         &'a self,
         vars: T,
-    ) -> Config<'a> {
+    ) -> Result<Config<'a>> {
         let mut config = self.default_config();
 
         for v in vars.into_iter() {
-            *config.get_mut(v).expect("Variable declared for config") = true;
+            config.set(v, true)?;
         }
 
-        config
+        Ok(config)
     }
 
     pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config {
-        let mut config = self.default_config();
-        for v in &self.variables {
-            *config
-                .variables
-                .get_mut(v)
-                .expect("Variable declared for config") = random_gen.randbool();
+        Config {
+            problem: self,
+            repr: self.mat_repr.random_config_repr(random_gen),
         }
-        config
     }
 }
 
@@ -154,35 +161,52 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct Config<'a> {
-    variables: BTreeMap<String, bool>,
     problem: &'a Problem,
+    repr: ndtools::ConfigRepr,
 }
 
 impl<'a> Config<'a> {
-    pub fn get_mut<T: Into<String>>(&mut self, var: T) -> Option<&mut bool> {
-        self.variables.get_mut(&var.into())
+    pub fn get<T: Into<String>>(&self, var: T) -> Result<bool> {
+        let name = var.into();
+        let i = match self.problem.variables_lookup.get(&name) {
+            Some(i) => i,
+            None => return Err(Error::InvalidVariable(name)),
+        };
+        Ok(unsafe { self.repr.get_unchecked(*i) == 1 })
     }
 
-    pub fn get<T: Into<String>>(&self, var: T) -> Option<bool> {
-        self.variables.get(&var.into()).copied()
+    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) -> Result<()> {
+        let name = var.into();
+        let i = match self.problem.variables_lookup.get(&name) {
+            Some(i) => i,
+            None => return Err(Error::InvalidVariable(name)),
+        };
+        unsafe {
+            self.repr.set_unchecked(*i, if val { 1 } else { 0 });
+        }
+        Ok(())
     }
 
     pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'a> {
-        let mut output = self.clone();
+        Config {
+            problem: self.problem,
+            repr: self.repr.random_neighbour(random_gen),
+        }
+    }
 
-        let var = random_gen.rand_elem(&self.problem.variables_vec[..]);
-        let v = output
-            .variables
-            .get_mut(&var)
-            .expect("Variable declared for config");
-        *v = !(*v);
-
-        output
+    pub fn neighbours(&self) -> Vec<Config<'a>> {
+        self.repr
+            .neighbours()
+            .into_iter()
+            .map(|x| Config {
+                problem: self.problem,
+                repr: x,
+            })
+            .collect()
     }
 
     pub fn is_feasable(&self) -> bool {
-        let config_repr = self.repr();
-        config_repr.is_feasable()
+        self.repr.is_feasable(&self.problem.mat_repr)
     }
 
     pub fn into_feasable(self) -> Option<FeasableConfig<'a>> {
@@ -196,19 +220,17 @@ impl<'a> Config<'a> {
     pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a> {
         FeasableConfig(self)
     }
-
-    pub fn repr(&self) -> ndtools::ConfigRepr<'a> {
-        self.problem.mat_repr.config(self)
-    }
 }
 
 impl<'a> std::fmt::Display for Config<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[ ")?;
         let slice: Vec<_> = self
-            .variables
+            .problem
+            .variables_vec
             .iter()
-            .map(|(var, val)| format!("{}: {}", var, val))
+            .enumerate()
+            .map(|(i, var)| format!("{}: {}", var, unsafe { self.repr.get_unchecked(i) }))
             .collect();
         write!(f, "{}", slice.join(", "))?;
         write!(f, " ]")?;
@@ -235,7 +257,7 @@ impl<'a> Ord for Config<'a> {
             return mat_repr_ord;
         }
 
-        return self.variables.cmp(&other.variables);
+        return self.repr.cmp(&other.repr);
     }
 }
 
@@ -249,11 +271,11 @@ impl<'a> PartialOrd for Config<'a> {
 pub struct FeasableConfig<'a>(Config<'a>);
 
 impl<'a> FeasableConfig<'a> {
-    pub fn get_mut<T: Into<String>>(&mut self, var: T) -> Option<&mut bool> {
-        self.0.get_mut(var)
+    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) -> Result<()> {
+        self.0.set(var, val)
     }
 
-    pub fn get<T: Into<String>>(&self, var: T) -> Option<bool> {
+    pub fn get<T: Into<String>>(&self, var: T) -> Result<bool> {
         self.0.get(var)
     }
 
