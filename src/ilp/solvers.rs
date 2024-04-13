@@ -5,7 +5,7 @@ use super::{Config, FeasableConfig};
 use std::collections::BTreeSet;
 
 pub trait FeasabilitySolver<'a> {
-    fn restore_feasability_exclude<'b>(
+    fn restore_feasability_exclude(
         &self,
         config: &Config<'a>,
         exclude_list: &BTreeSet<&FeasableConfig>,
