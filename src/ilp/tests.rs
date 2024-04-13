@@ -20,6 +20,10 @@ fn test_is_feasable() {
     let d = Expr::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
+        .add_variable("a")
+        .add_variable("b")
+        .add_variable("c")
+        .add_variable("d")
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
@@ -87,7 +91,7 @@ fn problem_extra_variables() {
     let pb = ProblemBuilder::new()
         .add_variable("X")
         .add_variable("Y")
-        .add_variables([String::from("Z"), String::from("W")])
+        .add_variables(["Z", "W"])
         .build()
         .unwrap();
 
