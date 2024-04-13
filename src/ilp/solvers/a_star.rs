@@ -12,8 +12,8 @@ impl Solver {
         Solver {}
     }
 
-    fn distance_heuristic(&self, _config: &Config) -> f32 {
-        0.
+    fn distance_heuristic(&self, config: &Config) -> f32 {
+        config.max_distance_to_constraint()
     }
 
     fn min_f_score<'a>(

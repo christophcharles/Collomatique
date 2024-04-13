@@ -205,6 +205,10 @@ impl<'a> Config<'a> {
             .collect()
     }
 
+    pub fn max_distance_to_constraint(&self) -> f32 {
+        self.repr.max_distance_to_constraint(&self.problem.mat_repr)
+    }
+
     pub fn is_feasable(&self) -> bool {
         self.repr.is_feasable(&self.problem.mat_repr)
     }
