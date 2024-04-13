@@ -17,13 +17,13 @@ impl Default for TemperatureFn {
 #[derive(Debug, Clone)]
 pub struct Optimizer<'a> {
     problem: &'a Problem,
-    init_config: Config,
+    init_config: Config<'a>,
     temp_profile: TemperatureFn,
 }
 
 impl<'a> Optimizer<'a> {
     pub fn new(problem: &'a Problem) -> Self {
-        let init_config = Config::new();
+        let init_config = problem.default_config();
 
         Optimizer {
             problem,
@@ -32,7 +32,7 @@ impl<'a> Optimizer<'a> {
         }
     }
 
-    pub fn set_init_config(&mut self, init_config: Config) {
+    pub fn set_init_config(&mut self, init_config: Config<'a>) {
         self.init_config = init_config;
     }
 
@@ -66,7 +66,7 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<
     random_gen: &'c mut R,
 
     previous_config: Option<(Rc<FeasableConfig<'a>>, f64)>,
-    current_config: Config,
+    current_config: Config<'a>,
 
     k: usize,
     temp_profile: TemperatureFn,
@@ -101,10 +101,7 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
             None => 1.0,
         };
 
-        self.current_config = self
-            .optimizer
-            .problem
-            .random_neighbour(&Config::from(config.as_ref()), self.random_gen);
+        self.current_config = config.as_ref().inner().random_neighbour(self.random_gen);
         self.k += 1;
         if acceptance >= self.random_gen.random() {
             self.previous_config = Some((config, config_cost));
