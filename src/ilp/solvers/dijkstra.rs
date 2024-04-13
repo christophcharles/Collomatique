@@ -28,10 +28,8 @@ impl<'a> FeasabilitySolver<'a> for Solver<'a> {
 
         use std::collections::VecDeque;
 
-        let exclude_configs: BTreeSet<ConfigRepr<'_>> = exclude_list
-            .iter()
-            .map(|x| self.problem.mat_repr.config(x.inner()))
-            .collect();
+        let exclude_configs: BTreeSet<ConfigRepr<'_>> =
+            exclude_list.iter().map(|x| x.inner().repr()).collect();
         let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();
         config_queue.push_back(config_repr);
