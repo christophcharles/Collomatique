@@ -68,7 +68,8 @@ fn test_sa() {
         } else {
             0.0
         }))
-        .build();
+        .build()
+        .unwrap();
 
     let mut sa_optimizer = super::Optimizer::new(&pb);
 
