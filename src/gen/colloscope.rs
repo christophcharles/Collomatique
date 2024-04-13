@@ -12,14 +12,16 @@ use thiserror::Error;
 pub enum Error {
     #[error("Subject {0} has empty students_per_interrogation: {1:?}")]
     SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroU32>),
-    #[error("Interrogation slot is too long to fit in a day")]
-    SlotOverlapsNextDay,
+    #[error("Subject has an interrogation slot overlapping next day")]
+    SubjectWithSlotOverlappingNextDay,
     #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
     SubjectWithInvalidTeacher(usize, usize, usize),
     #[error("Student {0} references an invalid subject number ({1})")]
     StudentWithInvalidSubject(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
+    #[error("Incompatibility has an interrogation slot overlapping next day")]
+    IncompatibilityWithSlotOverlappingNextDay,
     #[error("Slot groupings {0} and {1} are duplicates of each other")]
     SlotGroupingsDuplicated(usize, usize),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
@@ -155,7 +157,7 @@ impl ValidatedData {
                 }
                 for slot_start in &interrogation.slots {
                     if !Self::validate_slot(&general, slot_start, subject.duration) {
-                        return Err(Error::SlotOverlapsNextDay);
+                        return Err(Error::SubjectWithSlotOverlappingNextDay);
                     }
                 }
             }
@@ -164,7 +166,7 @@ impl ValidatedData {
         for incompatibility in &incompatibilities {
             for slot in &incompatibility.slots {
                 if !Self::validate_slot(&general, &slot.start, slot.duration) {
-                    return Err(Error::SlotOverlapsNextDay);
+                    return Err(Error::IncompatibilityWithSlotOverlappingNextDay);
                 }
             }
         }

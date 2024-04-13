@@ -137,7 +137,7 @@ fn invalid_students_per_interrogation() {
 }
 
 #[test]
-fn slot_overlaps_next_day() {
+fn subject_slot_overlaps_next_day() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
@@ -170,9 +170,12 @@ fn slot_overlaps_next_day() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::SlotOverlapsNextDay)
+        Err(Error::SubjectWithSlotOverlappingNextDay)
     );
+}
 
+#[test]
+fn incompatibility_slot_overlaps_next_day() {
     let general = GeneralData {
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
@@ -200,7 +203,7 @@ fn slot_overlaps_next_day() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::SlotOverlapsNextDay)
+        Err(Error::IncompatibilityWithSlotOverlappingNextDay)
     );
 }
 
