@@ -30,6 +30,8 @@ pub enum Error {
     SlotGroupingWithInvalidInterrogation(usize, SlotRef),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
     SlotGroupingWithInvalidSlot(usize, SlotRef),
+    #[error("The grouping incompatibility {0:?} has an invalid slot grouping reference {1}")]
+    GroupingIncompatWithInvalidSlotGrouping(GroupingIncompat, usize),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
