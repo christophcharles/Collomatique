@@ -279,7 +279,7 @@ fn invalid_subject_number() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::InvalidSubjectNumber)
+        Err(Error::StudentWithInvalidSubject(0, 1))
     );
 }
 
