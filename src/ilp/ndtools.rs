@@ -113,6 +113,41 @@ impl PartialOrd for ConfigRepr {
 }
 
 impl ConfigRepr {
+    pub fn max_distance_to_constraint(&self, mat_repr: &MatRepr) -> f32 {
+        let mut max_dist = 0.0f32;
+        let p = mat_repr.leq_mat.shape()[1];
+
+        let leq_column = mat_repr.leq_mat.dot(&self.values) + &mat_repr.leq_constants;
+
+        for (i, v) in leq_column.iter().copied().enumerate() {
+            let mut norm2 = 0.0f32;
+            for j in 0..p {
+                norm2 += mat_repr.leq_mat[(i, j)] as f32;
+            }
+            let dist = ((v as f32) / norm2.sqrt()).min(0.0f32);
+
+            if dist > max_dist {
+                max_dist = dist;
+            }
+        }
+
+        let eq_column = mat_repr.eq_mat.dot(&self.values) + &mat_repr.eq_constants;
+
+        for (i, v) in eq_column.iter().copied().enumerate() {
+            let mut norm2 = 0.0f32;
+            for j in 0..p {
+                norm2 += mat_repr.eq_mat[(i, j)] as f32;
+            }
+            let dist = ((v as f32) / norm2.sqrt()).abs();
+
+            if dist > max_dist {
+                max_dist = dist;
+            }
+        }
+
+        max_dist
+    }
+
     pub fn is_feasable(&self, mat_repr: &MatRepr) -> bool {
         let leq_column = mat_repr.leq_mat.dot(&self.values) + &mat_repr.leq_constants;
         let eq_column = mat_repr.eq_mat.dot(&self.values) + &mat_repr.eq_constants;
