@@ -58,18 +58,23 @@ impl ProblemBuilder {
     }
 
     pub fn build(mut self) -> Result<Problem, ProblemError> {
-        let mut variables = self.variables;
-
         for c in self.constraints.iter_mut() {
             c.clean();
         }
 
-        for c in self.constraints.iter() {
-            variables.append(&mut c.variables());
+        for (i, c) in self.constraints.iter().enumerate() {
+            let constraint_vars = c.variables();
+            if !self.variables.is_superset(&constraint_vars) {
+                for var in constraint_vars {
+                    if !self.variables.contains(&var) {
+                        return Err(ProblemError::UndeclaredVariable(i, var));
+                    }
+                }
+            }
         }
 
         Ok(Problem {
-            variables,
+            variables: self.variables,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
         })
