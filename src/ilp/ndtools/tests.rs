@@ -16,7 +16,8 @@ fn test_mat_repr() {
             (2 * Expr::var("c") - 3 * Expr::var("d") + 4 * Expr::var("e") + 2)
                 .eq(&(-1 * Expr::var("e") + Expr::var("c"))),
         )
-        .build();
+        .build()
+        .unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
@@ -45,7 +46,8 @@ fn test_is_feasable() {
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
-        .build();
+        .build()
+        .unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
@@ -103,7 +105,7 @@ fn test_is_feasable() {
 
 #[test]
 fn test_is_feasable_no_constraint() {
-    let pb = crate::ilp::ProblemBuilder::new().build();
+    let pb = crate::ilp::ProblemBuilder::new().build().unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
@@ -136,7 +138,8 @@ fn test_nd_feasable_agrees_with_pb_feasable() {
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
-        .build();
+        .build()
+        .unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
@@ -205,7 +208,8 @@ fn test_neighbours() {
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
-        .build();
+        .build()
+        .unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
@@ -244,7 +248,8 @@ fn test_cfg_repr_ord() {
     let pb = crate::ilp::ProblemBuilder::new()
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &b).leq(&Expr::constant(1)))
-        .build();
+        .build()
+        .unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
