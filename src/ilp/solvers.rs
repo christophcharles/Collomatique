@@ -1,3 +1,4 @@
+pub mod astar;
 pub mod dijkstra;
 
 use super::{Config, FeasableConfig};
