@@ -777,3 +777,32 @@ fn count_student_specializations() {
         expected_result
     );
 }
+
+#[test]
+fn invalid_interrogations_per_week() {
+    let general = GeneralData {
+        teacher_count: 0,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: Some(10..8),
+    };
+
+    let subjects = SubjectList::new();
+    let incompatibilities = IncompatibilityList::new();
+    let students = StudentList::new();
+
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = GroupingIncompatList::new();
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::GeneralDataWithInvalidInterrogationsPerWeek(10..8))
+    );
+}
