@@ -39,6 +39,8 @@ pub enum Error {
     SlotGroupingWithInvalidSlot(usize, SlotRef),
     #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
     GroupingIncompatWithInvalidSlotGrouping(usize, usize),
+    #[error("The range {0:?} for the number of interrogations per week is empty")]
+    GeneralDataWithInvalidInterrogationsPerWeek(std::ops::Range<u32>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -114,6 +116,7 @@ pub type StudentList = Vec<Student>;
 pub struct GeneralData {
     pub teacher_count: usize,
     pub week_count: NonZeroU32,
+    pub interrogations_per_week: Option<std::ops::Range<u32>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -234,6 +237,14 @@ impl ValidatedData {
                 if grouping >= slot_groupings.len() {
                     return Err(Error::GroupingIncompatWithInvalidSlotGrouping(i, grouping));
                 }
+            }
+        }
+
+        if let Some(interrogations_range) = general.interrogations_per_week.clone() {
+            if interrogations_range.is_empty() {
+                return Err(Error::GeneralDataWithInvalidInterrogationsPerWeek(
+                    interrogations_range,
+                ));
             }
         }
 
