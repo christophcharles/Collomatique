@@ -13,7 +13,7 @@ fn trivial_validated_data() {
     let students = StudentList::new();
 
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     let expected_result = ValidatedData {
         general: general.clone(),
@@ -21,7 +21,7 @@ fn trivial_validated_data() {
         incompatibilities: incompatibilities.clone(),
         students: students.clone(),
         slot_groupings: slot_groupings.clone(),
-        grouping_incompats: grouping_incompats.clone(),
+        slot_grouping_incompats: grouping_incompats.clone(),
     };
 
     assert_eq!(
@@ -74,6 +74,10 @@ fn simple_validated_data() {
                 },
             ],
         }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![BTreeSet::from([0, 1, 2]), BTreeSet::from([3, 4, 5])],
+            not_assigned: BTreeSet::from([6, 7, 8]),
+        },
     }];
     let incompatibilities = vec![Incompatibility {
         slots: vec![Slot {
@@ -85,10 +89,35 @@ fn simple_validated_data() {
             },
         }],
     }];
-    let students = vec![Student {
-        subjects: BTreeSet::from([0]),
-        incompatibilities: BTreeSet::from([0]),
-    }];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::from([0]),
+        },
+        Student {
+            incompatibilities: BTreeSet::from([0]),
+        },
+        Student {
+            incompatibilities: BTreeSet::from([0]),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::from([0]),
+        },
+        Student {
+            incompatibilities: BTreeSet::from([0]),
+        },
+        Student {
+            incompatibilities: BTreeSet::from([0]),
+        },
+    ];
     let slot_groupings = vec![
         SlotGrouping {
             slots: BTreeSet::from([SlotRef {
@@ -105,7 +134,7 @@ fn simple_validated_data() {
             }]),
         },
     ];
-    let grouping_incompats = GroupingIncompatList::from([GroupingIncompat {
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
         groupings: BTreeSet::from([0, 1]),
     }]);
 
@@ -115,7 +144,7 @@ fn simple_validated_data() {
         incompatibilities: incompatibilities.clone(),
         students: students.clone(),
         slot_groupings: slot_groupings.clone(),
-        grouping_incompats: grouping_incompats.clone(),
+        slot_grouping_incompats: grouping_incompats.clone(),
     };
 
     assert_eq!(
@@ -151,11 +180,15 @@ fn invalid_students_per_interrogation() {
                 start_time: time::Time::from_hm(0, 0).unwrap(),
             }],
         }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![],
+            not_assigned: BTreeSet::new(),
+        },
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -193,11 +226,15 @@ fn subject_slot_overlaps_next_day() {
                 start_time: time::Time::from_hm(23, 1).unwrap(),
             }],
         }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![],
+            not_assigned: BTreeSet::new(),
+        },
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -232,7 +269,7 @@ fn incompatibility_slot_overlaps_next_day() {
     }];
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
     assert_eq!(
         ValidatedData::new(
             general,
@@ -266,11 +303,15 @@ fn invalid_teacher_number() {
                 start_time: time::Time::from_hm(23, 0).unwrap(),
             }],
         }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![],
+            not_assigned: BTreeSet::new(),
+        },
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -282,48 +323,6 @@ fn invalid_teacher_number() {
             grouping_incompats
         ),
         Err(Error::SubjectWithInvalidTeacher(0, 0, 1))
-    );
-}
-
-#[test]
-fn invalid_subject_number() {
-    let general = GeneralData {
-        teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
-        interrogations_per_week: None,
-    };
-
-    let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
-        period: NonZeroU32::new(2).unwrap(),
-        duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![SlotStart {
-                week: 0,
-                weekday: time::Weekday::Monday,
-                start_time: time::Time::from_hm(23, 0).unwrap(),
-            }],
-        }],
-    }];
-    let incompatibilities = IncompatibilityList::new();
-    let students = vec![Student {
-        subjects: BTreeSet::from([1]),
-        incompatibilities: BTreeSet::new(),
-    }];
-    let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
-
-    assert_eq!(
-        ValidatedData::new(
-            general,
-            subjects,
-            incompatibilities,
-            students,
-            slot_groupings,
-            grouping_incompats
-        ),
-        Err(Error::StudentWithInvalidSubject(0, 1))
     );
 }
 
@@ -347,11 +346,10 @@ fn invalid_incompatibility_number() {
         }],
     }];
     let students = vec![Student {
-        subjects: BTreeSet::new(),
         incompatibilities: BTreeSet::from([1]),
     }];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -388,6 +386,10 @@ fn slot_ref_has_invalid_subject() {
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
         Subject {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
@@ -402,6 +404,10 @@ fn slot_ref_has_invalid_subject() {
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -420,7 +426,7 @@ fn slot_ref_has_invalid_subject() {
             },
         ]),
     }];
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -464,6 +470,10 @@ fn slot_ref_has_invalid_interrogation() {
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
         Subject {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
@@ -478,6 +488,10 @@ fn slot_ref_has_invalid_interrogation() {
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -496,7 +510,7 @@ fn slot_ref_has_invalid_interrogation() {
             },
         ]),
     }];
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -540,6 +554,10 @@ fn slot_ref_has_invalid_slot() {
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
         Subject {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
@@ -554,6 +572,10 @@ fn slot_ref_has_invalid_slot() {
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -572,7 +594,7 @@ fn slot_ref_has_invalid_slot() {
             },
         ]),
     }];
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -616,6 +638,10 @@ fn grouping_incompact_invalid_ref() {
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
         Subject {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
@@ -630,6 +656,10 @@ fn grouping_incompact_invalid_ref() {
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 }],
             }],
+            groups: GroupsDesc {
+                assigned_to_group: vec![],
+                not_assigned: BTreeSet::new(),
+            },
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -650,7 +680,7 @@ fn grouping_incompact_invalid_ref() {
             }]),
         },
     ];
-    let grouping_incompats = vec![GroupingIncompat {
+    let grouping_incompats = vec![SlotGroupingIncompat {
         groupings: BTreeSet::from([0, 2]),
     }];
 
@@ -663,128 +693,7 @@ fn grouping_incompact_invalid_ref() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::GroupingIncompatWithInvalidSlotGrouping(0, 2))
-    );
-}
-
-#[test]
-fn count_student_specializations() {
-    let general = GeneralData {
-        teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
-        interrogations_per_week: None,
-    };
-
-    let subjects = vec![
-        Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
-            period: NonZeroU32::new(2).unwrap(),
-            duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
-                teacher: 0,
-                slots: vec![SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
-                }],
-            }],
-        },
-        Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
-            period: NonZeroU32::new(2).unwrap(),
-            duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
-                teacher: 0,
-                slots: vec![SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                }],
-            }],
-        },
-    ];
-    let incompatibilities = vec![
-        Incompatibility {
-            slots: vec![Slot {
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Wednesday,
-                    start_time: time::Time::from_hm(12, 0).unwrap(),
-                },
-                duration: NonZeroU32::new(60).unwrap(),
-            }],
-        },
-        Incompatibility {
-            slots: vec![Slot {
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Thursday,
-                    start_time: time::Time::from_hm(13, 0).unwrap(),
-                },
-                duration: NonZeroU32::new(120).unwrap(),
-            }],
-        },
-    ];
-    let students = vec![
-        Student {
-            subjects: BTreeSet::from([0]),
-            incompatibilities: BTreeSet::from([1]),
-        },
-        Student {
-            subjects: BTreeSet::from([0, 1]),
-            incompatibilities: BTreeSet::from([0]),
-        },
-        Student {
-            subjects: BTreeSet::from([0, 1]),
-            incompatibilities: BTreeSet::from([1]),
-        },
-        Student {
-            subjects: BTreeSet::from([0]),
-            incompatibilities: BTreeSet::from([1]),
-        },
-    ];
-    let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
-
-    let validated_data = ValidatedData::new(
-        general,
-        subjects,
-        incompatibilities,
-        students,
-        slot_groupings,
-        grouping_incompats,
-    )
-    .unwrap();
-
-    let expected_result = BTreeMap::from([
-        (
-            Student {
-                subjects: BTreeSet::from([0]),
-                incompatibilities: BTreeSet::from([1]),
-            },
-            NonZeroUsize::new(2).unwrap(),
-        ),
-        (
-            Student {
-                subjects: BTreeSet::from([0, 1]),
-                incompatibilities: BTreeSet::from([1]),
-            },
-            NonZeroUsize::new(1).unwrap(),
-        ),
-        (
-            Student {
-                subjects: BTreeSet::from([0, 1]),
-                incompatibilities: BTreeSet::from([0]),
-            },
-            NonZeroUsize::new(1).unwrap(),
-        ),
-    ]);
-
-    assert_eq!(
-        validated_data.count_student_specializations(),
-        expected_result
+        Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(0, 2))
     );
 }
 
@@ -801,7 +710,7 @@ fn invalid_interrogations_per_week() {
     let students = StudentList::new();
 
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -813,6 +722,444 @@ fn invalid_interrogations_per_week() {
             grouping_incompats
         )
         .err(),
-        Some(Error::GeneralDataWithInvalidInterrogationsPerWeek(10..8))
+        Some(Error::SlotGeneralDataWithInvalidInterrogationsPerWeek(
+            10..8
+        ))
+    );
+}
+
+#[test]
+fn duplicated_groups() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![Interrogation {
+            teacher: 0,
+            slots: vec![
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            ],
+        }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                BTreeSet::from([0, 1, 2]),
+                BTreeSet::from([3, 4, 5]),
+                BTreeSet::from([0, 1, 2]),
+            ],
+            not_assigned: BTreeSet::from([0]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::SubjectWithDuplicatedStudent(0, 0))
+    );
+}
+
+#[test]
+fn duplicated_student() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![Interrogation {
+            teacher: 0,
+            slots: vec![
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            ],
+        }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                BTreeSet::from([0, 1, 2]),
+                BTreeSet::from([3, 4, 5]),
+                BTreeSet::from([3, 7, 8]),
+            ],
+            not_assigned: BTreeSet::from([0]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::SubjectWithDuplicatedStudent(0, 3))
+    );
+}
+
+#[test]
+fn duplicated_student_not_assigned() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![Interrogation {
+            teacher: 0,
+            slots: vec![
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            ],
+        }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![BTreeSet::from([0, 1, 2]), BTreeSet::from([3, 4, 5])],
+            not_assigned: BTreeSet::from([3]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::SubjectWithDuplicatedStudent(0, 3))
+    );
+}
+
+#[test]
+fn invalid_student_in_group() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![Interrogation {
+            teacher: 0,
+            slots: vec![
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            ],
+        }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![BTreeSet::from([1, 2, 3]), BTreeSet::from([4, 5, 6])],
+            not_assigned: BTreeSet::from([0]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::SubjectWithInvalidAssignedStudent(0, 1, 6))
+    );
+}
+
+#[test]
+fn invalid_student_not_assigned() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![Interrogation {
+            teacher: 0,
+            slots: vec![
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            ],
+        }],
+        groups: GroupsDesc {
+            assigned_to_group: vec![BTreeSet::from([0, 1, 2])],
+            not_assigned: BTreeSet::from([4, 7]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::SubjectWithInvalidNotAssignedStudent(0, 7))
     );
 }
