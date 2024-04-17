@@ -5,15 +5,15 @@ fn nd_problem_definition() {
 
     let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_variables(["a", "b", "c", "d", "e"])
-        .add(
+        .add_constraint(
             (2 * Expr::var("a") - 3 * Expr::var("b") + 4 * Expr::var("c") - 3)
                 .leq(&(2 * Expr::var("a") - 5 * Expr::var("d"))),
         )
-        .add(
+        .add_constraint(
             (-Expr::var("a") + Expr::var("b") + 3 * Expr::var("c") + 3)
                 .leq(&(2 * Expr::var("a") - 5 * Expr::var("d"))),
         )
-        .add(
+        .add_constraint(
             (2 * Expr::var("c") - 3 * Expr::var("d") + 4 * Expr::var("e") + 2)
                 .eq(&(-1 * Expr::var("e") + Expr::var("c"))),
         )
@@ -24,11 +24,11 @@ fn nd_problem_definition() {
 
     assert_eq!(
         pb.nd_problem.leq_mat,
-        array![[0, -3, 4, 5, 0], [-3, 1, 3, 5, 0],]
+        array![[-3, 1, 3, 5, 0], [0, -3, 4, 5, 0]] // We must follow lexicographical order because of BTreeSet
     );
-    assert_eq!(pb.nd_problem.eq_mat, array![[0, 0, 1, -3, 5],]);
+    assert_eq!(pb.nd_problem.eq_mat, array![[0, 0, 1, -3, 5]]);
 
-    assert_eq!(pb.nd_problem.leq_constants, array![-3, 3]);
+    assert_eq!(pb.nd_problem.leq_constants, array![3, -3]);
     assert_eq!(pb.nd_problem.eq_constants, array![2]);
 }
 
@@ -43,9 +43,9 @@ fn test_is_feasable() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c", "d"])
-        .add((&a + &b).leq(&Expr::constant(1)))
-        .add((&c + &d).leq(&Expr::constant(1)))
-        .add((&a + &d).eq(&Expr::constant(1)))
+        .add_constraint((&a + &b).leq(&Expr::constant(1)))
+        .add_constraint((&c + &d).leq(&Expr::constant(1)))
+        .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .build()
         .unwrap();
 
@@ -115,9 +115,9 @@ fn test_neighbours() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c", "d"])
-        .add((&a + &b).leq(&Expr::constant(1)))
-        .add((&c + &d).leq(&Expr::constant(1)))
-        .add((&a + &d).eq(&Expr::constant(1)))
+        .add_constraint((&a + &b).leq(&Expr::constant(1)))
+        .add_constraint((&c + &d).leq(&Expr::constant(1)))
+        .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .build()
         .unwrap();
 
@@ -156,8 +156,8 @@ fn nd_config_ord() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c"])
-        .add((&a + &b).leq(&Expr::constant(1)))
-        .add((&c + &b).leq(&Expr::constant(1)))
+        .add_constraint((&a + &b).leq(&Expr::constant(1)))
+        .add_constraint((&c + &b).leq(&Expr::constant(1)))
         .build()
         .unwrap();
 
