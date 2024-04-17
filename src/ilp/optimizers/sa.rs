@@ -2,6 +2,7 @@
 mod tests;
 
 use crate::ilp::dbg::Debuggable;
+use crate::ilp::linexpr::VariableName;
 use crate::ilp::random::RandomGen;
 use crate::ilp::solvers::FeasabilitySolver;
 use crate::ilp::{Config, FeasableConfig, Problem};
@@ -15,14 +16,14 @@ impl Default for TemperatureFn {
 }
 
 #[derive(Debug, Clone)]
-pub struct Optimizer<'a> {
-    problem: &'a Problem,
-    init_config: Config<'a>,
+pub struct Optimizer<'a, V: VariableName> {
+    problem: &'a Problem<V>,
+    init_config: Config<'a, V>,
     temp_profile: TemperatureFn,
 }
 
-impl<'a> Optimizer<'a> {
-    pub fn new(problem: &'a Problem) -> Self {
+impl<'a, V: VariableName> Optimizer<'a, V> {
+    pub fn new(problem: &'a Problem<V>) -> Self {
         let init_config = problem.default_config();
 
         Optimizer {
@@ -32,7 +33,7 @@ impl<'a> Optimizer<'a> {
         }
     }
 
-    pub fn set_init_config(&mut self, init_config: Config<'a>) {
+    pub fn set_init_config(&mut self, init_config: Config<'a, V>) {
         self.init_config = init_config;
     }
 
@@ -40,11 +41,11 @@ impl<'a> Optimizer<'a> {
         self.temp_profile = temp_profile;
     }
 
-    pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver>(
+    pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver<V>>(
         &'b self,
         solver: S,
         random_gen: &'c mut R,
-    ) -> OptimizerIterator<'a, 'b, 'c, R, S> {
+    ) -> OptimizerIterator<'a, 'b, 'c, V, R, S> {
         OptimizerIterator {
             optimizer: self,
             random_gen,
@@ -60,22 +61,23 @@ impl<'a> Optimizer<'a> {
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> {
-    optimizer: &'b Optimizer<'a>,
+pub struct OptimizerIterator<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>>
+{
+    optimizer: &'b Optimizer<'a, V>,
     solver: S,
     random_gen: &'c mut R,
 
-    previous_config: Option<(Rc<FeasableConfig<'a>>, f64)>,
-    current_config: Config<'a>,
+    previous_config: Option<(Rc<FeasableConfig<'a, V>>, f64)>,
+    current_config: Config<'a, V>,
 
     k: usize,
     temp_profile: TemperatureFn,
 }
 
-impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> Iterator
-    for OptimizerIterator<'b, 'a, 'c, R, S>
+impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Iterator
+    for OptimizerIterator<'b, 'a, 'c, V, R, S>
 {
-    type Item = (Rc<FeasableConfig<'a>>, f64);
+    type Item = (Rc<FeasableConfig<'a, V>>, f64);
 
     fn next(&mut self) -> Option<Self::Item> {
         use std::collections::BTreeSet;
@@ -111,8 +113,10 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> Iterator
     }
 }
 
-impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> OptimizerIterator<'b, 'a, 'c, R, S> {
-    pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a>>, f64)> {
+impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>>
+    OptimizerIterator<'b, 'a, 'c, V, R, S>
+{
+    pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a, V>>, f64)> {
         self.take(max_iter)
             .min_by(|x, y| x.1.partial_cmp(&y.1).expect("Non NaN"))
     }
