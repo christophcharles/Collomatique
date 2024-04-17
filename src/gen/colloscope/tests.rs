@@ -46,35 +46,44 @@ fn simple_validated_data() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -94,7 +103,7 @@ fn simple_validated_data() {
         },
     }];
     let incompatibilities = vec![Incompatibility {
-        slots: vec![Slot {
+        slots: vec![SlotWithDuration {
             duration: NonZeroU32::new(60).unwrap(),
             start: SlotStart {
                 week: 0,
@@ -136,14 +145,12 @@ fn simple_validated_data() {
         SlotGrouping {
             slots: BTreeSet::from([SlotRef {
                 subject: 0,
-                interrogation: 0,
                 slot: 2,
             }]),
         },
         SlotGrouping {
             slots: BTreeSet::from([SlotRef {
                 subject: 0,
-                interrogation: 0,
                 slot: 3,
             }]),
         },
@@ -183,17 +190,17 @@ fn invalid_students_per_interrogation() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
+        slots: vec![SlotWithTeacher {
             teacher: 0,
-            slots: vec![SlotStart {
+            start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(0, 0).unwrap(),
-            }],
+            },
         }],
         groups: GroupsDesc {
             assigned_to_group: vec![],
@@ -214,7 +221,7 @@ fn invalid_students_per_interrogation() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::SubjectWithInvalidStudentsPerInterrogationRange(
+        Err(Error::SubjectWithInvalidStudentsPerSlotRange(
             0,
             NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap()
         ))
@@ -230,17 +237,17 @@ fn subject_slot_overlaps_next_day() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
+        slots: vec![SlotWithTeacher {
             teacher: 0,
-            slots: vec![SlotStart {
+            start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(23, 1).unwrap(),
-            }],
+            },
         }],
         groups: GroupsDesc {
             assigned_to_group: vec![],
@@ -261,7 +268,7 @@ fn subject_slot_overlaps_next_day() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::SubjectWithSlotOverlappingNextDay(0, 0, 0))
+        Err(Error::SubjectWithSlotOverlappingNextDay(0, 0))
     );
 }
 
@@ -274,7 +281,7 @@ fn incompatibility_slot_overlaps_next_day() {
     };
     let subjects = SubjectList::new();
     let incompatibilities = vec![Incompatibility {
-        slots: vec![Slot {
+        slots: vec![SlotWithDuration {
             duration: NonZeroU32::new(60).unwrap(),
             start: SlotStart {
                 week: 0,
@@ -308,17 +315,17 @@ fn invalid_teacher_number() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
+        slots: vec![SlotWithTeacher {
             teacher: 1,
-            slots: vec![SlotStart {
+            start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(23, 0).unwrap(),
-            }],
+            },
         }],
         groups: GroupsDesc {
             assigned_to_group: vec![],
@@ -353,7 +360,7 @@ fn invalid_incompatibility_number() {
 
     let subjects = SubjectList::new();
     let incompatibilities = vec![Incompatibility {
-        slots: vec![Slot {
+        slots: vec![SlotWithDuration {
             duration: NonZeroU32::new(60).unwrap(),
             start: SlotStart {
                 week: 0,
@@ -391,18 +398,17 @@ fn slot_ref_has_invalid_subject() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
+            slots: vec![SlotWithTeacher {
                 teacher: 0,
-                slots: vec![SlotStart {
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
-                }],
+                },
             }],
             groups: GroupsDesc {
                 assigned_to_group: vec![],
@@ -410,18 +416,17 @@ fn slot_ref_has_invalid_subject() {
             },
         },
         Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
+            slots: vec![SlotWithTeacher {
                 teacher: 0,
-                slots: vec![SlotStart {
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
-                }],
+                },
             }],
             groups: GroupsDesc {
                 assigned_to_group: vec![],
@@ -435,12 +440,10 @@ fn slot_ref_has_invalid_subject() {
         slots: BTreeSet::from([
             SlotRef {
                 subject: 1,
-                interrogation: 0,
                 slot: 0,
             },
             SlotRef {
                 subject: 2,
-                interrogation: 0,
                 slot: 0,
             },
         ]),
@@ -460,93 +463,6 @@ fn slot_ref_has_invalid_subject() {
             0,
             SlotRef {
                 subject: 2,
-                interrogation: 0,
-                slot: 0,
-            }
-        ))
-    );
-}
-
-#[test]
-fn slot_ref_has_invalid_interrogation() {
-    let general = GeneralData {
-        teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
-        interrogations_per_week: None,
-    };
-
-    let subjects = vec![
-        Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
-            period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: true,
-            duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
-                teacher: 0,
-                slots: vec![SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
-                }],
-            }],
-            groups: GroupsDesc {
-                assigned_to_group: vec![],
-                not_assigned: BTreeSet::new(),
-            },
-        },
-        Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
-            period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
-                teacher: 0,
-                slots: vec![SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                }],
-            }],
-            groups: GroupsDesc {
-                assigned_to_group: vec![],
-                not_assigned: BTreeSet::new(),
-            },
-        },
-    ];
-    let incompatibilities = IncompatibilityList::new();
-    let students = StudentList::new();
-    let slot_groupings = vec![SlotGrouping {
-        slots: BTreeSet::from([
-            SlotRef {
-                subject: 1,
-                interrogation: 1,
-                slot: 0,
-            },
-            SlotRef {
-                subject: 0,
-                interrogation: 0,
-                slot: 0,
-            },
-        ]),
-    }];
-    let grouping_incompats = SlotGroupingIncompatList::new();
-
-    assert_eq!(
-        ValidatedData::new(
-            general,
-            subjects,
-            incompatibilities,
-            students,
-            slot_groupings,
-            grouping_incompats
-        ),
-        Err(Error::SlotGroupingWithInvalidInterrogation(
-            0,
-            SlotRef {
-                subject: 1,
-                interrogation: 1,
                 slot: 0,
             }
         ))
@@ -563,18 +479,17 @@ fn slot_ref_has_invalid_slot() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
+            slots: vec![SlotWithTeacher {
                 teacher: 0,
-                slots: vec![SlotStart {
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
-                }],
+                },
             }],
             groups: GroupsDesc {
                 assigned_to_group: vec![],
@@ -582,18 +497,17 @@ fn slot_ref_has_invalid_slot() {
             },
         },
         Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
+            slots: vec![SlotWithTeacher {
                 teacher: 0,
-                slots: vec![SlotStart {
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
-                }],
+                },
             }],
             groups: GroupsDesc {
                 assigned_to_group: vec![],
@@ -607,12 +521,10 @@ fn slot_ref_has_invalid_slot() {
         slots: BTreeSet::from([
             SlotRef {
                 subject: 1,
-                interrogation: 0,
                 slot: 0,
             },
             SlotRef {
                 subject: 0,
-                interrogation: 0,
                 slot: 1,
             },
         ]),
@@ -632,7 +544,6 @@ fn slot_ref_has_invalid_slot() {
             0,
             SlotRef {
                 subject: 0,
-                interrogation: 0,
                 slot: 1,
             }
         ))
@@ -649,18 +560,17 @@ fn grouping_incompact_invalid_ref() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
+            slots: vec![SlotWithTeacher {
                 teacher: 0,
-                slots: vec![SlotStart {
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
-                }],
+                },
             }],
             groups: GroupsDesc {
                 assigned_to_group: vec![],
@@ -668,18 +578,17 @@ fn grouping_incompact_invalid_ref() {
             },
         },
         Subject {
-            students_per_interrogation: NonZeroUsize::new(2).unwrap()
-                ..=NonZeroUsize::new(3).unwrap(),
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
-            interrogations: vec![Interrogation {
+            slots: vec![SlotWithTeacher {
                 teacher: 0,
-                slots: vec![SlotStart {
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
-                }],
+                },
             }],
             groups: GroupsDesc {
                 assigned_to_group: vec![],
@@ -693,14 +602,12 @@ fn grouping_incompact_invalid_ref() {
         SlotGrouping {
             slots: BTreeSet::from([SlotRef {
                 subject: 1,
-                interrogation: 0,
                 slot: 0,
             }]),
         },
         SlotGrouping {
             slots: BTreeSet::from([SlotRef {
                 subject: 0,
-                interrogation: 0,
                 slot: 0,
             }]),
         },
@@ -762,35 +669,44 @@ fn duplicated_groups() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -856,35 +772,44 @@ fn duplicated_student() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -959,35 +884,44 @@ fn duplicated_student_not_assigned() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1060,35 +994,44 @@ fn invalid_student_in_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1150,35 +1093,44 @@ fn invalid_student_not_assigned() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![GroupDesc {
                 students: BTreeSet::from([0, 1, 2]),
@@ -1234,35 +1186,44 @@ fn empty_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1341,35 +1302,44 @@ fn extensible_empty_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1444,35 +1414,44 @@ fn group_too_large() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1547,35 +1526,44 @@ fn non_extensible_too_small_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1654,35 +1642,44 @@ fn too_few_groups() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1756,35 +1753,44 @@ fn too_many_groups() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![Interrogation {
-            teacher: 0,
-            slots: vec![
-                SlotStart {
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
-                SlotStart {
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
                     week: 0,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
-            ],
-        }],
+            },
+        ],
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
@@ -1870,60 +1876,74 @@ fn fixed_group_variables() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![
-            Interrogation {
+        slots: vec![
+            SlotWithTeacher {
                 teacher: 0,
-                slots: vec![
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                ],
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
             },
-            Interrogation {
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
                 teacher: 1,
-                slots: vec![
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                ],
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
             },
         ],
         groups: GroupsDesc {
@@ -2006,98 +2026,82 @@ fn fixed_group_variables() {
     let expected_result = BTreeSet::from([
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 1,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 0,
         },
         Variable::FixedGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 1,
         },
     ]);
@@ -2114,60 +2118,74 @@ fn dynamic_group_variables() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
-        interrogations: vec![
-            Interrogation {
+        slots: vec![
+            SlotWithTeacher {
                 teacher: 0,
-                slots: vec![
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                ],
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
             },
-            Interrogation {
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
                 teacher: 1,
-                slots: vec![
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 0,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Monday,
-                        start_time: time::Time::from_hm(8, 0).unwrap(),
-                    },
-                    SlotStart {
-                        week: 1,
-                        weekday: time::Weekday::Tuesday,
-                        start_time: time::Time::from_hm(17, 0).unwrap(),
-                    },
-                ],
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
             },
         ],
         groups: GroupsDesc {
@@ -2250,673 +2268,577 @@ fn dynamic_group_variables() {
     let expected_result = BTreeSet::from([
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 0,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 1,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 2,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 0,
             slot: 3,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 0,
+            slot: 4,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 1,
+            slot: 5,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 2,
+            slot: 6,
             group: 3,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 2,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 2,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 2,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 2,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 2,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 2,
             student: 11,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 3,
             student: 6,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 3,
             student: 7,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 3,
             student: 8,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 3,
             student: 9,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 3,
             student: 10,
         },
         Variable::DynamicGroup {
             subject: 0,
-            interrogation: 1,
-            slot: 3,
+            slot: 7,
             group: 3,
             student: 11,
         },
