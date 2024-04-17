@@ -75,7 +75,16 @@ fn simple_validated_data() {
             ],
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![BTreeSet::from([0, 1, 2]), BTreeSet::from([3, 4, 5])],
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+            ],
             not_assigned: BTreeSet::from([6, 7, 8]),
         },
     }];
@@ -767,9 +776,18 @@ fn duplicated_groups() {
         }],
         groups: GroupsDesc {
             assigned_to_group: vec![
-                BTreeSet::from([0, 1, 2]),
-                BTreeSet::from([3, 4, 5]),
-                BTreeSet::from([0, 1, 2]),
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
             ],
             not_assigned: BTreeSet::new(),
         },
@@ -853,9 +871,18 @@ fn duplicated_student() {
         }],
         groups: GroupsDesc {
             assigned_to_group: vec![
-                BTreeSet::from([0, 1, 2]),
-                BTreeSet::from([3, 4, 5]),
-                BTreeSet::from([3, 7, 8]),
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 7, 8]),
+                    can_be_extended: false,
+                },
             ],
             not_assigned: BTreeSet::new(),
         },
@@ -947,7 +974,16 @@ fn duplicated_student_not_assigned() {
             ],
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![BTreeSet::from([0, 1, 2]), BTreeSet::from([3, 4, 5])],
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+            ],
             not_assigned: BTreeSet::from([3]),
         },
     }];
@@ -1040,7 +1076,16 @@ fn invalid_student_in_group() {
             ],
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![BTreeSet::from([1, 2, 3]), BTreeSet::from([4, 5, 6])],
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([1, 2, 3]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([4, 5, 6]),
+                    can_be_extended: false,
+                },
+            ],
             not_assigned: BTreeSet::from([0]),
         },
     }];
@@ -1122,7 +1167,10 @@ fn invalid_student_not_assigned() {
             ],
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![BTreeSet::from([0, 1, 2])],
+            assigned_to_group: vec![GroupDesc {
+                students: BTreeSet::from([0, 1, 2]),
+                can_be_extended: false,
+            }],
             not_assigned: BTreeSet::from([4, 7]),
         },
     }];
@@ -1205,9 +1253,18 @@ fn empty_group() {
         }],
         groups: GroupsDesc {
             assigned_to_group: vec![
-                BTreeSet::from([0, 1, 2]),
-                BTreeSet::from([3, 4, 5]),
-                BTreeSet::from([]),
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([]),
+                    can_be_extended: false,
+                },
             ],
             not_assigned: BTreeSet::new(),
         },
@@ -1299,7 +1356,16 @@ fn group_too_large() {
             ],
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![BTreeSet::from([0, 1]), BTreeSet::from([2, 3, 4, 5])],
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([2, 3, 4, 5]),
+                    can_be_extended: false,
+                },
+            ],
             not_assigned: BTreeSet::new(),
         },
     }];
