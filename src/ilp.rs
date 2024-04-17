@@ -31,7 +31,7 @@ impl Default for EvalFn {
 
 #[derive(Debug, Default, Clone)]
 pub struct ProblemBuilder {
-    constraints: Vec<linexpr::Constraint>,
+    constraints: Vec<linexpr::Constraint<String>>,
     eval_fn: EvalFn,
     variables: BTreeSet<String>,
 }
@@ -41,7 +41,7 @@ impl ProblemBuilder {
         Self::default()
     }
 
-    pub fn add(mut self, constraint: linexpr::Constraint) -> Self {
+    pub fn add(mut self, constraint: linexpr::Constraint<String>) -> Self {
         self.constraints.push(constraint);
         self
     }
@@ -104,7 +104,7 @@ pub struct Problem {
     variables: BTreeSet<String>,
     variables_vec: Vec<String>,
     variables_lookup: BTreeMap<String, usize>,
-    constraints: Vec<linexpr::Constraint>,
+    constraints: Vec<linexpr::Constraint<String>>,
     eval_fn: EvalFn,
     nd_problem: ndtools::NdProblem,
 }
