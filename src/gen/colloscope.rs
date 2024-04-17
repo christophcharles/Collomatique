@@ -33,6 +33,10 @@ pub enum Error {
         "Subject {0} has an invalid group ({1}) which is too large given the constraint ({2:?})"
     )]
     SubjectWithTooLargeAssignedGroup(usize, usize, RangeInclusive<NonZeroUsize>),
+    #[error(
+        "Subject {0} has an invalid non-extensible group ({1}) which is too small given the constraint ({2:?})"
+    )]
+    SubjectWithTooSmallNonExtensibleGroup(usize, usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has an empty group ({1})")]
     SubjectWithEmptyGroup(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
@@ -238,6 +242,15 @@ impl ValidatedData {
                 }
                 if group.students.is_empty() {
                     return Err(Error::SubjectWithEmptyGroup(i, j));
+                }
+                if group.students.len() < subject.students_per_interrogation.start().get()
+                    && !group.can_be_extended
+                {
+                    return Err(Error::SubjectWithTooSmallNonExtensibleGroup(
+                        i,
+                        j,
+                        subject.students_per_interrogation.clone(),
+                    ));
                 }
             }
 
