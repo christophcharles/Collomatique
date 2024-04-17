@@ -27,35 +27,6 @@ impl<V: VariableName> PartialEq for Expr<V> {
 
 impl<V: VariableName> Eq for Expr<V> {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Config<V: VariableName> {
-    values: BTreeMap<V, bool>,
-}
-
-impl<V: VariableName> Default for Config<V> {
-    fn default() -> Self {
-        Config {
-            values: BTreeMap::new(),
-        }
-    }
-}
-
-impl<V: VariableName> Config<V> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set<T: Into<V>>(&mut self, var: T, val: bool) {
-        self.values.insert(var.into(), val);
-    }
-
-    pub fn get<T: Into<V>>(&mut self, var: T) -> Option<bool> {
-        let val = self.values.get(&var.into())?;
-
-        Some(*val)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Sign {
     Equals,
