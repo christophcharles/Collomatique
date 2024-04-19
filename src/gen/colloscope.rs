@@ -362,6 +362,10 @@ pub enum Variable {
         slot: usize,
         group: usize,
     },
+    StudentNotInLastPeriod {
+        subject: usize,
+        student: usize,
+    },
     DynamicGroupAssignment {
         subject: usize,
         slot: usize,
@@ -388,6 +392,9 @@ impl std::fmt::Display for Variable {
                 slot,
                 group,
             } => write!(f, "GiS_{}_{}_{}", *subject, *slot, *group),
+            Variable::StudentNotInLastPeriod { subject, student } => {
+                write!(f, "SniLP_{}_{}", *subject, *student)
+            }
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -567,6 +574,32 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
+    fn is_last_period_incomplete(&self, subject: &Subject) -> bool {
+        self.data.general.week_count.get() % subject.period.get() != 0
+    }
+
+    fn build_student_not_in_last_period(&self) -> BTreeSet<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .filter_map(|(i, subject)| {
+                if !self.is_last_period_incomplete(subject) {
+                    return None;
+                }
+
+                let student_iterator = subject.groups.students_iterator();
+                Some(
+                    student_iterator.map(move |k| Variable::StudentNotInLastPeriod {
+                        subject: i,
+                        student: *k,
+                    }),
+                )
+            })
+            .flatten()
+            .collect()
+    }
+
     fn build_at_most_one_group_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         self.data
             .subjects
@@ -740,6 +773,7 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_dynamic_group_assignment_variables())
             .add_variables(self.build_student_in_group_variables())
             .add_variables(self.build_exact_periodicity_variables())
+            .add_variables(self.build_student_not_in_last_period())
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
     }
