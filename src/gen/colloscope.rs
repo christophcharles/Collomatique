@@ -1261,6 +1261,78 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_interrogations_per_week_constraints_for_student(
+        &self,
+        range: &std::ops::Range<u32>,
+        student: usize,
+        week: u32,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student) {
+                    for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+                        expr = expr
+                            + Expr::var(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                                student,
+                            });
+                    }
+                } else {
+                    for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                        if group.students.contains(&student) {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
+        let min = i32::try_from(range.start).unwrap();
+        let max = i32::try_from(range.end).unwrap() - 1;
+
+        BTreeSet::from([
+            expr.leq(&Expr::constant(max)),
+            expr.geq(&Expr::constant(min)),
+        ])
+    }
+
+    fn build_interrogations_per_week_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        let range = match &self.data.general.interrogations_per_week {
+            Some(r) => r,
+            None => return constraints,
+        };
+
+        for week in 0..self.data.general.week_count.get() {
+            for (student, _) in self.data.students.iter().enumerate() {
+                constraints.extend(
+                    self.build_interrogations_per_week_constraints_for_student(
+                        range, student, week,
+                    ),
+                );
+            }
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -1276,6 +1348,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_dynamic_groups_constraints())
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
             .add_constraints(self.build_periodicity_constraints())
+            .add_constraints(self.build_interrogations_per_week_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
