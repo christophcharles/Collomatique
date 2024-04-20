@@ -848,7 +848,42 @@ impl<'a> IlpTranslator<'a> {
         for (i, subject) in self.data.subjects.iter().enumerate() {
             let whole_period_count = self.data.general.week_count.get() / subject.period.get();
             for p in 0..whole_period_count {
-                let period = p..(p + subject.period.get());
+                let start = p * subject.period.get();
+                let period = start..(start + subject.period.get());
+
+                for student in subject.groups.not_assigned.iter().copied() {
+                    constraints.insert(
+                        self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
+                            i,
+                            subject,
+                            period.clone(),
+                            student,
+                        ),
+                    );
+                }
+
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    for student in group.students.iter().copied() {
+                        constraints.insert(
+                            self.build_one_interrogation_per_period_contraint_for_assigned_student(
+                                i,
+                                subject,
+                                period.clone(),
+                                k,
+                                group,
+                                student,
+                            ),
+                        );
+                    }
+                }
+            }
+
+            let there_is_an_incomplete_period =
+                self.data.general.week_count.get() % subject.period.get() != 0;
+            if there_is_an_incomplete_period {
+                let p = self.data.general.week_count.get() / subject.period.get();
+                let start = p * subject.period.get();
+                let period = start..self.data.general.week_count.get();
 
                 for student in subject.groups.not_assigned.iter().copied() {
                     constraints.insert(
