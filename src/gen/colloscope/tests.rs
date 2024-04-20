@@ -4949,3 +4949,122 @@ fn student_in_single_group() {
 
     assert_eq!(student_in_single_group_constraints, expected_result);
 }
+
+#[test]
+fn dynamic_groups_inequalities() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+    }];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let dynamic_groups_constraints = ilp_translator.build_dynamic_groups_constraints();
+
+    use crate::ilp::linexpr::Expr;
+
+    #[rustfmt::skip]
+    let sig_0_3_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 3, group: 1 });
+    #[rustfmt::skip]
+    let sig_0_4_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 4, group: 1 });
+    #[rustfmt::skip]
+    let sig_0_5_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 5, group: 1 });
+
+    #[rustfmt::skip]
+    let dga_0_0_1_3 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 3 });
+    #[rustfmt::skip]
+    let dga_0_0_1_4 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_0_1_5 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 5 });
+    #[rustfmt::skip]
+    let dga_0_1_1_3 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 3 });
+    #[rustfmt::skip]
+    let dga_0_1_1_4 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_1_1_5 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 5 });
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        dga_0_0_1_3.leq(&sig_0_3_1),
+        dga_0_1_1_3.leq(&sig_0_3_1),
+
+        dga_0_0_1_4.leq(&sig_0_4_1),
+        dga_0_1_1_4.leq(&sig_0_4_1),
+
+        dga_0_0_1_5.leq(&sig_0_5_1),
+        dga_0_1_1_5.leq(&sig_0_5_1),
+    ]);
+
+    assert_eq!(dynamic_groups_constraints, expected_result);
+}
