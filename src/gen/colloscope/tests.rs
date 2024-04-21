@@ -5034,7 +5034,7 @@ fn student_in_single_group() {
 }
 
 #[test]
-fn dynamic_groups_inequalities() {
+fn dynamic_groups_student_in_group_inequalities() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
@@ -5113,7 +5113,8 @@ fn dynamic_groups_inequalities() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let dynamic_groups_constraints = ilp_translator.build_dynamic_groups_constraints();
+    let dynamic_groups_student_in_group_constraints =
+        ilp_translator.build_dynamic_groups_student_in_group_constraints();
 
     use crate::ilp::linexpr::Expr;
 
@@ -5149,7 +5150,7 @@ fn dynamic_groups_inequalities() {
         dga_0_1_1_5.leq(&sig_0_5_1),
     ]);
 
-    assert_eq!(dynamic_groups_constraints, expected_result);
+    assert_eq!(dynamic_groups_student_in_group_constraints, expected_result);
 }
 
 #[test]
