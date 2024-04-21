@@ -1086,6 +1086,98 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_dynamic_groups_group_in_slot_constraint_for_case(
+        &self,
+        i: usize,
+        j: usize,
+        k: usize,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::DynamicGroupAssignment {
+            subject: i,
+            slot: j,
+            group: k,
+            student,
+        });
+        let rhs = Expr::var(Variable::GroupInSlot {
+            subject: i,
+            slot: j,
+            group: k,
+        });
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_dynamic_groups_group_in_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, _slot) in subject.slots.iter().enumerate() {
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    if !Self::is_group_fixed(group, subject) {
+                        for student in subject.groups.not_assigned.iter().copied() {
+                            constraints.insert(
+                                self.build_dynamic_groups_group_in_slot_constraint_for_case(
+                                    i, j, k, student,
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        constraints
+    }
+
+    fn build_group_in_slot_needs_student_constraint_for_case(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::GroupInSlot {
+            subject: i,
+            slot: j,
+            group: k,
+        });
+
+        let mut rhs = Expr::constant(0);
+
+        for student in subject.groups.not_assigned.iter().copied() {
+            rhs = rhs
+                + Expr::var(Variable::DynamicGroupAssignment {
+                    subject: i,
+                    slot: j,
+                    group: k,
+                    student,
+                });
+        }
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_group_in_slot_needs_student_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, _slot) in subject.slots.iter().enumerate() {
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    if !Self::is_group_fixed(group, subject) {
+                        constraints.insert(
+                            self.build_group_in_slot_needs_student_constraint_for_case(
+                                i, subject, j, k,
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        constraints
+    }
+
     fn build_one_periodicity_choice_per_student_constraint_for_student(
         &self,
         i: usize,
@@ -1348,6 +1440,8 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_students_per_group_count_constraints())
             .add_constraints(self.build_student_in_single_group_constraints())
             .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
+            .add_constraints(self.build_dynamic_groups_group_in_slot_constraints())
+            .add_constraints(self.build_group_in_slot_needs_student_constraints())
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
             .add_constraints(self.build_periodicity_constraints())
             .add_constraints(self.build_interrogations_per_week_constraints())
