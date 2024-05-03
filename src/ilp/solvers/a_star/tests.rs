@@ -1,7 +1,8 @@
-use collomatique::ilp::linexpr::Expr;
-use collomatique::ilp::ProblemBuilder;
+#[test]
+fn test_astar() {
+    use crate::ilp::linexpr::Expr;
+    use crate::ilp::ProblemBuilder;
 
-fn main() {
     // We test on a simple scheduling problem.
     //
     // We have two student groups x and y.
@@ -40,7 +41,7 @@ fn main() {
     let y21 = Expr::<String>::var("y21");
     let y22 = Expr::<String>::var("y22");
 
-    let one = Expr::constant(1);
+    let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::new()
         .add_variables(["x11", "x12", "x21", "x22"])
@@ -60,27 +61,18 @@ fn main() {
         .add_constraint((&x21 + &x22).eq(&one))
         .add_constraint((&y11 + &y12).eq(&one))
         .add_constraint((&y21 + &y22).eq(&one))
-        // eval func
-        .eval_fn(collomatique::debuggable!(|x| if x.get("y12").unwrap() {
-            1000.0
-        } else {
-            0.0
-        }))
         .build()
         .unwrap();
+    let config = pb.config_from(["x11", "y12", "y21"]).unwrap();
 
-    println!("{}", pb);
+    let solver = super::Solver::new();
 
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb);
+    use crate::ilp::solvers::FeasabilitySolver;
 
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let solution = solver.restore_feasability(&config);
 
-    sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
-
-    let solver = collomatique::ilp::solvers::a_star::Solver::new();
-    let iterator = sa_optimizer.iterate(solver, &mut random_gen);
-
-    for (i, (sol, cost)) in iterator.enumerate() {
-        println!("{}: {} - {}", i, cost, sol.inner().clone());
-    }
+    assert_eq!(
+        solution.expect("Solution should be found").into_inner(),
+        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap()
+    );
 }

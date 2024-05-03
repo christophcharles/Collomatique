@@ -1,7 +1,7 @@
 #[test]
 fn test_dijkstra() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::{Config, ProblemBuilder};
+    use crate::ilp::ProblemBuilder;
 
     // We test on a simple scheduling problem.
     //
@@ -31,45 +31,48 @@ fn test_dijkstra() {
     // The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
     // The same pattern is used for yij.
 
-    let x11 = Expr::var("x11");
-    let x12 = Expr::var("x12");
-    let x21 = Expr::var("x21");
-    let x22 = Expr::var("x22");
+    let x11 = Expr::<String>::var("x11");
+    let x12 = Expr::<String>::var("x12");
+    let x21 = Expr::<String>::var("x21");
+    let x22 = Expr::<String>::var("x22");
 
-    let y11 = Expr::var("y11");
-    let y12 = Expr::var("y12");
-    let y21 = Expr::var("y21");
-    let y22 = Expr::var("y22");
+    let y11 = Expr::<String>::var("y11");
+    let y12 = Expr::<String>::var("y12");
+    let y21 = Expr::<String>::var("y21");
+    let y22 = Expr::<String>::var("y22");
 
-    let one = Expr::constant(1);
+    let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::new()
+        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_variables(["y11", "y12", "y21", "y22"])
         // Both class should not attend a course at the same time
-        .add((&x11 + &y11).leq(&one))
-        .add((&x12 + &y12).leq(&one))
-        .add((&x21 + &y21).leq(&one))
-        .add((&x22 + &y22).leq(&one))
+        .add_constraint((&x11 + &y11).leq(&one))
+        .add_constraint((&x12 + &y12).leq(&one))
+        .add_constraint((&x21 + &y21).leq(&one))
+        .add_constraint((&x22 + &y22).leq(&one))
         // Each class should not attend more than one course at a given time
-        .add((&x11 + &x21).leq(&one))
-        .add((&x12 + &x22).leq(&one))
-        .add((&y11 + &y21).leq(&one))
-        .add((&y12 + &y22).leq(&one))
+        .add_constraint((&x11 + &x21).leq(&one))
+        .add_constraint((&x12 + &x22).leq(&one))
+        .add_constraint((&y11 + &y21).leq(&one))
+        .add_constraint((&y12 + &y22).leq(&one))
         // Each class must complete each course exactly once
-        .add((&x11 + &x12).eq(&one))
-        .add((&x21 + &x22).eq(&one))
-        .add((&y11 + &y12).eq(&one))
-        .add((&y21 + &y22).eq(&one))
-        .build();
-    let config = Config::from_iter(["x11", "y12", "y21"]);
+        .add_constraint((&x11 + &x12).eq(&one))
+        .add_constraint((&x21 + &x22).eq(&one))
+        .add_constraint((&y11 + &y12).eq(&one))
+        .add_constraint((&y21 + &y22).eq(&one))
+        .build()
+        .unwrap();
+    let config = pb.config_from(["x11", "y12", "y21"]).unwrap();
 
-    let dijkstra_solver = super::Solver::new(&pb);
+    let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = dijkstra_solver.restore_feasability(&config);
+    let solution = solver.restore_feasability(&config);
 
     assert_eq!(
-        Config::from(solution.expect("Solution found")),
-        Config::from_iter(["x11", "y12", "y21", "x22"])
+        solution.expect("Solution should be found").into_inner(),
+        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap()
     );
 }
