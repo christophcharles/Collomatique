@@ -1,7 +1,11 @@
 pub trait RandomGen {
     fn randbool(&mut self) -> bool;
     fn random(&mut self) -> f64;
-    fn rand_elem<T: Clone>(&mut self, elems: &[T]) -> T;
+    fn rand_in_range(&mut self, range: std::ops::Range<usize>) -> usize;
+    fn rand_elem<T: Clone>(&mut self, elems: &[T]) -> T {
+        let i = self.rand_in_range(0..elems.len());
+        elems[i].clone()
+    }
 }
 
 pub struct DefaultRndGen {
@@ -27,9 +31,8 @@ impl RandomGen for DefaultRndGen {
         self.thread_rng.gen::<f64>()
     }
 
-    fn rand_elem<T: Clone>(&mut self, elems: &[T]) -> T {
+    fn rand_in_range(&mut self, range: std::ops::Range<usize>) -> usize {
         use rand::Rng;
-        let i = self.thread_rng.gen_range(0..elems.len());
-        elems[i].clone()
+        self.thread_rng.gen_range(range)
     }
 }

@@ -1,49 +1,38 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::tools::{ConfigRepr, MatRepr};
-use crate::ilp::{Config, FeasableConfig, Problem};
+use crate::ilp::{Config, FeasableConfig};
 
-#[derive(Debug, Clone)]
-pub struct Solver<'a> {
-    problem: &'a Problem,
-    mat_repr: MatRepr<'a>,
-}
+#[derive(Debug, Clone, Default)]
+pub struct Solver {}
 
-impl<'a> Solver<'a> {
-    pub fn new(problem: &'a Problem) -> Self {
-        let mat_repr = MatRepr::new(problem);
-        Solver { problem, mat_repr }
+impl Solver {
+    pub fn new() -> Self {
+        Solver {}
     }
 }
 
-use super::FeasabilitySolver;
+use super::{FeasabilitySolver, VariableName};
+
 use std::collections::BTreeSet;
 
-impl<'a> FeasabilitySolver for Solver<'a> {
-    fn restore_feasability_exclude(
+impl<V: VariableName> FeasabilitySolver<V> for Solver {
+    fn restore_feasability_exclude<'a>(
         &self,
-        config: &Config,
-        exclude_list: &BTreeSet<&FeasableConfig>,
-    ) -> Option<FeasableConfig> {
-        let config_repr = self.mat_repr.config(config);
-
+        config: &Config<'a, V>,
+        exclude_list: &BTreeSet<&FeasableConfig<'a, V>>,
+    ) -> Option<FeasableConfig<'a, V>> {
         use std::collections::VecDeque;
 
-        let mut explored_configs: BTreeSet<ConfigRepr<'_, '_>> = exclude_list
-            .iter()
-            .map(|x| self.mat_repr.config(&Config::from(*x)))
-            .collect();
+        let exclude_configs: BTreeSet<Config<'a, V>> =
+            exclude_list.iter().map(|x| x.inner().clone()).collect();
+        let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();
-        config_queue.push_back(config_repr);
+        config_queue.push_back(config.clone());
 
         while let Some(candidate) = config_queue.pop_front() {
-            if candidate.is_feasable() && !explored_configs.contains(&candidate) {
-                return Some(
-                    self.problem
-                        .into_feasable(&candidate.into())
-                        .expect("Solution should be feasable"),
-                );
+            if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
+                return Some(unsafe { candidate.into_feasable_unchecked() });
             } else {
                 config_queue.extend(
                     candidate
@@ -51,7 +40,7 @@ impl<'a> FeasabilitySolver for Solver<'a> {
                         .into_iter()
                         .filter(|x| !explored_configs.contains(x)),
                 );
-                explored_configs.insert(candidate);
+                explored_configs.insert(candidate.clone());
             }
         }
 
