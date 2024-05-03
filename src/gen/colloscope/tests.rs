@@ -7101,3 +7101,310 @@ fn simple_colloscope() {
 
     assert_eq!(constraints, expected_result);
 }
+
+#[test]
+fn colloscope_with_dynamic_groups() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1]),
+                        can_be_extended: true,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([3]),
+                        can_be_extended: true,
+                    },
+                ],
+                not_assigned: BTreeSet::from([2, 4, 5]),
+            },
+        },
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::new(),
+                        can_be_extended: true,
+                    },
+                ],
+                not_assigned: BTreeSet::from([3, 4, 5]),
+            },
+        },
+    ];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let problem = ilp_translator.problem();
+    let constraints = problem.get_constraints().clone();
+
+    #[rustfmt::skip]
+    let gis_0_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_0_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 1 });
+
+    #[rustfmt::skip]
+    let gis_1_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 0, group: 0 });
+    #[rustfmt::skip]
+    let gis_1_0_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 0, group: 1 });
+    #[rustfmt::skip]
+    let gis_1_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 0 });
+    #[rustfmt::skip]
+    let gis_1_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 1 });
+
+    #[rustfmt::skip]
+    let sig_0_2_0 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 2, group: 0 });
+    #[rustfmt::skip]
+    let sig_0_4_0 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 4, group: 0 });
+    #[rustfmt::skip]
+    let sig_0_5_0 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 5, group: 0 });
+    #[rustfmt::skip]
+    let sig_0_2_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 2, group: 1 });
+    #[rustfmt::skip]
+    let sig_0_4_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 4, group: 1 });
+    #[rustfmt::skip]
+    let sig_0_5_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 0, student: 5, group: 1 });
+
+    #[rustfmt::skip]
+    let sig_1_3_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 1, student: 3, group: 1 });
+    #[rustfmt::skip]
+    let sig_1_4_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 1, student: 4, group: 1 });
+    #[rustfmt::skip]
+    let sig_1_5_1 = Expr::<Variable>::var(Variable::StudentInGroup { subject: 1, student: 5, group: 1 });
+
+    #[rustfmt::skip]
+    let dga_0_0_0_2 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 0, student: 2 });
+    #[rustfmt::skip]
+    let dga_0_0_0_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 0, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_0_0_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 0, student: 5 });
+    #[rustfmt::skip]
+    let dga_0_1_0_2 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 0, student: 2 });
+    #[rustfmt::skip]
+    let dga_0_1_0_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 0, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_1_0_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 0, student: 5 });
+
+    #[rustfmt::skip]
+    let dga_0_0_1_2 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 2 });
+    #[rustfmt::skip]
+    let dga_0_0_1_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_0_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 5 });
+    #[rustfmt::skip]
+    let dga_0_1_1_2 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 2 });
+    #[rustfmt::skip]
+    let dga_0_1_1_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_1_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 5 });
+
+    #[rustfmt::skip]
+    let dga_1_0_1_3 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 0, group: 1, student: 3 });
+    #[rustfmt::skip]
+    let dga_1_0_1_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 0, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_1_0_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 0, group: 1, student: 5 });
+    #[rustfmt::skip]
+    let dga_1_1_1_3 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 3 });
+    #[rustfmt::skip]
+    let dga_1_1_1_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_1_1_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 5 });
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        // One interrogation per period for groups with fixed students
+        (&gis_0_0_0 + &gis_0_1_0).eq(&Expr::constant(1)),
+        (&gis_0_0_1 + &gis_0_1_1).eq(&Expr::constant(1)),
+        (&gis_1_0_0 + &gis_1_1_0).eq(&Expr::constant(1)),
+
+        // One interrogation per period for dynamic students
+        (&dga_0_0_0_2 + &dga_0_0_1_2 + &dga_0_1_0_2 + &dga_0_1_1_2).eq(&Expr::constant(1)),
+        (&dga_0_0_0_4 + &dga_0_0_1_4 + &dga_0_1_0_4 + &dga_0_1_1_4).eq(&Expr::constant(1)),
+        (&dga_0_0_0_5 + &dga_0_0_1_5 + &dga_0_1_0_5 + &dga_0_1_1_5).eq(&Expr::constant(1)),
+
+        (&dga_1_0_1_3 + &dga_1_1_1_3).eq(&Expr::constant(1)),
+        (&dga_1_0_1_4 + &dga_1_1_1_4).eq(&Expr::constant(1)),
+        (&dga_1_0_1_5 + &dga_1_1_1_5).eq(&Expr::constant(1)),
+
+        // One interrogation at one time maximum for a given student
+        (&gis_0_0_0 + &gis_1_0_0).leq(&Expr::constant(1)),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&Expr::constant(1)),
+        (&dga_0_0_0_2 + &dga_0_0_1_2 + &gis_1_0_0).leq(&Expr::constant(1)),
+        (&dga_0_1_0_2 + &dga_0_1_1_2 + &gis_1_1_0).leq(&Expr::constant(1)),
+        (&gis_0_0_1 + &dga_1_0_1_3).leq(&Expr::constant(1)),
+        (&gis_0_1_1 + &dga_1_1_1_3).leq(&Expr::constant(1)),
+        (&dga_0_0_0_4 + &dga_0_0_1_4 + &dga_1_0_1_4).leq(&Expr::constant(1)),
+        (&dga_0_1_0_4 + &dga_0_1_1_4 + &dga_1_1_1_4).leq(&Expr::constant(1)),
+        (&dga_0_0_0_5 + &dga_0_0_1_5 + &dga_1_0_1_5).leq(&Expr::constant(1)),
+        (&dga_0_1_0_5 + &dga_0_1_1_5 + &dga_1_1_1_5).leq(&Expr::constant(1)),
+
+        // One group per interrogation maximum
+        (&gis_0_0_0 + &gis_0_0_1).leq(&Expr::constant(1)),
+        (&gis_0_1_0 + &gis_0_1_1).leq(&Expr::constant(1)),
+        (&gis_1_0_0 + &gis_1_0_1).leq(&Expr::constant(1)),
+        (&gis_1_1_0 + &gis_1_1_1).leq(&Expr::constant(1)),
+
+        // Dynamic students in exactly one group
+        (&sig_0_2_0 + &sig_0_2_1).eq(&Expr::constant(1)),
+        (&sig_0_4_0 + &sig_0_4_1).eq(&Expr::constant(1)),
+        (&sig_0_5_0 + &sig_0_5_1).eq(&Expr::constant(1)),
+
+        sig_1_3_1.eq(&Expr::constant(1)),
+        sig_1_4_1.eq(&Expr::constant(1)),
+        sig_1_5_1.eq(&Expr::constant(1)),
+
+        // Number of students per group (for dynamic students) 
+        (&sig_0_2_0 + &sig_0_4_0 + &sig_0_5_0).leq(&Expr::constant(1)),
+        (&sig_0_2_1 + &sig_0_4_1 + &sig_0_5_1).leq(&Expr::constant(2)),
+        (&sig_0_2_1 + &sig_0_4_1 + &sig_0_5_1).geq(&Expr::constant(1)),
+
+        (&sig_1_3_1 + &sig_1_4_1 + &sig_1_5_1).leq(&Expr::constant(3)),
+        (&sig_1_3_1 + &sig_1_4_1 + &sig_1_5_1).geq(&Expr::constant(2)),
+
+        // Dynamic group assignement only if group in correct slot
+        dga_0_0_0_2.leq(&gis_0_0_0),
+        dga_0_0_0_4.leq(&gis_0_0_0),
+        dga_0_0_0_5.leq(&gis_0_0_0),
+        dga_0_1_0_2.leq(&gis_0_1_0),
+        dga_0_1_0_4.leq(&gis_0_1_0),
+        dga_0_1_0_5.leq(&gis_0_1_0),
+
+        dga_0_0_1_2.leq(&gis_0_0_1),
+        dga_0_0_1_4.leq(&gis_0_0_1),
+        dga_0_0_1_5.leq(&gis_0_0_1),
+        dga_0_1_1_2.leq(&gis_0_1_1),
+        dga_0_1_1_4.leq(&gis_0_1_1),
+        dga_0_1_1_5.leq(&gis_0_1_1),
+
+        dga_1_0_1_3.leq(&gis_1_0_1),
+        dga_1_0_1_4.leq(&gis_1_0_1),
+        dga_1_0_1_5.leq(&gis_1_0_1),
+        dga_1_1_1_3.leq(&gis_1_1_1),
+        dga_1_1_1_4.leq(&gis_1_1_1),
+        dga_1_1_1_5.leq(&gis_1_1_1),
+
+        // Dynamic group assignement only if student in correct group
+        dga_0_0_0_2.leq(&sig_0_2_0),
+        dga_0_0_0_4.leq(&sig_0_4_0),
+        dga_0_0_0_5.leq(&sig_0_5_0),
+        dga_0_1_0_2.leq(&sig_0_2_0),
+        dga_0_1_0_4.leq(&sig_0_4_0),
+        dga_0_1_0_5.leq(&sig_0_5_0),
+
+        dga_0_0_1_2.leq(&sig_0_2_1),
+        dga_0_0_1_4.leq(&sig_0_4_1),
+        dga_0_0_1_5.leq(&sig_0_5_1),
+        dga_0_1_1_2.leq(&sig_0_2_1),
+        dga_0_1_1_4.leq(&sig_0_4_1),
+        dga_0_1_1_5.leq(&sig_0_5_1),
+
+        dga_1_0_1_3.leq(&sig_1_3_1),
+        dga_1_0_1_4.leq(&sig_1_4_1),
+        dga_1_0_1_5.leq(&sig_1_5_1),
+        dga_1_1_1_3.leq(&sig_1_3_1),
+        dga_1_1_1_4.leq(&sig_1_4_1),
+        dga_1_1_1_5.leq(&sig_1_5_1),
+
+        // Group in slot only if at least one dynamic student (if relevant)
+        (&dga_0_0_0_2 + &dga_0_0_0_4 + &dga_0_0_0_5).geq(&gis_0_0_0),
+        (&dga_0_1_0_2 + &dga_0_1_0_4 + &dga_0_1_0_5).geq(&gis_0_1_0),
+        (&dga_0_0_1_2 + &dga_0_0_1_4 + &dga_0_0_1_5).geq(&gis_0_0_1),
+        (&dga_0_1_1_2 + &dga_0_1_1_4 + &dga_0_1_1_5).geq(&gis_0_1_1),
+
+        (&dga_1_0_1_3 + &dga_1_0_1_4 + &dga_1_0_1_5).geq(&gis_1_0_1),
+        (&dga_1_1_1_3 + &dga_1_1_1_4 + &dga_1_1_1_5).geq(&gis_1_1_1),
+    ]);
+
+    assert_eq!(constraints, expected_result);
+}
