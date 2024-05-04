@@ -436,29 +436,19 @@ impl<'a, V: VariableName> PartialOrd for Config<'a, V> {
 pub struct FeasableConfig<'a, V: VariableName>(Config<'a, V>);
 
 impl<'a, V: VariableName> FeasableConfig<'a, V> {
-    pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
-    where
-        V: std::borrow::Borrow<T>,
-        T: Ord + ?Sized,
-        &'b T: Into<V>,
-    {
-        self.0.set(var, val)
-    }
-
-    pub fn get<'b, T>(&self, var: &'b T) -> Result<bool, V>
-    where
-        V: std::borrow::Borrow<T>,
-        T: Ord + ?Sized,
-        &'b T: Into<V>,
-    {
-        self.0.get(var)
-    }
-
     pub fn into_inner(self) -> Config<'a, V> {
         self.0
     }
 
     pub fn inner(&self) -> &Config<'a, V> {
         &self.0
+    }
+}
+
+impl<'a, V: VariableName> std::ops::Deref for FeasableConfig<'a, V> {
+    type Target = Config<'a, V>;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
     }
 }
