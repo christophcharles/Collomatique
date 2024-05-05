@@ -322,6 +322,11 @@ fn main() {
     let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
-        println!("{}: {} - {}", i, cost, sol.inner().clone());
+        println!(
+            "{}: {} - {:?}",
+            i,
+            cost,
+            ilp_translator.read_solution(sol.as_ref())
+        );
     }
 }
