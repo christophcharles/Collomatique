@@ -78,7 +78,7 @@ fn test_backtracking() {
         .build();
     let config = pb.default_config();
 
-    let solver = super::Solver::new();
+    let solver = super::Solver::new(super::heuristics::Connolly1992::default());
 
     use crate::ilp::solvers::FeasabilitySolver;
 
@@ -173,7 +173,7 @@ fn test_backtracking_2() {
         .build();
     let config = pb.config_from(["y21", "y22", "x11"]).unwrap();
 
-    let solver = super::Solver::new();
+    let solver = super::Solver::new(super::heuristics::Connolly1992::default());
 
     use crate::ilp::solvers::FeasabilitySolver;
 
