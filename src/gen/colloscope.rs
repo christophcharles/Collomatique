@@ -65,9 +65,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SlotStart {
-    week: u32,
-    weekday: time::Weekday,
-    start_time: time::Time,
+    pub week: u32,
+    pub weekday: time::Weekday,
+    pub start_time: time::Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -105,14 +105,14 @@ pub struct SlotWithTeacher {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupDesc {
-    students: BTreeSet<usize>,
-    can_be_extended: bool,
+    pub students: BTreeSet<usize>,
+    pub can_be_extended: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupsDesc {
-    prefilled_groups: Vec<GroupDesc>,
-    not_assigned: BTreeSet<usize>,
+    pub prefilled_groups: Vec<GroupDesc>,
+    pub not_assigned: BTreeSet<usize>,
 }
 
 impl GroupsDesc {
@@ -489,7 +489,7 @@ pub struct IlpTranslator<'a> {
 }
 
 use crate::ilp::linexpr::{Constraint, Expr};
-use crate::ilp::{Problem, ProblemBuilder};
+use crate::ilp::{FeasableConfig, Problem, ProblemBuilder};
 
 enum StudentStatus {
     Assigned(usize),
@@ -1471,10 +1471,14 @@ impl<'a> IlpTranslator<'a> {
         let min = i32::try_from(range.start).unwrap();
         let max = i32::try_from(range.end).unwrap() - 1;
 
-        BTreeSet::from([
-            expr.leq(&Expr::constant(max)),
-            expr.geq(&Expr::constant(min)),
-        ])
+        if min != max {
+            BTreeSet::from([
+                expr.leq(&Expr::constant(max)),
+                expr.geq(&Expr::constant(min)),
+            ])
+        } else {
+            BTreeSet::from([expr.eq(&Expr::constant(max))])
+        }
     }
 
     fn build_interrogations_per_week_constraints(&self) -> BTreeSet<Constraint<Variable>> {
@@ -1707,4 +1711,77 @@ impl<'a> IlpTranslator<'a> {
             .simplify_trivial_constraints()
             .build()
     }
+
+    fn read_subject(
+        &self,
+        config: &FeasableConfig<'_, Variable>,
+        i: usize,
+        subject: &Subject,
+    ) -> Option<ColloscopeSubject> {
+        let mut groups = Vec::with_capacity(subject.groups.prefilled_groups.len());
+
+        for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+            let mut output = group.students.clone();
+
+            for student in subject.groups.not_assigned.iter().copied() {
+                if config
+                    .get(&Variable::StudentInGroup {
+                        subject: i,
+                        student,
+                        group: k,
+                    })
+                    .ok()?
+                {
+                    output.insert(student);
+                }
+            }
+
+            groups.push(output)
+        }
+
+        let mut slots = Vec::with_capacity(subject.slots.len());
+
+        for (j, _slot) in subject.slots.iter().enumerate() {
+            let mut assigned_group = None;
+
+            for k in 0..subject.groups.prefilled_groups.len() {
+                if config
+                    .get(&Variable::GroupInSlot {
+                        subject: i,
+                        slot: j,
+                        group: k,
+                    })
+                    .ok()?
+                {
+                    assigned_group = Some(k);
+                    break;
+                }
+            }
+
+            slots.push(assigned_group);
+        }
+
+        Some(ColloscopeSubject { groups, slots })
+    }
+
+    pub fn read_solution(&self, config: &FeasableConfig<'_, Variable>) -> Option<Colloscope> {
+        let mut subjects = Vec::with_capacity(self.data.subjects.len());
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            subjects.push(self.read_subject(config, i, subject)?);
+        }
+
+        Some(Colloscope { subjects })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Colloscope {
+    pub subjects: Vec<ColloscopeSubject>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeSubject {
+    pub groups: Vec<BTreeSet<usize>>,
+    pub slots: Vec<Option<usize>>,
 }
