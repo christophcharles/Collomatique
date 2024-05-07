@@ -508,3 +508,9 @@ impl<'a, V: VariableName> std::ops::Deref for FeasableConfig<'a, V> {
         self.inner()
     }
 }
+
+impl<'a, V: VariableName> std::fmt::Display for FeasableConfig<'a, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner().fmt(f)
+    }
+}
