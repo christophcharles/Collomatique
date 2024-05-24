@@ -171,7 +171,7 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqliteConnec
     }
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
 
