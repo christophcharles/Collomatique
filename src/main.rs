@@ -32,19 +32,34 @@ CREATE TABLE "colloscopes" (
     PRIMARY KEY("colloscope_id" AUTOINCREMENT)
 );
 
+CREATE TABLE "course_incompats" (
+	"course_incompat_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	PRIMARY KEY("course_incompat_id")
+);
+
+CREATE TABLE "week_patterns" (
+	"week_pattern_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	PRIMARY KEY("week_pattern_id")
+);
+
+CREATE TABLE "weeks" (
+	"week_pattern_id"	INTEGER NOT NULL,
+	"week"	INTEGER NOT NULL,
+	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id"),
+	PRIMARY KEY("week_pattern_id","week")
+);
+
 CREATE TABLE "course_incompat_items" (
 	"course_incompat_id"	INTEGER NOT NULL,
 	"week_pattern_id"	INTEGER NOT NULL,
 	"start_day"	INTEGER NOT NULL,
 	"start_time"	INTEGER NOT NULL,
 	"duration"	INTEGER NOT NULL,
-	PRIMARY KEY("course_incompat_id","week_pattern_id","start_day","start_time","duration")
-);
-
-CREATE TABLE "course_incompats" (
-	"course_incompat_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("course_incompat_id")
+    FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
+	PRIMARY KEY("course_incompat_id","week_pattern_id","start_day","start_time","duration"),
+    FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id")
 );
 
 CREATE TABLE "general_data" (
@@ -53,34 +68,12 @@ CREATE TABLE "general_data" (
 	PRIMARY KEY("name")
 );
 
-CREATE TABLE "grouping_incompats" (
-	"id1"	INTEGER NOT NULL,
-	"id2"	INTEGER NOT NULL,
-	PRIMARY KEY("id1","id2")
-);
-
-CREATE TABLE "grouping_items" (
-	"grouping_id"	INTEGER NOT NULL,
-	"time_slot_id"	INTEGER NOT NULL,
-	PRIMARY KEY("grouping_id","time_slot_id")
-);
-
-CREATE TABLE "groupings" (
-	"grouping_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("grouping_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "student_incompats" (
-	"student_id"	INTEGER NOT NULL,
-	"incompat_id"	INTEGER NOT NULL,
-	PRIMARY KEY("student_id","incompat_id")
-);
-
-CREATE TABLE "student_subjects" (
-	"student_id"	INTEGER NOT NULL,
-	"subject_id"	INTEGER NOT NULL,
-	PRIMARY KEY("subject_id","student_id")
+CREATE TABLE "teachers" (
+	"teacher_id"	INTEGER NOT NULL,
+	"surname"	TEXT NOT NULL,
+	"firstname"	TEXT NOT NULL,
+	"contact"	TEXT NOT NULL,
+	PRIMARY KEY("teacher_id" AUTOINCREMENT)
 );
 
 CREATE TABLE "students" (
@@ -102,22 +95,30 @@ CREATE TABLE "subject_groups" (
 CREATE TABLE "subjects" (
 	"subject_id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
-	"subject_group"	INTEGER NOT NULL,
+	"subject_group_id"	INTEGER NOT NULL,
 	"duration"	INTEGER NOT NULL,
 	"course_incompat_id"	INTEGER,
 	"min_students_per_slot"	INTEGER NOT NULL,
 	"max_students_per_slot"	INTEGER NOT NULL,
 	"period"	INTEGER NOT NULL,
 	"period_is_strict"	INTEGER NOT NULL,
-	PRIMARY KEY("subject_id" AUTOINCREMENT)
+	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
+	PRIMARY KEY("subject_id" AUTOINCREMENT),
+    FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id")
 );
 
-CREATE TABLE "teachers" (
-	"teacher_id"	INTEGER NOT NULL,
-	"surname"	TEXT NOT NULL,
-	"firstname"	TEXT NOT NULL,
-	"contact"	TEXT NOT NULL,
-	PRIMARY KEY("teacher_id" AUTOINCREMENT)
+CREATE TABLE "groupings" (
+	"grouping_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	PRIMARY KEY("grouping_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "grouping_incompats" (
+	"id1"	INTEGER NOT NULL,
+	"id2"	INTEGER NOT NULL,
+	FOREIGN KEY("id1") REFERENCES "groupings"("grouping_id"),
+	PRIMARY KEY("id1","id2"),
+	FOREIGN KEY("id2") REFERENCES "groupings"("grouping_id")
 );
 
 CREATE TABLE "time_slots" (
@@ -126,20 +127,35 @@ CREATE TABLE "time_slots" (
 	"teacher_id"	INTEGER NOT NULL,
 	"start_day"	INTEGER NOT NULL,
 	"start_time"	INTEGER NOT NULL,
-	"week_pattern"	INTEGER NOT NULL,
-	PRIMARY KEY("time_slot_id" AUTOINCREMENT)
+	"week_pattern_id"	INTEGER NOT NULL,
+	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id"),
+	PRIMARY KEY("time_slot_id" AUTOINCREMENT),
+	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	FOREIGN KEY("teacher_id") REFERENCES "teachers"("teacher_id")
 );
 
-CREATE TABLE "week_patterns" (
-	"week_pattern_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("week_pattern_id")
+CREATE TABLE "grouping_items" (
+	"grouping_id"	INTEGER NOT NULL,
+	"time_slot_id"	INTEGER NOT NULL,
+    FOREIGN KEY("grouping_id") REFERENCES "groupings"("grouping_id"),
+	FOREIGN KEY("time_slot_id") REFERENCES "time_slots"("time_slot_id"),
+	PRIMARY KEY("grouping_id","time_slot_id")
 );
 
-CREATE TABLE "weeks" (
-	"week_pattern_id"	INTEGER NOT NULL,
-	"week"	INTEGER NOT NULL,
-	PRIMARY KEY("week_pattern_id","week")
+CREATE TABLE "student_incompats" (
+	"student_id"	INTEGER NOT NULL,
+	"incompat_id"	INTEGER NOT NULL,
+	PRIMARY KEY("student_id","incompat_id"),
+    FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
+	FOREIGN KEY("incompat_id") REFERENCES "course_incompats"("course_incompat_id")
+);
+
+CREATE TABLE "student_subjects" (
+	"student_id"	INTEGER NOT NULL,
+	"subject_id"	INTEGER NOT NULL,
+    FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
+	PRIMARY KEY("subject_id","student_id")
 );"#,
     )
     .execute(&mut db)
