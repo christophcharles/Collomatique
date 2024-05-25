@@ -1,4 +1,5 @@
 pub mod nd;
+pub mod sparse;
 
 use super::linexpr::{self, VariableName};
 use super::random;
