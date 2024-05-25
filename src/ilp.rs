@@ -4,7 +4,7 @@ pub mod optimizers;
 pub mod random;
 pub mod solvers;
 
-mod ndtools;
+mod mat_repr;
 
 #[cfg(test)]
 mod tests;
@@ -161,7 +161,7 @@ impl<V: VariableName> ProblemBuilder<V> {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let nd_problem = ndtools::NdProblem::new(&variables_vec, &self.constraints);
+        let nd_problem = mat_repr::nd::NdProblem::new(&variables_vec, &self.constraints);
 
         Problem {
             variables: self.variables,
@@ -258,7 +258,7 @@ pub struct Problem<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     constants: BTreeMap<V, bool>,
     eval_fn: EvalFn<V>,
-    nd_problem: ndtools::NdProblem<V>,
+    nd_problem: mat_repr::nd::NdProblem<V>,
 }
 
 impl<V: VariableName> std::fmt::Display for Problem<V> {
@@ -336,7 +336,7 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone)]
 pub struct Config<'a, V: VariableName> {
     problem: &'a Problem<V>,
-    nd_config: ndtools::NdConfig,
+    nd_config: mat_repr::nd::NdConfig,
 }
 
 impl<'a, V: VariableName> Config<'a, V> {
