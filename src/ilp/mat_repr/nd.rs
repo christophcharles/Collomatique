@@ -22,8 +22,10 @@ enum ConstraintRef {
     Eq(usize),
 }
 
-impl<V: VariableName> NdProblem<V> {
-    pub fn new<'a, I: IntoIterator<Item = &'a linexpr::Constraint<V>>>(
+impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
+    type Config = NdConfig<V>;
+
+    fn new<'a, I: IntoIterator<Item = &'a linexpr::Constraint<V>>>(
         variables_vec: &'a Vec<V>,
         constraints: I,
     ) -> NdProblem<V> {
@@ -72,15 +74,18 @@ impl<V: VariableName> NdProblem<V> {
         }
     }
 
-    pub fn default_nd_config(&self) -> NdConfig {
+    fn default_nd_config(&self) -> NdConfig<V> {
         let p = self.leq_mat.shape()[1];
 
         let values = Array1::zeros(p);
 
-        NdConfig { values }
+        NdConfig {
+            values,
+            _phantom: std::marker::PhantomData,
+        }
     }
 
-    pub fn random_nd_config<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig {
+    fn random_nd_config<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig<V> {
         let p = self.leq_mat.shape()[1];
 
         let mut values = Array1::zeros(p);
@@ -89,24 +94,28 @@ impl<V: VariableName> NdProblem<V> {
             values[i] = if random_gen.randbool() { 1 } else { 0 };
         }
 
-        NdConfig { values }
+        NdConfig {
+            values,
+            _phantom: std::marker::PhantomData,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct NdConfig {
+pub struct NdConfig<V: VariableName> {
     values: Array1<i32>,
+    _phantom: std::marker::PhantomData<V>,
 }
 
-impl PartialEq for NdConfig {
+impl<V: VariableName> PartialEq for NdConfig<V> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl Eq for NdConfig {}
+impl<V: VariableName> Eq for NdConfig<V> {}
 
-impl Ord for NdConfig {
+impl<V: VariableName> Ord for NdConfig<V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let l1 = self.values.len();
         let l2 = other.values.len();
@@ -123,14 +132,16 @@ impl Ord for NdConfig {
     }
 }
 
-impl PartialOrd for NdConfig {
+impl<V: VariableName> PartialOrd for NdConfig<V> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl NdConfig {
-    pub fn max_distance_to_constraint<V: VariableName>(&self, nd_problem: &NdProblem<V>) -> f32 {
+impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
+    type Problem = NdProblem<V>;
+
+    fn max_distance_to_constraint(&self, nd_problem: &NdProblem<V>) -> f32 {
         let mut max_dist = 0.0f32;
         let p = nd_problem.leq_mat.shape()[1];
 
@@ -165,10 +176,7 @@ impl NdConfig {
         max_dist
     }
 
-    pub fn compute_lhs<V: VariableName>(
-        &self,
-        nd_problem: &NdProblem<V>,
-    ) -> BTreeMap<linexpr::Constraint<V>, i32> {
+    fn compute_lhs(&self, nd_problem: &NdProblem<V>) -> BTreeMap<linexpr::Constraint<V>, i32> {
         let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
         let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
 
@@ -185,7 +193,7 @@ impl NdConfig {
         output
     }
 
-    pub fn is_feasable<V: VariableName>(&self, nd_problem: &NdProblem<V>) -> bool {
+    fn is_feasable(&self, nd_problem: &NdProblem<V>) -> bool {
         let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
         let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
 
@@ -202,7 +210,7 @@ impl NdConfig {
         true
     }
 
-    pub fn neighbours(&self) -> Vec<NdConfig> {
+    fn neighbours(&self) -> Vec<NdConfig<V>> {
         let mut output = vec![];
 
         for i in 0..self.values.len() {
@@ -216,7 +224,7 @@ impl NdConfig {
         output
     }
 
-    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig {
+    fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig<V> {
         let mut output = self.clone();
 
         let i = random_gen.rand_in_range(0..self.values.len());
@@ -225,11 +233,11 @@ impl NdConfig {
         output
     }
 
-    pub unsafe fn get_unchecked(&self, i: usize) -> i32 {
+    unsafe fn get_unchecked(&self, i: usize) -> i32 {
         self.values[i]
     }
 
-    pub unsafe fn set_unchecked(&mut self, i: usize, val: i32) {
+    unsafe fn set_unchecked(&mut self, i: usize, val: i32) {
         self.values[i] = val
     }
 }
