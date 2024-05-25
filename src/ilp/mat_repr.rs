@@ -9,9 +9,9 @@ pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug {
 
     fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> Self;
 
-    fn default_nd_config(&self) -> Self::Config;
+    fn default_config(&self) -> Self::Config;
 
-    fn random_nd_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Self::Config;
+    fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Self::Config;
 }
 
 pub trait ConfigRepr<V: VariableName>:
