@@ -297,6 +297,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         Config {
             problem: self,
             cfg_repr: self.pb_repr.default_config(),
+            precomputation: RefCell::new(None),
         }
     }
 
@@ -322,6 +323,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         Config {
             problem: self,
             cfg_repr: self.pb_repr.random_config(random_gen),
+            precomputation: RefCell::new(None),
         }
     }
 
@@ -334,12 +336,20 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     }
 }
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone)]
+struct Precomputation<V: VariableName, P: ProblemRepr<V>> {
+    data: <P::Config as mat_repr::ConfigRepr<V>>::Precomputation,
+    invalidated_vars: BTreeSet<usize>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Config<'a, V: VariableName, P: ProblemRepr<V>> {
     problem: &'a Problem<V, P>,
     cfg_repr: P::Config,
+    precomputation: RefCell<Option<Precomputation<V, P>>>,
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
@@ -381,7 +391,25 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         unsafe {
             self.cfg_repr.set_unchecked(*i, if val { 1 } else { 0 });
         }
+        self.invalidate_precomputation(*i);
         Ok(())
+    }
+
+    pub fn neighbour(&self, i: usize) -> Config<'a, V, P> {
+        assert!(i < self.problem.variables.len());
+
+        let cfg_repr = self.cfg_repr.neighbour(i);
+        let precomputation = self.precomputation.clone();
+
+        let mut output = Config {
+            problem: self.problem,
+            cfg_repr,
+            precomputation,
+        };
+
+        output.invalidate_precomputation(i);
+
+        output
     }
 
     pub fn random_neighbour<T: random::RandomGen>(
@@ -392,20 +420,14 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
             return None;
         }
 
-        Some(Config {
-            problem: self.problem,
-            cfg_repr: self.cfg_repr.random_neighbour(random_gen),
-        })
+        let i = random_gen.rand_in_range(0..self.problem.variables.len());
+        Some(self.neighbour(i))
     }
 
     pub fn neighbours(&self) -> Vec<Config<'a, V, P>> {
-        self.cfg_repr
-            .neighbours()
+        (0..self.problem.variables.len())
             .into_iter()
-            .map(|x| Config {
-                problem: self.problem,
-                cfg_repr: x,
-            })
+            .map(|x| self.neighbour(x))
             .collect()
     }
 
@@ -415,11 +437,15 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
     }
 
     pub fn compute_lhs(&self) -> BTreeMap<linexpr::Constraint<V>, i32> {
-        self.cfg_repr.compute_lhs(&self.problem.pb_repr)
+        let precomputation = self.get_precomputation();
+        self.cfg_repr
+            .compute_lhs(&self.problem.pb_repr, &*precomputation)
     }
 
     pub fn is_feasable(&self) -> bool {
-        self.cfg_repr.is_feasable(&self.problem.pb_repr)
+        let precomputation = self.get_precomputation();
+        self.cfg_repr
+            .is_feasable(&self.problem.pb_repr, &*precomputation)
     }
 
     pub fn into_feasable(self) -> Option<FeasableConfig<'a, V, P>> {
@@ -432,6 +458,46 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
 
     pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, P> {
         FeasableConfig(self)
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
+    fn get_precomputation(
+        &self,
+    ) -> std::cell::Ref<'_, <P::Config as mat_repr::ConfigRepr<V>>::Precomputation> {
+        let r = self.precomputation.borrow();
+        match r.as_ref() {
+            Some(x) => {
+                if !x.invalidated_vars.is_empty() {
+                    std::mem::drop(r);
+                    self.precomputation.borrow_mut().as_mut().map(|y| {
+                        self.cfg_repr.update_precomputation(
+                            &self.problem.pb_repr,
+                            &mut y.data,
+                            &y.invalidated_vars,
+                        );
+                        y.invalidated_vars.clear();
+                    });
+                }
+            }
+            None => {
+                std::mem::drop(r);
+                let data = self.cfg_repr.precompute(&self.problem.pb_repr);
+                self.precomputation.replace(Some(Precomputation {
+                    data,
+                    invalidated_vars: BTreeSet::new(),
+                }));
+            }
+        }
+        std::cell::Ref::map(self.precomputation.borrow(), |x| &x.as_ref().unwrap().data)
+    }
+
+    fn invalidate_precomputation(&mut self, i: usize) {
+        let mut b = self.precomputation.borrow_mut();
+
+        b.as_mut().map(|x| {
+            x.invalidated_vars.insert(i);
+        });
     }
 }
 
