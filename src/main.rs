@@ -949,21 +949,25 @@ async fn main() -> Result<()> {
 
     let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
-    sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
-    sa_optimizer.set_max_steps(Some(1000));
-    sa_optimizer.set_init_max_steps(Some(100000));
+    for i in 1.. {
+        println!("Attempt n°{}...", i);
 
-    use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
-    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
-    let iterator = sa_optimizer.iterate(solver, &mut random_gen);
+        sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
+        sa_optimizer.set_max_steps(Some(1000));
+        sa_optimizer.set_init_max_steps(Some(100000));
 
-    for (i, (sol, cost)) in iterator.enumerate() {
-        println!(
-            "{}: {} - {:?}",
-            i,
-            cost,
-            ilp_translator.read_solution(sol.as_ref())
-        );
+        use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
+        let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
+        let iterator = sa_optimizer.iterate(solver, &mut random_gen);
+
+        for (i, (sol, cost)) in iterator.enumerate() {
+            println!(
+                "{}: {} - {:?}",
+                i,
+                cost,
+                ilp_translator.read_solution(sol.as_ref())
+            );
+        }
     }
 
     Ok(())
