@@ -407,40 +407,31 @@ WHERE course_incompat_id IS NOT NULL
     Ok(StudentsData { list, id_map })
 }
 
-struct SubjectsData {
-    list: collomatique::gen::colloscope::SubjectList,
-    slot_map: std::collections::BTreeMap<
-        i64,
-        std::collections::BTreeSet<collomatique::gen::colloscope::SlotRef>,
-    >,
+#[derive(Clone, Debug)]
+struct SubjectRecord {
+    id: i64,
+    duration: i64,
+    min_students_per_slot: i64,
+    max_students_per_slot: i64,
+    period: i64,
+    period_is_strict: i64,
 }
 
-async fn generate_subjects(
-    db_conn: &SqlitePool,
-    student_id_map: &std::collections::BTreeMap<i64, usize>,
-) -> Result<SubjectsData> {
-    let subject_data = sqlx::query!("SELECT subject_id AS id, duration, min_students_per_slot, max_students_per_slot, period, period_is_strict FROM subjects")
-        .fetch_all(db_conn)
-        .await?;
-    let slots_data_req = sqlx::query!(
-        "
-SELECT time_slot_id AS id, subject_id, teacher_id, start_day, start_time, week
-FROM time_slots NATURAL JOIN weeks"
-    )
-    .fetch_all(db_conn);
-    let teachers_data_req =
-        sqlx::query!("SELECT teacher_id AS id FROM teachers").fetch_all(db_conn);
-    let student_subjects_req =
-        sqlx::query!("SELECT student_id, subject_id FROM student_subjects").fetch_all(db_conn);
-
+fn generate_bare_subjects(
+    subject_data: &[SubjectRecord],
+) -> (
+    collomatique::gen::colloscope::SubjectList,
+    std::collections::BTreeMap<i64, usize>,
+) {
+    use std::collections::BTreeMap;
     let id_map: BTreeMap<_, _> = subject_data
         .iter()
         .enumerate()
         .map(|(i, x)| (x.id, i))
         .collect();
 
-    use collomatique::gen::colloscope::SubjectList;
-    let mut list: SubjectList = subject_data
+    use std::collections::BTreeSet;
+    let subjects = subject_data
         .iter()
         .map(|x| {
             use collomatique::gen::colloscope::{GroupsDesc, Subject};
@@ -476,28 +467,53 @@ FROM time_slots NATURAL JOIN weeks"
         })
         .collect();
 
+    (subjects, id_map)
+}
+
+struct SlotRecord {
+    id: i64,
+    subject_id: i64,
+    teacher_id: i64,
+    start_day: i64,
+    start_time: i64,
+    week: i64,
+}
+
+struct TeacherRecord {
+    id: i64,
+}
+
+fn add_slots_to_subjects(
+    subjects: &mut collomatique::gen::colloscope::SubjectList,
+    slots_data: &[SlotRecord],
+    teachers_data: &[TeacherRecord],
+    subject_id_map: &std::collections::BTreeMap<i64, usize>,
+) -> Result<
+    std::collections::BTreeMap<
+        i64,
+        std::collections::BTreeSet<collomatique::gen::colloscope::SlotRef>,
+    >,
+> {
     use std::collections::{BTreeMap, BTreeSet};
     let mut slot_map = BTreeMap::<_, BTreeSet<_>>::new();
 
-    let slots_data = slots_data_req.await?;
-    let teachers_data = teachers_data_req.await?;
     let teacher_id_map: BTreeMap<_, _> = teachers_data
         .iter()
         .enumerate()
         .map(|(i, x)| (x.id, i))
         .collect();
 
-    for slot in &slots_data {
+    for slot in slots_data {
         use collomatique::gen::colloscope::{SlotRef, SlotStart, SlotWithTeacher};
         use collomatique::gen::time::{Time, Weekday};
 
-        let subject_index = id_map[&slot.subject_id];
+        let subject_index = subject_id_map[&slot.subject_id];
 
         match slot_map.get_mut(&slot.id) {
             Some(val) => {
                 val.insert(SlotRef {
                     subject: subject_index,
-                    slot: list[subject_index].slots.len(),
+                    slot: subjects[subject_index].slots.len(),
                 });
             }
             None => {
@@ -505,13 +521,13 @@ FROM time_slots NATURAL JOIN weeks"
                     slot.id,
                     BTreeSet::from([SlotRef {
                         subject: subject_index,
-                        slot: list[subject_index].slots.len(),
+                        slot: subjects[subject_index].slots.len(),
                     }]),
                 );
             }
         }
 
-        list[subject_index].slots.push(SlotWithTeacher {
+        subjects[subject_index].slots.push(SlotWithTeacher {
             teacher: teacher_id_map[&slot.teacher_id],
             start: SlotStart {
                 week: u32::try_from(slot.week)?,
@@ -522,19 +538,31 @@ FROM time_slots NATURAL JOIN weeks"
         });
     }
 
-    let student_subjects_data = student_subjects_req.await?;
+    Ok(slot_map)
+}
 
-    for x in &student_subjects_data {
-        let subject_index = id_map[&x.subject_id];
+struct StudentSubjectRecord {
+    student_id: i64,
+    subject_id: i64,
+}
+
+fn add_students_to_subjects(
+    subjects: &mut collomatique::gen::colloscope::SubjectList,
+    student_subjects_data: &[StudentSubjectRecord],
+    subject_id_map: &std::collections::BTreeMap<i64, usize>,
+    student_id_map: &std::collections::BTreeMap<i64, usize>,
+) -> Result<()> {
+    for x in student_subjects_data {
+        let subject_index = subject_id_map[&x.subject_id];
         let student_index = student_id_map[&x.student_id];
 
-        list[subject_index]
+        subjects[subject_index]
             .groups
             .not_assigned
             .insert(student_index);
     }
 
-    for subject in list.iter_mut() {
+    for subject in subjects.iter_mut() {
         if subject.groups.not_assigned.len() < subject.students_per_slot.start().get() {
             return Err(anyhow!("Not enough students to assign into groups"));
         }
@@ -558,6 +586,7 @@ FROM time_slots NATURAL JOIN weeks"
 
         for _i in 0..group_count {
             use collomatique::gen::colloscope::GroupDesc;
+            use std::collections::BTreeSet;
 
             subject.groups.prefilled_groups.push(GroupDesc {
                 students: BTreeSet::new(),
@@ -565,6 +594,59 @@ FROM time_slots NATURAL JOIN weeks"
             });
         }
     }
+
+    Ok(())
+}
+
+struct SubjectsData {
+    list: collomatique::gen::colloscope::SubjectList,
+    slot_map: std::collections::BTreeMap<
+        i64,
+        std::collections::BTreeSet<collomatique::gen::colloscope::SlotRef>,
+    >,
+}
+
+async fn generate_subjects(
+    db_conn: &SqlitePool,
+    student_id_map: &std::collections::BTreeMap<i64, usize>,
+    collo_id: i64,
+) -> Result<SubjectsData> {
+    let subject_data = sqlx::query_as!(SubjectRecord, "SELECT subject_id AS id, duration, min_students_per_slot, max_students_per_slot, period, period_is_strict FROM subjects")
+        .fetch_all(db_conn)
+        .await?;
+    let slots_data_req = sqlx::query_as!(
+        SlotRecord,
+        "
+SELECT time_slot_id AS id, subject_id, teacher_id, start_day, start_time, week
+FROM time_slots NATURAL JOIN weeks"
+    )
+    .fetch_all(db_conn);
+    let teachers_data_req =
+        sqlx::query_as!(TeacherRecord, "SELECT teacher_id AS id FROM teachers").fetch_all(db_conn);
+    let student_subjects_req = sqlx::query_as!(
+        StudentSubjectRecord,
+        "SELECT student_id, subject_id FROM student_subjects"
+    )
+    .fetch_all(db_conn);
+
+    let (mut list, subject_id_map) = generate_bare_subjects(&subject_data[..]);
+
+    let slots_data = slots_data_req.await?;
+    let teachers_data = teachers_data_req.await?;
+    let slot_map = add_slots_to_subjects(
+        &mut list,
+        &slots_data[..],
+        &teachers_data[..],
+        &subject_id_map,
+    )?;
+
+    let student_subjects_data = student_subjects_req.await?;
+    add_students_to_subjects(
+        &mut list,
+        &student_subjects_data[..],
+        &subject_id_map,
+        student_id_map,
+    )?;
 
     Ok(SubjectsData { list, slot_map })
 }
@@ -661,7 +743,7 @@ async fn generate_colloscope_data(
     let general = generate_general_data(db_conn);
     let incompatibilities = generate_incompatibilies(db_conn).await?;
     let students = generate_students(db_conn, &incompatibilities.id_map).await?;
-    let subjects = generate_subjects(db_conn, &students.id_map).await?;
+    let subjects = generate_subjects(db_conn, &students.id_map, collo_id).await?;
     let slot_groupings = generate_slot_groupings(db_conn, &subjects.slot_map).await?;
     let grouping_incompats = generate_grouping_incompats(db_conn, &slot_groupings.id_map);
 
