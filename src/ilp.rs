@@ -24,7 +24,7 @@ pub enum Error<V: VariableName> {
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
 
-pub type EvalFn<V, P> = dbg::Debuggable<dyn Fn(&FeasableConfig<V, P>) -> f64>;
+pub type EvalFn<V, P> = dbg::Debuggable<dyn Sync + Send + Fn(&FeasableConfig<V, P>) -> f64>;
 
 impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     fn default() -> Self {

@@ -251,6 +251,7 @@ dependencies = [
  "ndarray",
  "ordered-float",
  "rand",
+ "rayon",
  "serde",
  "serde_json",
  "sprs",
