@@ -22,6 +22,7 @@ pub struct Optimizer<'a, V: VariableName, P: ProblemRepr<V>> {
     init_config: Config<'a, V, P>,
     temp_profile: TemperatureFn,
     max_steps: Option<usize>,
+    init_max_steps: Option<usize>,
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
@@ -33,6 +34,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
             init_config,
             temp_profile: TemperatureFn::default(),
             max_steps: None,
+            init_max_steps: None,
         }
     }
 
@@ -46,6 +48,10 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
 
     pub fn set_max_steps(&mut self, max_steps: Option<usize>) {
         self.max_steps = max_steps;
+    }
+
+    pub fn set_init_max_steps(&mut self, init_max_steps: Option<usize>) {
+        self.init_max_steps = init_max_steps;
     }
 
     pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver<V, P>>(
@@ -62,6 +68,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
             k: 0,
             temp_profile: self.temp_profile.clone(),
             max_steps: self.max_steps.clone(),
+            current_max_steps: self.init_max_steps.clone(),
         }
     }
 }
@@ -88,6 +95,7 @@ pub struct OptimizerIterator<
     k: usize,
     temp_profile: TemperatureFn,
     max_steps: Option<usize>,
+    current_max_steps: Option<usize>,
 }
 
 impl<
@@ -116,7 +124,7 @@ impl<
         let sol = match self.solver.restore_feasability_with_origin_and_max_steps(
             &self.current_config,
             origin,
-            self.max_steps,
+            self.current_max_steps,
         ) {
             Some(s) => s,
             None => match &self.previous_config {
@@ -124,6 +132,7 @@ impl<
                 None => return None,
             },
         };
+        self.current_max_steps = self.max_steps;
         let config = Rc::new(sol);
 
         let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
