@@ -5,10 +5,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ordered_float::NotNan;
 
+use crate::ilp::mat_repr::ProblemRepr;
+
 pub trait Heuristic: std::fmt::Debug + Clone {
-    fn compute_guess_list<'a, V: VariableName>(
+    fn compute_guess_list<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &Config<'a, V>,
+        config: &Config<'a, V, P>,
         available_variables: &BTreeSet<V>,
     ) -> Vec<V>;
 }
@@ -16,17 +18,17 @@ pub trait Heuristic: std::fmt::Debug + Clone {
 pub trait HeuristicWithScores: std::fmt::Debug + Clone {
     type Score: Ord + Clone;
 
-    fn compute_scores<'a, V: VariableName>(
+    fn compute_scores<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &Config<'a, V>,
+        config: &Config<'a, V, P>,
         available_variables: &BTreeSet<V>,
     ) -> BTreeMap<V, Self::Score>;
 }
 
 impl<T: HeuristicWithScores> Heuristic for T {
-    fn compute_guess_list<'a, V: VariableName>(
+    fn compute_guess_list<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &Config<'a, V>,
+        config: &Config<'a, V, P>,
         available_variables: &BTreeSet<V>,
     ) -> Vec<V> {
         let mut scores_vec: Vec<_> = self
@@ -63,8 +65,8 @@ fn is_var_helpful<V: VariableName>(
     }
 }
 
-fn compute_help<'a, V: VariableName>(
-    config: &Config<'a, V>,
+fn compute_help<'a, V: VariableName, P: ProblemRepr<V>>(
+    config: &Config<'a, V, P>,
     available_variables: &BTreeSet<V>,
     constraint: &crate::ilp::linexpr::Constraint<V>,
     lhs: i32,
@@ -97,9 +99,9 @@ impl Connolly1992 {
 impl HeuristicWithScores for Connolly1992 {
     type Score = NotNan<f64>;
 
-    fn compute_scores<'a, V: VariableName>(
+    fn compute_scores<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &Config<'a, V>,
+        config: &Config<'a, V, P>,
         available_variables: &BTreeSet<V>,
     ) -> BTreeMap<V, Self::Score> {
         let lhs_map = config.compute_lhs();
@@ -179,9 +181,9 @@ impl Knuth2000 {
 impl HeuristicWithScores for Knuth2000 {
     type Score = NotNan<f64>;
 
-    fn compute_scores<'a, V: VariableName>(
+    fn compute_scores<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &Config<'a, V>,
+        config: &Config<'a, V, P>,
         available_variables: &BTreeSet<V>,
     ) -> BTreeMap<V, Self::Score> {
         let lhs_map = config.compute_lhs();
