@@ -13,20 +13,21 @@ impl Solver {
 }
 
 use super::{FeasabilitySolver, VariableName};
+use crate::ilp::mat_repr::ProblemRepr;
 
 use std::collections::BTreeSet;
 
-impl<V: VariableName> FeasabilitySolver<V> for Solver {
+impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
     fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
-        config: &Config<'a, V>,
-        origin: Option<&FeasableConfig<'a, V>>,
+        config: &Config<'a, V, P>,
+        origin: Option<&FeasableConfig<'a, V, P>>,
         mut max_steps: Option<usize>,
-    ) -> Option<FeasableConfig<'a, V>> {
+    ) -> Option<FeasableConfig<'a, V, P>> {
         use std::collections::VecDeque;
 
         let forbidden_config = origin.map(|x| x.inner().clone());
-        let mut explored_configs: BTreeSet<Config<'_, V>> =
+        let mut explored_configs: BTreeSet<Config<'_, V, P>> =
             forbidden_config.iter().cloned().collect();
         let mut config_queue = VecDeque::new();
         config_queue.push_back(config.clone());
