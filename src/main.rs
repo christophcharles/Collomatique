@@ -1014,7 +1014,7 @@ async fn main() -> Result<()> {
         let mut initializer = collomatique::ilp::initializers::Random::new(random_gen);
 
         use collomatique::ilp::initializers::ConfigInitializer;
-        sa_optimizer.set_init_config(initializer.build_init_config(&problem));
+        sa_optimizer.set_init_config(initializer.build_init_config(&problem).unwrap());
         sa_optimizer.set_max_steps(Some(1000));
         sa_optimizer.set_init_max_steps(Some(100000));
 
