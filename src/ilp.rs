@@ -33,7 +33,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     }
 }
 
-type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
+pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
@@ -381,7 +381,7 @@ struct Precomputation<V: VariableName, P: ProblemRepr<V>> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Config<'a, V: VariableName, P: ProblemRepr<V>> {
+pub struct Config<'a, V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     problem: &'a Problem<V, P>,
     cfg_repr: P::Config,
     precomputation: RefCell<Option<Precomputation<V, P>>>,
