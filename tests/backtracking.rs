@@ -17,6 +17,7 @@ fn restricted_interrogations_per_week() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(1).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -110,6 +111,7 @@ fn restricted_interrogations_per_week() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -171,6 +173,7 @@ fn restricted_interrogations_per_week() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -228,6 +231,7 @@ fn restricted_interrogations_per_week() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
