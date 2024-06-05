@@ -170,6 +170,10 @@ impl Solver {
         let config = problem
             .config_from(&vars)
             .expect("Variables should be valid");
-        Some(unsafe { config.into_feasable_unchecked() })
+        Some(
+            config
+                .into_feasable()
+                .expect("Config from coin_cbc should be feasable"),
+        )
     }
 }
