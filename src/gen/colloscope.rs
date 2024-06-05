@@ -130,6 +130,7 @@ pub struct Subject {
     pub students_per_slot: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
+    pub is_tutorial: bool,
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,

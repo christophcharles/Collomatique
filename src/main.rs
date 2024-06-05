@@ -471,6 +471,7 @@ fn generate_bare_subjects(
                 )
                 .expect("Valid non-zero period for subject"),
                 period_is_strict: x.period_is_strict != 0,
+                is_tutorial: false,
                 duration: NonZeroU32::new(
                     u32::try_from(x.duration).expect("Valid u32 for subject duration"),
                 )
