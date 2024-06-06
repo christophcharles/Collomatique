@@ -10,6 +10,8 @@ pub mod mat_repr;
 #[cfg(test)]
 mod tests;
 
+use std::sync::RwLock;
+
 use thiserror::Error;
 
 use linexpr::VariableName;
@@ -362,7 +364,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         Ok(Config {
             problem: self,
             cfg_repr: self.pb_repr.config_from(&vars_repr),
-            precomputation: RefCell::new(None),
+            precomputation: RwLock::new(None),
         })
     }
 
@@ -379,7 +381,6 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     }
 }
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
@@ -388,11 +389,28 @@ struct Precomputation<V: VariableName, P: ProblemRepr<V>> {
     invalidated_vars: BTreeSet<usize>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Config<'a, V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     problem: &'a Problem<V, P>,
     cfg_repr: P::Config,
-    precomputation: RefCell<Option<Precomputation<V, P>>>,
+    precomputation: RwLock<Option<Precomputation<V, P>>>,
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
+    fn clone_precomputation(&self) -> RwLock<Option<Precomputation<V, P>>> {
+        let guard = self.precomputation.read().unwrap();
+        RwLock::new(guard.clone())
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Clone for Config<'a, V, P> {
+    fn clone(&self) -> Self {
+        Config {
+            problem: self.problem,
+            cfg_repr: self.cfg_repr.clone(),
+            precomputation: self.clone_precomputation(),
+        }
+    }
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
@@ -442,7 +460,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         assert!(i < self.problem.variables.len());
 
         let cfg_repr = self.cfg_repr.neighbour(i);
-        let precomputation = self.precomputation.clone();
+        let precomputation = self.clone_precomputation();
 
         let mut output = Config {
             problem: self.problem,
@@ -504,16 +522,26 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
     }
 }
 
+// MappedRwLockReadGuard is still in nightly...
+pub struct PrecomputationGuard<'a, V: VariableName, P: ProblemRepr<V>> {
+    guard: std::sync::RwLockReadGuard<'a, Option<Precomputation<V, P>>>,
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::ops::Deref for PrecomputationGuard<'a, V, P> {
+    type Target = <P::Config as mat_repr::ConfigRepr<V>>::Precomputation;
+    fn deref(&self) -> &Self::Target {
+        let opt = self.guard.deref();
+        &opt.as_ref().unwrap().data
+    }
+}
+
 impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
-    fn get_precomputation(
-        &self,
-    ) -> std::cell::Ref<'_, <P::Config as mat_repr::ConfigRepr<V>>::Precomputation> {
-        let r = self.precomputation.borrow();
-        match r.as_ref() {
+    fn get_precomputation(&self) -> PrecomputationGuard<'_, V, P> {
+        let mut write_guard = self.precomputation.write().unwrap();
+        match write_guard.as_ref() {
             Some(x) => {
                 if !x.invalidated_vars.is_empty() {
-                    std::mem::drop(r);
-                    self.precomputation.borrow_mut().as_mut().map(|y| {
+                    write_guard.as_mut().map(|y| {
                         self.cfg_repr.update_precomputation(
                             &self.problem.pb_repr,
                             &mut y.data,
@@ -524,19 +552,20 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
                 }
             }
             None => {
-                std::mem::drop(r);
                 let data = self.cfg_repr.precompute(&self.problem.pb_repr);
-                self.precomputation.replace(Some(Precomputation {
+                *write_guard = Some(Precomputation {
                     data,
                     invalidated_vars: BTreeSet::new(),
-                }));
+                });
             }
         }
-        std::cell::Ref::map(self.precomputation.borrow(), |x| &x.as_ref().unwrap().data)
+        std::mem::drop(write_guard);
+        let guard = self.precomputation.read().unwrap();
+        PrecomputationGuard { guard }
     }
 
     fn invalidate_precomputation(&mut self, i: usize) {
-        let mut b = self.precomputation.borrow_mut();
+        let mut b = self.precomputation.write().unwrap();
 
         b.as_mut().map(|x| {
             x.invalidated_vars.insert(i);
