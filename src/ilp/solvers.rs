@@ -8,7 +8,7 @@ use super::{Config, FeasableConfig};
 use super::linexpr::VariableName;
 use super::mat_repr::ProblemRepr;
 
-pub trait FeasabilitySolver<V: VariableName, P: ProblemRepr<V>> {
+pub trait FeasabilitySolver<V: VariableName, P: ProblemRepr<V>>: Send + Sync {
     fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
         config: &Config<'a, V, P>,
