@@ -633,6 +633,10 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> FeasableConfig<'a, V, P> {
     pub fn inner(&self) -> &Config<'a, V, P> {
         &self.0
     }
+
+    pub fn eval(&self) -> f64 {
+        (self.0.problem.eval_fn)(self)
+    }
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> std::ops::Deref for FeasableConfig<'a, V, P> {
