@@ -6,7 +6,7 @@ use crate::ilp::linexpr::VariableName;
 use crate::ilp::mat_repr::ProblemRepr;
 use crate::ilp::random::RandomGen;
 use crate::ilp::solvers::FeasabilitySolver;
-use crate::ilp::{Config, FeasableConfig, Problem};
+use crate::ilp::{Config, FeasableConfig};
 
 pub type TemperatureFn = Debuggable<dyn Fn(usize) -> f64>;
 
@@ -18,7 +18,6 @@ impl Default for TemperatureFn {
 
 #[derive(Debug, Clone)]
 pub struct Optimizer<'a, V: VariableName, P: ProblemRepr<V>> {
-    problem: &'a Problem<V, P>,
     init_config: Config<'a, V, P>,
     temp_profile: TemperatureFn,
     max_steps: Option<usize>,
@@ -26,11 +25,8 @@ pub struct Optimizer<'a, V: VariableName, P: ProblemRepr<V>> {
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
-    pub fn new(problem: &'a Problem<V, P>) -> Self {
-        let init_config = problem.default_config();
-
+    pub fn new(init_config: Config<'a, V, P>) -> Self {
         Optimizer {
-            problem,
             init_config,
             temp_profile: TemperatureFn::default(),
             max_steps: None,
@@ -54,13 +50,12 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
         self.init_max_steps = init_max_steps;
     }
 
-    pub fn iterate<'b, R: RandomGen, S: FeasabilitySolver<V, P>>(
-        &'b self,
+    pub fn iterate<R: RandomGen, S: FeasabilitySolver<V, P>>(
+        &self,
         solver: S,
         random_gen: R,
-    ) -> OptimizerIterator<'a, 'b, V, P, R, S> {
+    ) -> OptimizerIterator<'a, V, P, R, S> {
         OptimizerIterator {
-            optimizer: self,
             random_gen,
             solver,
             previous_config: None,
@@ -77,14 +72,12 @@ use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct OptimizerIterator<
-    'b,
-    'a: 'b,
+    'a,
     V: VariableName,
     P: ProblemRepr<V>,
     R: RandomGen,
     S: FeasabilitySolver<V, P>,
 > {
-    optimizer: &'b Optimizer<'a, V, P>,
     solver: S,
     random_gen: R,
 
@@ -97,15 +90,8 @@ pub struct OptimizerIterator<
     current_max_steps: Option<usize>,
 }
 
-impl<
-        'b,
-        'a: 'b,
-        'c,
-        V: VariableName,
-        P: ProblemRepr<V>,
-        R: RandomGen,
-        S: FeasabilitySolver<V, P>,
-    > Iterator for OptimizerIterator<'b, 'a, V, P, R, S>
+impl<'a, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<V, P>> Iterator
+    for OptimizerIterator<'a, V, P, R, S>
 {
     type Item = (Rc<FeasableConfig<'a, V, P>>, f64);
 
@@ -157,8 +143,8 @@ impl<
     }
 }
 
-impl<'b, 'a: 'b, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<V, P>>
-    OptimizerIterator<'b, 'a, V, P, R, S>
+impl<'a, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<V, P>>
+    OptimizerIterator<'a, V, P, R, S>
 {
     pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a, V, P>>, f64)> {
         self.take(max_iter)
