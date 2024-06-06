@@ -1023,7 +1023,23 @@ async fn main() -> Result<()> {
 
     println!("{}", problem);
 
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
+    let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
+
+    let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
+        collomatique::ilp::random::DefaultRndGen::new(),
+        100,
+    )
+    .unwrap();
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let max_steps = None;
+    let retries = 20;
+    let initializer =
+        ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
+
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let iterator = genetic_optimizer.iterate(initializer, solver)?;
+
+    /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
     let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
         collomatique::ilp::random::DefaultRndGen::new(),
@@ -1060,7 +1076,7 @@ async fn main() -> Result<()> {
                 ilp_translator.read_solution(sol.as_ref())
             );
         }
-    }
+    }*/
 
     Ok(())
 }
