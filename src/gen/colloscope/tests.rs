@@ -6,6 +6,7 @@ fn trivial_validated_data() {
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = SubjectList::new();
@@ -43,6 +44,7 @@ fn simple_validated_data() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -187,6 +189,7 @@ fn invalid_students_per_interrogation() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -236,6 +239,7 @@ fn subject_slot_overlaps_next_day() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -282,6 +286,7 @@ fn incompatibility_slot_overlaps_next_day() {
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
     let subjects = SubjectList::new();
     let incompatibilities = vec![Incompatibility {
@@ -316,6 +321,7 @@ fn invalid_teacher_number() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -362,6 +368,7 @@ fn invalid_incompatibility_number() {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = SubjectList::new();
@@ -400,6 +407,7 @@ fn slot_ref_has_invalid_subject() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -485,6 +493,7 @@ fn slot_ref_has_invalid_slot() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -570,6 +579,7 @@ fn slot_grouping_overlap() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -680,6 +690,7 @@ fn grouping_incompact_invalid_ref() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -761,6 +772,7 @@ fn invalid_interrogations_per_week() {
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: Some(10..8),
+        max_interrogations_per_day: None,
     };
 
     let subjects = SubjectList::new();
@@ -792,6 +804,7 @@ fn duplicated_groups() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -897,6 +910,7 @@ fn duplicated_student() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1011,6 +1025,7 @@ fn duplicated_student_not_assigned() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1123,6 +1138,7 @@ fn invalid_student_in_group() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1224,6 +1240,7 @@ fn invalid_student_not_assigned() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1319,6 +1336,7 @@ fn empty_group() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1437,6 +1455,7 @@ fn extensible_empty_group() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1551,6 +1570,7 @@ fn group_too_large() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1665,6 +1685,7 @@ fn non_extensible_too_small_group() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1783,6 +1804,7 @@ fn too_few_groups() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -1896,6 +1918,7 @@ fn too_many_groups() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -2021,6 +2044,7 @@ fn no_full_period() {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -2106,6 +2130,7 @@ fn group_in_slot_variables() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -2303,6 +2328,7 @@ fn dynamic_group_assignment_variables() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -2580,6 +2606,7 @@ fn student_in_group_variables() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -2758,6 +2785,7 @@ fn with_student_not_in_last_period_variables() {
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -2981,6 +3009,7 @@ fn without_student_not_in_last_period_variables() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -3178,6 +3207,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -3389,6 +3419,7 @@ fn periodicity_variables_for_strict_period() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -3578,6 +3609,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -3767,6 +3799,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -3930,6 +3963,7 @@ fn use_grouping() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -4048,6 +4082,7 @@ fn at_most_max_groups_per_slot_constraints() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -4348,6 +4383,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -4536,6 +4572,7 @@ fn one_interrogation_per_period() {
         teacher_count: 2,
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -4789,6 +4826,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -5040,6 +5078,7 @@ fn students_per_group_count() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -5222,6 +5261,7 @@ fn student_in_single_group() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -5403,6 +5443,7 @@ fn dynamic_groups_student_in_group_inequalities() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -5525,6 +5566,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -5644,6 +5686,7 @@ fn one_periodicity_choice_per_student() {
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -5923,6 +5966,7 @@ fn periodicity_inequalities() {
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -6302,6 +6346,7 @@ fn interrogations_per_week() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: Some(1..3),
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -6538,6 +6583,7 @@ fn grouping_inequalities() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -6690,6 +6736,7 @@ fn grouping_incompats() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -6822,6 +6869,7 @@ fn students_incompats() {
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
@@ -7044,6 +7092,7 @@ fn simple_colloscope() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -7209,6 +7258,7 @@ fn colloscope_with_dynamic_groups() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -7514,6 +7564,7 @@ fn at_most_one_interrogation_per_empty_group() {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![Subject {
