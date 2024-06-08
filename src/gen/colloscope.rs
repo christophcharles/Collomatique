@@ -56,8 +56,14 @@ pub enum Error {
     SlotGroupingWithInvalidSlot(usize, SlotRef),
     #[error("The slot groupings {0} and {1} refer to the same slot {2:?}")]
     SlotGroupingOverlap(usize, usize, SlotRef),
+    #[error("The grouping incompatibility {0} does not have enough groupings (only {1})")]
+    SlotGroupingIncompatDoesNotHaveEnoughGroupings(usize, usize),
     #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
     SlotGroupingIncompatWithInvalidSlotGrouping(usize, usize),
+    #[error(
+        "The grouping incompatibility {0} limit ({1}) is larger than the number of groupings ({2})"
+    )]
+    SlotGroupingIncompatWithLimitTooBig(usize, usize, usize),
     #[error("The range {0:?} for the number of interrogations per week is empty")]
     SlotGeneralDataWithInvalidInterrogationsPerWeek(std::ops::Range<u32>),
 }
@@ -154,17 +160,8 @@ pub type SlotGroupingList = Vec<SlotGrouping>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotGroupingIncompat {
-    grouping1: usize,
-    grouping2: usize,
-}
-
-impl SlotGroupingIncompat {
-    pub fn new(g1: usize, g2: usize) -> Self {
-        SlotGroupingIncompat {
-            grouping1: usize::min(g1, g2),
-            grouping2: usize::max(g1, g2),
-        }
-    }
+    pub groupings: BTreeSet<usize>,
+    pub max_count: NonZeroUsize,
 }
 
 pub type SlotGroupingIncompatSet = BTreeSet<SlotGroupingIncompat>;
@@ -380,16 +377,24 @@ impl ValidatedData {
         }
 
         for (i, grouping_incompat) in grouping_incompats.iter().enumerate() {
-            if grouping_incompat.grouping1 >= slot_groupings.len() {
-                return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+            for grouping in grouping_incompat.groupings.iter().copied() {
+                if grouping >= slot_groupings.len() {
+                    return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+                        i, grouping,
+                    ));
+                }
+            }
+            if grouping_incompat.groupings.len() < 2 {
+                return Err(Error::SlotGroupingIncompatDoesNotHaveEnoughGroupings(
                     i,
-                    grouping_incompat.grouping1,
+                    grouping_incompat.groupings.len(),
                 ));
             }
-            if grouping_incompat.grouping2 >= slot_groupings.len() {
-                return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+            if grouping_incompat.max_count.get() >= grouping_incompat.groupings.len() {
+                return Err(Error::SlotGroupingIncompatWithLimitTooBig(
                     i,
-                    grouping_incompat.grouping2,
+                    grouping_incompat.max_count.get(),
+                    grouping_incompat.groupings.len(),
                 ));
             }
         }
@@ -1646,10 +1651,15 @@ impl<'a> IlpTranslator<'a> {
         &self,
         grouping_incompat: &SlotGroupingIncompat,
     ) -> Constraint<Variable> {
-        let lhs = Expr::var(Variable::UseGrouping(grouping_incompat.grouping1))
-            + Expr::var(Variable::UseGrouping(grouping_incompat.grouping2));
+        let mut lhs = Expr::constant(0);
 
-        lhs.leq(&Expr::constant(1))
+        for grouping in grouping_incompat.groupings.iter().copied() {
+            lhs = lhs + Expr::var(Variable::UseGrouping(grouping));
+        }
+
+        let max_count_i32 = i32::try_from(grouping_incompat.max_count.get()).unwrap();
+
+        lhs.leq(&Expr::constant(max_count_i32))
     }
 
     fn build_grouping_incompats_constraints(&self) -> BTreeSet<Constraint<Variable>> {
