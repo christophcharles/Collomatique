@@ -190,6 +190,7 @@ pub struct GeneralData {
     pub teacher_count: usize,
     pub week_count: NonZeroU32,
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
+    pub max_interrogations_per_day: Option<NonZeroU32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

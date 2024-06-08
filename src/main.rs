@@ -277,6 +277,7 @@ async fn generate_general_data(
         teacher_count,
         week_count,
         interrogations_per_week,
+        max_interrogations_per_day: None,
     })
 }
 
