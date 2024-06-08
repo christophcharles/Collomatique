@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
@@ -126,9 +127,11 @@ impl GroupsDesc {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
-    pub students_per_slot: RangeInclusive<NonZeroUsize>,
+    pub students_per_group: RangeInclusive<NonZeroUsize>,
+    pub max_groups_per_slot: NonZeroUsize,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
+    pub is_tutorial: bool,
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
@@ -224,10 +227,10 @@ impl ValidatedData {
                 ));
             }
 
-            if subject.students_per_slot.is_empty() {
+            if subject.students_per_group.is_empty() {
                 return Err(Error::SubjectWithInvalidStudentsPerSlotRange(
                     i,
-                    subject.students_per_slot.clone(),
+                    subject.students_per_group.clone(),
                 ));
             }
 
@@ -266,15 +269,15 @@ impl ValidatedData {
                 if !group.can_be_extended {
                     continue;
                 }
-                if group.students.len() >= subject.students_per_slot.end().get() {
+                if group.students.len() >= subject.students_per_group.end().get() {
                     continue;
                 }
-                remaining_seats += subject.students_per_slot.end().get() - group.students.len();
+                remaining_seats += subject.students_per_group.end().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() > remaining_seats {
                 return Err(Error::SubjectWithTooFewGroups(
                     i,
-                    subject.students_per_slot.clone(),
+                    subject.students_per_group.clone(),
                 ));
             }
 
@@ -283,15 +286,15 @@ impl ValidatedData {
                 if !group.can_be_extended {
                     continue;
                 }
-                if group.students.len() >= subject.students_per_slot.start().get() {
+                if group.students.len() >= subject.students_per_group.start().get() {
                     continue;
                 }
-                min_seats += subject.students_per_slot.start().get() - group.students.len();
+                min_seats += subject.students_per_group.start().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() < min_seats {
                 return Err(Error::SubjectWithTooManyGroups(
                     i,
-                    subject.students_per_slot.clone(),
+                    subject.students_per_group.clone(),
                 ));
             }
 
@@ -307,20 +310,20 @@ impl ValidatedData {
                         students_no_duplicate.insert(*k, j);
                     }
                 }
-                if group.students.len() > subject.students_per_slot.end().get() {
+                if group.students.len() > subject.students_per_group.end().get() {
                     return Err(Error::SubjectWithTooLargeAssignedGroup(
                         i,
                         j,
-                        subject.students_per_slot.clone(),
+                        subject.students_per_group.clone(),
                     ));
                 }
-                if group.students.len() < subject.students_per_slot.start().get()
+                if group.students.len() < subject.students_per_group.start().get()
                     && !group.can_be_extended
                 {
                     return Err(Error::SubjectWithTooSmallNonExtensibleGroup(
                         i,
                         j,
-                        subject.students_per_slot.clone(),
+                        subject.students_per_group.clone(),
                     ));
                 }
             }
@@ -479,17 +482,31 @@ impl std::fmt::Display for Variable {
 
 impl ValidatedData {
     pub fn ilp_translator<'a>(&'a self) -> IlpTranslator<'a> {
-        IlpTranslator { data: self }
+        IlpTranslator {
+            data: self,
+            problem_builder_cache: RefCell::new(None),
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct IlpTranslator<'a> {
     data: &'a ValidatedData,
+    problem_builder_cache: RefCell<Option<ProblemBuilder<Variable>>>,
 }
 
+use crate::ilp::initializers::ConfigInitializer;
 use crate::ilp::linexpr::{Constraint, Expr};
-use crate::ilp::{FeasableConfig, Problem, ProblemBuilder};
+use crate::ilp::solvers::FeasabilitySolver;
+use crate::ilp::{Config, DefaultRepr, FeasableConfig, Problem, ProblemBuilder};
+
+pub trait GenericInitializer: ConfigInitializer<Variable, DefaultRepr<Variable>> {}
+
+impl<T: ConfigInitializer<Variable, DefaultRepr<Variable>>> GenericInitializer for T {}
+
+pub trait GenericSolver: FeasabilitySolver<Variable, DefaultRepr<Variable>> {}
+
+impl<S: FeasabilitySolver<Variable, DefaultRepr<Variable>>> GenericSolver for S {}
 
 enum StudentStatus {
     Assigned(usize),
@@ -499,7 +516,7 @@ enum StudentStatus {
 
 impl<'a> IlpTranslator<'a> {
     fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
-        !group.can_be_extended || (group.students.len() == subject.students_per_slot.end().get())
+        !group.can_be_extended || (group.students.len() == subject.students_per_group.end().get())
     }
 
     fn compute_needed_time_resolution(&self) -> u32 {
@@ -675,7 +692,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_at_most_one_group_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_at_most_max_groups_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         self.data
             .subjects
             .iter()
@@ -693,7 +710,12 @@ impl<'a> IlpTranslator<'a> {
                             });
                     }
 
-                    expr.leq(&Expr::constant(1))
+                    let max_groups_per_slot = subject
+                        .max_groups_per_slot
+                        .get()
+                        .try_into()
+                        .expect("Should be less than 2^31 maximum");
+                    expr.leq(&Expr::constant(max_groups_per_slot))
                 })
             })
             .collect()
@@ -1073,7 +1095,7 @@ impl<'a> IlpTranslator<'a> {
         k: usize,
         group: &GroupDesc,
     ) -> Option<Constraint<Variable>> {
-        let min = subject.students_per_slot.start().get();
+        let min = subject.students_per_group.start().get();
         if min <= group.students.len() {
             return None;
         }
@@ -1092,7 +1114,7 @@ impl<'a> IlpTranslator<'a> {
         k: usize,
         group: &GroupDesc,
     ) -> Constraint<Variable> {
-        let max = subject.students_per_slot.end().get();
+        let max = subject.students_per_group.end().get();
         assert!(group.students.len() <= max);
 
         let max_i32: i32 = (max - group.students.len())
@@ -1435,6 +1457,10 @@ impl<'a> IlpTranslator<'a> {
         let mut expr = Expr::constant(0);
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                // ignore tutorial sessions for interrogation count
+                continue;
+            }
             for (j, slot) in subject.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
@@ -1660,7 +1686,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
+    fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
             .expect("Should not have duplicates")
@@ -1674,7 +1700,7 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
             .expect("Should not have duplicates")
-            .add_constraints(self.build_at_most_one_group_per_slot_constraints())
+            .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .expect("Variables should be declared")
@@ -1706,10 +1732,98 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
     }
 
+    pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
+        let mut r = self.problem_builder_cache.borrow_mut();
+        match r.as_ref() {
+            Some(pb_builder) => pb_builder.clone(),
+            None => {
+                let pb_builder = self.problem_builder_internal();
+
+                *r = Some(pb_builder.clone());
+
+                pb_builder
+            }
+        }
+    }
+
     pub fn problem(&self) -> Problem<Variable> {
-        self.problem_builder()
-            .simplify_trivial_constraints()
-            .build()
+        self.problem_builder().build()
+    }
+
+    fn compute_period_length(&self) -> NonZeroU32 {
+        use crate::math::lcm;
+
+        let mut result = 1;
+        for subject in &self.data.subjects {
+            result = lcm(result, subject.period.get());
+        }
+
+        NonZeroU32::new(result).unwrap()
+    }
+
+    pub fn incremental_initializer<T: GenericInitializer, S: GenericSolver>(
+        &self,
+        initializer: T,
+        solver: S,
+        max_steps: Option<usize>,
+        retries: usize,
+    ) -> IncrementalInitializer<T, S> {
+        let period_length = self.compute_period_length();
+
+        let last_period_full = (self.data.general.week_count.get() % period_length.get()) != 0;
+        let period_count = NonZeroU32::new(
+            (self.data.general.week_count.get() + period_length.get() - 1) / period_length.get(),
+        )
+        .unwrap();
+
+        let subject_week_map = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
+            .collect();
+        let subject_strictness = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| subject.period_is_strict)
+            .collect();
+        let subject_period = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| subject.period)
+            .collect();
+        let grouping_week_map = self
+            .data
+            .slot_groupings
+            .iter()
+            .map(|grouping| {
+                grouping
+                    .slots
+                    .iter()
+                    .map(|slot_ref| {
+                        self.data.subjects[slot_ref.subject].slots[slot_ref.slot]
+                            .start
+                            .week
+                    })
+                    .collect()
+            })
+            .collect();
+
+        IncrementalInitializer {
+            period_length,
+            last_period_full,
+            period_count,
+            subject_strictness,
+            subject_week_map,
+            subject_period,
+            grouping_week_map,
+            max_steps,
+            retries,
+            initializer,
+            solver,
+        }
     }
 
     fn read_subject(
@@ -1747,7 +1861,7 @@ impl<'a> IlpTranslator<'a> {
         let mut slots = Vec::with_capacity(subject.slots.len());
 
         for (j, _slot) in subject.slots.iter().enumerate() {
-            let mut assigned_group = None;
+            let mut assigned_groups = BTreeSet::new();
 
             for k in 0..subject.groups.prefilled_groups.len() {
                 if config
@@ -1758,12 +1872,11 @@ impl<'a> IlpTranslator<'a> {
                     })
                     .ok()?
                 {
-                    assigned_group = Some(k);
-                    break;
+                    assigned_groups.insert(k);
                 }
             }
 
-            slots.push(assigned_group);
+            slots.push(assigned_groups);
         }
 
         Some(ColloscopeSubject { groups, slots })
@@ -1788,5 +1901,231 @@ pub struct Colloscope {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeSubject {
     pub groups: Vec<BTreeSet<usize>>,
-    pub slots: Vec<Option<usize>>,
+    pub slots: Vec<BTreeSet<usize>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
+    period_length: NonZeroU32,
+    last_period_full: bool,
+    period_count: NonZeroU32,
+    subject_strictness: Vec<bool>,
+    subject_week_map: Vec<Vec<u32>>,
+    subject_period: Vec<NonZeroU32>,
+    grouping_week_map: Vec<BTreeSet<u32>>,
+    max_steps: Option<usize>,
+    retries: usize,
+    initializer: T,
+    solver: S,
+}
+
+impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, DefaultRepr<Variable>>
+    for IncrementalInitializer<T, S>
+{
+    fn build_init_config<'a, 'b>(
+        &'a self,
+        problem: &'b Problem<Variable, DefaultRepr<Variable>>,
+    ) -> Option<Config<'b, Variable, DefaultRepr<Variable>>> {
+        let problem_builder = problem.clone().into_builder();
+
+        let mut set_variables = BTreeMap::new();
+
+        let first_period_problem_no_periodicity = self.construct_period_problem(
+            problem_builder.clone().filter_variables(|v| {
+                if let Variable::Periodicity {
+                    subject: _,
+                    student: _,
+                    week_modulo: _,
+                } = v
+                {
+                    false
+                } else {
+                    true
+                }
+            }),
+            &set_variables,
+            0,
+        );
+        let first_period_config_no_periodicity =
+            self.construct_init_config(&first_period_problem_no_periodicity)?;
+        Self::update_set_variables(&mut set_variables, &first_period_config_no_periodicity);
+
+        for period in 0..self.period_count.get() {
+            let period_problem =
+                self.construct_period_problem(problem_builder.clone(), &set_variables, period);
+
+            let partial_config = self.construct_init_config(&period_problem)?;
+            Self::update_set_variables(&mut set_variables, &partial_config);
+        }
+
+        let vars: BTreeSet<_> = set_variables
+            .iter()
+            .filter_map(|(v, val)| if *val { Some(v.clone()) } else { None })
+            .collect();
+
+        problem.config_from(&vars).ok()
+    }
+}
+
+impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
+    fn construct_init_config<'a, 'b>(
+        &'a self,
+        problem: &'b Problem<Variable>,
+    ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
+        for _i in 0..self.retries {
+            if let Some(config) = self.construct_init_config_one_try(problem) {
+                return Some(config);
+            }
+        }
+        None
+    }
+
+    fn construct_init_config_one_try<'a, 'b>(
+        &'a self,
+        problem: &'b Problem<Variable>,
+    ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
+        let init_config = self.initializer.build_init_config(&problem)?;
+        self.solver
+            .restore_feasability_with_max_steps(&init_config, self.max_steps.clone())
+    }
+
+    fn update_set_variables(
+        set_variables: &mut BTreeMap<Variable, bool>,
+        config: &FeasableConfig<'_, Variable, DefaultRepr<Variable>>,
+    ) {
+        for var in config
+            .get_problem()
+            .get_variables()
+            .into_iter()
+            .chain(config.get_problem().get_constants())
+        {
+            if !set_variables.contains_key(var) {
+                set_variables.insert(
+                    var.clone(),
+                    config.get(var).expect("var should be a valid variable"),
+                );
+            }
+        }
+    }
+
+    fn is_week_in_period(&self, week: u32, period: u32) -> bool {
+        let period_for_week = week / self.period_length.get();
+
+        period_for_week == period
+    }
+
+    fn is_subject_concerned_by_period(&self, subject: usize, period: u32) -> bool {
+        for week in self.subject_week_map[subject].iter().copied() {
+            if self.is_week_in_period(week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_grouping_concerned_by_period(&self, grouping: usize, period: u32) -> bool {
+        for week in self.grouping_week_map[grouping].iter().copied() {
+            if self.is_week_in_period(week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn are_subject_and_period_concerned_with_periodicity(
+        &self,
+        subject: usize,
+        period: u32,
+    ) -> bool {
+        if self.subject_strictness[subject] {
+            return true;
+        }
+
+        // Normally this should be true or we should not have any Periodicity variables
+        assert!(!self.last_period_full);
+
+        if period == self.period_count.get() - 1 {
+            return true;
+        }
+
+        assert!(self.period_count.get() >= 2);
+        assert!(period != self.period_count.get() - 2);
+
+        // If we are on the second to last period, we might need to fix periodicity
+        // if the penultimate subject period (which might be shorter) leaks on that period
+        (2 * self.subject_period[subject].get()) > self.period_length.get()
+    }
+
+    fn filter_relevant_variables(
+        &self,
+        problem_builder: ProblemBuilder<Variable>,
+        period: u32,
+    ) -> ProblemBuilder<Variable> {
+        problem_builder.filter_variables(|v| match v {
+            Variable::GroupInSlot {
+                subject,
+                slot,
+                group: _,
+            } => {
+                let week = self.subject_week_map[*subject][*slot];
+                self.is_week_in_period(week, period)
+            }
+            Variable::StudentNotInLastPeriod {
+                subject: _,
+                student: _,
+            } => period == self.period_count.get() - 1,
+            Variable::DynamicGroupAssignment {
+                subject,
+                slot,
+                group: _,
+                student: _,
+            } => {
+                let week = self.subject_week_map[*subject][*slot];
+                self.is_week_in_period(week, period)
+            }
+            Variable::StudentInGroup {
+                subject,
+                student: _,
+                group: _,
+            } => self.is_subject_concerned_by_period(*subject, period),
+            Variable::Periodicity {
+                subject,
+                student: _,
+                week_modulo: _,
+            } => self.are_subject_and_period_concerned_with_periodicity(*subject, period),
+            Variable::UseGrouping(grouping) => {
+                self.is_grouping_concerned_by_period(*grouping, period)
+            }
+        })
+    }
+
+    fn set_relevant_variables(
+        &self,
+        mut problem_builder: ProblemBuilder<Variable>,
+        set_variables: &BTreeMap<Variable, bool>,
+    ) -> ProblemBuilder<Variable> {
+        let variables = problem_builder.get_variables().clone();
+        for var in &variables {
+            if let Some(val) = set_variables.get(var) {
+                problem_builder = problem_builder
+                    .add_constraint(crate::ilp::linexpr::Expr::var(var.clone()).eq(
+                        &crate::ilp::linexpr::Expr::constant(if *val { 1 } else { 0 }),
+                    ))
+                    .expect("Should be a valid constraint");
+            }
+        }
+        problem_builder
+    }
+
+    fn construct_period_problem(
+        &self,
+        problem_builder: ProblemBuilder<Variable>,
+        set_variables: &BTreeMap<Variable, bool>,
+        period: u32,
+    ) -> Problem<Variable> {
+        let filtered_problem = self.filter_relevant_variables(problem_builder, period);
+        self.set_relevant_variables(filtered_problem, set_variables)
+            .simplify_trivial_constraints()
+            .build()
+    }
 }
