@@ -265,6 +265,7 @@ fn restricted_interrogations_per_week() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -310,6 +311,7 @@ fn restricted_interrogations_per_week() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,

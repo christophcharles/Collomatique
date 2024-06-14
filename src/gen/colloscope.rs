@@ -46,10 +46,16 @@ pub enum Error {
     SubjectWithPeriodicityTooBig(u32, u32),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
-    #[error("Incompatibility {0} has slot {1} after the week count ({2}) of the schedule")]
-    IncompatibilityWithSlotAfterLastWeek(usize, usize, u32),
-    #[error("Incompatibility {0} has interrogation slot {1} overlapping next day")]
-    IncompatibilityWithSlotOverlappingNextDay(usize, usize),
+    #[error("Incompatibility {0} references an invalid incompatibility group ({1})")]
+    IncompatibilityWithInvalidIncompatibilityGroup(usize, usize),
+    #[error("Incompatibility {0} has max_count larger ({1}) than the number of groups ({2})")]
+    IncompatibilityWithMaxCountTooBig(usize, usize, usize),
+    #[error(
+        "Incompatibility group {0} has slot ({1:?}) after the week count ({2}) of the schedule"
+    )]
+    IncompatibilityGroupWithSlotAfterLastWeek(usize, SlotWithDuration, u32),
+    #[error("Incompatibility group {0} has interrogation slot ({1:?}) overlapping next day")]
+    IncompatibilityGroupWithSlotOverlappingNextDay(usize, SlotWithDuration),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
     SlotGroupingWithInvalidSubject(usize, SlotRef),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
@@ -70,14 +76,14 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotStart {
     pub week: u32,
     pub weekday: time::Weekday,
     pub start_time: time::Time,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotWithDuration {
     pub start: SlotStart,
     pub duration: NonZeroU32,
@@ -205,8 +211,16 @@ pub struct SlotGroupingIncompat {
 pub type SlotGroupingIncompatSet = BTreeSet<SlotGroupingIncompat>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IncompatibilityGroup {
+    pub slots: BTreeSet<SlotWithDuration>,
+}
+
+pub type IncompatibilityGroupList = Vec<IncompatibilityGroup>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
-    pub slots: Vec<SlotWithDuration>,
+    pub groups: BTreeSet<usize>,
+    pub max_count: usize,
 }
 
 pub type IncompatibilityList = Vec<Incompatibility>;
@@ -232,6 +246,7 @@ pub struct GeneralData {
 pub struct ValidatedData {
     general: GeneralData,
     subjects: SubjectList,
+    incompatibility_groups: IncompatibilityGroupList,
     incompatibilities: IncompatibilityList,
     students: StudentList,
     slot_groupings: SlotGroupingList,
@@ -250,6 +265,7 @@ impl ValidatedData {
     pub fn new(
         general: GeneralData,
         subjects: SubjectList,
+        incompatibility_groups: IncompatibilityGroupList,
         incompatibilities: IncompatibilityList,
         students: StudentList,
         slot_groupings: SlotGroupingList,
@@ -374,16 +390,37 @@ impl ValidatedData {
         }
 
         for (i, incompatibility) in incompatibilities.iter().enumerate() {
-            for (j, slot) in incompatibility.slots.iter().enumerate() {
-                if !Self::validate_slot_start(&general, &slot.start) {
-                    return Err(Error::IncompatibilityWithSlotAfterLastWeek(
+            for incompat_group in &incompatibility.groups {
+                if *incompat_group >= incompatibility_groups.len() {
+                    return Err(Error::IncompatibilityWithInvalidIncompatibilityGroup(
                         i,
-                        j,
+                        *incompat_group,
+                    ));
+                }
+            }
+            if incompatibility.max_count >= incompatibility.groups.len() {
+                return Err(Error::IncompatibilityWithMaxCountTooBig(
+                    i,
+                    incompatibility.max_count,
+                    incompatibility.groups.len(),
+                ));
+            }
+        }
+
+        for (i, incompat_group) in incompatibility_groups.iter().enumerate() {
+            for slot in &incompat_group.slots {
+                if !Self::validate_slot_start(&general, &slot.start) {
+                    return Err(Error::IncompatibilityGroupWithSlotAfterLastWeek(
+                        i,
+                        slot.clone(),
                         general.week_count.get(),
                     ));
                 }
                 if !Self::validate_slot_overlap(&slot.start, slot.duration) {
-                    return Err(Error::IncompatibilityWithSlotOverlappingNextDay(i, j));
+                    return Err(Error::IncompatibilityGroupWithSlotOverlappingNextDay(
+                        i,
+                        slot.clone(),
+                    ));
                 }
             }
         }
@@ -448,6 +485,7 @@ impl ValidatedData {
         Ok(ValidatedData {
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -629,8 +667,8 @@ impl<'a> IlpTranslator<'a> {
             }
         }
 
-        for incompatibility in &self.data.incompatibilities {
-            for slot in &incompatibility.slots {
+        for incompat_group in &self.data.incompatibility_groups {
+            for slot in &incompat_group.slots {
                 result = gcd(result, slot.duration.get());
                 result = gcd(result, slot.start.start_time.get());
             }
@@ -1776,12 +1814,17 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .copied()
         {
-            for slot in self.data.incompatibilities[incompat].slots.iter() {
-                if slot.overlap_with(&SlotWithDuration {
-                    start: slot_start.clone(),
-                    duration,
-                }) {
-                    return false;
+            for incompat_group in self.data.incompatibilities[incompat].groups.iter().copied() {
+                for slot in self.data.incompatibility_groups[incompat_group]
+                    .slots
+                    .iter()
+                {
+                    if slot.overlap_with(&SlotWithDuration {
+                        start: slot_start.clone(),
+                        duration,
+                    }) {
+                        return false;
+                    }
                 }
             }
         }
