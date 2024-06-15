@@ -2067,6 +2067,211 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_assigned_version(
+        &self,
+        student: usize,
+        subject: usize,
+        incompat_group: usize,
+        slot: usize,
+        group: usize,
+    ) -> Constraint<Variable> {
+        let expr = Expr::var(Variable::GroupInSlot {
+            subject,
+            slot,
+            group,
+        });
+
+        expr.leq(&Expr::var(Variable::IncompatGroupForStudent {
+            incompat_group,
+            student,
+        }))
+    }
+
+    fn build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_dynamic_version(
+        &self,
+        student: usize,
+        subject: usize,
+        incompat_group: usize,
+        slot: usize,
+        group: usize,
+    ) -> Constraint<Variable> {
+        let expr = Expr::var(Variable::DynamicGroupAssignment {
+            subject,
+            slot,
+            group,
+            student,
+        });
+
+        expr.leq(&Expr::var(Variable::IncompatGroupForStudent {
+            incompat_group,
+            student,
+        }))
+    }
+
+    fn need_building_for_slot_and_incompat_group(
+        &self,
+        slot_start: &SlotStart,
+        duration: NonZeroU32,
+        incompat_group: &IncompatibilityGroup,
+    ) -> bool {
+        for slot in &incompat_group.slots {
+            if slot.overlap_with(&SlotWithDuration {
+                start: slot_start.clone(),
+                duration,
+            }) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn build_incompat_group_for_student_constraints_for_subject_slot_student_and_incompat_group(
+        &self,
+        i: usize,
+        j: usize,
+        subject: &Subject,
+        k: usize,
+        l: usize,
+        slot: &SlotWithTeacher,
+        q: usize,
+        incompat_group: &IncompatibilityGroup,
+        assigned: bool,
+    ) -> Option<Constraint<Variable>> {
+        if !self.need_building_for_slot_and_incompat_group(
+            &slot.start,
+            subject.duration,
+            incompat_group,
+        ) {
+            return None;
+        }
+
+        if assigned {
+            Some(self.build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_assigned_version(
+                i,
+                j,
+                q,
+                l,
+                k,
+            ))
+        } else {
+            Some(self.build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_dynamic_version(
+                i,
+                j,
+                q,
+                l,
+                k,
+            ))
+        }
+    }
+
+    fn build_incompat_group_for_student_constraints_for_subject_and_student(
+        &self,
+        i: usize,
+        student: &Student,
+        j: usize,
+        subject: &Subject,
+        k: usize,
+        assigned: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (l, slot) in subject.slots.iter().enumerate() {
+            for p in student.incompatibilities.iter().copied() {
+                let incompat = &self.data.incompatibilities[p];
+                for q in incompat.groups.iter().copied() {
+                    let incompat_group = &self.data.incompatibility_groups[q];
+                    constraints.extend(
+                        self.build_incompat_group_for_student_constraints_for_subject_slot_student_and_incompat_group(
+                            i,
+                            j,
+                            subject,
+                            k,
+                            l,
+                            slot,
+                            q,
+                            incompat_group,
+                            assigned
+                        )
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
+    fn build_incompat_group_for_student_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (j, subject) in self.data.subjects.iter().enumerate() {
+            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                for i in group.students.iter().copied() {
+                    let student = &self.data.students[i];
+                    constraints.extend(
+                        self.build_incompat_group_for_student_constraints_for_subject_and_student(
+                            i, student, j, subject, k, true,
+                        ),
+                    );
+                }
+
+                if !Self::is_group_fixed(group, subject) {
+                    for i in subject.groups.not_assigned.iter().copied() {
+                        let student = &self.data.students[i];
+                        constraints.extend(
+                            self.build_incompat_group_for_student_constraints_for_subject_and_student(
+                                i,
+                                student,
+                                j,
+                                subject,
+                                k,
+                                false,
+                            )
+                        );
+                    }
+                }
+            }
+        }
+
+        constraints
+    }
+
+    fn build_student_incompat_max_count_constraint_for_student_and_incompat(
+        &self,
+        student: usize,
+        incompat: &Incompatibility,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::<Variable>::constant(0);
+
+        for incompat_group in incompat.groups.iter().copied() {
+            expr = expr
+                + Expr::var(Variable::IncompatGroupForStudent {
+                    incompat_group,
+                    student,
+                })
+        }
+
+        let max_count_i32 = incompat.max_count.try_into().expect("Less than 2^31");
+        expr.leq(&Expr::constant(max_count_i32))
+    }
+
+    fn build_student_incompat_max_count_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, student) in self.data.students.iter().enumerate() {
+            for j in student.incompatibilities.iter().copied() {
+                let incompat = &self.data.incompatibilities[j];
+                constraints.insert(
+                    self.build_student_incompat_max_count_constraint_for_student_and_incompat(
+                        i, incompat,
+                    ),
+                );
+            }
+        }
+
+        constraints
+    }
+
     fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -2114,6 +2319,10 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_grouping_incompats_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_students_incompats_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_incompat_group_for_student_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_student_incompat_max_count_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_balancing_constraints())
             .expect("Variables should be declared")
