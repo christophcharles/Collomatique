@@ -10,6 +10,7 @@ fn restricted_interrogations_per_week() {
         teacher_count: 5,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: Some(2..3),
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
@@ -18,7 +19,6 @@ fn restricted_interrogations_per_week() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(1).unwrap(),
             period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -107,13 +107,13 @@ fn restricted_interrogations_per_week() {
                 ],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -170,13 +170,13 @@ fn restricted_interrogations_per_week() {
                 ],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -229,13 +229,13 @@ fn restricted_interrogations_per_week() {
                 ],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -262,8 +262,10 @@ fn restricted_interrogations_per_week() {
                 }],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -309,6 +311,7 @@ fn restricted_interrogations_per_week() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
