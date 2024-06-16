@@ -11,8 +11,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    #[error("Some init config were failed. Only {0} individuals generated")]
-    InitializerFailed(usize),
     #[error("Solver failed on initial population. Only {0} individuals were solved")]
     SolverFailed(usize),
 }
@@ -87,13 +85,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
         let non_feasable_configs: Vec<_> = (0..self.population_size)
             .into_par_iter()
             .map(|_i| initializer.build_init_config(&self.problem))
-            .while_some()
             .collect();
-
-        let number_init = non_feasable_configs.len();
-        if number_init != self.population_size {
-            return Err(Error::InitializerFailed(number_init));
-        }
 
         let feasable_configs: Vec<_> = non_feasable_configs
             .par_iter()
