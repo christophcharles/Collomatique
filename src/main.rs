@@ -12,8 +12,9 @@ struct Args {
     db: std::path::PathBuf,
 }
 
-use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::SqlitePool;
+
+use collomatique::backend::sqlite;
 
 use serde::{Deserialize, Serialize};
 use std::num::{NonZeroU32, NonZeroUsize};
@@ -24,246 +25,11 @@ struct GeneralDataDb {
     max_interrogations_per_day: Option<NonZeroU32>,
 }
 
-async fn create_db(db_url: &str) -> Result<SqlitePool> {
-    if sqlx::Sqlite::database_exists(db_url).await? {
-        return Err(anyhow!("Database \"{}\" already exists", db_url));
-    }
-
-    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
-    use std::str::FromStr;
-    let options = SqliteConnectOptions::from_str(db_url)?
-        .journal_mode(SqliteJournalMode::Delete)
-        .create_if_missing(true);
-    let db = SqlitePool::connect_with(options).await?;
-
-    sqlx::query(
-        r#"
-CREATE TABLE "colloscopes" (
-    "colloscope_id"	INTEGER NOT NULL,
-    "name"	TEXT NOT NULL UNIQUE,
-    PRIMARY KEY("colloscope_id" AUTOINCREMENT)
-);
-INSERT INTO "colloscopes" ( "name" ) VALUES ( "Colloscope_1" );
-
-CREATE TABLE "incompats" (
-	"incompat_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	"max_count"	INTEGER NOT NULL,
-	PRIMARY KEY("incompat_id")
-);
-
-CREATE TABLE "incompat_groups" (
-	"incompat_group_id"	INTEGER NOT NULL,
-	"incompat_id"	INTEGER NOT NULL,
-	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
-	PRIMARY KEY("incompat_group_id")
-);
-
-CREATE TABLE "week_patterns" (
-	"week_pattern_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("week_pattern_id")
-);
-
-CREATE TABLE "weeks" (
-	"week_pattern_id"	INTEGER NOT NULL,
-	"week"	INTEGER NOT NULL,
-	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id"),
-	PRIMARY KEY("week_pattern_id","week")
-);
-
-CREATE TABLE "incompat_group_items" (
-	"incompat_group_id"	INTEGER NOT NULL,
-	"week_pattern_id"	INTEGER NOT NULL,
-	"start_day"	INTEGER NOT NULL,
-	"start_time"	INTEGER NOT NULL,
-	"duration"	INTEGER NOT NULL,
-	FOREIGN KEY("incompat_group_id") REFERENCES "incompat_groups"("incompat_group_id"),
-	PRIMARY KEY("incompat_group_id","week_pattern_id","start_day","start_time","duration"),
-	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id")
-);
-
-CREATE TABLE "general_data" (
-	"id"	INTEGER NOT NULL,
-	"value"	TEXT NOT NULL,
-	PRIMARY KEY("id" AUTOINCREMENT)
-);
-
-INSERT INTO "general_data" ( "value" ) VALUES ( ? );
-
-CREATE TABLE "teachers" (
-	"teacher_id"	INTEGER NOT NULL,
-	"surname"	TEXT NOT NULL,
-	"firstname"	TEXT NOT NULL,
-	"contact"	TEXT NOT NULL,
-	PRIMARY KEY("teacher_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "students" (
-	"student_id"	INTEGER NOT NULL,
-	"surname"	TEXT NOT NULL,
-	"firstname"	TEXT NOT NULL,
-	"email"	TEXT,
-	"phone"	TEXT,
-	PRIMARY KEY("student_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "subject_groups" (
-	"subject_group_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	"optional"	INTEGER NOT NULL,
-	PRIMARY KEY("subject_group_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "subjects" (
-	"subject_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	"subject_group_id"	INTEGER NOT NULL,
-	"duration"	INTEGER NOT NULL,
-	"incompat_id"	INTEGER,
-	"min_students_per_group"	INTEGER NOT NULL,
-	"max_students_per_group"	INTEGER NOT NULL,
-	"period"	INTEGER NOT NULL,
-	"period_is_strict"	INTEGER NOT NULL,
-	"is_tutorial"	INTEGER NOT NULL,
-	"max_groups_per_slot"	INTEGER NOT NULL,
-    "balance_teachers"	INTEGER NOT NULL,
-	"balance_timeslots"	INTEGER NOT NULL,
-	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
-	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
-	PRIMARY KEY("subject_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "groupings" (
-	"grouping_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("grouping_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "grouping_incompats" (
-	"grouping_incompat_id"	INTEGER NOT NULL UNIQUE,
-	"max_count"	INTEGER NOT NULL,
-	PRIMARY KEY("grouping_incompat_id")
-);
-
-CREATE TABLE "grouping_incompat_items" (
-	"grouping_incompat_id"	INTEGER NOT NULL,
-	"grouping_id"	INTEGER NOT NULL,
-	FOREIGN KEY("grouping_id") REFERENCES "groupings"("grouping_id"),
-	FOREIGN KEY("grouping_incompat_id") REFERENCES "grouping_incompats"("grouping_incompat_id"),
-	PRIMARY KEY("grouping_incompat_id","grouping_id")
-);
-
-CREATE TABLE "time_slots" (
-	"time_slot_id"	INTEGER NOT NULL,
-	"subject_id"	INTEGER NOT NULL,
-	"teacher_id"	INTEGER NOT NULL,
-	"start_day"	INTEGER NOT NULL,
-	"start_time"	INTEGER NOT NULL,
-	"week_pattern_id"	INTEGER NOT NULL,
-    "room"	TEXT NOT NULL,
-	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id"),
-	PRIMARY KEY("time_slot_id" AUTOINCREMENT),
-	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
-	FOREIGN KEY("teacher_id") REFERENCES "teachers"("teacher_id")
-);
-
-CREATE TABLE "grouping_items" (
-	"grouping_id"	INTEGER NOT NULL,
-	"time_slot_id"	INTEGER NOT NULL,
-    FOREIGN KEY("grouping_id") REFERENCES "groupings"("grouping_id"),
-	FOREIGN KEY("time_slot_id") REFERENCES "time_slots"("time_slot_id"),
-	PRIMARY KEY("grouping_id","time_slot_id")
-);
-
-CREATE TABLE "student_incompats" (
-	"student_id"	INTEGER NOT NULL,
-	"incompat_id"	INTEGER NOT NULL,
-	PRIMARY KEY("student_id","incompat_id"),
-    FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
-	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id")
-);
-
-CREATE TABLE "student_subjects" (
-	"student_id"	INTEGER NOT NULL,
-	"subject_id"	INTEGER NOT NULL,
-    FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
-	FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
-	PRIMARY KEY("subject_id","student_id")
-);
-
-CREATE TABLE "group_lists" (
-	"group_list_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("group_list_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "group_list_subjects" (
-	"subject_id"	INTEGER NOT NULL,
-	"group_list_id"	INTEGER NOT NULL,
-	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
-	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
-	PRIMARY KEY("subject_id","group_list_id")
-);
-
-CREATE TABLE "groups" (
-	"group_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	"extendable"	INTEGER NOT NULL,
-	UNIQUE("group_id"),
-	PRIMARY KEY("group_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "group_list_items" (
-	"group_list_id"	INTEGER NOT NULL,
-	"group_id"	INTEGER NOT NULL UNIQUE,
-	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
-	FOREIGN KEY("group_id") REFERENCES "groups"("group_id"),
-	PRIMARY KEY("group_list_id","group_id")
-);
-
-CREATE TABLE "group_items" (
-	"group_list_id"	INTEGER NOT NULL,
-	"group_id"	INTEGER NOT NULL,
-	"student_id"	INTEGER NOT NULL,
-	UNIQUE("group_list_id","student_id"),
-	FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
-	PRIMARY KEY("student_id","group_list_id","group_id"),
-	FOREIGN KEY ("group_list_id", "group_id") REFERENCES group_list_items("group_list_id", "group_id")
-);"#,
-    )
-    .bind(serde_json::to_string(&GeneralDataDb {
-        interrogations_per_week: None,
-        max_interrogations_per_day: None,
-    })?)
-    .execute(&db)
-    .await?;
-
-    Ok(db)
-}
-
-async fn open_db(db_url: &str) -> Result<SqlitePool> {
-    if !sqlx::Sqlite::database_exists(db_url).await? {
-        return Err(anyhow!("Database \"{}\" does not exist", db_url));
-    }
-
-    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
-    use std::str::FromStr;
-    let options = SqliteConnectOptions::from_str(db_url)?.journal_mode(SqliteJournalMode::Delete);
-    Ok(SqlitePool::connect_with(options).await?)
-}
-
-async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqlitePool> {
-    let filename = match path.to_str() {
-        Some(f) => f,
-        None => return Err(anyhow!("Non UTF-8 file name")),
-    };
-    let db_url = format!("sqlite://{}", filename);
-
+async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Storage> {
     if create {
-        create_db(&db_url).await
+        Ok(sqlite::Storage::new_db(path).await?)
     } else {
-        open_db(&db_url).await
+        Ok(sqlite::Storage::open_db(path).await?)
     }
 }
 
@@ -1148,9 +914,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     println!("Opening database...");
-    let db = connect_db(args.create, args.db.as_path()).await?;
+    let storage = connect_db(args.create, args.db.as_path()).await?;
+    let pool = storage.get_pool();
 
-    let data = generate_colloscope_data(&db).await?;
+    let data = generate_colloscope_data(pool).await?;
 
     let ilp_translator = data.ilp_translator();
 
