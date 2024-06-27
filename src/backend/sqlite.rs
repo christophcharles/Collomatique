@@ -301,6 +301,7 @@ impl Store {
 
 use super::*;
 
+mod teachers;
 mod week_patterns;
 
 impl Storage for Store {
@@ -331,5 +332,34 @@ impl Storage for Store {
         index: WeekPatternId,
     ) -> impl core::future::Future<Output = Result<(), Self::WeekPatternError>> + Send {
         week_patterns::remove(&self.pool, index)
+    }
+
+    type TeacherError = teachers::Error;
+
+    fn teachers_get(
+        &self,
+        index: TeacherId,
+    ) -> impl core::future::Future<Output = Result<Teacher, Self::TeacherError>> + Send {
+        teachers::get(&self.pool, index)
+    }
+
+    fn teachers_get_all(
+        &self,
+    ) -> impl core::future::Future<Output = Result<Vec<Teacher>, Self::TeacherError>> + Send {
+        teachers::get_all(&self.pool)
+    }
+
+    fn teachers_add(
+        &self,
+        teacher: Teacher,
+    ) -> impl core::future::Future<Output = Result<TeacherId, Self::TeacherError>> + Send {
+        teachers::add(&self.pool, teacher)
+    }
+
+    fn teachers_remove(
+        &self,
+        index: TeacherId,
+    ) -> impl core::future::Future<Output = Result<(), Self::TeacherError>> + Send {
+        teachers::remove(&self.pool, index)
     }
 }
