@@ -46,12 +46,12 @@ pub async fn get(
     })
 }
 
-pub async fn get_all(pool: &SqlitePool) -> Result<Vec<WeekPattern>> {
+pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, WeekPattern>> {
     let names = sqlx::query!("SELECT week_pattern_id, name FROM week_patterns")
         .fetch_all(pool)
         .await?;
 
-    let mut output = Vec::with_capacity(names.len());
+    let mut output = BTreeMap::new();
 
     for record in names {
         let data = sqlx::query!(
@@ -78,10 +78,13 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<WeekPattern>> {
             })
             .collect::<Result<BTreeSet<_>>>()?;
 
-        output.push(WeekPattern {
-            name: record.name,
-            weeks,
-        });
+        output.insert(
+            Id(record.week_pattern_id),
+            WeekPattern {
+                name: record.name,
+                weeks,
+            },
+        );
     }
 
     Ok(output)
