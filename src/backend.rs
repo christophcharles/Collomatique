@@ -23,6 +23,7 @@ use std::collections::BTreeMap;
 pub trait Storage {
     type WeekPatternId: OrdId;
     type TeacherId: OrdId;
+    type SubjectGroupId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
@@ -67,6 +68,27 @@ pub trait Storage {
         index: Self::TeacherId,
         teacher: Teacher,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
+
+    async fn subject_groups_get_all(
+        &self,
+    ) -> std::result::Result<BTreeMap<Self::SubjectGroupId, SubjectGroup>, Self::InternalError>;
+    async fn subject_groups_get(
+        &self,
+        index: Self::SubjectGroupId,
+    ) -> std::result::Result<SubjectGroup, IdError<Self::InternalError, Self::SubjectGroupId>>;
+    async fn subject_groups_add(
+        &self,
+        subject_group: SubjectGroup,
+    ) -> std::result::Result<Self::SubjectGroupId, Self::InternalError>;
+    async fn subject_groups_remove(
+        &self,
+        index: Self::SubjectGroupId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
+    async fn subject_groups_update(
+        &self,
+        index: Self::SubjectGroupId,
+        subject_group: SubjectGroup,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
 }
 
 use std::collections::BTreeSet;
@@ -95,4 +117,10 @@ pub struct Teacher {
     pub surname: String,
     pub firstname: String,
     pub contact: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectGroup {
+    pub name: String,
+    pub optional: bool,
 }
