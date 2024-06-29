@@ -518,3 +518,67 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
     assert_eq!(result, expected_result);
 }
+
+#[sqlx::test]
+async fn week_pattern_update_one(pool: sqlx::SqlitePool) {
+    let store = prepare_empty_db(pool).await;
+
+    let _ = sqlx::query!(
+        r#"
+INSERT INTO week_patterns (name) VALUES ("Toutes"), ("Impaires"), ("Paires");
+INSERT INTO weeks (week_pattern_id, week) VALUES (1,0), (1,1), (1,2), (1,3), (1,4), (1,5), (1,6), (1,7), (1,8), (1,9);
+INSERT INTO weeks (week_pattern_id, week) VALUES (2,0), (2,2), (2,4), (2,6), (2,8);
+INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,9);
+        "#
+    ).execute(&store.pool).await.unwrap();
+
+    store
+        .week_patterns_update(
+            super::super::week_patterns::Id(2),
+            WeekPattern {
+                name: String::from("Une sur trois"),
+                weeks: BTreeSet::from([Week(0), Week(3), Week(6), Week(9)]),
+            },
+        )
+        .await
+        .unwrap();
+
+    let result = store.week_patterns_get_all().await.unwrap();
+
+    let expected_result = BTreeMap::from([
+        (
+            super::super::week_patterns::Id(1),
+            WeekPattern {
+                name: String::from("Toutes"),
+                weeks: BTreeSet::from([
+                    Week(0),
+                    Week(1),
+                    Week(2),
+                    Week(3),
+                    Week(4),
+                    Week(5),
+                    Week(6),
+                    Week(7),
+                    Week(8),
+                    Week(9),
+                ]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(2),
+            WeekPattern {
+                name: String::from("Une sur trois"),
+                weeks: BTreeSet::from([Week(0), Week(3), Week(6), Week(9)]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(3),
+            WeekPattern {
+                name: String::from("Paires"),
+                weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
+            },
+        ),
+    ]);
+
+    assert_eq!(result, expected_result);
+}
