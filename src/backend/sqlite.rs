@@ -9,6 +9,8 @@ pub enum Error {
     SqlxError(#[from] sqlx::Error),
     #[error("Corrupted database: {0}")]
     CorruptedDatabase(String),
+    #[error("Cannot represent some data in database: {0}")]
+    RepresentationError(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
