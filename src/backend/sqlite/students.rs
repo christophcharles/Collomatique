@@ -41,7 +41,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, Student>> {
         .collect())
 }
 
-pub async fn add(pool: &SqlitePool, student: Student) -> Result<Id> {
+pub async fn add(pool: &SqlitePool, student: &Student) -> Result<Id> {
     let mut conn = pool.acquire().await?;
 
     let id = sqlx::query!(
@@ -81,7 +81,7 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
 pub async fn update(
     pool: &SqlitePool,
     index: Id,
-    student: Student,
+    student: &Student,
 ) -> std::result::Result<(), IdError<Error, Id>> {
     let student_id = index.0;
 
