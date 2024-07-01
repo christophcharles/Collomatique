@@ -307,6 +307,7 @@ impl Store {
 
 use super::*;
 
+mod group_lists;
 mod incompats;
 mod students;
 mod subject_groups;
@@ -319,6 +320,7 @@ impl Storage for Store {
     type StudentId = students::Id;
     type SubjectGroupId = subject_groups::Id;
     type IncompatId = incompats::Id;
+    type GroupListId = group_lists::Id;
 
     type InternalError = Error;
 
@@ -547,5 +549,63 @@ impl Storage for Store {
         >,
     > + Send {
         incompats::update(&self.pool, index, incompat)
+    }
+
+    fn group_lists_get(
+        &self,
+        index: Self::GroupListId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            GroupList<Self::StudentId>,
+            IdError<Self::InternalError, Self::GroupListId>,
+        >,
+    > + Send {
+        group_lists::get(&self.pool, index)
+    }
+    fn group_lists_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::GroupListId, GroupList<Self::StudentId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        group_lists::get_all(&self.pool)
+    }
+    fn group_lists_add(
+        &self,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Self::GroupListId,
+            InvalidCrossError<Self::InternalError, GroupList<Self::StudentId>, Self::StudentId>,
+        >,
+    > + Send {
+        group_lists::add(&self.pool, group_list)
+    }
+    fn group_lists_remove(
+        &self,
+        index: Self::GroupListId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupListId>>,
+    > + Send {
+        group_lists::remove(&self.pool, index)
+    }
+    fn group_lists_update(
+        &self,
+        index: Self::GroupListId,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            InvalidCrossIdError<
+                Self::InternalError,
+                GroupList<Self::StudentId>,
+                Self::GroupListId,
+                Self::StudentId,
+            >,
+        >,
+    > + Send {
+        group_lists::update(&self.pool, index, group_list)
     }
 }

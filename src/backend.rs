@@ -41,6 +41,39 @@ where
     InternalError(#[from] T),
 }
 
+#[derive(Error, Debug)]
+pub enum InvalidCrossError<T, Data, CrossId>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Data: std::fmt::Debug,
+    CrossId: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId(CrossId),
+    #[error("Data to be stored is invalid: {0:?}")]
+    InvalidData(Data),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum InvalidCrossIdError<T, Data, Id, CrossId>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Data: std::fmt::Debug,
+    Id: std::fmt::Debug,
+    CrossId: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId(CrossId),
+    #[error("Data to be stored is invalid: {0:?}")]
+    InvalidData(Data),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
 pub trait OrdId: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord {}
 impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord> OrdId for T {}
 
@@ -54,6 +87,7 @@ pub trait Storage {
     type StudentId: OrdId;
     type SubjectGroupId: OrdId;
     type IncompatId: OrdId;
+    type GroupListId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
@@ -170,6 +204,44 @@ pub trait Storage {
         (),
         CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,
     >;
+
+    async fn group_lists_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::GroupListId, GroupList<Self::StudentId>>,
+        Self::InternalError,
+    >;
+    async fn group_lists_get(
+        &self,
+        index: Self::GroupListId,
+    ) -> std::result::Result<
+        GroupList<Self::StudentId>,
+        IdError<Self::InternalError, Self::GroupListId>,
+    >;
+    async fn group_lists_add(
+        &self,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> std::result::Result<
+        Self::GroupListId,
+        InvalidCrossError<Self::InternalError, GroupList<Self::StudentId>, Self::StudentId>,
+    >;
+    async fn group_lists_remove(
+        &self,
+        index: Self::GroupListId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupListId>>;
+    async fn group_lists_update(
+        &self,
+        index: Self::GroupListId,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> std::result::Result<
+        (),
+        InvalidCrossIdError<
+            Self::InternalError,
+            GroupList<Self::StudentId>,
+            Self::GroupListId,
+            Self::StudentId,
+        >,
+    >;
 }
 
 use std::collections::BTreeSet;
@@ -237,4 +309,17 @@ pub struct Incompat<WeekPatternId: OrdId> {
     pub name: String,
     pub max_count: usize,
     pub groups: BTreeSet<IncompatGroup<WeekPatternId>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Group {
+    pub name: String,
+    pub extendable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupList<StudentId: OrdId> {
+    pub name: String,
+    pub groups: Vec<Group>,
+    pub students_mapping: BTreeMap<StudentId, usize>,
 }
