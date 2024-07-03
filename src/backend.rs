@@ -42,6 +42,45 @@ where
 }
 
 #[derive(Error, Debug)]
+pub enum Cross3Error<T, CrossId1, CrossId2, CrossId3>
+where
+    T: std::fmt::Debug + std::error::Error,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId3(CrossId3),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Cross3IdError<T, Id, CrossId1, CrossId2, CrossId3>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId3(CrossId3),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
 pub enum InvalidCrossError<T, Data, CrossId>
 where
     T: std::fmt::Debug + std::error::Error,
@@ -78,7 +117,8 @@ pub trait OrdId: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord {}
 impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord> OrdId for T {}
 
 use std::collections::BTreeMap;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
+use std::ops::RangeInclusive;
 
 #[trait_variant::make(Send)]
 pub trait Storage {
@@ -88,6 +128,7 @@ pub trait Storage {
     type SubjectGroupId: OrdId;
     type IncompatId: OrdId;
     type GroupListId: OrdId;
+    type SubjectId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
@@ -248,6 +289,48 @@ pub trait Storage {
             Self::StudentId,
         >,
     >;
+
+    async fn subjects_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<
+            Self::SubjectId,
+            Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+        >,
+        Self::InternalError,
+    >;
+    async fn subjects_get(
+        &self,
+        index: Self::SubjectId,
+    ) -> std::result::Result<
+        Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+        IdError<Self::InternalError, Self::SubjectId>,
+    >;
+    async fn subjects_add(
+        &self,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> std::result::Result<
+        Self::SubjectId,
+        Cross3Error<Self::InternalError, Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    >;
+    async fn subjects_remove(
+        &self,
+        index: Self::SubjectId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>;
+    async fn subjects_update(
+        &self,
+        index: Self::SubjectId,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> std::result::Result<
+        (),
+        Cross3IdError<
+            Self::InternalError,
+            Self::SubjectId,
+            Self::SubjectGroupId,
+            Self::IncompatId,
+            Self::GroupListId,
+        >,
+    >;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -334,4 +417,25 @@ pub struct GroupList<StudentId: OrdId> {
     pub name: String,
     pub groups: Vec<Group>,
     pub students_mapping: BTreeMap<StudentId, usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingRequirements {
+    pub teachers: bool,
+    pub timeslots: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Subject<SubjectGroupId: OrdId, IncompatId: OrdId, GroupListId: OrdId> {
+    pub name: String,
+    pub subject_group_id: SubjectGroupId,
+    pub incompat_id: Option<IncompatId>,
+    pub group_list_id: GroupListId,
+    pub duration: NonZeroU32,
+    pub students_per_group: RangeInclusive<NonZeroUsize>,
+    pub period: NonZeroU32,
+    pub period_is_strict: bool,
+    pub is_tutorial: bool,
+    pub max_groups_per_slot: NonZeroUsize,
+    pub balancing_requirements: BalancingRequirements,
 }
