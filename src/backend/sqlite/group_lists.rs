@@ -248,8 +248,61 @@ pub async fn add(
     Ok(Id(group_list_id))
 }
 
-pub async fn remove(_pool: &SqlitePool, _index: Id) -> std::result::Result<(), IdError<Error, Id>> {
-    todo!()
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+    let group_list_id = index.0;
+
+    let groups_to_delete = sqlx::query!(
+        "SELECT group_id FROM group_list_items WHERE group_list_id = ?",
+        group_list_id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Error::from)?;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        "DELETE FROM group_items WHERE group_list_id = ?",
+        group_list_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        "DELETE FROM group_list_items WHERE group_list_id = ?",
+        group_list_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    for group in groups_to_delete {
+        let _ = sqlx::query!("DELETE FROM groups WHERE group_id = ?", group.group_id)
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::from)?;
+    }
+
+    let count = sqlx::query!(
+        "DELETE FROM group_lists WHERE group_list_id = ?",
+        group_list_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if count > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple group_lists with id {:?}",
+            index
+        ))));
+    } else if count == 0 {
+        return Err(IdError::InvalidId(index));
+    }
+
+    Ok(())
 }
 
 pub async fn update(
