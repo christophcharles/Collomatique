@@ -121,7 +121,7 @@ VALUES
 }
 
 #[sqlx::test]
-async fn time_slot_get_one_1(pool: sqlx::SqlitePool) {
+async fn time_slots_get_one_1(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
     let time_slot = store
@@ -144,7 +144,7 @@ async fn time_slot_get_one_1(pool: sqlx::SqlitePool) {
 }
 
 #[sqlx::test]
-async fn time_slot_get_one_2(pool: sqlx::SqlitePool) {
+async fn time_slots_get_one_2(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
     let time_slot = store
@@ -167,7 +167,7 @@ async fn time_slot_get_one_2(pool: sqlx::SqlitePool) {
 }
 
 #[sqlx::test]
-async fn time_slot_get_one_3(pool: sqlx::SqlitePool) {
+async fn time_slots_get_one_3(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
     let time_slot = store
@@ -190,7 +190,7 @@ async fn time_slot_get_one_3(pool: sqlx::SqlitePool) {
 }
 
 #[sqlx::test]
-async fn time_slot_get_all(pool: sqlx::SqlitePool) {
+async fn time_slots_get_all(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
     let time_slots = store.time_slots_get_all().await.unwrap();
@@ -501,7 +501,7 @@ async fn time_slot_get_all(pool: sqlx::SqlitePool) {
 }
 
 #[sqlx::test]
-async fn time_slot_remove_one(pool: sqlx::SqlitePool) {
+async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
     store
@@ -804,7 +804,7 @@ async fn time_slot_remove_one(pool: sqlx::SqlitePool) {
 }
 
 #[sqlx::test]
-async fn time_slot_remove_then_add(pool: sqlx::SqlitePool) {
+async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
     store
