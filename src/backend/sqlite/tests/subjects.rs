@@ -1141,3 +1141,190 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
 
     assert_eq!(subjects, subjects_expected);
 }
+
+#[sqlx::test]
+async fn subjects_update(pool: sqlx::SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .subjects_update(
+            super::super::subjects::Id(4),
+            &Subject {
+                name: String::from("LV1 - Anglais - new"),
+                subject_group_id: super::super::subject_groups::Id(3),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: None,
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: true,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let subjects = store.subjects_get_all().await.unwrap();
+
+    let subjects_expected = BTreeMap::from([
+        (
+            super::super::subjects::Id(1),
+            Subject {
+                name: String::from("HGG"),
+                subject_group_id: super::super::subject_groups::Id(1),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: None,
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: Some(super::super::group_lists::Id(2)),
+            },
+        ),
+        (
+            super::super::subjects::Id(2),
+            Subject {
+                name: String::from("ESH"),
+                subject_group_id: super::super::subject_groups::Id(1),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: Some(super::super::incompats::Id(1)),
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: Some(super::super::group_lists::Id(1)),
+            },
+        ),
+        (
+            super::super::subjects::Id(3),
+            Subject {
+                name: String::from("Lettres-Philo"),
+                subject_group_id: super::super::subject_groups::Id(5),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: None,
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: Some(super::super::group_lists::Id(1)),
+            },
+        ),
+        (
+            super::super::subjects::Id(4),
+            Subject {
+                name: String::from("LV1 - Anglais - new"),
+                subject_group_id: super::super::subject_groups::Id(3),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: None,
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: true,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: None,
+            },
+        ),
+        (
+            super::super::subjects::Id(5),
+            Subject {
+                name: String::from("LV2 - Espagnol"),
+                subject_group_id: super::super::subject_groups::Id(2),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: Some(super::super::incompats::Id(2)),
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: Some(super::super::group_lists::Id(1)),
+            },
+        ),
+        (
+            super::super::subjects::Id(6),
+            Subject {
+                name: String::from("LV2 - Allemand"),
+                subject_group_id: super::super::subject_groups::Id(2),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: Some(super::super::incompats::Id(3)),
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: Some(super::super::group_lists::Id(1)),
+            },
+        ),
+        (
+            super::super::subjects::Id(7),
+            Subject {
+                name: String::from("Mathématiques Approfondies"),
+                subject_group_id: super::super::subject_groups::Id(4),
+                duration: NonZeroU32::new(60).unwrap(),
+                incompat_id: None,
+                students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: false,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: true,
+                    timeslots: true,
+                },
+                group_list_id: Some(super::super::group_lists::Id(1)),
+            },
+        ),
+        (
+            super::super::subjects::Id(8),
+            Subject {
+                name: String::from("TP Info"),
+                subject_group_id: super::super::subject_groups::Id(6),
+                duration: NonZeroU32::new(120).unwrap(),
+                incompat_id: None,
+                students_per_group: NonZeroUsize::new(10).unwrap()..=NonZeroUsize::new(19).unwrap(),
+                period: NonZeroU32::new(2).unwrap(),
+                period_is_strict: false,
+                is_tutorial: true,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                balancing_requirements: BalancingRequirements {
+                    teachers: false,
+                    timeslots: false,
+                },
+                group_list_id: Some(super::super::group_lists::Id(3)),
+            },
+        ),
+    ]);
+
+    assert_eq!(subjects, subjects_expected);
+}
