@@ -925,7 +925,12 @@ impl Storage for Store {
     ) -> impl core::future::Future<
         Output = std::result::Result<
             (),
-            Id3Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId, Self::SubjectId>,
+            CrossId2Error<
+                Self::InternalError,
+                Self::StudentId,
+                Self::SubjectGroupId,
+                Self::SubjectId,
+            >,
         >,
     > + Send {
         subject_group_for_student::set(&self.pool, student_id, subject_group_id, subject_id)
