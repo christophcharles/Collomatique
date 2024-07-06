@@ -184,3 +184,160 @@ async fn groupings_get_all(pool: SqlitePool) {
 
     assert_eq!(groupings, groupings_expected);
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GroupingDb {
+    grouping_id: i64,
+    name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GroupingItemDb {
+    grouping_id: i64,
+    time_slot_id: i64,
+}
+
+#[sqlx::test]
+async fn groupings_add_one_1(pool: SqlitePool) {
+    let store = prepare_db(pool).await;
+
+    let id = store
+        .groupings_add(&Grouping {
+            name: String::from("G1"),
+            slots: BTreeSet::from([super::super::time_slots::Id(3)]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, super::super::groupings::Id(1));
+
+    let groupings = sqlx::query_as!(GroupingDb, "SELECT grouping_id, name FROM groupings")
+        .fetch_all(&store.pool)
+        .await
+        .unwrap();
+
+    let grouping_items = sqlx::query_as!(
+        GroupingItemDb,
+        "SELECT grouping_id, time_slot_id FROM grouping_items"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let groupings_expected = vec![GroupingDb {
+        grouping_id: 1,
+        name: String::from("G1"),
+    }];
+
+    let grouping_items_expected = vec![GroupingItemDb {
+        grouping_id: 1,
+        time_slot_id: 3,
+    }];
+
+    assert_eq!(groupings, groupings_expected);
+    assert_eq!(grouping_items, grouping_items_expected);
+}
+
+#[sqlx::test]
+async fn groupings_add_one_2(pool: SqlitePool) {
+    let store = prepare_db(pool).await;
+
+    let id = store
+        .groupings_add(&Grouping {
+            name: String::from("G2"),
+            slots: BTreeSet::from([super::super::time_slots::Id(4)]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, super::super::groupings::Id(1));
+
+    let groupings = sqlx::query_as!(GroupingDb, "SELECT grouping_id, name FROM groupings")
+        .fetch_all(&store.pool)
+        .await
+        .unwrap();
+
+    let grouping_items = sqlx::query_as!(
+        GroupingItemDb,
+        "SELECT grouping_id, time_slot_id FROM grouping_items"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let groupings_expected = vec![GroupingDb {
+        grouping_id: 1,
+        name: String::from("G2"),
+    }];
+
+    let grouping_items_expected = vec![GroupingItemDb {
+        grouping_id: 1,
+        time_slot_id: 4,
+    }];
+
+    assert_eq!(groupings, groupings_expected);
+    assert_eq!(grouping_items, grouping_items_expected);
+}
+
+#[sqlx::test]
+async fn groupings_add_multiple(pool: SqlitePool) {
+    let store = prepare_db(pool).await;
+
+    let id = store
+        .groupings_add(&Grouping {
+            name: String::from("G1"),
+            slots: BTreeSet::from([super::super::time_slots::Id(3)]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, super::super::groupings::Id(1));
+
+    let id = store
+        .groupings_add(&Grouping {
+            name: String::from("G2"),
+            slots: BTreeSet::from([super::super::time_slots::Id(4)]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, super::super::groupings::Id(2));
+
+    let groupings = sqlx::query_as!(GroupingDb, "SELECT grouping_id, name FROM groupings")
+        .fetch_all(&store.pool)
+        .await
+        .unwrap();
+
+    let grouping_items = sqlx::query_as!(
+        GroupingItemDb,
+        "SELECT grouping_id, time_slot_id FROM grouping_items"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let groupings_expected = vec![
+        GroupingDb {
+            grouping_id: 1,
+            name: String::from("G1"),
+        },
+        GroupingDb {
+            grouping_id: 2,
+            name: String::from("G2"),
+        },
+    ];
+
+    let grouping_items_expected = vec![
+        GroupingItemDb {
+            grouping_id: 1,
+            time_slot_id: 3,
+        },
+        GroupingItemDb {
+            grouping_id: 2,
+            time_slot_id: 4,
+        },
+    ];
+
+    assert_eq!(groupings, groupings_expected);
+    assert_eq!(grouping_items, grouping_items_expected);
+}
