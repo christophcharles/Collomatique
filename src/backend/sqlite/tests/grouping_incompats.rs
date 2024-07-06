@@ -507,3 +507,50 @@ async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
 
     assert_eq!(grouping_incompats, grouping_incompats_expected);
 }
+
+#[sqlx::test]
+async fn grouping_incompats_update(pool: SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .grouping_incompats_update(
+            super::super::grouping_incompats::Id(1),
+            &GroupingIncompat {
+                max_count: NonZeroUsize::new(2).unwrap(),
+                groupings: BTreeSet::from([
+                    super::super::groupings::Id(3),
+                    super::super::groupings::Id(4),
+                ]),
+            },
+        )
+        .await
+        .unwrap();
+
+    let grouping_incompats = store.grouping_incompats_get_all().await.unwrap();
+
+    let grouping_incompats_expected = BTreeMap::from([
+        (
+            super::super::grouping_incompats::Id(1),
+            GroupingIncompat {
+                max_count: NonZeroUsize::new(2).unwrap(),
+                groupings: BTreeSet::from([
+                    super::super::groupings::Id(3),
+                    super::super::groupings::Id(4),
+                ]),
+            },
+        ),
+        (
+            super::super::grouping_incompats::Id(2),
+            GroupingIncompat {
+                max_count: NonZeroUsize::new(2).unwrap(),
+                groupings: BTreeSet::from([
+                    super::super::groupings::Id(3),
+                    super::super::groupings::Id(4),
+                    super::super::groupings::Id(5),
+                ]),
+            },
+        ),
+    ]);
+
+    assert_eq!(grouping_incompats, grouping_incompats_expected);
+}
