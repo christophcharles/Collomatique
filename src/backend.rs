@@ -130,7 +130,8 @@ pub trait Storage {
     type GroupListId: OrdId;
     type SubjectId: OrdId;
     type TimeSlotId: OrdId;
-    type GroupingsId: OrdId;
+    type GroupingId: OrdId;
+    type GroupingIncompatId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
@@ -376,31 +377,64 @@ pub trait Storage {
     async fn groupings_get_all(
         &self,
     ) -> std::result::Result<
-        BTreeMap<Self::GroupingsId, Grouping<Self::TimeSlotId>>,
+        BTreeMap<Self::GroupingId, Grouping<Self::TimeSlotId>>,
         Self::InternalError,
     >;
     async fn groupings_get(
         &self,
-        index: Self::GroupingsId,
+        index: Self::GroupingId,
     ) -> std::result::Result<
         Grouping<Self::TimeSlotId>,
-        IdError<Self::InternalError, Self::GroupingsId>,
+        IdError<Self::InternalError, Self::GroupingId>,
     >;
     async fn groupings_add(
         &self,
         grouping: &Grouping<Self::TimeSlotId>,
-    ) -> std::result::Result<Self::GroupingsId, CrossError<Self::InternalError, Self::TimeSlotId>>;
+    ) -> std::result::Result<Self::GroupingId, CrossError<Self::InternalError, Self::TimeSlotId>>;
     async fn groupings_remove(
         &self,
-        index: Self::GroupingsId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingsId>>;
+        index: Self::GroupingId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingId>>;
     async fn groupings_update(
         &self,
-        index: Self::GroupingsId,
+        index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> std::result::Result<
         (),
-        CrossIdError<Self::InternalError, Self::GroupingsId, Self::TimeSlotId>,
+        CrossIdError<Self::InternalError, Self::GroupingId, Self::TimeSlotId>,
+    >;
+
+    async fn grouping_incompats_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::GroupingIncompatId, GroupingIncompat<Self::GroupingId>>,
+        Self::InternalError,
+    >;
+    async fn grouping_incompats_get(
+        &self,
+        index: Self::GroupingIncompatId,
+    ) -> std::result::Result<
+        GroupingIncompat<Self::GroupingId>,
+        IdError<Self::InternalError, Self::GroupingIncompatId>,
+    >;
+    async fn grouping_incompats_add(
+        &self,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> std::result::Result<
+        Self::GroupingIncompatId,
+        CrossError<Self::InternalError, Self::GroupingId>,
+    >;
+    async fn grouping_incompats_remove(
+        &self,
+        index: Self::GroupingIncompatId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>>;
+    async fn grouping_incompats_update(
+        &self,
+        index: Self::GroupingIncompatId,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> std::result::Result<
+        (),
+        CrossIdError<Self::InternalError, Self::GroupingIncompatId, Self::GroupingId>,
     >;
 }
 
@@ -524,4 +558,10 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
 pub struct Grouping<TimeSlotId: OrdId> {
     pub name: String,
     pub slots: BTreeSet<TimeSlotId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupingIncompat<GroupingId: OrdId> {
+    pub max_count: NonZeroUsize,
+    pub groupings: BTreeSet<GroupingId>,
 }
