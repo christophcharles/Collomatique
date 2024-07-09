@@ -1211,7 +1211,7 @@ pub trait Storage: Send + Sync {
     async unsafe fn groupings_add_unchecked(
         &mut self,
         grouping: &Grouping<Self::TimeSlotId>,
-    ) -> std::result::Result<Self::GroupingId, CrossError<Self::InternalError, Self::TimeSlotId>>;
+    ) -> std::result::Result<Self::GroupingId, Self::InternalError>;
     async unsafe fn groupings_remove_unchecked(
         &mut self,
         index: Self::GroupingId,
@@ -1220,10 +1220,71 @@ pub trait Storage: Send + Sync {
         &mut self,
         index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn groupings_check_id(
+        &self,
+        index: Self::GroupingId,
+    ) -> std::result::Result<bool, Self::InternalError> {
+        async move {
+            let groupings = self.groupings_get_all().await?;
+
+            Ok(groupings.contains_key(&index))
+        }
+    }
+    async fn groupings_check_data(
+        &self,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> std::result::Result<DataStatusWithId<Self::TimeSlotId>, Self::InternalError> {
+        async move {
+            let time_slots = self.time_slots_get_all().await?;
+            for &slot_id in &grouping.slots {
+                if !time_slots.contains_key(&slot_id) {
+                    return Ok(DataStatusWithId::BadCrossId(slot_id));
+                }
+            }
+
+            Ok(DataStatusWithId::Ok)
+        }
+    }
+    async fn groupings_add(
+        &mut self,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> std::result::Result<Self::GroupingId, CrossError<Self::InternalError, Self::TimeSlotId>>
+    {
+        async move {
+            let data_status = self.groupings_check_data(grouping).await?;
+            match data_status {
+                DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
+                DataStatusWithId::Ok => {
+                    let id = unsafe { self.groupings_add_unchecked(grouping) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
+    async fn groupings_update(
+        &mut self,
+        index: Self::GroupingId,
+        grouping: &Grouping<Self::TimeSlotId>,
     ) -> std::result::Result<
         (),
         CrossIdError<Self::InternalError, Self::GroupingId, Self::TimeSlotId>,
-    >;
+    > {
+        async move {
+            if !self.groupings_check_id(index).await? {
+                return Err(CrossIdError::InvalidId(index));
+            }
+
+            let data_status = self.groupings_check_data(grouping).await?;
+            match data_status {
+                DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
+                DataStatusWithId::Ok => {
+                    unsafe { self.groupings_update_unchecked(index, grouping) }.await?;
+                    Ok(())
+                }
+            }
+        }
+    }
 
     async fn grouping_incompats_get_all(
         &self,
