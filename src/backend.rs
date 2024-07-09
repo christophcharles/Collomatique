@@ -1474,12 +1474,32 @@ pub trait Storage: Send + Sync {
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
         enabled: bool,
-    ) -> std::result::Result<(), Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async fn incompat_for_student_get(
         &self,
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
     ) -> std::result::Result<bool, Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
+    async fn incompat_for_student_set(
+        &mut self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+        enabled: bool,
+    ) -> std::result::Result<(), Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>
+    {
+        async move {
+            let students = self.students_get_all().await?;
+            if !students.contains_key(&student_id) {
+                return Err(Id2Error::InvalidId1(student_id));
+            }
+            if !self.incompats_check_id(incompat_id).await? {
+                return Err(Id2Error::InvalidId2(incompat_id));
+            }
+            unsafe { self.incompat_for_student_set_unchecked(student_id, incompat_id, enabled) }
+                .await?;
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
