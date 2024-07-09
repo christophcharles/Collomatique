@@ -64,39 +64,6 @@ VALUES
 ("LV2 - Allemand", 2, 3, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
 ("TP Info", 6, NULL, 3, 120, 10, 19, 2, 0, 1, 1, 0, 0);
-
-INSERT INTO teachers (surname, firstname, contact)
-VALUES
-("DURAND", "Gontran", "gontran.durand@yahoo.fr"),
-("BEAUREGARD", "Stéphane", "sbeauregard42@orange.fr"),
-("RIVOUX", "Jérôme", "jejeriri@gmail.com"),
-("DUPONT", "Suzanne", "s.dupont158@wanadoo.fr"),
-("MORET", "Béatrice", "bebemoret@yahoo.fr"),
-("SELLIER", "Geoffroy", "geoffroy.sellier@ac-lyon.fr"),
-("WEBER", "Xavier", "xavier.weber@gmail.com"),
-("LALLEMAND", "Gérard", "gerardlallemand@orange.fr"),
-("VILLARD", "Josette", "josette.villard@ac-lyon.fr"),
-("COLAS", "Filibustine", "fcolas@gmail.com"),
-("HUARD", "Violette", "vhuard42@orange.fr"),
-("RAMOS", "Camille", "camille.ramos@ac-lyon.fr"),
-("MARTEAU", "Fabrice", "fmarteau73@orange.fr"),
-("TOURNIER", "Alexandre", "alexandre.tournier@ac-lyon.fr"),
-("VIGOUROUX", "Maud", "maud.vigouroux@orange.fr"),
-("PEYRE", "Elisabeth", "epeyre@laposte.net"),
-("DE SOUSA", "Gabriel", "gabidesousa42@yahoo.fr"),
-("BUISSON", "Louise", "louise.buisson@ac-lyon.fr");
-
-INSERT INTO time_slots
-(subject_id, teacher_id, start_day, start_time, week_pattern_id, room)
-VALUES
-(1, 1, 3, 960, 1, ""), (1, 1, 3, 1020, 2, ""),
-(2, 2, 1, 840, 1, ""), (2, 2, 1, 960, 1, ""), (2, 3, 3, 960, 1, ""), (2, 4, 3, 1020, 1, ""),
-(3, 5, 0, 840, 1, ""), (3, 5, 3, 960, 1, ""), (3, 6, 3, 960, 1, ""), (3, 7, 2, 1020, 1, ""),
-(4, 8, 0, 900, 1, ""), (4, 9, 0, 900, 1, ""), (4, 10, 2, 1020, 1, ""), (4, 11, 3, 1020, 1, ""),
-(7, 12, 0, 840, 1, ""), (7, 13, 0, 840, 1, ""), (7, 14, 1, 960, 1, ""), (7, 14, 1, 1020, 1, ""),
-(5, 15, 0, 840, 1, ""), (5, 16, 0, 900, 1, ""), (5, 17, 4, 1020, 1, ""),
-(6, 18, 3, 780, 1, ""),
-(8, 14, 2, 960, 1, "");
         "#
     )
     .execute(&store.pool)
