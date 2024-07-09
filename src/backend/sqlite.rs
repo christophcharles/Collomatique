@@ -819,10 +819,7 @@ impl Storage for Store {
         &mut self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> impl core::future::Future<
-        Output = std::result::Result<
-            Self::GroupingIncompatId,
-            CrossError<Self::InternalError, Self::GroupingId>,
-        >,
+        Output = std::result::Result<Self::GroupingIncompatId, Self::InternalError>,
     > + Send {
         grouping_incompats::add(&self.pool, grouping_incompat)
     }
@@ -838,12 +835,8 @@ impl Storage for Store {
         &mut self,
         index: Self::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            CrossIdError<Self::InternalError, Self::GroupingIncompatId, Self::GroupingId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         grouping_incompats::update(&self.pool, index, grouping_incompat)
     }
 
