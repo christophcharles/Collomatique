@@ -1878,6 +1878,10 @@ where
         "Group size constraints are too strict (nb student = {0}, allowed group sizes in {1:?})"
     )]
     InconsistentGroupSizeConstraints(usize, std::ops::RangeInclusive<NonZeroUsize>),
+    #[error("Inconsistent data: bad time slot id ({0:?})")]
+    BadTimeSlotId(T::TimeSlotId),
+    #[error("Inconsistent data: bad grouping id ({0:?})")]
+    BadGroupingId(T::GroupingId),
 }
 
 impl<T: Storage, StorageError: std::fmt::Debug + std::error::Error>
@@ -1901,6 +1905,8 @@ struct GenColloscopeData<T: Storage> {
     subject_for_student_data: BTreeSet<(T::StudentId, T::SubjectId)>,
     time_slots: BTreeMap<T::TimeSlotId, TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>>,
     group_lists: BTreeMap<T::GroupListId, GroupList<T::StudentId>>,
+    groupings: BTreeMap<T::GroupingId, Grouping<T::TimeSlotId>>,
+    grouping_incompats: BTreeMap<T::GroupingIncompatId, GroupingIncompat<T::GroupingId>>,
 }
 
 impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
@@ -1963,6 +1969,8 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             subject_for_student_data,
             time_slots: self.data_storage.time_slots_get_all().await?,
             group_lists: self.data_storage.group_lists_get_all().await?,
+            groupings: self.data_storage.groupings_get_all().await?,
+            grouping_incompats: self.data_storage.grouping_incompats_get_all().await?,
         })
     }
 
@@ -2404,21 +2412,101 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     }
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_slot_groupings(
-        &self,
-        _data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::SlotGroupingList, T> {
-        todo!()
-    }
+#[derive(Clone, Debug)]
+struct SlotGroupingData<T: Storage> {
+    slot_grouping_list: crate::gen::colloscope::SlotGroupingList,
+    id_map: BTreeMap<T::GroupingId, BTreeMap<Week, usize>>,
+}
 
+impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
+    fn build_slot_grouping_data(
+        &self,
+        data: &GenColloscopeData<T>,
+        week_count: NonZeroU32,
+        slot_id_map: &BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
+    ) -> GenColloscopeResult<SlotGroupingData<T>, T> {
+        use crate::gen::colloscope::SlotGrouping;
+
+        let mut output = SlotGroupingData {
+            slot_grouping_list: vec![],
+            id_map: BTreeMap::new(),
+        };
+
+        for (&grouping_id, grouping) in &data.groupings {
+            let mut ids = BTreeMap::new();
+
+            for i in 0..week_count.get() {
+                let week = Week(i);
+
+                let mut slots = BTreeSet::new();
+
+                for &time_slot_id in &grouping.slots {
+                    let week_map = slot_id_map
+                        .get(&time_slot_id)
+                        .ok_or(GenColloscopeError::BadTimeSlotId(time_slot_id))?;
+
+                    let slot_ref_opt = week_map.get(&week);
+                    if let Some(slot_ref) = slot_ref_opt {
+                        slots.insert(slot_ref.clone());
+                    }
+                }
+
+                if !slots.is_empty() {
+                    ids.insert(week, output.slot_grouping_list.len());
+                    output.slot_grouping_list.push(SlotGrouping { slots });
+                };
+            }
+
+            output.id_map.insert(grouping_id, ids);
+        }
+
+        Ok(output)
+    }
+}
+
+impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     fn build_grouping_incompats(
         &self,
-        _data: &GenColloscopeData<T>,
+        data: &GenColloscopeData<T>,
+        week_count: NonZeroU32,
+        grouping_id_map: &BTreeMap<T::GroupingId, BTreeMap<Week, usize>>,
     ) -> GenColloscopeResult<crate::gen::colloscope::SlotGroupingIncompatSet, T> {
-        todo!()
-    }
+        use crate::gen::colloscope::SlotGroupingIncompat;
 
+        let mut output = BTreeSet::new();
+
+        for (&_grouping_incompat_id, grouping_incompat) in &data.grouping_incompats {
+            for i in 0..week_count.get() {
+                let week = Week(i);
+
+                let mut groupings = BTreeSet::new();
+
+                for &grouping_id in &grouping_incompat.groupings {
+                    let week_map = grouping_id_map
+                        .get(&grouping_id)
+                        .ok_or(GenColloscopeError::BadGroupingId(grouping_id))?;
+
+                    let grouping_index_opt = week_map.get(&week);
+                    if let Some(&grouping_index) = grouping_index_opt {
+                        groupings.insert(grouping_index);
+                    }
+                }
+
+                let max_count = grouping_incompat.max_count;
+                if groupings.len() > max_count.get() {
+                    output.insert(SlotGroupingIncompat {
+                        groupings,
+                        max_count,
+                    });
+                };
+            }
+        }
+
+        Ok(output)
+    }
+}
+
+impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     pub async fn build_validated_data(
         &self,
     ) -> GenColloscopeResult<crate::gen::colloscope::ValidatedData, T> {
@@ -2428,8 +2516,10 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         let incompatibility_data = self.build_incompatibility_data(&data, general.week_count)?;
         let student_data = self.build_student_data(&data, &incompatibility_data.id_map)?;
         let subject_data = self.build_subject_data(&data, &student_data.id_map)?;
-        let slot_groupings = self.build_slot_groupings(&data)?;
-        let grouping_incompats = self.build_grouping_incompats(&data)?;
+        let slot_grouping_data =
+            self.build_slot_grouping_data(&data, general.week_count, &subject_data.slot_id_map)?;
+        let grouping_incompats =
+            self.build_grouping_incompats(&data, general.week_count, &slot_grouping_data.id_map)?;
 
         crate::gen::colloscope::ValidatedData::new(
             general,
@@ -2437,7 +2527,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             incompatibility_data.incompat_group_list,
             incompatibility_data.incompat_list,
             student_data.student_list,
-            slot_groupings,
+            slot_grouping_data.slot_grouping_list,
             grouping_incompats,
         )
         .map_err(GenColloscopeError::from_validation)
