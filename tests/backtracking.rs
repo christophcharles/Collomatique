@@ -1,7 +1,7 @@
 #[test]
 fn restricted_interrogations_per_week() {
     use collomatique::gen::colloscope::*;
-    use collomatique::gen::time;
+    use collomatique::time;
 
     use std::collections::BTreeSet;
     use std::num::{NonZeroU32, NonZeroUsize};
