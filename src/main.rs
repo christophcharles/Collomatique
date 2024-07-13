@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     .unwrap();
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
     let max_steps = None;
-    let retries = 20;
+    let retries = 1;
     let incremental_initializer =
         ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
     let random_gen = collomatique::ilp::random::DefaultRndGen::new();
