@@ -1873,6 +1873,7 @@ struct GenColloscopeData<T: Storage> {
     general_data: GeneralData,
     week_patterns: BTreeMap<T::WeekPatternId, WeekPattern>,
     teachers: BTreeMap<T::TeacherId, Teacher>,
+    incompats: BTreeMap<T::IncompatId, Incompat<T::WeekPatternId>>,
 }
 
 impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
@@ -1881,7 +1882,19 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             general_data: self.data_storage.general_data_get().await?,
             week_patterns: self.data_storage.week_patterns_get_all().await?,
             teachers: self.data_storage.teachers_get_all().await?,
+            incompats: self.data_storage.incompats_get_all().await?,
         })
+    }
+
+    fn is_week_in_week_pattern(
+        data: &GenColloscopeData<T>,
+        week_pattern_id: T::WeekPatternId,
+        week: u32,
+    ) -> bool {
+        match data.week_patterns.get(&week_pattern_id) {
+            None => false,
+            Some(week_pattern) => week_pattern.weeks.contains(&Week(week)),
+        }
     }
 
     fn build_general_data(
@@ -1904,19 +1917,84 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             max_interrogations_per_day: data.general_data.max_interrogations_per_day,
         })
     }
+}
 
-    fn build_incompatibility_groups(
-        &self,
-        _data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::IncompatibilityGroupList, T> {
-        todo!()
+#[derive(Clone, Debug)]
+struct IncompatibilitiesData<T: Storage> {
+    incompat_list: crate::gen::colloscope::IncompatibilityList,
+    incompat_group_list: crate::gen::colloscope::IncompatibilityGroupList,
+    id_map: BTreeMap<T::IncompatId, std::collections::BTreeSet<usize>>,
+}
+
+impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
+    fn is_week_in_incompat_group(
+        data: &GenColloscopeData<T>,
+        group: &IncompatGroup<T::WeekPatternId>,
+        week: u32,
+    ) -> bool {
+        for slot in &group.slots {
+            if Self::is_week_in_week_pattern(data, slot.week_pattern_id, week) {
+                return true;
+            }
+        }
+        false
     }
 
-    fn build_incompatibilities(
+    fn build_incompatibility_data(
         &self,
-        _data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::IncompatibilityList, T> {
-        todo!()
+        data: &GenColloscopeData<T>,
+        week_count: NonZeroU32,
+    ) -> GenColloscopeResult<IncompatibilitiesData<T>, T> {
+        use crate::gen::colloscope::{Incompatibility, IncompatibilityGroup, SlotWithDuration};
+
+        let mut output = IncompatibilitiesData {
+            incompat_list: vec![],
+            incompat_group_list: vec![],
+            id_map: BTreeMap::new(),
+        };
+
+        for (&incompat_id, incompat) in &data.incompats {
+            let mut ids = BTreeSet::new();
+
+            for week in 0..week_count.get() {
+                let mut new_incompat = Incompatibility {
+                    max_count: incompat.max_count,
+                    groups: BTreeSet::new(),
+                };
+
+                for group in &incompat.groups {
+                    if !Self::is_week_in_incompat_group(data, group, week) {
+                        continue;
+                    }
+
+                    let slots = group
+                        .slots
+                        .iter()
+                        .map(|s| SlotWithDuration {
+                            start: crate::gen::colloscope::SlotStart {
+                                week,
+                                weekday: s.start.day,
+                                start_time: s.start.time.clone(),
+                            },
+                            duration: s.duration,
+                        })
+                        .collect();
+                    let new_group = IncompatibilityGroup { slots };
+
+                    new_incompat.groups.insert(output.incompat_group_list.len());
+                    output.incompat_group_list.push(new_group);
+                }
+
+                if !new_incompat.groups.is_empty() {
+                    ids.insert(output.incompat_list.len());
+                    output.incompat_list.push(new_incompat);
+                }
+            }
+
+            output.id_map.insert(incompat_id, ids);
+        }
+
+        Ok(output)
     }
 
     fn build_students(
@@ -1953,8 +2031,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         let data = self.extract_data().await?;
 
         let general = self.build_general_data(&data)?;
-        let incompatibility_groups = self.build_incompatibility_groups(&data)?;
-        let incompatibilities = self.build_incompatibilities(&data)?;
+        let incompatibility_data = self.build_incompatibility_data(&data, general.week_count)?;
         let students = self.build_students(&data)?;
         let subjects = self.build_subjects(&data)?;
         let slot_groupings = self.build_slot_groupings(&data)?;
@@ -1963,8 +2040,8 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         crate::gen::colloscope::ValidatedData::new(
             general,
             subjects,
-            incompatibility_groups,
-            incompatibilities,
+            incompatibility_data.incompat_group_list,
+            incompatibility_data.incompat_list,
             students,
             slot_groupings,
             grouping_incompats,
