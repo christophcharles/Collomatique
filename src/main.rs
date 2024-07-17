@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use std::num::NonZeroU32;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(version, about)]
 struct Args {
     /// Create new database - won't override an existing one
@@ -15,7 +15,7 @@ struct Args {
     command: Command,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum Command {
     /// Act on general parameters of the colloscope
     General {
@@ -26,7 +26,7 @@ enum Command {
     Solve,
 }
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 enum GeneralCommand {
     SetWeekCount {
         /// New week count for the colloscope
