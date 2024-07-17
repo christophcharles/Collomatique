@@ -3,13 +3,6 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id(pub(super) i64);
 
-impl std::fmt::Display for Id {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)?;
-        Ok(())
-    }
-}
-
 pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, GroupList<super::students::Id>>> {
     let records = sqlx::query!("SELECT group_list_id, name FROM group_lists",)
         .fetch_all(pool)
