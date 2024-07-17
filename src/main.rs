@@ -1,5 +1,6 @@
-use anyhow::Result;
-use clap::Parser;
+use anyhow::{anyhow, Result};
+use clap::{Parser, Subcommand};
+use std::num::NonZeroU32;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -9,9 +10,36 @@ struct Args {
     create: bool,
     /// Sqlite file (to open or create) that contains the database
     db: std::path::PathBuf,
+    /// Command to run on the database
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Act on general parameters of the colloscope
+    General {
+        #[command(subcommand)]
+        command: GeneralCommand,
+    },
+    /// Try and solve the colloscope
+    Solve,
+}
+
+#[derive(Subcommand)]
+enum GeneralCommand {
+    SetWeekCount {
+        /// New week count for the colloscope
+        week_count: NonZeroU32,
+        /// Force truncating of week_patterns if needed
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
 }
 
 use collomatique::backend::sqlite;
+use collomatique::backend::Logic;
+use collomatique::frontend::state::AppState;
 
 async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Store> {
     if create {
@@ -21,14 +49,8 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Stor
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Args::parse();
-
-    println!("Opening database...");
-
-    let logic =
-        collomatique::backend::Logic::new(connect_db(args.create, args.db.as_path()).await?);
+async fn solve_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
+    let logic = app_state.get_backend_logic();
     let gen_colloscope_translator = logic.gen_colloscope_translator();
     let data = gen_colloscope_translator.build_validated_data().await?;
 
@@ -69,5 +91,58 @@ async fn main() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+async fn general_command(
+    command: GeneralCommand,
+    app_state: &mut AppState<sqlite::Store>,
+) -> Result<()> {
+    use collomatique::frontend::state::{Operation, UpdateError};
+
+    match command {
+        GeneralCommand::SetWeekCount { week_count, force } => {
+            if force {
+                todo!("Force flag for \"general set-week-count\"");
+            }
+
+            app_state.apply(Operation::GeneralSetWeekCount(week_count)).await.map_err(
+                |e| match e {
+                    UpdateError::CannotSetWeekCountWeekPatternsNeedTruncating(week_patterns) => {
+                        let week_pattern_list = week_patterns.into_iter().map(
+                            |week_pattern| week_pattern.to_string()
+                        ).collect::<Vec<_>>().join(", ");
+
+                        anyhow!(
+                            format!(
+                                "Cannot reduce week_count. The following week patterns need truncating: {}\nYou can use the '-f' flag to force truncating.",
+                                week_pattern_list
+                            )
+                        )
+                    }
+                    UpdateError::InternalError(int_err) => anyhow!(
+                        format!(
+                            "/!\\ Internal error in sqlite backend. The following error was issued:\n{:?}", int_err
+                        )
+                    ),
+                }
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let args = Args::parse();
+
+    let logic = Logic::new(connect_db(args.create, args.db.as_path()).await?);
+    let mut app_state = AppState::new(logic);
+
+    match args.command {
+        Command::General { command } => general_command(command, &mut app_state).await?,
+        Command::Solve => solve_command(&mut app_state).await?,
+    }
     Ok(())
 }
