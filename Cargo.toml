@@ -24,5 +24,6 @@ highs = "1.6"
 trait-variant = "0.1.2"
 gag = "1.0.0"
 indicatif = "0.17.8"
+num_cpus = "1.0"
 
 [features]
