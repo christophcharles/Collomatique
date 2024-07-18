@@ -16,6 +16,16 @@ impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
         origin: Option<&FeasableConfig<'a, V, P>>,
         max_steps: Option<usize>,
     ) -> Option<FeasableConfig<'a, V, P>> {
+        // cbc does not seem to shut up even if logging is disabled
+        // we block output directly
+        let stdout_gag = gag::Gag::stdout();
+        // We allow for errors in case this is run in multiple threads
+        if !self.disable_logging {
+            if let Ok(gag) = stdout_gag {
+                drop(gag);
+            }
+        }
+
         // When everything is solved for some reason this is sometimes an issue...
         if let Some(result) = config.clone().into_feasable() {
             return Some(result);
@@ -51,7 +61,7 @@ impl Default for Solver {
 impl Solver {
     pub fn new() -> Self {
         Solver {
-            disable_logging: false,
+            disable_logging: true,
         }
     }
 
