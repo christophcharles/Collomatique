@@ -25,7 +25,7 @@ pub enum GeneralOperation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WeekPatternsOperation {
-    Add(backend::WeekPattern),
+    Create(backend::WeekPattern),
     Remove(handles::WeekPatternHandle),
     Update(handles::WeekPatternHandle, backend::WeekPattern),
 }
@@ -187,7 +187,7 @@ impl<T: backend::Storage> AppState<T> {
         op: &AnnotatedWeekPatternsOperation,
     ) -> Result<AnnotatedWeekPatternsOperation, T::InternalError> {
         let backward = match op {
-            AnnotatedWeekPatternsOperation::Add(handle, _pattern) => {
+            AnnotatedWeekPatternsOperation::Create(handle, _pattern) => {
                 AnnotatedWeekPatternsOperation::Remove(*handle)
             }
             AnnotatedWeekPatternsOperation::Remove(handle) => {
@@ -206,7 +206,7 @@ impl<T: backend::Storage> AppState<T> {
                         }
                         backend::IdError::InternalError(int_err) => int_err,
                     })?;
-                AnnotatedWeekPatternsOperation::Add(*handle, pattern)
+                AnnotatedWeekPatternsOperation::Create(*handle, pattern)
             }
             AnnotatedWeekPatternsOperation::Update(handle, _new_pattern) => {
                 let week_pattern_id = self
@@ -317,7 +317,7 @@ impl<T: backend::Storage> AppState<T> {
         op: &AnnotatedWeekPatternsOperation,
     ) -> Result<(), UpdateError<T>> {
         match op {
-            AnnotatedWeekPatternsOperation::Add(week_pattern_handle, pattern) => {
+            AnnotatedWeekPatternsOperation::Create(week_pattern_handle, pattern) => {
                 let new_id = self
                     .backend_logic
                     .week_patterns_add(pattern)
