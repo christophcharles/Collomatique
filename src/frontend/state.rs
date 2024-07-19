@@ -1,124 +1,27 @@
 use std::num::NonZeroU32;
 use thiserror::Error;
 
+pub mod handles;
+mod history;
+
+use crate::backend;
+use history::{AnnotatedOperation, ModificationHistory, ReversibleOperation};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
     GeneralSetWeekCount(NonZeroU32),
-    GeneralSetMaxInterrogationPerDay(Option<NonZeroU32>),
-    GeneralSetInterrogationPerWeekRange(Option<std::ops::Range<u32>>),
+    GeneralSetMaxInterrogationsPerDay(Option<NonZeroU32>),
+    GeneralSetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
+
+    WeekPatternsAdd(backend::WeekPattern),
+    WeekPatternsRemove(handles::WeekPatternHandle),
 }
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ReversibleOperation {
-    forward: Operation,
-    backward: Operation,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-struct ModificationHistory {
-    history: std::collections::VecDeque<ReversibleOperation>,
-    history_pointer: usize,
-    max_history_size: Option<usize>,
-}
-
-impl ModificationHistory {
-    fn truncate_history_as_needed(&mut self) {
-        if let Some(max_hist_size) = self.max_history_size {
-            if max_hist_size >= self.history.len() {
-                return;
-            }
-
-            // Try to keep undo history as a priority (rather than redo history)
-            // So we remove the beginning of the queue only if we really can't keep it
-            if self.history_pointer > max_hist_size {
-                let split_point = self.history_pointer - max_hist_size;
-                let new_history = self.history.split_off(split_point);
-                self.history = new_history;
-
-                self.history_pointer = max_hist_size;
-            }
-
-            self.history.truncate(max_hist_size);
-        }
-    }
-}
-
-impl ModificationHistory {
-    fn new() -> Self {
-        ModificationHistory {
-            history: std::collections::VecDeque::new(),
-            history_pointer: 0,
-            max_history_size: None,
-        }
-    }
-
-    fn with_max_history_size(max_history_size: Option<usize>) -> Self {
-        ModificationHistory {
-            history: std::collections::VecDeque::new(),
-            history_pointer: 0,
-            max_history_size,
-        }
-    }
-
-    fn get_max_history_size(&self) -> Option<usize> {
-        self.max_history_size
-    }
-
-    fn set_max_history_size(&mut self, max_history_size: Option<usize>) {
-        self.max_history_size = max_history_size;
-
-        self.truncate_history_as_needed();
-    }
-
-    fn apply(&mut self, reversible_op: ReversibleOperation) {
-        self.history.truncate(self.history_pointer);
-
-        self.history_pointer += 1;
-        self.history.push_back(reversible_op);
-
-        self.truncate_history_as_needed();
-    }
-
-    fn can_undo(&self) -> bool {
-        self.history_pointer > 0
-    }
-
-    fn can_redo(&self) -> bool {
-        self.history_pointer < self.history.len()
-    }
-
-    fn undo(&mut self) -> Option<Operation> {
-        if !self.can_undo() {
-            return None;
-        }
-
-        self.history_pointer -= 1;
-
-        assert!(self.history_pointer < self.history.len());
-
-        let last_op = self.history[self.history_pointer].clone();
-
-        Some(last_op.backward)
-    }
-
-    fn redo(&mut self) -> Option<Operation> {
-        if !self.can_redo() {
-            return None;
-        }
-
-        let new_op = self.history[self.history_pointer].clone();
-        self.history_pointer += 1;
-
-        Some(new_op.forward)
-    }
-}
-
-use crate::backend;
 
 #[derive(Debug)]
 pub struct AppState<T: backend::Storage> {
     backend_logic: backend::Logic<T>,
     mod_history: ModificationHistory,
+    handle_managers: handles::ManagerCollection<T>,
 }
 
 #[derive(Debug, Clone, Error)]
@@ -142,6 +45,7 @@ impl<T: backend::Storage> AppState<T> {
         AppState {
             backend_logic,
             mod_history: ModificationHistory::new(),
+            handle_managers: handles::ManagerCollection::new(),
         }
     }
 
@@ -152,6 +56,7 @@ impl<T: backend::Storage> AppState<T> {
         AppState {
             backend_logic,
             mod_history: ModificationHistory::with_max_history_size(max_history_size),
+            handle_managers: handles::ManagerCollection::new(),
         }
     }
 
@@ -161,6 +66,10 @@ impl<T: backend::Storage> AppState<T> {
 
     pub fn get_backend_logic(&self) -> &backend::Logic<T> {
         &self.backend_logic
+    }
+
+    pub fn get_week_pattern_handle(&mut self, id: T::WeekPatternId) -> handles::WeekPatternHandle {
+        self.handle_managers.week_patterns.get_handle(id)
     }
 
     pub fn set_max_history_size(&mut self, max_history_size: Option<usize>) {
@@ -226,51 +135,92 @@ where
     CannotSetWeekCountWeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
     #[error("Cannot set interrogations_per_week range: the range must be non-empty")]
     CannotSetInterrogationsPerWeekRangeIsEmpty,
+    #[error("Cannot add the week pattern: it references weeks beyond week_count")]
+    CannotAddWeekPatternWeekNumberTooBig(u32),
+    #[error("Cannot remove the week pattern: it is referenced by the database")]
+    CannotRemoveWeekPatternBecauseOfDependancies(
+        Vec<backend::WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
+    ),
 }
 
 impl<T: backend::Storage> AppState<T> {
-    async fn build_rev_op(&self, op: Operation) -> Result<ReversibleOperation, T::InternalError> {
-        match op {
-            Operation::GeneralSetWeekCount(_new_week_count) => {
+    async fn build_rev_op(
+        &mut self,
+        op: Operation,
+    ) -> Result<ReversibleOperation, T::InternalError> {
+        let forward = AnnotatedOperation::annotate(op, &mut self.handle_managers);
+        match forward {
+            AnnotatedOperation::GeneralSetWeekCount(_new_week_count) => {
                 let general_data = self.backend_logic.general_data_get().await?;
 
                 let rev_op = ReversibleOperation {
-                    forward: op,
-                    backward: Operation::GeneralSetWeekCount(general_data.week_count),
+                    forward,
+                    backward: AnnotatedOperation::GeneralSetWeekCount(general_data.week_count),
                 };
 
                 Ok(rev_op)
             }
-            Operation::GeneralSetMaxInterrogationPerDay(_max_interrogation_per_day) => {
+            AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(_max_interrogations_per_day) => {
                 let general_data = self.backend_logic.general_data_get().await?;
 
                 let rev_op = ReversibleOperation {
-                    forward: op,
-                    backward: Operation::GeneralSetMaxInterrogationPerDay(
+                    forward,
+                    backward: AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(
                         general_data.max_interrogations_per_day,
                     ),
                 };
 
                 Ok(rev_op)
             }
-            Operation::GeneralSetInterrogationPerWeekRange(ref _max_interrogation_per_day) => {
+            AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(
+                ref _interrogations_per_week,
+            ) => {
                 let general_data = self.backend_logic.general_data_get().await?;
 
                 let rev_op = ReversibleOperation {
-                    forward: op,
-                    backward: Operation::GeneralSetInterrogationPerWeekRange(
+                    forward,
+                    backward: AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(
                         general_data.interrogations_per_week,
                     ),
                 };
 
                 Ok(rev_op)
             }
+            AnnotatedOperation::WeekPatternsAdd(handle, ref _pattern) => Ok(ReversibleOperation {
+                forward,
+                backward: AnnotatedOperation::WeekPatternsRemove(handle),
+            }),
+            AnnotatedOperation::WeekPatternsRemove(handle) => {
+                let week_pattern_id = self
+                    .handle_managers
+                    .week_patterns
+                    .get_id(handle)
+                    .expect("week pattern to remove should exist");
+                let pattern = self
+                    .backend_logic
+                    .week_patterns_get(week_pattern_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                let rev_op = ReversibleOperation {
+                    forward,
+                    backward: AnnotatedOperation::WeekPatternsAdd(handle, pattern),
+                };
+                Ok(rev_op)
+            }
         }
     }
 
-    async fn update_internal_state(&mut self, op: &Operation) -> Result<(), UpdateError<T>> {
+    async fn update_internal_state(
+        &mut self,
+        op: &AnnotatedOperation,
+    ) -> Result<(), UpdateError<T>> {
         match op {
-            Operation::GeneralSetWeekCount(new_week_count) => {
+            AnnotatedOperation::GeneralSetWeekCount(new_week_count) => {
                 let mut general_data = self.backend_logic.general_data_get().await?;
                 general_data.week_count = *new_week_count;
                 self.backend_logic
@@ -286,9 +236,11 @@ impl<T: backend::Storage> AppState<T> {
                     })?;
                 Ok(())
             }
-            Operation::GeneralSetMaxInterrogationPerDay(new_max_interrogation_per_day) => {
+            AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(
+                new_max_interrogations_per_day,
+            ) => {
                 let mut general_data = self.backend_logic.general_data_get().await?;
-                general_data.max_interrogations_per_day = *new_max_interrogation_per_day;
+                general_data.max_interrogations_per_day = *new_max_interrogations_per_day;
                 self.backend_logic
                     .general_data_set(&general_data)
                     .await
@@ -302,14 +254,16 @@ impl<T: backend::Storage> AppState<T> {
                     })?;
                 Ok(())
             }
-            Operation::GeneralSetInterrogationPerWeekRange(new_max_interrogation_per_week) => {
-                if let Some(range) = new_max_interrogation_per_week {
+            AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(
+                new_interrogations_per_week,
+            ) => {
+                if let Some(range) = new_interrogations_per_week {
                     if range.is_empty() {
                         return Err(UpdateError::CannotSetInterrogationsPerWeekRangeIsEmpty);
                     }
                 }
                 let mut general_data = self.backend_logic.general_data_get().await?;
-                general_data.interrogations_per_week = new_max_interrogation_per_week.clone();
+                general_data.interrogations_per_week = new_interrogations_per_week.clone();
                 self.backend_logic
                     .general_data_set(&general_data)
                     .await
@@ -321,6 +275,49 @@ impl<T: backend::Storage> AppState<T> {
                             UpdateError::InternalError(int_error)
                         }
                     })?;
+                Ok(())
+            }
+            AnnotatedOperation::WeekPatternsAdd(week_pattern_handle, pattern) => {
+                let new_id = self
+                    .backend_logic
+                    .week_patterns_add(pattern)
+                    .await
+                    .map_err(|e| match e {
+                        backend::WeekPatternError::WeekNumberTooBig(week_number) => {
+                            UpdateError::CannotAddWeekPatternWeekNumberTooBig(week_number)
+                        }
+                        backend::WeekPatternError::InternalError(int_error) => {
+                            UpdateError::InternalError(int_error)
+                        }
+                    })?;
+                self.handle_managers
+                    .week_patterns
+                    .update_handle(*week_pattern_handle, Some(new_id));
+                Ok(())
+            }
+            AnnotatedOperation::WeekPatternsRemove(week_pattern_handle) => {
+                let week_pattern_id = self
+                    .handle_managers
+                    .week_patterns
+                    .get_id(*week_pattern_handle)
+                    .expect("week pattern to remove should exist");
+                self.backend_logic
+                    .week_patterns_remove(week_pattern_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::InternalError(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            UpdateError::CannotRemoveWeekPatternBecauseOfDependancies(dependancies)
+                        }
+                    })?;
+                self.handle_managers
+                    .week_patterns
+                    .update_handle(*week_pattern_handle, None);
                 Ok(())
             }
         }
