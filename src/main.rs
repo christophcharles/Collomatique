@@ -273,8 +273,7 @@ async fn solve_command(
     steps: Option<usize>,
     thread_count: Option<NonZeroUsize>,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     use indicatif::MultiProgress;
     use std::time::Duration;
 
@@ -361,19 +360,13 @@ async fn solve_command(
         None => return Err(anyhow!("No solution found, colloscope is unfeasable!\nThis means the constraints are incompatible and no colloscope can be built that follows all of them. Relax some constraints and try again.")),
     };
 
-    print!("Best cost found is: {}", best_cost.0);
-    if new_line_needed {
-        println!("");
-    }
-
-    Ok(())
+    Ok(Some(format!("Best cost found is: {}", best_cost.0)))
 }
 
 async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     use collomatique::frontend::state::{Operation, UpdateError};
 
     match command {
@@ -414,25 +407,20 @@ async fn week_count_command(
                 };
                 return Err(err);
             }
+            Ok(None)
         }
         WeekCountCommand::Print => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let week_count = general_data.week_count.get();
-            print!("{}", week_count);
-            if new_line_needed {
-                println!("");
-            }
+            Ok(Some(week_count.to_string()))
         }
     }
-
-    Ok(())
 }
 
 async fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     use collomatique::frontend::state::{Operation, UpdateError};
 
     match command {
@@ -451,6 +439,7 @@ async fn max_interrogations_per_day_command(
                 };
                 return Err(err);
             }
+            Ok(None)
         }
         MaxInterrogationsPerDayCommand::Disable => {
             if let Err(e) = app_state
@@ -463,28 +452,24 @@ async fn max_interrogations_per_day_command(
                 };
                 return Err(err);
             }
+            Ok(None)
         }
         MaxInterrogationsPerDayCommand::Print => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let max_interrogations_per_day = general_data.max_interrogations_per_day;
-            match max_interrogations_per_day {
-                Some(value) => print!("{}", value.get()),
-                None => print!("none"),
-            }
-            if new_line_needed {
-                println!("");
-            }
+            let output = match max_interrogations_per_day {
+                Some(value) => value.get().to_string(),
+                None => String::from("none"),
+            };
+            Ok(Some(output))
         }
     }
-
-    Ok(())
 }
 
 async fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     use collomatique::frontend::state::{Operation, UpdateError};
 
     match command {
@@ -511,6 +496,7 @@ async fn interrogations_per_week_range_command(
                 };
                 return Err(err);
             }
+            Ok(None)
         }
         InterrogationsPerWeekRangeCommand::SetMin {
             min_interrogations_per_week,
@@ -535,6 +521,7 @@ async fn interrogations_per_week_range_command(
                 };
                 return Err(err);
             }
+            Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Disable => {
             if let Err(e) = app_state
@@ -547,48 +534,39 @@ async fn interrogations_per_week_range_command(
                 };
                 return Err(err);
             }
+            Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Print => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let interrogations_per_week = general_data.interrogations_per_week;
-            match interrogations_per_week {
-                Some(value) => print!("{}..={}", value.start, value.end - 1),
-                None => print!("none"),
-            }
-            if new_line_needed {
-                println!("");
-            }
+            let output = match interrogations_per_week {
+                Some(value) => format!("{}..={}", value.start, value.end - 1),
+                None => String::from("none"),
+            };
+            Ok(Some(output))
         }
     }
-
-    Ok(())
 }
 
 async fn general_command(
     command: GeneralCommand,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     match command {
-        GeneralCommand::WeekCount { command } => {
-            week_count_command(command, app_state, new_line_needed).await?
-        }
+        GeneralCommand::WeekCount { command } => week_count_command(command, app_state).await,
         GeneralCommand::MaxInterrogationsPerDay { command } => {
-            max_interrogations_per_day_command(command, app_state, new_line_needed).await?
+            max_interrogations_per_day_command(command, app_state).await
         }
         GeneralCommand::InterrogationsPerWeekRange { command } => {
-            interrogations_per_week_range_command(command, app_state, new_line_needed).await?
+            interrogations_per_week_range_command(command, app_state).await
         }
     }
-
-    Ok(())
 }
 
 async fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     use collomatique::backend::{Week, WeekPattern};
     use collomatique::frontend::state::{Operation, UpdateError};
     use std::collections::BTreeSet;
@@ -641,6 +619,8 @@ async fn week_pattern_command(
                 };
                 return Err(err);
             }
+
+            Ok(None)
         }
         WeekPatternCommand::PrintAll => {
             let week_patterns = app_state
@@ -650,23 +630,24 @@ async fn week_pattern_command(
 
             let count = week_patterns.len();
             let width = count.to_string().len();
-            for (i, (_, week_pattern)) in week_patterns.iter().enumerate() {
-                let weeks = week_pattern
-                    .weeks
-                    .iter()
-                    .map(|w| (w.get() + 1).to_string())
-                    .collect::<Vec<_>>()
-                    .join(",");
 
-                print!("{:>width$} - {}: {}", i + 1, week_pattern.name, weeks);
-                if i != count - 1 || new_line_needed {
-                    println!("");
-                }
-            }
+            let week_pattern_vec: Vec<_> = week_patterns
+                .iter()
+                .enumerate()
+                .map(|(i, (_, week_pattern))| {
+                    let weeks = week_pattern
+                        .weeks
+                        .iter()
+                        .map(|w| (w.get() + 1).to_string())
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!("{:>width$} - {}: {}", i + 1, week_pattern.name, weeks)
+                })
+                .collect();
+
+            Ok(Some(week_pattern_vec.join("\n")))
         }
     }
-
-    return Ok(());
 }
 
 struct ReedCompleter {}
@@ -785,13 +766,19 @@ async fn respond(
         None => return Err(anyhow!("Invalid input")),
     };
 
-    match shell_command.command {
-        ShellCommand::Global(command) => execute_cli_command(command, app_state, true).await?,
-        ShellCommand::Extra(extra_command) => match extra_command {
-            ShellExtraCommand::Undo => app_state.undo().await?,
-            ShellExtraCommand::Redo => app_state.redo().await?,
-            ShellExtraCommand::Exit => return Ok(true),
-        },
+    let output = match shell_command.command {
+        ShellCommand::Global(command) => execute_cli_command(command, app_state).await?,
+        ShellCommand::Extra(extra_command) => {
+            match extra_command {
+                ShellExtraCommand::Undo => app_state.undo().await?,
+                ShellExtraCommand::Redo => app_state.redo().await?,
+                ShellExtraCommand::Exit => return Ok(true),
+            }
+            None
+        }
+    };
+    if let Some(msg) = output {
+        println!("{}", msg);
     }
 
     Ok(false)
@@ -800,21 +787,15 @@ async fn respond(
 async fn execute_cli_command(
     command: CliCommand,
     app_state: &mut AppState<sqlite::Store>,
-    new_line_needed: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     match command {
-        CliCommand::General { command } => {
-            general_command(command, app_state, new_line_needed).await?
-        }
-        CliCommand::WeekPatterns { command } => {
-            week_pattern_command(command, app_state, new_line_needed).await?
-        }
+        CliCommand::General { command } => general_command(command, app_state).await,
+        CliCommand::WeekPatterns { command } => week_pattern_command(command, app_state).await,
         CliCommand::Solve {
             steps,
             thread_count,
-        } => solve_command(steps, thread_count, app_state, new_line_needed).await?,
+        } => solve_command(steps, thread_count, app_state).await,
     }
-    Ok(())
 }
 
 #[tokio::main]
@@ -829,7 +810,10 @@ async fn main() -> Result<()> {
         return Ok(());
     };
 
-    execute_cli_command(command, &mut app_state, false).await?;
+    let output = execute_cli_command(command, &mut app_state).await?;
+    if let Some(msg) = output {
+        print!("{}", msg);
+    }
 
     Ok(())
 }
