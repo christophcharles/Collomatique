@@ -525,15 +525,18 @@ async fn week_pattern_command(
 }
 
 async fn shell_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
-    use clap_repl::ClapEditor;
-    use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory};
+    use nu_ansi_term::{Color, Style};
+    use reedline::{DefaultHinter, Emacs, FileBackedHistory, Reedline};
 
-    let mut prompt = DefaultPrompt::default();
-    prompt.left_prompt = DefaultPromptSegment::Basic("collomatique".to_owned());
-    let mut rl = ClapEditor::<ShellLine>::new_with_prompt(Box::new(prompt), |reed| {
-        // Do custom things with `Reedline` instance here
-        reed.with_history(Box::new(FileBackedHistory::new(10000).unwrap()))
-    });
+    let keybindings = reedline::default_emacs_keybindings();
+
+    let mut rl = Reedline::create()
+        .with_hinter(Box::new(
+            DefaultHinter::default().with_style(Style::new().fg(Color::DarkGray).italic()),
+        ))
+        .with_edit_mode(Box::new(Emacs::new(keybindings)))
+        .with_history(Box::new(FileBackedHistory::new(10000).unwrap()));
+
     loop {
         match respond(&mut rl, app_state).await {
             Ok(quit) => {
@@ -552,12 +555,34 @@ async fn shell_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
 }
 
 async fn respond(
-    rl: &mut clap_repl::ClapEditor<ShellLine>,
+    rl: &mut reedline::Reedline,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<bool> {
-    let shell_command = match rl.read_command() {
-        Some(cmd) => cmd,
-        None => return Ok(false),
+    use reedline::{DefaultPrompt, DefaultPromptSegment, Signal};
+
+    let mut prompt = DefaultPrompt::default();
+    prompt.left_prompt = DefaultPromptSegment::Basic("collomatique".to_owned());
+    prompt.right_prompt = DefaultPromptSegment::Empty;
+
+    let line = match rl.read_line(&prompt) {
+        Ok(Signal::Success(buffer)) => buffer,
+        Ok(Signal::CtrlC | Signal::CtrlD) => return Ok(true),
+        _ => return Err(anyhow!("Failed to read line. Input maybe invalid.")),
+    };
+
+    if line.trim().is_empty() {
+        return Ok(false);
+    }
+
+    let shell_command = match shlex::split(&line) {
+        Some(mut value) => {
+            value.insert(0, String::from(""));
+            match ShellLine::try_parse_from(value.iter().map(String::as_str)) {
+                Ok(c) => c,
+                Err(e) => return Err(e.into()),
+            }
+        }
+        None => return Err(anyhow!("Invalid input")),
     };
 
     match shell_command.command {
