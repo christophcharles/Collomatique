@@ -515,7 +515,7 @@ async fn week_pattern_command(
     return Err(anyhow!("Week pattern commands not yet implemented"));
 }
 
-async fn shell_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
+async fn interactive_shell(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
     use nu_ansi_term::{Color, Style};
     use reedline::{DefaultHinter, Emacs, FileBackedHistory, Reedline};
 
@@ -616,7 +616,7 @@ async fn main() -> Result<()> {
     let mut app_state = AppState::new(logic);
 
     let Some(command) = args.command else {
-        shell_command(&mut app_state).await?;
+        interactive_shell(&mut app_state).await?;
         return Ok(());
     };
 
