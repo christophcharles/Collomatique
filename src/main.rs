@@ -53,25 +53,14 @@ struct ShellLine {
 
 #[derive(Debug, Subcommand)]
 enum ShellCommand {
-    /// Act on general parameters of the colloscope
-    General {
-        #[command(subcommand)]
-        command: GeneralCommand,
-    },
-    /// Create, remove and configure week patterns
-    WeekPatterns {
-        #[command(subcommand)]
-        command: WeekPatternCommand,
-    },
-    /// Try and solve the colloscope
-    Solve {
-        /// Numbers of optimizing steps - default is 1000
-        #[arg(short, long)]
-        steps: Option<usize>,
-        /// Number of concurrent threads to solve the colloscope - default is the number of CPU core
-        #[arg(short = 'n')]
-        thread_count: Option<NonZeroUsize>,
-    },
+    #[command(flatten)]
+    Global(CliCommand),
+    #[command(flatten)]
+    Extra(ShellExtraCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum ShellExtraCommand {
     /// Undo last command
     Undo,
     /// Redo previously undone command
@@ -588,20 +577,35 @@ async fn respond(
     };
 
     match shell_command.command {
-        ShellCommand::General { command } => general_command(command, app_state, true).await?,
-        ShellCommand::WeekPatterns { command } => {
-            week_pattern_command(command, app_state, true).await?
-        }
-        ShellCommand::Solve {
-            steps,
-            thread_count,
-        } => solve_command(steps, thread_count, app_state, true).await?,
-        ShellCommand::Undo => app_state.undo().await?,
-        ShellCommand::Redo => app_state.redo().await?,
-        ShellCommand::Exit => return Ok(true),
+        ShellCommand::Global(command) => execute_cli_command(command, app_state, true).await?,
+        ShellCommand::Extra(extra_command) => match extra_command {
+            ShellExtraCommand::Undo => app_state.undo().await?,
+            ShellExtraCommand::Redo => app_state.redo().await?,
+            ShellExtraCommand::Exit => return Ok(true),
+        },
     }
 
     Ok(false)
+}
+
+async fn execute_cli_command(
+    command: CliCommand,
+    app_state: &mut AppState<sqlite::Store>,
+    new_line_needed: bool,
+) -> Result<()> {
+    match command {
+        CliCommand::General { command } => {
+            general_command(command, app_state, new_line_needed).await?
+        }
+        CliCommand::WeekPatterns { command } => {
+            week_pattern_command(command, app_state, new_line_needed).await?
+        }
+        CliCommand::Solve {
+            steps,
+            thread_count,
+        } => solve_command(steps, thread_count, app_state, new_line_needed).await?,
+    }
+    Ok(())
 }
 
 #[tokio::main]
@@ -616,15 +620,7 @@ async fn main() -> Result<()> {
         return Ok(());
     };
 
-    match command {
-        CliCommand::General { command } => general_command(command, &mut app_state, false).await?,
-        CliCommand::WeekPatterns { command } => {
-            week_pattern_command(command, &mut app_state, false).await?
-        }
-        CliCommand::Solve {
-            steps,
-            thread_count,
-        } => solve_command(steps, thread_count, &mut app_state, false).await?,
-    }
+    execute_cli_command(command, &mut app_state, false).await?;
+
     Ok(())
 }
