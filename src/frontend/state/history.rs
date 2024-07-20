@@ -4,6 +4,7 @@ use super::*;
 pub enum AnnotatedOperation {
     General(AnnotatedGeneralOperation),
     WeekPatterns(AnnotatedWeekPatternsOperation),
+    Aggregated(Vec<AnnotatedOperation>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +66,11 @@ impl AnnotatedOperation {
             }
             Operation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 AnnotatedWeekPatternsOperation::annotate(op, handle_managers),
+            ),
+            Operation::Aggregated(ops) => AnnotatedOperation::Aggregated(
+                ops.into_iter()
+                    .map(|op| AnnotatedOperation::annotate(op, handle_managers))
+                    .collect(),
             ),
         }
     }
