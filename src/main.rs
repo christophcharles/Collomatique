@@ -200,8 +200,8 @@ enum WeekPatternCommand {
         /// Possible predefined patterns
         pattern: WeekPatternFilling,
     },
-    /// Empty existing week pattern
-    Empty {
+    /// Clear existing week pattern to make it empty
+    Clear {
         /// Name of the week pattern
         name: String,
         /// If multiple week patterns have the same name, select which one to use.
@@ -917,7 +917,7 @@ async fn week_pattern_command(
             }
             Ok(None)
         }
-        WeekPatternCommand::Empty {
+        WeekPatternCommand::Clear {
             name,
             week_pattern_number,
         } => {
