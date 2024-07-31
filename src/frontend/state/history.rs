@@ -187,4 +187,10 @@ impl ModificationHistory {
                 .collect(),
         )
     }
+
+    pub fn clear_past_history(&mut self) {
+        let new_history = self.history.split_off(self.history_pointer);
+        self.history = new_history;
+        self.history_pointer = 0;
+    }
 }
