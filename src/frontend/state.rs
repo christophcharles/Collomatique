@@ -145,6 +145,10 @@ impl<'a, T: update::Manager> AppSession<'a, T> {
 
     fn commit_internal(&mut self) {
         let aggregated_ops = self.session_history.build_aggregated_ops();
+        if aggregated_ops.inner().is_empty() {
+            // If no operation needs commiting, do not add an event for this session
+            return;
+        }
         self.op_manager.get_history_mut().apply(aggregated_ops);
     }
 }
