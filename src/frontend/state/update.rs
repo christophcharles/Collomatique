@@ -280,81 +280,6 @@ pub(super) mod private {
         fn get_history(&self) -> &ModificationHistory;
     }
 
-    pub async fn update_general_state<T: ManagerInternal>(
-        manager: &mut T,
-        op: &AnnotatedGeneralOperation,
-    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
-        match op {
-            AnnotatedGeneralOperation::SetWeekCount(new_week_count) => {
-                let mut general_data = manager.get_backend_logic().general_data_get().await?;
-                general_data.week_count = *new_week_count;
-                manager
-                    .get_backend_logic_mut()
-                    .general_data_set(&general_data)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedError::CheckFailed(data) => {
-                            let translated_data = data
-                                .into_iter()
-                                .map(|id| {
-                                    manager
-                                        .get_handle_managers_mut()
-                                        .week_patterns
-                                        .get_handle(id)
-                                })
-                                .collect();
-                            UpdateError::WeekPatternsNeedTruncating(translated_data)
-                        }
-                        backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                Ok(())
-            }
-            AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(
-                new_max_interrogations_per_day,
-            ) => {
-                let mut general_data = manager.get_backend_logic().general_data_get().await?;
-                general_data.max_interrogations_per_day = *new_max_interrogations_per_day;
-                manager.get_backend_logic_mut()
-                    .general_data_set(&general_data)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedError::CheckFailed(_data) => {
-                            panic!("General data should be valid as modifying max_interrogations_per_day has no dependancy")
-                        }
-                        backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                Ok(())
-            }
-            AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(
-                new_interrogations_per_week,
-            ) => {
-                if let Some(range) = new_interrogations_per_week {
-                    if range.is_empty() {
-                        return Err(UpdateError::InterrogationsPerWeekRangeIsEmpty);
-                    }
-                }
-                let mut general_data = manager.get_backend_logic().general_data_get().await?;
-                general_data.interrogations_per_week = new_interrogations_per_week.clone();
-                manager.get_backend_logic_mut()
-                    .general_data_set(&general_data)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedError::CheckFailed(_data) => {
-                            panic!("General data should be valid as modifying interrogations_per_week has no dependancy")
-                        }
-                        backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                Ok(())
-            }
-        }
-    }
-
     pub async fn update_general_data_state<T: ManagerInternal>(
         manager: &mut T,
         general_data: &backend::GeneralData,
@@ -490,7 +415,6 @@ pub(super) mod private {
         op: &AnnotatedOperation,
     ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
-            AnnotatedOperation::General(op) => update_general_state(manager, op).await?,
             AnnotatedOperation::GeneralData(data) => {
                 update_general_data_state(manager, data).await?
             }
@@ -540,31 +464,6 @@ pub(super) mod private {
         }
 
         Err(err)
-    }
-
-    pub async fn build_backward_general_op<T: ManagerInternal>(
-        manager: &T,
-        op: &AnnotatedGeneralOperation,
-    ) -> Result<AnnotatedGeneralOperation, <T::Storage as backend::Storage>::InternalError> {
-        let backward = match op {
-            AnnotatedGeneralOperation::SetWeekCount(_new_week_count) => {
-                let general_data = manager.get_backend_logic().general_data_get().await?;
-                AnnotatedGeneralOperation::SetWeekCount(general_data.week_count)
-            }
-            AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(_max_interrogations_per_day) => {
-                let general_data = manager.get_backend_logic().general_data_get().await?;
-                AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(
-                    general_data.max_interrogations_per_day,
-                )
-            }
-            AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(_interrogations_per_week) => {
-                let general_data = manager.get_backend_logic().general_data_get().await?;
-                AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(
-                    general_data.interrogations_per_week,
-                )
-            }
-        };
-        Ok(backward)
     }
 
     pub async fn build_backward_general_data<T: ManagerInternal>(
@@ -628,9 +527,6 @@ pub(super) mod private {
     ) -> Result<ReversibleOperation, <T::Storage as backend::Storage>::InternalError> {
         let forward = AnnotatedOperation::annotate(op, manager.get_handle_managers_mut());
         let backward = match &forward {
-            AnnotatedOperation::General(op) => {
-                AnnotatedOperation::General(build_backward_general_op(manager, op).await?)
-            }
             AnnotatedOperation::GeneralData(_data) => {
                 AnnotatedOperation::GeneralData(build_backward_general_data(manager).await?)
             }
