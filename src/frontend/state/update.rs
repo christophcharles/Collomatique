@@ -17,12 +17,37 @@ pub enum UpdateError<IntError: std::error::Error> {
     ),
     #[error("Week pattern corresponding to handle {0:?} was previously removed")]
     WeekPatternRemoved(WeekPatternHandle),
+    #[error("Teacher corresponding to handle {0:?} was previously removed")]
+    TeacherRemoved(TeacherHandle),
+    #[error("Cannot remove the teacher: it is referenced by the database")]
+    TeacherDependanciesRemaining(Vec<TimeSlotHandle>),
+}
+
+#[derive(Debug, Error)]
+pub enum RevError<IntError: std::error::Error> {
+    #[error("Error in storage backend: {0:?}")]
+    Internal(#[from] IntError),
+    #[error("Week pattern corresponding to handle {0:?} was previously removed")]
+    WeekPatternRemoved(WeekPatternHandle),
+    #[error("Teacher corresponding to handle {0:?} was previously removed")]
+    TeacherRemoved(TeacherHandle),
+}
+
+impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntError> {
+    fn from(value: RevError<IntError>) -> Self {
+        match value {
+            RevError::Internal(int_error) => UpdateError::Internal(int_error),
+            RevError::WeekPatternRemoved(handle) => UpdateError::WeekPatternRemoved(handle),
+            RevError::TeacherRemoved(handle) => UpdateError::TeacherRemoved(handle),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum ReturnHandle {
     NoHandle,
     WeekPattern(WeekPatternHandle),
+    Teacher(TeacherHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -58,6 +83,26 @@ pub trait Manager: ManagerInternal {
         &self,
         pattern: &backend::WeekPattern,
     ) -> std::result::Result<(), WeekPatternError<<Self::Storage as backend::Storage>::InternalError>>;
+    async fn teachers_get_all(
+        &mut self,
+    ) -> Result<
+        BTreeMap<TeacherHandle, backend::Teacher>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn teachers_get(
+        &self,
+        handle: TeacherHandle,
+    ) -> Result<
+        backend::Teacher,
+        IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
+    >;
+    async fn teachers_check_can_remove(
+        &mut self,
+        handle: TeacherHandle,
+    ) -> Result<
+        Vec<TimeSlotHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
+    >;
 
     async fn apply(
         &mut self,
@@ -132,10 +177,7 @@ impl<T: ManagerInternal> Manager for T {
                 .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(id) => panic!(
-                        "Week pattern id {:?} should be valid as it was computed from handle {:?}",
-                        id, handle
-                    ),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
                 })?;
 
             Ok(week_pattern)
@@ -163,10 +205,7 @@ impl<T: ManagerInternal> Manager for T {
                 .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(id) => panic!(
-                        "Week pattern id {:?} should be valid as it was computed from handle {:?}",
-                        id, handle
-                    ),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
                 })?;
 
             let handle_managers = &mut self.get_handle_managers_mut();
@@ -202,6 +241,94 @@ impl<T: ManagerInternal> Manager for T {
             self.get_backend_logic()
                 .week_patterns_check_data(pattern)
                 .await
+        }
+    }
+
+    fn teachers_get_all(
+        &mut self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<TeacherHandle, backend::Teacher>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async {
+            let teachers_backend = self.get_backend_logic().teachers_get_all().await?;
+
+            let handle_manager = &mut self.get_handle_managers_mut().teachers;
+            let teachers = teachers_backend
+                .into_iter()
+                .map(|(id, teacher)| {
+                    let handle = handle_manager.get_handle(id);
+                    (handle, teacher)
+                })
+                .collect();
+
+            Ok(teachers)
+        }
+    }
+
+    fn teachers_get(
+        &self,
+        handle: TeacherHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::Teacher,
+            IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().teachers;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let teacher =
+                self.get_backend_logic()
+                    .teachers_get(index)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                    })?;
+
+            Ok(teacher)
+        }
+    }
+
+    fn teachers_check_can_remove(
+        &mut self,
+        handle: TeacherHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<TimeSlotHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().teachers;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let teacher_deps_backend = self
+                .get_backend_logic()
+                .teachers_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let time_slot_handle_manager = &mut handle_managers.time_slots;
+
+            let teacher_deps = teacher_deps_backend
+                .into_iter()
+                .map(|dep| time_slot_handle_manager.get_handle(dep))
+                .collect();
+
+            Ok(teacher_deps)
         }
     }
 
@@ -405,7 +532,7 @@ pub(super) mod private {
                     .get_handle_managers()
                     .week_patterns
                     .get_id(*week_pattern_handle)
-                    .expect("week pattern to update should exist");
+                    .ok_or(UpdateError::WeekPatternRemoved(*week_pattern_handle))?;
                 manager
                     .get_backend_logic_mut()
                     .week_patterns_update(week_pattern_id, pattern)
@@ -426,6 +553,79 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_teachers_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedTeachersOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedTeachersOperation::Create(teacher_handle, teacher) => {
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .teachers_add(teacher)
+                    .await
+                    .map_err(|e| UpdateError::Internal(e))?;
+                manager
+                    .get_handle_managers_mut()
+                    .teachers
+                    .update_handle(*teacher_handle, Some(new_id));
+                Ok(ReturnHandle::Teacher(*teacher_handle))
+            }
+            AnnotatedTeachersOperation::Remove(teacher_handle) => {
+                let teacher_id = manager
+                    .get_handle_managers()
+                    .teachers
+                    .get_id(*teacher_handle)
+                    .ok_or(UpdateError::TeacherRemoved(*teacher_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .teachers_remove(teacher_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| {
+                                    manager.get_handle_managers_mut().time_slots.get_handle(dep)
+                                })
+                                .collect();
+                            UpdateError::TeacherDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .teachers
+                    .update_handle(*teacher_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedTeachersOperation::Update(teacher_handle, teacher) => {
+                let teacher_id = manager
+                    .get_handle_managers()
+                    .teachers
+                    .get_id(*teacher_handle)
+                    .ok_or(UpdateError::TeacherRemoved(*teacher_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .teachers_update(teacher_id, teacher)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -433,6 +633,7 @@ pub(super) mod private {
         match op {
             AnnotatedOperation::GeneralData(data) => update_general_data_state(manager, data).await,
             AnnotatedOperation::WeekPatterns(op) => update_week_patterns_state(manager, op).await,
+            AnnotatedOperation::Teachers(op) => update_teachers_state(manager, op).await,
         }
     }
 
@@ -488,8 +689,10 @@ pub(super) mod private {
     pub async fn build_backward_week_patterns_op<T: ManagerInternal>(
         manager: &T,
         op: &AnnotatedWeekPatternsOperation,
-    ) -> Result<AnnotatedWeekPatternsOperation, <T::Storage as backend::Storage>::InternalError>
-    {
+    ) -> Result<
+        AnnotatedWeekPatternsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
         let backward = match op {
             AnnotatedWeekPatternsOperation::Create(handle, _pattern) => {
                 AnnotatedWeekPatternsOperation::Remove(*handle)
@@ -499,7 +702,7 @@ pub(super) mod private {
                     .get_handle_managers()
                     .week_patterns
                     .get_id(*handle)
-                    .expect("week pattern to remove should exist");
+                    .ok_or(RevError::WeekPatternRemoved(*handle))?;
                 let pattern = manager
                     .get_backend_logic()
                     .week_patterns_get(week_pattern_id)
@@ -517,7 +720,7 @@ pub(super) mod private {
                     .get_handle_managers()
                     .week_patterns
                     .get_id(*handle)
-                    .expect("week pattern to update should exist");
+                    .ok_or(RevError::WeekPatternRemoved(*handle))?;
                 let pattern = manager
                     .get_backend_logic()
                     .week_patterns_get(week_pattern_id)
@@ -534,10 +737,60 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_teachers_op<T: ManagerInternal>(
+        manager: &T,
+        op: &AnnotatedTeachersOperation,
+    ) -> Result<AnnotatedTeachersOperation, RevError<<T::Storage as backend::Storage>::InternalError>>
+    {
+        let backward = match op {
+            AnnotatedTeachersOperation::Create(handle, _pattern) => {
+                AnnotatedTeachersOperation::Remove(*handle)
+            }
+            AnnotatedTeachersOperation::Remove(handle) => {
+                let teacher_id = manager
+                    .get_handle_managers()
+                    .teachers
+                    .get_id(*handle)
+                    .ok_or(RevError::TeacherRemoved(*handle))?;
+                let teacher = manager
+                    .get_backend_logic()
+                    .teachers_get(teacher_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedTeachersOperation::Create(*handle, teacher)
+            }
+            AnnotatedTeachersOperation::Update(handle, _new_teacher) => {
+                let teacher_id = manager
+                    .get_handle_managers()
+                    .teachers
+                    .get_id(*handle)
+                    .ok_or(RevError::TeacherRemoved(*handle))?;
+                let teacher = manager
+                    .get_backend_logic()
+                    .teachers_get(teacher_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedTeachersOperation::Update(*handle, teacher)
+            }
+        };
+        Ok(backward)
+    }
+
     pub async fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
-    ) -> Result<ReversibleOperation, <T::Storage as backend::Storage>::InternalError> {
+    ) -> Result<ReversibleOperation, RevError<<T::Storage as backend::Storage>::InternalError>>
+    {
         let forward = AnnotatedOperation::annotate(op, manager.get_handle_managers_mut());
         let backward = match &forward {
             AnnotatedOperation::GeneralData(_data) => {
@@ -546,6 +799,9 @@ pub(super) mod private {
             AnnotatedOperation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 build_backward_week_patterns_op(manager, op).await?,
             ),
+            AnnotatedOperation::Teachers(op) => {
+                AnnotatedOperation::Teachers(build_backward_teachers_op(manager, op).await?)
+            }
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
