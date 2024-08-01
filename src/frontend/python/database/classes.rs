@@ -164,3 +164,99 @@ impl From<WeekPattern> for backend::WeekPattern {
         backend::WeekPattern::from(&value)
     }
 }
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TeacherHandle {
+    pub handle: state::TeacherHandle,
+}
+
+impl From<&state::TeacherHandle> for TeacherHandle {
+    fn from(value: &state::TeacherHandle) -> Self {
+        TeacherHandle {
+            handle: value.clone(),
+        }
+    }
+}
+
+impl From<state::TeacherHandle> for TeacherHandle {
+    fn from(value: state::TeacherHandle) -> Self {
+        TeacherHandle::from(&value)
+    }
+}
+
+impl From<&TeacherHandle> for state::TeacherHandle {
+    fn from(value: &TeacherHandle) -> Self {
+        value.handle.clone()
+    }
+}
+
+impl From<TeacherHandle> for state::TeacherHandle {
+    fn from(value: TeacherHandle) -> Self {
+        state::TeacherHandle::from(&value)
+    }
+}
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Teacher {
+    #[pyo3(set, get)]
+    surname: String,
+    #[pyo3(set, get)]
+    firstname: String,
+    #[pyo3(set, get)]
+    contact: String,
+}
+
+#[pymethods]
+impl Teacher {
+    #[new]
+    fn new(surname: String, firstname: String) -> Self {
+        Teacher {
+            surname,
+            firstname,
+            contact: String::new(),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!(
+            "{{ surname = {}, firstname = {}, contact = {} }}",
+            self_.surname, self_.firstname, self_.contact,
+        );
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::Teacher> for Teacher {
+    fn from(value: &backend::Teacher) -> Self {
+        Teacher {
+            surname: value.surname.clone(),
+            firstname: value.firstname.clone(),
+            contact: value.contact.clone(),
+        }
+    }
+}
+
+impl From<backend::Teacher> for Teacher {
+    fn from(value: backend::Teacher) -> Self {
+        Teacher::from(&value)
+    }
+}
+
+impl From<&Teacher> for backend::Teacher {
+    fn from(value: &Teacher) -> Self {
+        backend::Teacher {
+            surname: value.surname.clone(),
+            firstname: value.firstname.clone(),
+            contact: value.contact.clone(),
+        }
+    }
+}
+
+impl From<Teacher> for backend::Teacher {
+    fn from(value: Teacher) -> Self {
+        backend::Teacher::from(&value)
+    }
+}

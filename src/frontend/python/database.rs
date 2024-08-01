@@ -123,6 +123,75 @@ impl Database {
 
         Ok(())
     }
+
+    fn teachers_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<TeacherHandle, Teacher>> {
+        let Answer::Teachers(TeachersAnswer::GetAll(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Teachers(TeachersCommand::GetAll),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn teachers_get(self_: PyRef<'_, Self>, handle: TeacherHandle) -> PyResult<Teacher> {
+        let Answer::Teachers(TeachersAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Teachers(TeachersCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn teachers_create(self_: PyRef<'_, Self>, teacher: Teacher) -> PyResult<TeacherHandle> {
+        let Answer::Teachers(TeachersAnswer::Create(handle)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Teachers(TeachersCommand::Create(teacher)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn teachers_update(
+        self_: PyRef<'_, Self>,
+        handle: TeacherHandle,
+        teacher: Teacher,
+    ) -> PyResult<()> {
+        let Answer::Teachers(TeachersAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Teachers(TeachersCommand::Update(handle, teacher)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn teachers_remove(self_: PyRef<'_, Self>, handle: TeacherHandle) -> PyResult<()> {
+        let Answer::Teachers(TeachersAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Teachers(TeachersCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -135,6 +204,7 @@ use crate::frontend::state::{self, Operation, UpdateError};
 pub enum Command {
     GeneralData(GeneralDataCommand),
     WeekPatterns(WeekPatternsCommand),
+    Teachers(TeachersCommand),
     Exit,
 }
 
@@ -151,6 +221,15 @@ pub enum WeekPatternsCommand {
     Create(WeekPattern),
     Update(WeekPatternHandle, WeekPattern),
     Remove(WeekPatternHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum TeachersCommand {
+    GetAll,
+    Get(TeacherHandle),
+    Create(Teacher),
+    Update(TeacherHandle, Teacher),
+    Remove(TeacherHandle),
 }
 
 #[derive(Debug)]
@@ -170,6 +249,7 @@ impl std::error::Error for PythonError {}
 pub enum Answer {
     GeneralData(GeneralDataAnswer),
     WeekPatterns(WeekPatternsAnswer),
+    Teachers(TeachersAnswer),
 }
 
 #[derive(Debug)]
@@ -183,6 +263,15 @@ pub enum WeekPatternsAnswer {
     GetAll(BTreeMap<WeekPatternHandle, WeekPattern>),
     Get(WeekPattern),
     Create(WeekPatternHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum TeachersAnswer {
+    GetAll(BTreeMap<TeacherHandle, Teacher>),
+    Get(Teacher),
+    Create(TeacherHandle),
     Update,
     Remove,
 }
@@ -381,6 +470,88 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
+    async fn execute_teachers_job<T: state::Manager>(
+        teachers_command: &TeachersCommand,
+        manager: &mut T,
+    ) -> PyResult<TeachersAnswer> {
+        match teachers_command {
+            TeachersCommand::GetAll => {
+                let result = manager
+                    .teachers_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, teacher)| (handle.into(), Teacher::from(teacher)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(TeachersAnswer::GetAll(result))
+            }
+            TeachersCommand::Get(handle) => {
+                let result = manager
+                    .teachers_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(TeachersAnswer::Get(result.into()))
+            }
+            TeachersCommand::Create(teacher) => {
+                let output = manager
+                    .apply(Operation::Teachers(state::TeachersOperation::Create(
+                        teacher.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::Teacher(handle) = output else {
+                    panic!("No teacher handle returned on TeachersOperation::Create");
+                };
+
+                Ok(TeachersAnswer::Create(handle.into()))
+            }
+            TeachersCommand::Update(handle, teacher) => {
+                manager
+                    .apply(Operation::Teachers(state::TeachersOperation::Update(
+                        handle.handle,
+                        teacher.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::TeacherRemoved(_) => {
+                            PyValueError::new_err("Teacher was previsouly removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(TeachersAnswer::Update)
+            }
+            TeachersCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::Teachers(state::TeachersOperation::Remove(
+                        handle.handle,
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::TeacherRemoved(_) => {
+                            PyValueError::new_err("Teacher was previsouly removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(TeachersAnswer::Remove)
+            }
+        }
+    }
+
     async fn execute_job<T: state::Manager>(
         command: &Command,
         manager: &mut T,
@@ -394,6 +565,10 @@ impl<'scope> SessionConnection<'scope> {
                 let answer =
                     Self::execute_week_patterns_job(week_patterns_command, manager).await?;
                 Ok(Answer::WeekPatterns(answer))
+            }
+            Command::Teachers(teachers_command) => {
+                let answer = Self::execute_teachers_job(teachers_command, manager).await?;
+                Ok(Answer::Teachers(answer))
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
