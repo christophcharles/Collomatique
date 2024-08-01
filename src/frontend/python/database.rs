@@ -9,6 +9,7 @@ use classes::*;
 #[pymodule]
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<WeekPattern>()?;
+    m.add_class::<Teacher>()?;
     Ok(())
 }
 
