@@ -41,6 +41,12 @@ pub enum UpdateError<IntError: std::error::Error> {
     IncompatDependanciesRemaining(Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>),
     #[error("Group list corresponding to handle {0:?} was previously removed")]
     GroupListRemoved(GroupListHandle),
+    #[error("Group list has inconsistent student mapping")]
+    GroupListWithInconsistentStudentMapping,
+    #[error("GRoup list references a bad student (probably removed) of id {0:?}")]
+    GroupListBadStudent(StudentHandle),
+    #[error("Cannot remove incompat: it is referenced by the database")]
+    GroupListDependanciesRemaining(Vec<SubjectHandle>),
     #[error("Subject corresponding to handle {0:?} was previously removed")]
     SubjectRemoved(SubjectHandle),
     #[error("Time slot corresponding to handle {0:?} was previously removed")]
@@ -105,6 +111,7 @@ pub enum ReturnHandle {
     Student(StudentHandle),
     SubjectGroup(SubjectGroupHandle),
     Incompat(IncompatHandle),
+    GroupList(GroupListHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -1631,7 +1638,9 @@ impl<T: ManagerInternal> Manager for T {
 }
 
 pub(super) mod private {
-    use self::backend::{DataStatusWithId, SubjectGroupDependancy};
+    use self::backend::{
+        DataStatusWithId, DataStatusWithIdAndInvalidState, SubjectGroupDependancy,
+    };
 
     use super::*;
 
@@ -2127,6 +2136,129 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_group_lists_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedGroupListsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedGroupListsOperation::Create(group_list_handle, group_list) => {
+                let group_list_backend = match convert_group_list_from_handles(
+                    group_list.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        DataStatusWithIdAndInvalidState::Ok => {
+                            panic!("DataStatusWithIdAndInvalidState::Ok is not an error")
+                        }
+                        DataStatusWithIdAndInvalidState::BadCrossId(student_handle) => {
+                            return Err(UpdateError::GroupListBadStudent(student_handle))
+                        }
+                        DataStatusWithIdAndInvalidState::InvalidData => {
+                            return Err(UpdateError::GroupListWithInconsistentStudentMapping)
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .group_lists_add(&group_list_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::InvalidCrossError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::InvalidCrossError::InvalidCrossId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::InvalidCrossError::InvalidData(_data) => {
+                            UpdateError::GroupListWithInconsistentStudentMapping
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .group_lists
+                    .update_handle(*group_list_handle, Some(new_id));
+                Ok(ReturnHandle::GroupList(*group_list_handle))
+            }
+            AnnotatedGroupListsOperation::Remove(group_list_handle) => {
+                let group_list_id = manager
+                    .get_handle_managers()
+                    .group_lists
+                    .get_id(*group_list_handle)
+                    .ok_or(UpdateError::GroupListRemoved(*group_list_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .group_lists_remove(group_list_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| {
+                                    manager.get_handle_managers_mut().subjects.get_handle(dep)
+                                })
+                                .collect();
+                            UpdateError::GroupListDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .group_lists
+                    .update_handle(*group_list_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedGroupListsOperation::Update(group_list_handle, group_list) => {
+                let group_list_backend = match convert_group_list_from_handles(
+                    group_list.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        DataStatusWithIdAndInvalidState::Ok => {
+                            panic!("DataStatusWithIdAndInvalidState::Ok is not an error")
+                        }
+                        DataStatusWithIdAndInvalidState::BadCrossId(student_handle) => {
+                            return Err(UpdateError::GroupListBadStudent(student_handle))
+                        }
+                        DataStatusWithIdAndInvalidState::InvalidData => {
+                            return Err(UpdateError::GroupListWithInconsistentStudentMapping)
+                        }
+                    },
+                };
+                let group_list_id = manager
+                    .get_handle_managers()
+                    .group_lists
+                    .get_id(*group_list_handle)
+                    .ok_or(UpdateError::GroupListRemoved(*group_list_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .group_lists_update(group_list_id, &group_list_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::InvalidCrossIdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::InvalidCrossIdError::InvalidCrossId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::InvalidCrossIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::InvalidCrossIdError::InvalidData(_) => {
+                            UpdateError::GroupListWithInconsistentStudentMapping
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -2138,7 +2270,7 @@ pub(super) mod private {
             AnnotatedOperation::Students(op) => update_students_state(manager, op).await,
             AnnotatedOperation::SubjectGroups(op) => update_subject_groups_state(manager, op).await,
             AnnotatedOperation::Incompats(op) => update_incompats_state(manager, op).await,
-            AnnotatedOperation::GroupLists(_op) => todo!(),
+            AnnotatedOperation::GroupLists(op) => update_group_lists_state(manager, op).await,
             AnnotatedOperation::Subjects(_op) => todo!(),
             AnnotatedOperation::TimeSlots(_op) => todo!(),
             AnnotatedOperation::Groupings(_op) => todo!(),
