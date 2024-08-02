@@ -576,20 +576,20 @@ pub struct SubjectGroup {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotStart {
-    day: crate::time::Weekday,
-    time: crate::time::Time,
+    pub day: crate::time::Weekday,
+    pub time: crate::time::Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatSlot<WeekPatternId: OrdId> {
-    week_pattern_id: WeekPatternId,
-    start: SlotStart,
-    duration: NonZeroU32,
+    pub week_pattern_id: WeekPatternId,
+    pub start: SlotStart,
+    pub duration: NonZeroU32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatGroup<WeekPatternId: OrdId> {
-    slots: BTreeSet<IncompatSlot<WeekPatternId>>,
+    pub slots: BTreeSet<IncompatSlot<WeekPatternId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
