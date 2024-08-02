@@ -6,9 +6,9 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedStudentsOperation,
-    AnnotatedSubjectGroupsOperation, AnnotatedTeachersOperation, AnnotatedWeekPatternsOperation,
-    ModificationHistory, ReversibleOperation,
+    AnnotatedOperation, AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation,
+    AnnotatedTeachersOperation, AnnotatedWeekPatternsOperation, ModificationHistory,
+    ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
