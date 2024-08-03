@@ -15,6 +15,7 @@ pub enum AnnotatedOperation {
     TimeSlots(AnnotatedTimeSlotsOperation),
     Groupings(AnnotatedGroupingsOperation),
     GroupingIncompats(AnnotatedGroupingIncompatsOperation),
+    RegisterStudent(AnnotatedRegisterStudentOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,6 +110,16 @@ pub enum AnnotatedGroupingIncompatsOperation {
         handles::GroupingIncompatHandle,
         backend::GroupingIncompat<GroupingHandle>,
     ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedRegisterStudentOperation {
+    InSubjectGroup(
+        handles::StudentHandle,
+        handles::SubjectGroupHandle,
+        Option<handles::SubjectHandle>,
+    ),
+    InIncompat(handles::StudentHandle, handles::IncompatHandle, bool),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -295,6 +306,32 @@ impl AnnotatedGroupingIncompatsOperation {
     }
 }
 
+impl AnnotatedRegisterStudentOperation {
+    fn annotate<T: backend::Storage>(
+        op: RegisterStudentOperation,
+        _handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            RegisterStudentOperation::InSubjectGroup(
+                student_handle,
+                subject_group_handle,
+                subject_handle,
+            ) => AnnotatedRegisterStudentOperation::InSubjectGroup(
+                student_handle,
+                subject_group_handle,
+                subject_handle,
+            ),
+            RegisterStudentOperation::InIncompat(student_handle, incompat_handle, enabled) => {
+                AnnotatedRegisterStudentOperation::InIncompat(
+                    student_handle,
+                    incompat_handle,
+                    enabled,
+                )
+            }
+        }
+    }
+}
+
 impl AnnotatedOperation {
     pub fn annotate<T: backend::Storage>(
         op: Operation,
@@ -331,6 +368,9 @@ impl AnnotatedOperation {
             ),
             Operation::GroupingIncompats(op) => AnnotatedOperation::GroupingIncompats(
                 AnnotatedGroupingIncompatsOperation::annotate(op, handle_managers),
+            ),
+            Operation::RegisterStudent(op) => AnnotatedOperation::RegisterStudent(
+                AnnotatedRegisterStudentOperation::annotate(op, handle_managers),
             ),
         }
     }
