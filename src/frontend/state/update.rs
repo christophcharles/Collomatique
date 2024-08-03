@@ -396,6 +396,30 @@ pub trait Manager: ManagerInternal {
         backend::DataStatusWithId<GroupingHandle>,
         <Self::Storage as backend::Storage>::InternalError,
     >;
+    async fn subject_group_for_student_get(
+        &mut self,
+        student_handle: StudentHandle,
+        subject_group_handle: SubjectGroupHandle,
+    ) -> Result<
+        Option<SubjectHandle>,
+        backend::Id2Error<
+            <Self::Storage as backend::Storage>::InternalError,
+            StudentHandle,
+            SubjectGroupHandle,
+        >,
+    >;
+    async fn incompat_for_student_get(
+        &self,
+        student_handle: StudentHandle,
+        incompat_handle: IncompatHandle,
+    ) -> Result<
+        bool,
+        backend::Id2Error<
+            <Self::Storage as backend::Storage>::InternalError,
+            StudentHandle,
+            IncompatHandle,
+        >,
+    >;
 
     async fn apply(
         &mut self,
@@ -1587,6 +1611,101 @@ impl<T: ManagerInternal> Manager for T {
             };
 
             Ok(status)
+        }
+    }
+
+    fn subject_group_for_student_get(
+        &mut self,
+        student_handle: StudentHandle,
+        subject_group_handle: SubjectGroupHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Option<SubjectHandle>,
+            backend::Id2Error<
+                <Self::Storage as backend::Storage>::InternalError,
+                StudentHandle,
+                SubjectGroupHandle,
+            >,
+        >,
+    > + Send {
+        async move {
+            let student_id = self
+                .get_handle_managers()
+                .students
+                .get_id(student_handle)
+                .ok_or(backend::Id2Error::InvalidId1(student_handle))?;
+            let subject_group_id = self
+                .get_handle_managers()
+                .subject_groups
+                .get_id(subject_group_handle)
+                .ok_or(backend::Id2Error::InvalidId2(subject_group_handle))?;
+
+            let subject_id = self
+                .get_backend_logic()
+                .subject_group_for_student_get(student_id, subject_group_id)
+                .await
+                .map_err(|e| match e {
+                    backend::Id2Error::InternalError(int_err) => {
+                        backend::Id2Error::InternalError(int_err)
+                    }
+                    backend::Id2Error::InvalidId1(_) => {
+                        panic!("StudentId was taken from a handle manager and thus should be valid")
+                    }
+                    backend::Id2Error::InvalidId2(_) => panic!(
+                        "SubjectGroupId was taken from a handle manager and thus should be valid"
+                    ),
+                })?;
+
+            let subject_handle =
+                subject_id.map(|x| self.get_handle_managers_mut().subjects.get_handle(x));
+
+            Ok(subject_handle)
+        }
+    }
+
+    fn incompat_for_student_get(
+        &self,
+        student_handle: StudentHandle,
+        incompat_handle: IncompatHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            bool,
+            backend::Id2Error<
+                <Self::Storage as backend::Storage>::InternalError,
+                StudentHandle,
+                IncompatHandle,
+            >,
+        >,
+    > + Send {
+        async move {
+            let student_id = self
+                .get_handle_managers()
+                .students
+                .get_id(student_handle)
+                .ok_or(backend::Id2Error::InvalidId1(student_handle))?;
+            let incompat_id = self
+                .get_handle_managers()
+                .incompats
+                .get_id(incompat_handle)
+                .ok_or(backend::Id2Error::InvalidId2(incompat_handle))?;
+
+            let output = self
+                .get_backend_logic()
+                .incompat_for_student_get(student_id, incompat_id)
+                .await
+                .map_err(|e| match e {
+                    backend::Id2Error::InternalError(int_err) => {
+                        backend::Id2Error::InternalError(int_err)
+                    }
+                    backend::Id2Error::InvalidId1(_) => {
+                        panic!("StudentId was taken from a handle manager and thus should be valid")
+                    }
+                    backend::Id2Error::InvalidId2(_) => panic!(
+                        "SubjectGroupId was taken from a handle manager and thus should be valid"
+                    ),
+                })?;
+
+            Ok(output)
         }
     }
 
