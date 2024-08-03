@@ -16,6 +16,13 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Teacher>()?;
     m.add_class::<Student>()?;
     m.add_class::<SubjectGroup>()?;
+    m.add_class::<Weekday>()?;
+    m.add_class::<Time>()?;
+    m.add_class::<SlotStart>()?;
+    m.add_class::<IncompatSlot>()?;
+    m.add_class::<Incompat>()?;
+    m.add_class::<Group>()?;
+    m.add_class::<GroupList>()?;
 
     m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
 
