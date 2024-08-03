@@ -71,6 +71,10 @@ pub enum UpdateError<IntError: std::error::Error> {
     TimeSlotDependanciesRemaining(Vec<GroupingHandle>),
     #[error("Grouping corresponding to handle {0:?} was previously removed")]
     GroupingRemoved(GroupingHandle),
+    #[error("Grouping references a bad time slot (probably removed) of id {0:?}")]
+    GroupingBadTimeSlot(TimeSlotHandle),
+    #[error("Cannot remove grouping: it is referenced by the database")]
+    GroupingDependanciesRemaining(Vec<GroupingIncompatHandle>),
     #[error("Grouping ncompat corresponding to handle {0:?} was previously removed")]
     GroupingIncompatRemoved(GroupingIncompatHandle),
 }
@@ -132,6 +136,7 @@ pub enum ReturnHandle {
     GroupList(GroupListHandle),
     Subject(SubjectHandle),
     TimeSlot(TimeSlotHandle),
+    Grouping(GroupingHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -2476,14 +2481,14 @@ pub(super) mod private {
                 Ok(ReturnHandle::TimeSlot(*time_slot_handle))
             }
             AnnotatedTimeSlotsOperation::Remove(time_slot_handle) => {
-                let subject_id = manager
+                let time_slot_id = manager
                     .get_handle_managers()
                     .time_slots
                     .get_id(*time_slot_handle)
                     .ok_or(UpdateError::TimeSlotRemoved(*time_slot_handle))?;
                 manager
                     .get_backend_logic_mut()
-                    .time_slots_remove(subject_id)
+                    .time_slots_remove(time_slot_id)
                     .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
@@ -2560,6 +2565,120 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_groupings_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedGroupingsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedGroupingsOperation::Create(grouping_handle, grouping) => {
+                let grouping_backend = match convert_grouping_from_handles(
+                    grouping.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId::Ok => {
+                            panic!("DataStatusWithId::Ok is not an error")
+                        }
+                        backend::DataStatusWithId::BadCrossId(time_slot_handle) => {
+                            return Err(UpdateError::GroupingBadTimeSlot(time_slot_handle))
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .groupings_add(&grouping_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CrossError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CrossError::InvalidCrossId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .groupings
+                    .update_handle(*grouping_handle, Some(new_id));
+                Ok(ReturnHandle::Grouping(*grouping_handle))
+            }
+            AnnotatedGroupingsOperation::Remove(grouping_handle) => {
+                let grouping_id = manager
+                    .get_handle_managers()
+                    .groupings
+                    .get_id(*grouping_handle)
+                    .ok_or(UpdateError::GroupingRemoved(*grouping_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .groupings_remove(grouping_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| {
+                                    manager
+                                        .get_handle_managers_mut()
+                                        .grouping_incompats
+                                        .get_handle(dep)
+                                })
+                                .collect();
+                            UpdateError::GroupingDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .groupings
+                    .update_handle(*grouping_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedGroupingsOperation::Update(grouping_handle, grouping) => {
+                let grouping_backend = match convert_grouping_from_handles(
+                    grouping.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId::Ok => {
+                            panic!("DataStatusWithId::Ok is not an error")
+                        }
+                        backend::DataStatusWithId::BadCrossId(time_slot_handle) => {
+                            return Err(UpdateError::GroupingBadTimeSlot(time_slot_handle))
+                        }
+                    },
+                };
+                let grouping_id = manager
+                    .get_handle_managers()
+                    .groupings
+                    .get_id(*grouping_handle)
+                    .ok_or(UpdateError::GroupingRemoved(*grouping_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .groupings_update(grouping_id, &grouping_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CrossIdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::CrossIdError::InvalidCrossId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CrossIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -2574,7 +2693,7 @@ pub(super) mod private {
             AnnotatedOperation::GroupLists(op) => update_group_lists_state(manager, op).await,
             AnnotatedOperation::Subjects(op) => update_subjects_state(manager, op).await,
             AnnotatedOperation::TimeSlots(op) => update_time_slots_state(manager, op).await,
-            AnnotatedOperation::Groupings(_op) => todo!(),
+            AnnotatedOperation::Groupings(op) => update_groupings_state(manager, op).await,
             AnnotatedOperation::GroupingIncompats(_op) => todo!(),
         }
     }
