@@ -3,6 +3,18 @@ pub mod sqlite;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+pub enum CheckedError<T, CheckData>
+where
+    T: std::fmt::Debug + std::error::Error,
+    CheckData: std::fmt::Debug,
+{
+    #[error("Check failed. Data provided is: {0:?}")]
+    CheckFailed(CheckData),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
 pub enum IdError<T, Id>
 where
     T: std::fmt::Debug + std::error::Error,
@@ -131,7 +143,7 @@ where
     Id: std::fmt::Debug,
     CrossId1: std::fmt::Debug,
     CrossId2: std::fmt::Debug,
-    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
 {
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId1(CrossId1),
@@ -139,6 +151,30 @@ where
     InvalidCrossId2(CrossId2),
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId3(CrossId3),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Cross3IdWithDepError<T, Id, CrossId1, CrossId2, CrossId3, DepId>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
+    DepId: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId3(CrossId3),
+    #[error("Dependancy of id {0:?} blocks modification of this data")]
+    BlockingDependancy(DepId),
     #[error("Id {0:?} is invalid")]
     InvalidId(Id),
     #[error("Backend internal error: {0:?}")]
@@ -204,9 +240,9 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     type GroupingId: OrdId;
     type GroupingIncompatId: OrdId;
 
-    type InternalError: std::fmt::Debug + std::error::Error;
+    type InternalError: std::fmt::Debug + std::error::Error + Send;
 
-    async fn general_data_set(
+    async unsafe fn general_data_set_unchecked(
         &mut self,
         general_data: &GeneralData,
     ) -> std::result::Result<(), Self::InternalError>;
@@ -219,7 +255,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<WeekPattern, IdError<Self::InternalError, Self::WeekPatternId>>;
-    async fn week_patterns_add(
+    async unsafe fn week_patterns_add_unchecked(
         &mut self,
         pattern: &WeekPattern,
     ) -> std::result::Result<Self::WeekPatternId, Self::InternalError>;
@@ -227,11 +263,11 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         &mut self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn week_patterns_update(
+    async unsafe fn week_patterns_update_unchecked(
         &mut self,
         index: Self::WeekPatternId,
         pattern: &WeekPattern,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
 
     async fn teachers_get_all(
         &self,
@@ -491,8 +527,9 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneralData {
-    interrogations_per_week: Option<std::ops::Range<u32>>,
-    max_interrogations_per_day: Option<NonZeroU32>,
+    pub interrogations_per_week: Option<std::ops::Range<u32>>,
+    pub max_interrogations_per_day: Option<NonZeroU32>,
+    pub week_count: NonZeroU32,
 }
 
 use std::collections::BTreeSet;
@@ -539,20 +576,20 @@ pub struct SubjectGroup {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotStart {
-    day: crate::time::Weekday,
-    time: crate::time::Time,
+    pub day: crate::time::Weekday,
+    pub time: crate::time::Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatSlot<WeekPatternId: OrdId> {
-    week_pattern_id: WeekPatternId,
-    start: SlotStart,
-    duration: NonZeroU32,
+    pub week_pattern_id: WeekPatternId,
+    pub start: SlotStart,
+    pub duration: NonZeroU32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatGroup<WeekPatternId: OrdId> {
-    slots: BTreeSet<IncompatSlot<WeekPatternId>>,
+    pub slots: BTreeSet<IncompatSlot<WeekPatternId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -693,6 +730,41 @@ pub enum DataStatusWithIdAndInvalidState<Id: OrdId> {
     BadCrossId(Id),
 }
 
+#[derive(Debug, Error)]
+pub enum WeekPatternError<T: std::fmt::Debug + std::error::Error> {
+    #[error("Week pattern references a week number ({0}) which exceeds general_data.week_count")]
+    WeekNumberTooBig(u32),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Debug, Error)]
+pub enum WeekPatternIdError<T, Id>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+{
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Week pattern references a week number ({0}) which exceeds general_data.week_count")]
+    WeekNumberTooBig(u32),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+impl<T, Id> WeekPatternIdError<T, Id>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+{
+    fn from_week_pattern_error(error: WeekPatternError<T>) -> Self {
+        match error {
+            WeekPatternError::WeekNumberTooBig(id) => WeekPatternIdError::WeekNumberTooBig(id),
+            WeekPatternError::InternalError(int_err) => WeekPatternIdError::InternalError(int_err),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Logic<T: Storage> {
     storage: T,
@@ -708,8 +780,23 @@ impl<T: Storage> Logic<T> {
     pub async fn general_data_set(
         &mut self,
         general_data: &GeneralData,
-    ) -> std::result::Result<(), T::InternalError> {
-        self.storage.general_data_set(general_data).await
+    ) -> std::result::Result<(), CheckedError<T::InternalError, Vec<T::WeekPatternId>>> {
+        let week_patterns = self.week_patterns_get_all().await?;
+
+        let mut errors = vec![];
+        for (&week_pattern_id, week_pattern) in &week_patterns {
+            if let Some(last_week) = week_pattern.weeks.last() {
+                if last_week.0 >= general_data.week_count.get() {
+                    errors.push(week_pattern_id);
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(CheckedError::CheckFailed(errors));
+        }
+
+        Ok(unsafe { self.storage.general_data_set_unchecked(general_data) }.await?)
     }
     pub async fn general_data_get(&self) -> std::result::Result<GeneralData, T::InternalError> {
         self.storage.general_data_get().await
@@ -726,21 +813,52 @@ impl<T: Storage> Logic<T> {
     ) -> std::result::Result<WeekPattern, IdError<T::InternalError, T::WeekPatternId>> {
         self.storage.week_patterns_get(index).await
     }
+    pub async fn week_patterns_check_id(
+        &self,
+        index: T::WeekPatternId,
+    ) -> std::result::Result<bool, T::InternalError> {
+        let week_patterns = self.week_patterns_get_all().await?;
+
+        Ok(week_patterns.contains_key(&index))
+    }
+    pub async fn week_patterns_check_data(
+        &self,
+        pattern: &WeekPattern,
+    ) -> std::result::Result<(), WeekPatternError<T::InternalError>> {
+        let general_data = self.general_data_get().await?;
+
+        if let Some(last_week) = pattern.weeks.last() {
+            if last_week.0 >= general_data.week_count.get() {
+                return Err(WeekPatternError::WeekNumberTooBig(last_week.0));
+            }
+        }
+
+        Ok(())
+    }
     pub async fn week_patterns_add(
         &mut self,
         pattern: &WeekPattern,
-    ) -> std::result::Result<T::WeekPatternId, T::InternalError> {
-        self.storage.week_patterns_add(pattern).await
+    ) -> std::result::Result<T::WeekPatternId, WeekPatternError<T::InternalError>> {
+        self.week_patterns_check_data(pattern).await?;
+
+        Ok(unsafe { self.storage.week_patterns_add_unchecked(pattern) }.await?)
     }
     pub async fn week_patterns_update(
         &mut self,
         index: T::WeekPatternId,
         pattern: &WeekPattern,
-    ) -> std::result::Result<(), IdError<T::InternalError, T::WeekPatternId>> {
-        self.storage.week_patterns_update(index, pattern).await
+    ) -> std::result::Result<(), WeekPatternIdError<T::InternalError, T::WeekPatternId>> {
+        if !self.week_patterns_check_id(index).await? {
+            return Err(WeekPatternIdError::InvalidId(index));
+        }
+        self.week_patterns_check_data(pattern)
+            .await
+            .map_err(WeekPatternIdError::from_week_pattern_error)?;
+
+        Ok(unsafe { self.storage.week_patterns_update_unchecked(index, pattern) }.await?)
     }
     pub async fn week_patterns_check_can_remove(
-        &mut self,
+        &self,
         index: T::WeekPatternId,
     ) -> std::result::Result<
         Vec<WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
@@ -817,7 +935,7 @@ impl<T: Storage> Logic<T> {
         self.storage.teachers_update(index, teacher).await
     }
     pub async fn teachers_check_can_remove(
-        &mut self,
+        &self,
         index: T::TeacherId,
     ) -> std::result::Result<Vec<T::TimeSlotId>, IdError<T::InternalError, T::TeacherId>> {
         let teachers = self.teachers_get_all().await?;
@@ -837,7 +955,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn teachers_patterns_remove(
+    pub async fn teachers_remove(
         &mut self,
         index: T::TeacherId,
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TeacherId, Vec<T::TimeSlotId>>>
@@ -878,7 +996,7 @@ impl<T: Storage> Logic<T> {
         self.storage.students_update(index, student).await
     }
     pub async fn students_check_can_remove(
-        &mut self,
+        &self,
         index: T::StudentId,
     ) -> std::result::Result<Vec<T::GroupListId>, IdError<T::InternalError, T::StudentId>> {
         let students = self.students_get_all().await?;
@@ -940,8 +1058,8 @@ impl<T: Storage> Logic<T> {
             .subject_groups_update(index, subject_group)
             .await
     }
-    pub async fn subject_groups_can_remove(
-        &mut self,
+    pub async fn subject_groups_check_can_remove(
+        &self,
         index: T::SubjectGroupId,
     ) -> std::result::Result<
         Vec<SubjectGroupDependancy<T::SubjectId, T::StudentId>>,
@@ -992,7 +1110,7 @@ impl<T: Storage> Logic<T> {
         >,
     > {
         let dependancies = self
-            .subject_groups_can_remove(index)
+            .subject_groups_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1071,8 +1189,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn incompats_can_remove(
-        &mut self,
+    pub async fn incompats_check_can_remove(
+        &self,
         index: T::IncompatId,
     ) -> std::result::Result<
         Vec<IncompatDependancy<T::SubjectId, T::StudentId>>,
@@ -1121,7 +1239,7 @@ impl<T: Storage> Logic<T> {
         >,
     > {
         let dependancies = self
-            .incompats_can_remove(index)
+            .incompats_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1222,8 +1340,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn group_lists_can_remove(
-        &mut self,
+    pub async fn group_lists_check_can_remove(
+        &self,
         index: T::GroupListId,
     ) -> std::result::Result<Vec<T::SubjectId>, IdError<T::InternalError, T::GroupListId>> {
         if !self.group_lists_check_id(index).await? {
@@ -1247,7 +1365,7 @@ impl<T: Storage> Logic<T> {
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::GroupListId, Vec<T::SubjectId>>>
     {
         let dependancies = self
-            .group_lists_can_remove(index)
+            .group_lists_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1334,31 +1452,59 @@ impl<T: Storage> Logic<T> {
         subject: &Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
     ) -> std::result::Result<
         (),
-        Cross3IdError<
+        Cross3IdWithDepError<
             T::InternalError,
             T::SubjectId,
             T::SubjectGroupId,
             T::IncompatId,
             T::GroupListId,
+            T::StudentId,
         >,
     > {
         if !self.subjects_check_id(index).await? {
-            return Err(Cross3IdError::InvalidId(index));
+            return Err(Cross3IdWithDepError::InvalidId(index));
+        }
+
+        let current_subject = self.subjects_get(index).await.map_err(|e| match e {
+            IdError::InvalidId(id) => panic!(
+                "Subject group id {:?} should be valid as it was already checked",
+                id
+            ),
+            IdError::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+        })?;
+
+        if current_subject.subject_group_id != subject.subject_group_id {
+            let students = self.students_get_all().await?;
+            for (student_id, _student) in students {
+                let subject_group_id = subject.subject_group_id;
+                let subject_group_for_student = self.subject_group_for_student_get(student_id, subject_group_id)
+                    .await
+                    .map_err(
+                        |e| match e {
+                            Id2Error::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+                            Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid as it was returned from students_get_all", id1),
+                            Id2Error::InvalidId2(id2) => panic!("Subject group id {:?} should be valid as it was already checked", id2),
+                        }
+                    )?;
+                if subject_group_for_student == Some(index) {
+                    return Err(Cross3IdWithDepError::BlockingDependancy(student_id));
+                }
+            }
         }
 
         let data_status = self.subjects_check_data(subject).await?;
         match data_status {
-            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
-            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
-            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
+            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
+            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
                 unsafe { self.storage.subjects_update_unchecked(index, subject) }.await?;
                 Ok(())
             }
         }
     }
-    pub async fn subjects_can_remove(
-        &mut self,
+    pub async fn subjects_check_can_remove(
+        &self,
         index: T::SubjectId,
     ) -> std::result::Result<
         Vec<SubjectDependancy<T::TimeSlotId, T::StudentId>>,
@@ -1406,7 +1552,7 @@ impl<T: Storage> Logic<T> {
         >,
     > {
         let dependancies = self
-            .subjects_can_remove(index)
+            .subjects_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1512,8 +1658,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn time_slots_can_remove(
-        &mut self,
+    pub async fn time_slots_check_can_remove(
+        &self,
         index: T::TimeSlotId,
     ) -> std::result::Result<Vec<T::GroupingId>, IdError<T::InternalError, T::TimeSlotId>> {
         if !self.time_slots_check_id(index).await? {
@@ -1537,7 +1683,7 @@ impl<T: Storage> Logic<T> {
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TimeSlotId, Vec<T::GroupingId>>>
     {
         let dependancies = self
-            .time_slots_can_remove(index)
+            .time_slots_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1612,8 +1758,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn groupings_can_remove(
-        &mut self,
+    pub async fn groupings_check_can_remove(
+        &self,
         index: T::GroupingId,
     ) -> std::result::Result<Vec<T::GroupingIncompatId>, IdError<T::InternalError, T::GroupingId>>
     {
@@ -1640,7 +1786,7 @@ impl<T: Storage> Logic<T> {
         CheckedIdError<T::InternalError, T::GroupingId, Vec<T::GroupingIncompatId>>,
     > {
         let dependancies = self
-            .groupings_can_remove(index)
+            .groupings_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1734,8 +1880,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn grouping_incompats_can_remove(
-        &mut self,
+    pub async fn grouping_incompats_check_can_remove(
+        &self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::GroupingIncompatId>> {
         if !self.grouping_incompats_check_id(index).await? {
@@ -1748,7 +1894,7 @@ impl<T: Storage> Logic<T> {
         &mut self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::GroupingIncompatId>> {
-        self.grouping_incompats_can_remove(index).await?;
+        self.grouping_incompats_check_can_remove(index).await?;
 
         unsafe { self.storage.grouping_incompats_remove_unchecked(index) }.await?;
         Ok(())
@@ -1860,8 +2006,6 @@ where
     StorageError(#[from] StorageError),
     #[error("Error while validating data: {0:?}")]
     ValidationError(crate::gen::colloscope::Error),
-    #[error("No weeks in storage")]
-    NoWeeks,
     #[error("Inconsistent data: bad subject id ({0:?})")]
     BadSubjectId(T::SubjectId),
     #[error("Inconsistent data: bad teacher id ({0:?})")]
@@ -1989,18 +2133,9 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         &self,
         data: &GenColloscopeData<T>,
     ) -> GenColloscopeResult<crate::gen::colloscope::GeneralData, T> {
-        let week_count_u32 = data
-            .week_patterns
-            .iter()
-            .filter_map(|(_pattern_id, pattern)| pattern.weeks.last().map(|w| w.0 + 1))
-            .max()
-            .unwrap_or(0);
-
-        let week_count = NonZeroU32::new(week_count_u32).ok_or(GenColloscopeError::NoWeeks)?;
-
         Ok(crate::gen::colloscope::GeneralData {
             teacher_count: data.teachers.len(),
-            week_count,
+            week_count: data.general_data.week_count,
             interrogations_per_week: data.general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: data.general_data.max_interrogations_per_day,
         })
