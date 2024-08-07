@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
 
 use thiserror::Error;
 
@@ -81,7 +80,7 @@ impl Content {
         }
     }
 
-    pub fn from_csv_file(path: &PathBuf) -> Result<Self> {
+    pub fn from_csv_file(path: &std::path::Path) -> Result<Self> {
         let mut csv_file = Content::new();
 
         let mut file = File::open(path)?;
