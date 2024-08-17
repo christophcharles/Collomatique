@@ -469,9 +469,13 @@ async fn solve_command(
         .read_solution(&best_config)
         .expect("Solution should be translatable to gen::Colloscope data");
 
+    let best_backend_config = gen_colloscope_translator
+        .translate_colloscope(&best_ilp_config, "Test")
+        .await?;
+
     Ok(Some(format!(
         "Best cost found {} is for config: {:?}",
-        best_cost.0, best_ilp_config
+        best_cost.0, best_backend_config
     )))
 }
 
