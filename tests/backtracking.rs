@@ -22,6 +22,7 @@ fn restricted_interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -30,6 +31,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -38,6 +40,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -46,6 +49,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -54,6 +58,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -62,6 +67,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -70,6 +76,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -78,6 +85,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -117,6 +125,7 @@ fn restricted_interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 2,
                     start: SlotStart {
                         week: 0,
@@ -125,6 +134,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 2,
                     start: SlotStart {
                         week: 0,
@@ -133,6 +143,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 2,
                     start: SlotStart {
                         week: 1,
@@ -141,6 +152,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 2,
                     start: SlotStart {
                         week: 1,
@@ -180,6 +192,7 @@ fn restricted_interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 3,
                     start: SlotStart {
                         week: 0,
@@ -188,6 +201,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 3,
                     start: SlotStart {
                         week: 0,
@@ -196,6 +210,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 3,
                     start: SlotStart {
                         week: 1,
@@ -204,6 +219,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 3,
                     start: SlotStart {
                         week: 1,
@@ -239,6 +255,7 @@ fn restricted_interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 4,
                     start: SlotStart {
                         week: 0,
@@ -247,6 +264,7 @@ fn restricted_interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 4,
                     start: SlotStart {
                         week: 1,
