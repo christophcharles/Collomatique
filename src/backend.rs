@@ -687,6 +687,7 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
     pub start: SlotStart,
     pub week_pattern_id: WeekPatternId,
     pub room: String,
+    pub cost: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
