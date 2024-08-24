@@ -12,6 +12,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
+    #[error("Invalid periodicity cut {0}. There are only {1} weeks.")]
+    InvalidPeriodicityCut(u32, u32),
     #[error("Subject {0} has empty students_per_slot: {1:?}")]
     SubjectWithInvalidStudentsPerSlotRange(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has the slot {1} placed after the week count ({2}) of the schedule")]
@@ -278,6 +280,12 @@ impl ValidatedData {
         slot_groupings: SlotGroupingList,
         grouping_incompats: SlotGroupingIncompatSet,
     ) -> Result<ValidatedData> {
+        for cut in &general.periodicity_cuts {
+            if *cut >= general.week_count.get() {
+                return Err(Error::InvalidPeriodicityCut(*cut, general.week_count.get()));
+            }
+        }
+
         for (i, subject) in subjects.iter().enumerate() {
             if subject.period.get() > general.week_count.get() {
                 return Err(Error::SubjectWithPeriodicityTooBig(
