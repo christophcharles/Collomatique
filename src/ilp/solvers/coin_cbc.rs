@@ -10,11 +10,12 @@ pub struct Solver {
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
         &self,
         config: &Config<'a, V, P>,
         origin: Option<&FeasableConfig<'a, V, P>>,
         max_steps: Option<usize>,
+        hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
@@ -33,7 +34,7 @@ impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
 
         let problem = config.get_problem();
 
-        let mut cbc_model = self.build_model(problem, config);
+        let mut cbc_model = self.build_model(problem, config, hint_only);
         if let Some(ms) = max_steps {
             cbc_model.model.set_parameter("maxN", &format!("{}", ms));
         }
@@ -73,6 +74,7 @@ impl Solver {
         &self,
         problem: &Problem<V, P>,
         config: &Config<'_, V, P>,
+        hint_only: bool,
     ) -> CbcModel<V> {
         use coin_cbc::{Model, Sense};
         use std::collections::BTreeMap;
@@ -98,7 +100,9 @@ impl Solver {
             // So if a variable is true in the config, false should be penalized
             // And if a variable is false in the config, true should be penalized
             // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-            model.set_obj_coeff(*col, 1. - 2. * value);
+            if !hint_only {
+                model.set_obj_coeff(*col, 1. - 2. * value);
+            }
         }
 
         for constraint in problem.get_constraints() {
