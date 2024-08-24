@@ -26,7 +26,8 @@ pub enum CliCommand {
         /// Numbers of optimizing steps - default is 1000
         #[arg(short, long)]
         steps: Option<usize>,
-        /// Number of concurrent threads to solve the colloscope - default is the number of CPU core
+        /// Number of concurrent threads to solve the colloscope - default is 1
+        /// You should enable long_init to really take advantage of multiple threads
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
         /// Name to save the colloscope as
@@ -523,7 +524,7 @@ async fn solve_command(
 
     let thread_count = match thread_count {
         Some(value) => value.get(),
-        None => num_cpus::get(),
+        None => 1,
     };
 
     let gen_colloscope_translator = GenColloscopeTranslator::new(app_state).await?;
