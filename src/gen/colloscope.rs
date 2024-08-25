@@ -131,19 +131,13 @@ pub struct GroupsDesc {
     pub not_assigned: BTreeSet<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BalancingRequirements {
-    pub teachers: bool,
-    pub timeslots: bool,
-}
-
-impl Default for BalancingRequirements {
-    fn default() -> Self {
-        BalancingRequirements {
-            teachers: false,
-            timeslots: false,
-        }
-    }
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum BalancingRequirements {
+    #[default]
+    None,
+    Teachers,
+    Timeslots,
+    TeachersAndTimeslots,
 }
 
 impl BalancingRequirements {
@@ -1889,35 +1883,19 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            match (
-                subject.balancing_requirements.teachers,
-                subject.balancing_requirements.timeslots,
-            ) {
-                (true, true) => {
-                    constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(
-                            i,
-                            subject,
-                        )
-                    );
-                }
-                (true, false) => {
-                    constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TeacherBalancing>(
-                            i, subject,
-                        ),
-                    );
-                }
-                (false, true) => {
-                    constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TimeslotBalancing>(
-                            i, subject,
-                        ),
-                    );
-                }
-                (false, false) => {
-                    // ignore, no balancing needed
-                }
+            match subject.balancing_requirements {
+                BalancingRequirements::None => {} // ignore, no balancing needed
+                BalancingRequirements::Timeslots => constraints.extend(
+                    self.build_balancing_constraints_for_subject::<TimeslotBalancing>(i, subject),
+                ),
+                BalancingRequirements::Teachers => constraints.extend(
+                    self.build_balancing_constraints_for_subject::<TeacherBalancing>(i, subject),
+                ),
+                BalancingRequirements::TeachersAndTimeslots => constraints.extend(
+                    self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(
+                        i, subject,
+                    ),
+                ),
             }
         }
 
