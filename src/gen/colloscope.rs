@@ -46,6 +46,8 @@ pub enum Error {
     SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has a larger periodicity {1} than the number of weeks {2}. A full period is needed for the algorithm to work")]
     SubjectWithPeriodicityTooBig(usize, u32, u32),
+    #[error("Subject {0} has overlapping week selections in its balacing requirements")]
+    SubjectWithOverlappingWeekSelections(usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error("Incompatibility {0} references an invalid incompatibility group ({1})")]
@@ -396,6 +398,31 @@ impl ValidatedData {
         }
 
         for (i, subject) in subjects.iter().enumerate() {
+            if let Some(balancing_requirements) = &subject.balancing_requirements {
+                let week_selection_list: Vec<WeekSelection> = match &balancing_requirements.object {
+                    BalancingObject::Teachers(map) => {
+                        map.iter().map(|(ws, _)| ws.clone()).collect()
+                    }
+                    BalancingObject::Timeslots(map) => {
+                        map.iter().map(|(ws, _)| ws.clone()).collect()
+                    }
+                    BalancingObject::TeachersAndTimeslots(map) => {
+                        map.iter().map(|(ws, _)| ws.clone()).collect()
+                    }
+                };
+
+                let mut weeks = BTreeSet::new();
+
+                for week_selection in week_selection_list {
+                    for week in week_selection.selection {
+                        if weeks.contains(&week) {
+                            return Err(Error::SubjectWithOverlappingWeekSelections(i));
+                        }
+                        weeks.insert(week);
+                    }
+                }
+            }
+
             if subject.period.get() > general.week_count.get() {
                 return Err(Error::SubjectWithPeriodicityTooBig(
                     i,
