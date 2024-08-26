@@ -7058,7 +7058,7 @@ fn balancing_teachers() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::teachers_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7170,24 +7170,31 @@ fn balancing_teachers() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).leq(&Expr::constant(2)),
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).geq(&Expr::constant(1)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).leq(&(2*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).geq(&(1*&gows_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).leq(&Expr::constant(2)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).geq(&Expr::constant(1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).leq(&(2*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).geq(&(1*&gows_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).leq(&Expr::constant(2)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).geq(&Expr::constant(1)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).leq(&(2*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).geq(&(1*&gows_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0).leq(&Expr::constant(1)),
-        (&gis_0_4_0 + &gis_0_5_0).geq(&Expr::constant(0)),
+        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_4_1 + &gis_0_5_1).leq(&Expr::constant(1)),
-        (&gis_0_4_1 + &gis_0_5_1).geq(&Expr::constant(0)),
+        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_4_2 + &gis_0_5_2).leq(&Expr::constant(1)),
-        (&gis_0_4_2 + &gis_0_5_2).geq(&Expr::constant(0)),
+        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -7266,7 +7273,7 @@ fn balancing_timeslots() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7378,33 +7385,40 @@ fn balancing_timeslots() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_2_0).leq(&Expr::constant(1)),
-        (&gis_0_0_0 + &gis_0_2_0).geq(&Expr::constant(0)),
+        (&gis_0_0_0 + &gis_0_2_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_2_1).leq(&Expr::constant(1)),
-        (&gis_0_0_1 + &gis_0_2_1).geq(&Expr::constant(0)),
+        (&gis_0_0_1 + &gis_0_2_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_2_2).leq(&Expr::constant(1)),
-        (&gis_0_0_2 + &gis_0_2_2).geq(&Expr::constant(0)),
+        (&gis_0_0_2 + &gis_0_2_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2).geq(&(0*&gows_0_0_2)),
 
-        (&gis_0_1_0 + &gis_0_3_0).leq(&Expr::constant(1)),
-        (&gis_0_1_0 + &gis_0_3_0).geq(&Expr::constant(0)),
+        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_1_1 + &gis_0_3_1).leq(&Expr::constant(1)),
-        (&gis_0_1_1 + &gis_0_3_1).geq(&Expr::constant(0)),
+        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_1_2 + &gis_0_3_2).leq(&Expr::constant(1)),
-        (&gis_0_1_2 + &gis_0_3_2).geq(&Expr::constant(0)),
+        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&gows_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0).leq(&Expr::constant(1)),
-        (&gis_0_4_0 + &gis_0_5_0).geq(&Expr::constant(0)),
+        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_4_1 + &gis_0_5_1).leq(&Expr::constant(1)),
-        (&gis_0_4_1 + &gis_0_5_1).geq(&Expr::constant(0)),
+        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_4_2 + &gis_0_5_2).leq(&Expr::constant(1)),
-        (&gis_0_4_2 + &gis_0_5_2).geq(&Expr::constant(0)),
+        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -7483,7 +7497,7 @@ fn balancing_timeslots_2() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7595,24 +7609,31 @@ fn balancing_timeslots_2() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).leq(&Expr::constant(2)),
-        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).geq(&Expr::constant(1)),
+        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).leq(&(2*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).geq(&(1*&gows_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).leq(&Expr::constant(2)),
-        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).geq(&Expr::constant(1)),
+        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).leq(&(2*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).geq(&(1*&gows_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).leq(&Expr::constant(2)),
-        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).geq(&Expr::constant(1)),
+        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).leq(&(2*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).geq(&(1*&gows_0_0_2)),
 
-        (&gis_0_1_0 + &gis_0_3_0).leq(&Expr::constant(1)),
-        (&gis_0_1_0 + &gis_0_3_0).geq(&Expr::constant(0)),
+        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_1_1 + &gis_0_3_1).leq(&Expr::constant(1)),
-        (&gis_0_1_1 + &gis_0_3_1).geq(&Expr::constant(0)),
+        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_1_2 + &gis_0_3_2).leq(&Expr::constant(1)),
-        (&gis_0_1_2 + &gis_0_3_2).geq(&Expr::constant(0)),
+        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -7691,7 +7712,7 @@ fn balancing_teachers_and_timeslots() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::teachers_and_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7803,33 +7824,40 @@ fn balancing_teachers_and_timeslots() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_2_0).leq(&Expr::constant(1)),
-        (&gis_0_0_0 + &gis_0_2_0).geq(&Expr::constant(0)),
+        (&gis_0_0_0 + &gis_0_2_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_2_1).leq(&Expr::constant(1)),
-        (&gis_0_0_1 + &gis_0_2_1).geq(&Expr::constant(0)),
+        (&gis_0_0_1 + &gis_0_2_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_2_2).leq(&Expr::constant(1)),
-        (&gis_0_0_2 + &gis_0_2_2).geq(&Expr::constant(0)),
+        (&gis_0_0_2 + &gis_0_2_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2).geq(&(0*&gows_0_0_2)),
 
-        (&gis_0_1_0 + &gis_0_3_0).leq(&Expr::constant(1)),
-        (&gis_0_1_0 + &gis_0_3_0).geq(&Expr::constant(0)),
+        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_1_1 + &gis_0_3_1).leq(&Expr::constant(1)),
-        (&gis_0_1_1 + &gis_0_3_1).geq(&Expr::constant(0)),
+        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_1_2 + &gis_0_3_2).leq(&Expr::constant(1)),
-        (&gis_0_1_2 + &gis_0_3_2).geq(&Expr::constant(0)),
+        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&gows_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0).leq(&Expr::constant(1)),
-        (&gis_0_4_0 + &gis_0_5_0).geq(&Expr::constant(0)),
+        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
 
-        (&gis_0_4_1 + &gis_0_5_1).leq(&Expr::constant(1)),
-        (&gis_0_4_1 + &gis_0_5_1).geq(&Expr::constant(0)),
+        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
 
-        (&gis_0_4_2 + &gis_0_5_2).leq(&Expr::constant(1)),
-        (&gis_0_4_2 + &gis_0_5_2).geq(&Expr::constant(0)),
+        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -8143,7 +8171,7 @@ fn balancing_timeslots_with_ghost_group() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -8313,14 +8341,21 @@ fn balancing_timeslots_with_ghost_group() {
     let gis_0_f_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 15, group: 2 });
 
     #[rustfmt::skip]
-    let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0 + &gis_0_8_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).eq(&Expr::constant(2)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1 + &gis_0_8_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).eq(&Expr::constant(2)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2 + &gis_0_8_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).eq(&Expr::constant(2)),
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
 
-        (&gis_0_4_0 + &gis_0_5_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_c_0 + &gis_0_d_0 + &gis_0_e_0 + &gis_0_f_0).eq(&Expr::constant(2)),
-        (&gis_0_4_1 + &gis_0_5_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_c_1 + &gis_0_d_1 + &gis_0_e_1 + &gis_0_f_1).eq(&Expr::constant(2)),
-        (&gis_0_4_2 + &gis_0_5_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_c_2 + &gis_0_d_2 + &gis_0_e_2 + &gis_0_f_2).eq(&Expr::constant(2)),
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0 + &gis_0_8_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).eq(&(2*&gows_0_0_0)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1 + &gis_0_8_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).eq(&(2*&gows_0_0_1)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2 + &gis_0_8_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).eq(&(2*&gows_0_0_2)),
+
+        (&gis_0_4_0 + &gis_0_5_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_c_0 + &gis_0_d_0 + &gis_0_e_0 + &gis_0_f_0).eq(&(2*&gows_0_0_0)),
+        (&gis_0_4_1 + &gis_0_5_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_c_1 + &gis_0_d_1 + &gis_0_e_1 + &gis_0_f_1).eq(&(2*&gows_0_0_1)),
+        (&gis_0_4_2 + &gis_0_5_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_c_2 + &gis_0_d_2 + &gis_0_e_2 + &gis_0_f_2).eq(&(2*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -8453,7 +8488,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -8599,24 +8634,31 @@ fn balancing_timeslots_with_ghost_group_2() {
     let gis_0_b_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 11, group: 2 });
 
     #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).geq(&Expr::constant(1)),
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).leq(&Expr::constant(2)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).geq(&(1*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).leq(&(2*&gows_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).geq(&Expr::constant(1)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).leq(&Expr::constant(2)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).geq(&(1*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).leq(&(2*&gows_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).geq(&Expr::constant(1)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).leq(&Expr::constant(2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).geq(&(1*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).leq(&(2*&gows_0_0_2)),
 
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).geq(&Expr::constant(1)),
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).leq(&Expr::constant(2)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).geq(&(1*&gows_0_0_0)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).leq(&(2*&gows_0_0_0)),
 
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).geq(&Expr::constant(1)),
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).leq(&Expr::constant(2)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).geq(&(1*&gows_0_0_1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).leq(&(2*&gows_0_0_1)),
 
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).geq(&Expr::constant(1)),
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).leq(&Expr::constant(2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).geq(&(1*&gows_0_0_2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).leq(&(2*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -8695,7 +8737,7 @@ fn balancing_timeslots_with_partial_last_period() {
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::default(),
+            strictness: BalancingStrictness::OverallOnly,
             object: BalancingObject::timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -8805,24 +8847,31 @@ fn balancing_timeslots_with_partial_last_period() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).geq(&Expr::constant(0)),
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).leq(&Expr::constant(1)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).leq(&(1*&gows_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).geq(&Expr::constant(0)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).leq(&Expr::constant(1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).leq(&(1*&gows_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).geq(&Expr::constant(0)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).leq(&Expr::constant(1)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).leq(&(1*&gows_0_0_2)),
 
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).geq(&Expr::constant(0)),
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).leq(&Expr::constant(1)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
 
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).geq(&Expr::constant(0)),
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).leq(&Expr::constant(1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
 
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).geq(&Expr::constant(0)),
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).leq(&Expr::constant(1)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
