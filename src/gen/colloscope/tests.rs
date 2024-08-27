@@ -6374,6 +6374,11 @@ fn simple_colloscope() {
 
         gis_1_1_1.leq(&gowsa_1_1_1),
         gis_1_1_1.geq(&gowsa_1_1_1),
+
+        (&gowsa_0_0_0 + &gowsa_0_1_0).eq(&Expr::constant(1)),
+        (&gowsa_1_0_0 + &gowsa_1_1_0).eq(&Expr::constant(1)),
+        (&gowsa_0_0_1 + &gowsa_0_1_1).eq(&Expr::constant(1)),
+        (&gowsa_1_0_1 + &gowsa_1_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(constraints, expected_result);
@@ -6728,6 +6733,11 @@ fn colloscope_with_dynamic_groups() {
 
         gis_1_1_1.leq(&gowsa_1_1_1),
         gis_1_1_1.geq(&gowsa_1_1_1),
+
+        (&gowsa_0_0_0 + &gowsa_0_1_0).eq(&Expr::constant(1)),
+        (&gowsa_1_0_0 + &gowsa_1_1_0).eq(&Expr::constant(1)),
+        (&gowsa_0_0_1 + &gowsa_0_1_1).eq(&Expr::constant(1)),
+        (&gowsa_1_0_1 + &gowsa_1_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(constraints, expected_result);
@@ -10052,6 +10062,9 @@ fn group_on_week_selection_constraints() {
         gis_0_5_1.leq(&gows_0_1_1),
         gis_0_7_1.leq(&gows_0_1_1),
         (&gis_0_1_1 + &gis_0_3_1 + &gis_0_5_1 + &gis_0_7_1).geq(&gows_0_1_1),
+
+        (&gows_0_0_0 + &gows_0_1_0).eq(&Expr::constant(1)),
+        (&gows_0_0_1 + &gows_0_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(group_on_week_selection_constraints, expected_result);
