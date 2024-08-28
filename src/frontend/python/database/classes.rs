@@ -1138,6 +1138,148 @@ impl From<SubjectHandle> for state::SubjectHandle {
     }
 }
 
+#[pyclass(eq, eq_int)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BalancingConstraints {
+    OptimizeOnly,
+    OverallOnly,
+    StrictWithCuts,
+    StrictWithCutsAndOverall,
+    Strict,
+}
+
+impl std::fmt::Display for BalancingConstraints {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                BalancingConstraints::OptimizeOnly => "OptimizeOnly",
+                BalancingConstraints::OverallOnly => "OverallOnly",
+                BalancingConstraints::StrictWithCuts => "StrictWithCuts",
+                BalancingConstraints::StrictWithCutsAndOverall => "StrictWithCutsAndOverall",
+                BalancingConstraints::Strict => "Strict",
+            }
+        )
+    }
+}
+
+#[pymethods]
+impl BalancingConstraints {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = self_.to_string();
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&crate::backend::BalancingConstraints> for BalancingConstraints {
+    fn from(value: &crate::backend::BalancingConstraints) -> Self {
+        use crate::backend::BalancingConstraints as BC;
+        match value {
+            BC::OptimizeOnly => BalancingConstraints::OptimizeOnly,
+            BC::OverallOnly => BalancingConstraints::OverallOnly,
+            BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
+            BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
+            BC::Strict => BalancingConstraints::Strict,
+        }
+    }
+}
+
+impl From<crate::backend::BalancingConstraints> for BalancingConstraints {
+    fn from(value: crate::backend::BalancingConstraints) -> Self {
+        BalancingConstraints::from(&value)
+    }
+}
+
+impl From<&BalancingConstraints> for crate::backend::BalancingConstraints {
+    fn from(value: &BalancingConstraints) -> Self {
+        use crate::backend::BalancingConstraints as BC;
+        match value {
+            BalancingConstraints::OptimizeOnly => BC::OptimizeOnly,
+            BalancingConstraints::OverallOnly => BC::OverallOnly,
+            BalancingConstraints::StrictWithCuts => BC::StrictWithCuts,
+            BalancingConstraints::StrictWithCutsAndOverall => BC::StrictWithCutsAndOverall,
+            BalancingConstraints::Strict => BC::Strict,
+        }
+    }
+}
+
+impl From<BalancingConstraints> for crate::backend::BalancingConstraints {
+    fn from(value: BalancingConstraints) -> Self {
+        crate::backend::BalancingConstraints::from(&value)
+    }
+}
+
+#[pyclass(eq, eq_int)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BalancingSlotSelections {
+    TeachersAndTimeSlots,
+    Teachers,
+    Timeslots,
+    Manual,
+}
+
+impl std::fmt::Display for BalancingSlotSelections {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                BalancingSlotSelections::Manual => "Manual",
+                BalancingSlotSelections::Teachers => "Teachers",
+                BalancingSlotSelections::Timeslots => "Timeslots",
+                BalancingSlotSelections::TeachersAndTimeSlots => "TeachersAndTimeSlots",
+            }
+        )
+    }
+}
+
+#[pymethods]
+impl BalancingSlotSelections {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = self_.to_string();
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&crate::backend::BalancingSlotSelections> for BalancingSlotSelections {
+    fn from(value: &crate::backend::BalancingSlotSelections) -> Self {
+        use crate::backend::BalancingSlotSelections as BSS;
+        match value {
+            BSS::Manual => BalancingSlotSelections::Manual,
+            BSS::Teachers => BalancingSlotSelections::Teachers,
+            BSS::Timeslots => BalancingSlotSelections::Timeslots,
+            BSS::TeachersAndTimeSlots => BalancingSlotSelections::TeachersAndTimeSlots,
+        }
+    }
+}
+
+impl From<crate::backend::BalancingSlotSelections> for BalancingSlotSelections {
+    fn from(value: crate::backend::BalancingSlotSelections) -> Self {
+        BalancingSlotSelections::from(&value)
+    }
+}
+
+impl From<&BalancingSlotSelections> for crate::backend::BalancingSlotSelections {
+    fn from(value: &BalancingSlotSelections) -> Self {
+        use crate::backend::BalancingSlotSelections as BSS;
+        match value {
+            BalancingSlotSelections::Manual => BSS::Manual,
+            BalancingSlotSelections::Teachers => BSS::Teachers,
+            BalancingSlotSelections::Timeslots => BSS::Timeslots,
+            BalancingSlotSelections::TeachersAndTimeSlots => BSS::TeachersAndTimeSlots,
+        }
+    }
+}
+
+impl From<BalancingSlotSelections> for crate::backend::BalancingSlotSelections {
+    fn from(value: BalancingSlotSelections) -> Self {
+        crate::backend::BalancingSlotSelections::from(&value)
+    }
+}
+
 #[pyclass(eq)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subject {
@@ -1162,9 +1304,9 @@ pub struct Subject {
     #[pyo3(set, get)]
     max_groups_per_slot: NonZeroUsize,
     #[pyo3(set, get)]
-    balance_teachers: bool,
+    balancing_constraints: BalancingConstraints,
     #[pyo3(set, get)]
-    balance_timeslots: bool,
+    balancing_slot_selections: BalancingSlotSelections,
 }
 
 #[pymethods]
@@ -1185,14 +1327,14 @@ impl Subject {
             period_is_strict: false,
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
-            balance_teachers: false,
-            balance_timeslots: false,
+            balancing_constraints: BalancingConstraints::OptimizeOnly,
+            balancing_slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
-            "{{ name = {}, subject_group_handle = {:?}, incompat_handle = {}, group_list_handle = {}, duration = {}, students_per_group_range = {}..={}, period = {}, period_is_strict = {}, is_tutorial = {}, max_groups_per_slot = {}, balance_teachers = {}, balance_timeslots = {} }}",
+            "{{ name = {}, subject_group_handle = {:?}, incompat_handle = {}, group_list_handle = {}, duration = {}, students_per_group_range = {}..={}, period = {}, period_is_strict = {}, is_tutorial = {}, max_groups_per_slot = {}, balancing_constraints = {}, balancing_slot_selections = {} }}",
             self_.name,
             self_.subject_group_handle,
             match &self_.incompat_handle {
@@ -1218,8 +1360,8 @@ impl Subject {
             self_.period_is_strict,
             self_.is_tutorial,
             self_.max_groups_per_slot.get(),
-            self_.balance_teachers,
-            self_.balance_timeslots,
+            self_.balancing_constraints,
+            self_.balancing_slot_selections,
 
         );
 
@@ -1253,8 +1395,8 @@ impl
             period_is_strict: value.period_is_strict,
             is_tutorial: value.is_tutorial,
             max_groups_per_slot: value.max_groups_per_slot,
-            balance_teachers: value.balancing_requirements.teachers,
-            balance_timeslots: value.balancing_requirements.timeslots,
+            balancing_constraints: value.balancing_requirements.constraints.into(),
+            balancing_slot_selections: value.balancing_requirements.slot_selections.into(),
         }
     }
 }
@@ -1290,8 +1432,8 @@ impl From<&Subject>
             is_tutorial: value.is_tutorial,
             max_groups_per_slot: value.max_groups_per_slot,
             balancing_requirements: backend::BalancingRequirements {
-                teachers: value.balance_teachers,
-                timeslots: value.balance_timeslots,
+                constraints: value.balancing_constraints.into(),
+                slot_selections: value.balancing_slot_selections.into(),
             },
         }
     }
