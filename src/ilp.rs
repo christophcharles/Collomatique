@@ -1,7 +1,6 @@
 pub mod dbg;
 pub mod initializers;
 pub mod linexpr;
-pub mod optimizers;
 pub mod random;
 pub mod solvers;
 

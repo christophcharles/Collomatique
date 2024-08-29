@@ -23,13 +23,6 @@ pub enum CliCommand {
     },
     /// Try and solve the colloscope
     Solve {
-        /// Numbers of optimizing steps - default is 1000
-        #[arg(short, long)]
-        steps: Option<usize>,
-        /// Number of concurrent threads to solve the colloscope - default is 1
-        /// You should enable long_init to really take advantage of multiple threads
-        #[arg(short = 'n')]
-        thread_count: Option<NonZeroUsize>,
         /// Name to save the colloscope as
         #[arg(short = 'o', long = "output")]
         name: Option<String>,
@@ -49,8 +42,6 @@ pub enum CliCommand {
         command: PythonCommand,
     },
 }
-
-const DEFAULT_OPTIMIZING_STEP_COUNT: usize = 1000;
 
 #[derive(Debug, Subcommand)]
 pub enum GeneralCommand {
@@ -364,87 +355,36 @@ fn solve_initial_guess<'a>(
 }
 
 use crate::ilp::FeasableConfig;
-use std::rc::Rc;
-fn solve_initial_colloscope<'a>(
-    init_config: Config<'a, Variable>,
-    verbose: bool,
-    long_init: bool,
-) -> (
-    Option<(Rc<FeasableConfig<'a, Variable>>, f64)>,
-    impl Iterator<Item = (Rc<FeasableConfig<'a, Variable>>, f64)>,
-) {
-    let mut sa_optimizer = crate::ilp::optimizers::sa::Optimizer::new(init_config);
-    let first_config_is_only_hint = !long_init;
-    sa_optimizer.set_first_config_is_only_hint(first_config_is_only_hint);
-    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-    let random_gen = crate::ilp::random::DefaultRndGen::new();
-    let mutation_policy = crate::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
-    let mut iterator = sa_optimizer.iterate(solver, random_gen, mutation_policy);
-    let first_opt = iterator.next();
-
-    (first_opt, iterator)
-}
-
 use indicatif::{ProgressBar, ProgressStyle};
-fn solve_thread<'a>(
+fn solve_colloscope<'a>(
     pb: ProgressBar,
-    style: ProgressStyle,
     ilp_translator: &IlpTranslator<'a>,
     problem: &'a Problem<Variable>,
-    step_count: usize,
     verbose: bool,
     long_init: bool,
-) -> Option<(FeasableConfig<'a, Variable>, f64)> {
+) -> Option<FeasableConfig<'a, Variable>> {
     use std::time::Duration;
 
-    pb.set_style(style.clone());
     pb.set_message("Building initial guess... (this can take a few minutes)");
     pb.enable_steady_tick(Duration::from_millis(100));
 
     let init_config = solve_initial_guess(ilp_translator, problem, verbose, long_init);
 
     pb.set_message("Building initial colloscope... (this can take a few minutes)");
-    let (first_config_opt, iterator) = solve_initial_colloscope(init_config, verbose, long_init);
 
-    let (first_sol, first_cost) = match first_config_opt {
-        Some(value) => value,
-        None => return None,
-    };
-
-    if step_count == 0 {
-        pb.finish_with_message(format!("Done. Found colloscope of cost {}", first_cost));
-        return Some((first_sol.as_ref().clone(), first_cost));
-    }
-
-    let width = step_count.to_string().len();
-    let template = format!(
-        "[{{elapsed_precise:.dim}}] {{spinner:.blue}} {{prefix}}Optimizing colloscope... [{{bar:25.green}}] {{pos:>{width}}}/{{len}} - {{wide_msg:!}} {{eta:.dim}}"
+    use crate::ilp::solvers::FeasabilitySolver;
+    let first_config_is_only_hint = !long_init;
+    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
+    let config_opt = solver.restore_feasability_with_origin_and_max_steps_and_hint_only(
+        &init_config,
+        None,
+        None,
+        first_config_is_only_hint,
     );
-    let style = ProgressStyle::with_template(&template)
-        .unwrap()
-        .progress_chars("=> ");
 
-    pb.set_position(0);
-    pb.set_length(step_count.try_into().unwrap());
-    pb.set_style(style);
-    pb.reset_eta();
-    pb.set_message(format!(
-        "Cost (current/best): {}/{}",
-        first_cost, first_cost
-    ));
-    let mut min_cost = first_cost;
-    let mut min_config = first_sol;
-    for (sol, cost) in iterator.take(step_count) {
-        if min_cost > cost {
-            min_cost = cost;
-            min_config = sol;
-        }
-        pb.set_message(format!("Cost (current/best): {}/{}", cost, min_cost));
-        pb.inc(1);
-    }
-    pb.finish_with_message(format!("Done. Best colloscope cost is {}.", min_cost));
+    pb.finish_with_message("Done. Found valid colloscope");
 
-    Some((min_config.as_ref().clone(), min_cost))
+    config_opt
 }
 
 fn is_colloscope_name_used(
@@ -489,8 +429,6 @@ fn find_colloscope_name(
 }
 
 async fn solve_command(
-    steps: Option<usize>,
-    thread_count: Option<NonZeroUsize>,
     name: Option<String>,
     force: bool,
     verbose: bool,
@@ -498,7 +436,6 @@ async fn solve_command(
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
-    use indicatif::MultiProgress;
     use std::time::Duration;
 
     let colloscopes = app_state.colloscopes_get_all().await?;
@@ -522,11 +459,6 @@ async fn solve_command(
         ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} {prefix}{msg}")
             .unwrap();
 
-    let thread_count = match thread_count {
-        Some(value) => value.get(),
-        None => 1,
-    };
-
     let gen_colloscope_translator = GenColloscopeTranslator::new(app_state).await?;
     let data = gen_colloscope_translator.get_validated_data();
 
@@ -538,61 +470,11 @@ async fn solve_command(
     let problem = ilp_translator.problem();
     pb.finish();
 
-    let multi_pb = MultiProgress::new();
-    let mut threads_data = vec![];
-    for i in 0..thread_count {
-        let pb = multi_pb.add(ProgressBar::new_spinner());
-        let width = thread_count.to_string().len();
-        if thread_count > 1 {
-            pb.set_prefix(format!("[{:>width$}/{}] ", i + 1, thread_count));
-        }
+    let pb = ProgressBar::new_spinner().with_style(style.clone());
 
-        threads_data.push((pb, style.clone(), ilp_translator.clone()));
-    }
+    let best_config_opt = solve_colloscope(pb, &ilp_translator, &problem, verbose, long_init);
 
-    // With multithreading, the gag for cbc might have a race condition
-    // We just set it up here for the whole computation
-    let stdout_gag = if verbose {
-        None
-    } else {
-        Some(gag::Gag::stdout().unwrap())
-    };
-
-    let step_count = steps.unwrap_or(DEFAULT_OPTIMIZING_STEP_COUNT);
-    let best_cost_opt = {
-        use rayon::prelude::*;
-
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(thread_count)
-            .build()?;
-
-        thread_pool.install(|| {
-            threads_data
-                .into_par_iter()
-                .panic_fuse()
-                .map(|(pb, style, ilp_translator)| {
-                    let (best_config, best_cost) = solve_thread(
-                        pb,
-                        style,
-                        &ilp_translator,
-                        &problem,
-                        step_count,
-                        verbose,
-                        long_init,
-                    )?;
-
-                    use ordered_float::OrderedFloat;
-                    Some((best_config, OrderedFloat(best_cost)))
-                })
-                .while_some()
-                .min_by_key(|(_c, cost)| *cost)
-        })
-    };
-
-    drop(stdout_gag);
-    drop(multi_pb);
-
-    let (best_config, best_cost) = match best_cost_opt {
+    let best_config = match best_config_opt {
         Some(value) => value,
         None => return Err(anyhow!("No solution found, colloscope is unfeasable!\nThis means the constraints are incompatible and no colloscope can be built that follows all of them. Relax some constraints and try again.")),
     };
@@ -617,8 +499,8 @@ async fn solve_command(
     pb.finish();
 
     Ok(Some(format!(
-        "Best cost found is {}. Colloscope was stored as \"{}\".",
-        best_cost.0, colloscope_name
+        "Colloscope was stored as \"{}\".",
+        colloscope_name
     )))
 }
 
@@ -1518,24 +1400,11 @@ pub async fn execute_cli_command(
         CliCommand::WeekPatterns { command } => week_pattern_command(command, app_state).await,
         CliCommand::Colloscopes { command } => colloscope_command(command, app_state).await,
         CliCommand::Solve {
-            steps,
-            thread_count,
             name,
             force,
             verbose,
             long_init,
-        } => {
-            solve_command(
-                steps,
-                thread_count,
-                name,
-                force,
-                verbose,
-                long_init,
-                app_state,
-            )
-            .await
-        }
+        } => solve_command(name, force, verbose, long_init, app_state).await,
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
