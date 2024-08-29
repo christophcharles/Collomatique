@@ -133,8 +133,10 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
         let p = self.leq_mat.shape().1;
 
         for (&i, &val) in vars {
-            indices.push(i);
-            data.push(val);
+            if val != 0 {
+                indices.push(i);
+                data.push(val);
+            }
         }
 
         let values = CsVec::new(p, indices, data);
@@ -299,22 +301,7 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
     }
 
     unsafe fn set_unchecked(&mut self, i: usize, val: i32) {
-        assert!(val >= 0);
-        assert!(val <= 1);
-
-        match self.values.get(i) {
-            Some(v) => {
-                assert!(*v == 1);
-                if val == 0 {
-                    *self = self.flip(i);
-                }
-            }
-            None => {
-                if val == 1 {
-                    *self = self.flip(i);
-                }
-            }
-        }
+        Self::change_bit(&mut self.values, i, val);
     }
 }
 
@@ -351,39 +338,5 @@ impl<V: VariableName> SprsConfig<V> {
             }
         }
         *values = CsVec::new(values.dim(), indices, data);
-    }
-
-    fn flip(&self, i: usize) -> SprsConfig<V> {
-        let mut indices = vec![];
-        let mut data = vec![];
-
-        let mut prev = 0usize;
-        for (j, v) in self.values.iter() {
-            assert!(*v == 1);
-
-            if j == i {
-                prev = j + 1;
-                continue;
-            }
-
-            if prev <= i && j > i {
-                indices.push(i);
-                data.push(1);
-            }
-
-            indices.push(j);
-            data.push(*v);
-
-            prev = j + 1;
-        }
-        if prev <= i && self.values.dim() > i {
-            indices.push(i);
-            data.push(1);
-        }
-
-        SprsConfig {
-            values: CsVec::new(self.values.dim(), indices, data),
-            _phantom: std::marker::PhantomData,
-        }
     }
 }
