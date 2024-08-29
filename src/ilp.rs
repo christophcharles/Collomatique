@@ -1,5 +1,4 @@
 pub mod dbg;
-pub mod initializers;
 pub mod linexpr;
 pub mod random;
 pub mod solvers;
