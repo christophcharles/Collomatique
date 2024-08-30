@@ -8,18 +8,35 @@ pub struct Solver {
     disable_logging: bool,
 }
 
+enum Objective {
+    None,
+    MinimumDistance,
+    MinimumObjectiveFn,
+}
+
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
     fn find_closest_solution<'a>(
         &self,
         config: &Config<'a, V, P>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        self.solve_internal(config, true)
+        self.solve_internal(config, Objective::MinimumDistance)
     }
 
-    fn solve<'a>(&self, problem: &'a Problem<V, P>) -> Option<FeasableConfig<'a, V, P>> {
+    fn solve<'a>(
+        &self,
+        problem: &'a Problem<V, P>,
+        minimize_objective: bool,
+    ) -> Option<FeasableConfig<'a, V, P>> {
         let init_config = problem.default_config();
-        self.solve_internal(&init_config, false)
+        self.solve_internal(
+            &init_config,
+            if minimize_objective {
+                Objective::MinimumObjectiveFn
+            } else {
+                Objective::None
+            },
+        )
     }
 }
 
@@ -48,7 +65,7 @@ impl Solver {
     fn solve_internal<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
         init_config: &Config<'a, V, P>,
-        minimize_distance_to_init_config: bool,
+        objective: Objective,
     ) -> Option<FeasableConfig<'a, V, P>> {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
@@ -63,10 +80,12 @@ impl Solver {
         let problem = init_config.get_problem();
 
         let mut cbc_model = self.build_model(problem, init_config);
-        if minimize_distance_to_init_config {
-            self.add_minimize_dist_constraint(&mut cbc_model, init_config);
-        } else {
-            self.add_objective_fn(&mut cbc_model, problem);
+        match objective {
+            Objective::MinimumDistance => {
+                self.add_minimize_dist_constraint(&mut cbc_model, init_config)
+            }
+            Objective::MinimumObjectiveFn => self.add_objective_fn(&mut cbc_model, problem),
+            Objective::None => {}
         }
 
         let sol = cbc_model.model.solve();
