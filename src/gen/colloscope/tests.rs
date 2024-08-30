@@ -6341,6 +6341,52 @@ fn simple_colloscope() {
     let goss_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 1, group: 1 });
 
     #[rustfmt::skip]
+    let ubipd_0 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDay { student: 0 });
+    #[rustfmt::skip]
+    let ubipd_1 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDay { student: 1 });
+    #[rustfmt::skip]
+    let ubipd_2 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDay { student: 2 });
+    #[rustfmt::skip]
+    let ubipd_3 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDay { student: 3 });
+    #[rustfmt::skip]
+    let ubipd_4 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDay { student: 4 });
+    #[rustfmt::skip]
+    let ubipd_5 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDay { student: 5 });
+
+    #[rustfmt::skip]
+    let ubipw_0 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeek { student: 0 });
+    #[rustfmt::skip]
+    let ubipw_1 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeek { student: 1 });
+    #[rustfmt::skip]
+    let ubipw_2 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeek { student: 2 });
+    #[rustfmt::skip]
+    let ubipw_3 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeek { student: 3 });
+    #[rustfmt::skip]
+    let ubipw_4 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeek { student: 4 });
+    #[rustfmt::skip]
+    let ubipw_5 = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeek { student: 5 });
+
+    #[rustfmt::skip]
+    let lbipw_0 = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeek { student: 0 });
+    #[rustfmt::skip]
+    let lbipw_1 = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeek { student: 1 });
+    #[rustfmt::skip]
+    let lbipw_2 = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeek { student: 2 });
+    #[rustfmt::skip]
+    let lbipw_3 = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeek { student: 3 });
+    #[rustfmt::skip]
+    let lbipw_4 = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeek { student: 4 });
+    #[rustfmt::skip]
+    let lbipw_5 = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeek { student: 5 });
+
+    #[rustfmt::skip]
+    let ubipdg = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerDayGlobal);
+    #[rustfmt::skip]
+    let ubipwg = Expr::<Variable>::var(Variable::UpperBoundInterrogationPerWeekGlobal);
+    #[rustfmt::skip]
+    let lbipwg = Expr::<Variable>::var(Variable::LowerBoundInterrogationPerWeekGlobal);
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
         (&gis_0_0_0 + &gis_0_1_0).eq(&Expr::constant(1)),
         (&gis_0_0_1 + &gis_0_1_1).eq(&Expr::constant(1)),
@@ -6386,6 +6432,88 @@ fn simple_colloscope() {
         (&goss_1_0_0 + &goss_1_1_0).eq(&Expr::constant(1)),
         (&goss_0_0_1 + &goss_0_1_1).eq(&Expr::constant(1)),
         (&goss_1_0_1 + &goss_1_1_1).eq(&Expr::constant(1)),
+
+        ubipd_0.geq(&Expr::constant(0)),
+        ubipd_1.geq(&Expr::constant(0)),
+        ubipd_2.geq(&Expr::constant(0)),
+        ubipd_3.geq(&Expr::constant(0)),
+        ubipd_4.geq(&Expr::constant(0)),
+        ubipd_5.geq(&Expr::constant(0)),
+
+        (&gis_0_0_0 + &gis_1_0_0).leq(&ubipd_0),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&ubipd_0),
+
+        (&gis_0_0_0 + &gis_1_0_0).leq(&ubipd_1),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&ubipd_1),
+
+        (&gis_0_0_0 + &gis_1_0_0).leq(&ubipd_2),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&ubipd_2),
+
+        (&gis_0_0_1 + &gis_1_0_1).leq(&ubipd_3),
+        (&gis_0_1_1 + &gis_1_1_1).leq(&ubipd_3),
+
+        (&gis_0_0_1 + &gis_1_0_1).leq(&ubipd_4),
+        (&gis_0_1_1 + &gis_1_1_1).leq(&ubipd_4),
+
+        (&gis_0_0_1 + &gis_1_0_1).leq(&ubipd_5),
+        (&gis_0_1_1 + &gis_1_1_1).leq(&ubipd_5),
+
+        (&gis_0_0_0 + &gis_1_0_0).leq(&ubipw_0),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&ubipw_0),
+
+        (&gis_0_0_0 + &gis_1_0_0).leq(&ubipw_1),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&ubipw_1),
+
+        (&gis_0_0_0 + &gis_1_0_0).leq(&ubipw_2),
+        (&gis_0_1_0 + &gis_1_1_0).leq(&ubipw_2),
+
+        (&gis_0_0_1 + &gis_1_0_1).leq(&ubipw_3),
+        (&gis_0_1_1 + &gis_1_1_1).leq(&ubipw_3),
+
+        (&gis_0_0_1 + &gis_1_0_1).leq(&ubipw_4),
+        (&gis_0_1_1 + &gis_1_1_1).leq(&ubipw_4),
+
+        (&gis_0_0_1 + &gis_1_0_1).leq(&ubipw_5),
+        (&gis_0_1_1 + &gis_1_1_1).leq(&ubipw_5),
+
+        (&gis_0_0_0 + &gis_1_0_0).geq(&lbipw_0),
+        (&gis_0_1_0 + &gis_1_1_0).geq(&lbipw_0),
+
+        (&gis_0_0_0 + &gis_1_0_0).geq(&lbipw_1),
+        (&gis_0_1_0 + &gis_1_1_0).geq(&lbipw_1),
+
+        (&gis_0_0_0 + &gis_1_0_0).geq(&lbipw_2),
+        (&gis_0_1_0 + &gis_1_1_0).geq(&lbipw_2),
+
+        (&gis_0_0_1 + &gis_1_0_1).geq(&lbipw_3),
+        (&gis_0_1_1 + &gis_1_1_1).geq(&lbipw_3),
+
+        (&gis_0_0_1 + &gis_1_0_1).geq(&lbipw_4),
+        (&gis_0_1_1 + &gis_1_1_1).geq(&lbipw_4),
+
+        (&gis_0_0_1 + &gis_1_0_1).geq(&lbipw_5),
+        (&gis_0_1_1 + &gis_1_1_1).geq(&lbipw_5),
+
+        ubipd_0.leq(&ubipdg),
+        ubipd_1.leq(&ubipdg),
+        ubipd_2.leq(&ubipdg),
+        ubipd_3.leq(&ubipdg),
+        ubipd_4.leq(&ubipdg),
+        ubipd_5.leq(&ubipdg),
+
+        ubipw_0.leq(&ubipwg),
+        ubipw_1.leq(&ubipwg),
+        ubipw_2.leq(&ubipwg),
+        ubipw_3.leq(&ubipwg),
+        ubipw_4.leq(&ubipwg),
+        ubipw_5.leq(&ubipwg),
+
+        lbipw_0.geq(&lbipwg),
+        lbipw_1.geq(&lbipwg),
+        lbipw_2.geq(&lbipwg),
+        lbipw_3.geq(&lbipwg),
+        lbipw_4.geq(&lbipwg),
+        lbipw_5.geq(&lbipwg),
     ]);
 
     assert_eq!(constraints, expected_result);
