@@ -2919,10 +2919,7 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn build_variables(
-        &self,
-        soft_constraints: &BTreeSet<Constraint<Variable>>,
-    ) -> BTreeSet<Variable> {
+    fn build_variables(&self) -> BTreeSet<Variable> {
         let mut output = BTreeSet::new();
 
         output.extend(self.build_group_in_slot_variables());
@@ -2943,21 +2940,11 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn build_objective_fn(
-        &self,
-        soft_constraints: &BTreeSet<Constraint<Variable>>,
-    ) -> Expr<Variable> {
-        const STUDENT_PER_DAY_COST: i32 = 1;
-        const STUDENT_PER_WEEK_COST: i32 = 1;
-        const GLOBAL_PER_DAY_COST: i32 = 1;
-        const GLOBAL_PER_WEEK_COST: i32 = 1;
-        const BALANCING_COST: i32 = 1;
+    fn build_objective_contribs(&self) -> BTreeMap<Variable, f64> {
+        let mut output = BTreeMap::new();
 
-        let mut expr = Expr::constant(0);
-
-        // Costs for slots
-        let student_count_i32 =
-            i32::try_from(self.data.students.len()).expect("Student count should fit in i32");
+        // Taking into account slots costs
+        let student_count_f64 = self.data.students.len() as f64;
         for (i, subject) in self.data.subjects.iter().enumerate() {
             for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.cost == 0 {
@@ -2965,20 +2952,31 @@ impl<'a> IlpTranslator<'a> {
                 }
 
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    let cost_i32 =
-                        i32::try_from(slot.cost).expect("Cost for slot should fit in i32");
+                    let cost_f64 = f64::from(slot.cost);
 
-                    expr = expr
-                        + student_count_i32
-                            * cost_i32
-                            * Expr::var(Variable::GroupInSlot {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                            });
+                    output.insert(
+                        Variable::GroupInSlot {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                        },
+                        student_count_f64 * cost_f64,
+                    );
                 }
             }
         }
+
+        output
+    }
+
+    fn build_objective_terms(&self) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        const STUDENT_PER_DAY_COST: i32 = 1;
+        const STUDENT_PER_WEEK_COST: i32 = 1;
+        const GLOBAL_PER_DAY_COST: i32 = 1;
+        const GLOBAL_PER_WEEK_COST: i32 = 1;
+        const BALANCING_COST: i32 = 1;
+
+        let mut output = Vec::new();
 
         // Number of interrogations per day
         /*for (student_num, _student) in self.data.students.iter().enumerate() {
@@ -3011,11 +3009,12 @@ impl<'a> IlpTranslator<'a> {
         expr = expr + student_count_i32 * GLOBAL_PER_WEEK_COST * range_global;*/
 
         // Soft constraints
+        let soft_constraints = self.build_soft_constraints();
         /*for (i, _constraint) in soft_constraints.iter().enumerate() {
             expr = expr + BALANCING_COST * Expr::var(Variable::SoftConstraint { num: i });
         }*/
 
-        expr
+        output
     }
 
     fn build_soft_constraints_upper_bound_constraints(
@@ -3035,10 +3034,7 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn build_hard_constraints(
-        &self,
-        soft_constraints: &BTreeSet<Constraint<Variable>>,
-    ) -> BTreeSet<Constraint<Variable>> {
+    fn build_hard_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut output = BTreeSet::new();
 
         output.extend(self.build_at_most_max_groups_per_slot_constraints());
@@ -3058,14 +3054,6 @@ impl<'a> IlpTranslator<'a> {
         output.extend(self.build_student_incompat_max_count_constraints());
         output.extend(self.build_group_on_slot_selection_constraints());
         output.extend(self.build_balancing_constraints());
-        /*output.extend(self.build_upper_bound_interrogation_per_day_constraints());
-        output.extend(self.build_upper_bound_interrogation_per_week_constraints());
-        output.extend(self.build_lower_bound_interrogation_per_week_constraints());
-        output.extend(self.build_upper_bound_interrogation_per_day_global_constraints());
-        output.extend(self.build_upper_bound_interrogation_per_week_global_constraints());
-        output.extend(self.build_lower_bound_interrogation_per_week_global_constraints());*/
-
-        /*output.extend(self.build_soft_constraints_upper_bound_constraints(soft_constraints));*/
 
         output
     }
@@ -3074,15 +3062,15 @@ impl<'a> IlpTranslator<'a> {
         //let soft_problem = self.problem_builder_soft().build();
         //let subjects = self.data.subjects.clone();
 
-        let soft_constraints = self.build_soft_constraints();
-
         let hard_problem_builder = ProblemBuilder::new()
-            .add_bool_variables(self.build_variables(&soft_constraints))
+            .add_bool_variables(self.build_variables())
             .expect("Should not have duplicates")
-            .add_constraints(self.build_hard_constraints(&soft_constraints))
+            .add_constraints(self.build_hard_constraints())
+            .expect("Variables should be defined")
+            .add_objective_terms(self.build_objective_terms())
+            .expect("Variables should be defined")
+            .set_objective_contribs(self.build_objective_contribs())
             .expect("Variables should be defined");
-        /* .set_objective_fn(self.build_objective_fn(&soft_constraints))
-        .expect("Variables should be declared");*/
         // Comment out for now, we are going to need this code for the linear optimization
         /*      .eval_fn(crate::debuggable!(move |x| {
             let bool_vars = x.get_bool_vars();
