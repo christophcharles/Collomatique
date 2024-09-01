@@ -184,7 +184,7 @@ impl Solver {
 
         for objective_term in problem.get_objective_terms() {
             let new_col = cbc_model.model.add_col();
-            cbc_model.model.set_col_lower(new_col, 0.);
+            cbc_model.model.set_col_lower(new_col, -f64::INFINITY);
             cbc_model.model.set_col_upper(new_col, f64::INFINITY);
 
             cbc_model.model.set_obj_coeff(new_col, objective_term.coef);
