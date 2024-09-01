@@ -87,7 +87,7 @@ impl Solver {
             Objective::MinimumDistance => {
                 self.add_minimize_dist_constraint(&mut cbc_model, init_config)
             }
-            Objective::MinimumObjectiveFn => self.add_objective_fn(&mut cbc_model, problem),
+            Objective::MinimumObjectiveFn => self.add_objective_terms(&mut cbc_model, problem),
             Objective::None => {}
         }
 
@@ -174,23 +174,37 @@ impl Solver {
         }
     }
 
-    fn add_objective_fn<V: VariableName, P: ProblemRepr<V>>(
+    fn add_objective_terms<V: VariableName, P: ProblemRepr<V>>(
         &self,
         cbc_model: &mut CbcModel<V>,
         problem: &Problem<V, P>,
     ) {
         use coin_cbc::Sense;
         cbc_model.model.set_obj_sense(Sense::Minimize);
-        /*for (var, col) in &cbc_model.cols {
-            match problem.get_objective_fn().get(var) {
-                Some(coef) => {
-                    cbc_model.model.set_obj_coeff(*col, coef.into());
+        for objective_term in problem.get_objective_terms() {
+            let new_col = cbc_model.model.add_col();
+            cbc_model.model.set_col_lower(new_col, 0.);
+            cbc_model.model.set_col_upper(new_col, f64::INFINITY);
+
+            cbc_model.model.set_obj_coeff(new_col, objective_term.coef);
+
+            for expr in &objective_term.exprs {
+                let row = cbc_model.model.add_row();
+
+                cbc_model.model.set_weight(row, new_col, -1.);
+
+                for v in expr.variables() {
+                    let col = cbc_model.cols[&v];
+                    let weight = expr.get(v).unwrap();
+
+                    cbc_model.model.set_weight(row, col, weight.into());
                 }
-                None => {
-                    cbc_model.model.set_obj_coeff(*col, 0.);
-                }
+
+                cbc_model
+                    .model
+                    .set_row_upper(row, (-expr.get_constant()).into());
             }
-        }*/
+        }
     }
 
     fn reconstruct_config<'a, 'b, 'c, V: VariableName, P: ProblemRepr<V>>(
