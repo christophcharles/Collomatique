@@ -38,6 +38,10 @@ pub enum CliCommand {
         /// is usually unusable.
         #[arg(short, long, default_value_t = false)]
         quick: bool,
+        /// Maximum time for resolution in minutes
+        /// 0 means no limit
+        #[arg(short, long, default_value_t = 60)]
+        max_time: u32,
         /// EXPERIMENTAL: use HiGHS solver
         #[cfg(feature = "highs")]
         #[arg(long, default_value_t = false)]
@@ -380,6 +384,7 @@ async fn solve_command(
     force: bool,
     verbose: bool,
     quick: bool,
+    max_time: u32,
     #[cfg(feature = "highs")] highs: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
@@ -427,19 +432,26 @@ async fn solve_command(
     use crate::ilp::solvers::FeasabilitySolver;
     let minimize_objective = !quick;
 
+    let config_hint = problem.default_config();
+    let time_limit_in_seconds = if max_time == 0 {
+        None
+    } else {
+        Some(max_time * 60)
+    };
+
     #[cfg(feature = "highs")]
     let config_opt = if highs {
         let solver = crate::ilp::solvers::highs::Solver::with_disable_logging(!verbose);
-        solver.solve(&problem, minimize_objective)
+        solver.solve(&config_hint, minimize_objective, time_limit_in_seconds)
     } else {
         let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-        solver.solve(&problem, minimize_objective)
+        solver.solve(&config_hint, minimize_objective, time_limit_in_seconds)
     };
 
     #[cfg(not(feature = "highs"))]
     let config_opt = {
         let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-        solver.solve(&problem, minimize_objective)
+        solver.solve(&config_hint, minimize_objective, time_limit_in_seconds)
     };
 
     pb.finish_with_message(if config_opt.is_some() {
@@ -1378,6 +1390,7 @@ pub async fn execute_cli_command(
             force,
             verbose,
             quick,
+            max_time,
             #[cfg(feature = "highs")]
             highs,
         } => {
@@ -1386,6 +1399,7 @@ pub async fn execute_cli_command(
                 force,
                 verbose,
                 quick,
+                max_time,
                 #[cfg(feature = "highs")]
                 highs,
                 app_state,
