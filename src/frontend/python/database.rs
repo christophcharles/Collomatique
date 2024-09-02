@@ -29,6 +29,8 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GroupingIncompat>()?;
     m.add_class::<SlotGroup>()?;
     m.add_class::<SlotSelection>()?;
+    m.add_class::<BalancingConstraints>()?;
+    m.add_class::<BalancingSlotSelections>()?;
 
     m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
     m.add_function(wrap_pyfunction!(load_csv, m)?)?;
