@@ -734,7 +734,7 @@ pub enum BalancingConstraints {
 pub enum BalancingSlotSelections {
     TeachersAndTimeSlots,
     Teachers,
-    Timeslots,
+    TimeSlots,
     Manual,
 }
 
