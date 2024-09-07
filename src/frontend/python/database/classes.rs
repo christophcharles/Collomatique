@@ -76,6 +76,7 @@ impl From<&GeneralData> for backend::GeneralData {
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
             periodicity_cuts: value.periodicity_cuts.clone(),
+            costs_adjustements: backend::CostsAdjustements::default(),
         }
     }
 }
