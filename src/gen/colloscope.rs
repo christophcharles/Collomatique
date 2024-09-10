@@ -146,6 +146,10 @@ pub enum BalancingConstraints {
     StrictWithCuts,
     StrictWithCutsAndOverall,
     Strict,
+    OptimizeAndNonConsecutive,
+    OverallAndNonConsecutive,
+    StrictWithCutsAndNonConsecutive,
+    StrictWithCutsAndOverallAndNonConsecutive,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2337,6 +2341,37 @@ impl<'a> IlpTranslator<'a> {
                     ))
                 }
                 BalancingConstraints::StrictWithCutsAndOverall => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                        false,
+                    ));
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ));
+                }
+                BalancingConstraints::OptimizeAndNonConsecutive => {} // Ignore, no strict constraint in this case
+                BalancingConstraints::OverallAndNonConsecutive => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ))
+                }
+                BalancingConstraints::StrictWithCutsAndNonConsecutive => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                        false,
+                    ))
+                }
+                BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive => {
                     constraints.extend(self.build_balancing_constraints_for_subject_strict(
                         i,
                         subject,
