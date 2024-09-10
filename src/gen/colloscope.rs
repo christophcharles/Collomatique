@@ -478,6 +478,7 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Student {
     pub incompatibilities: BTreeSet<usize>,
+    pub non_consecutive_interrogations: bool,
 }
 
 pub type StudentList = Vec<Student>;
@@ -2669,6 +2670,159 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn get_all_in_slot_variables_at(
+        &self,
+        student_num: usize,
+        week: u32,
+        weekday: time::Weekday,
+        at_time: time::Time,
+        not_at_time: time::Time,
+        time_resolution: u32,
+    ) -> BTreeSet<Variable> {
+        let mut output = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                continue;
+            }
+
+            let student_status = Self::get_student_status(student_num, subject);
+
+            if let StudentStatus::NotConcerned = student_status {
+                continue;
+            }
+
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+                if slot.start.weekday != weekday {
+                    continue;
+                }
+                if !at_time.fit_in(&slot.start.start_time, time_resolution) {
+                    continue;
+                }
+                if not_at_time.fit_in(&slot.start.start_time, time_resolution) {
+                    continue;
+                }
+
+                match student_status {
+                    StudentStatus::Assigned(k) => {
+                        output.insert(Variable::GroupInSlot {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                        });
+                    }
+                    StudentStatus::ToBeAssigned(ref group_list) => {
+                        for k in group_list {
+                            output.insert(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: *k,
+                                student: student_num,
+                            });
+                        }
+                    }
+                    StudentStatus::NotConcerned => {
+                        unreachable!("Last case should have already been filtered out")
+                    }
+                }
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_constraints_for_student_and_time(
+        &self,
+        student_num: usize,
+        week: u32,
+        weekday: time::Weekday,
+        time: time::Time,
+        time_resolution: u32,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let Some(half_time) = time.add(time_resolution) else {
+            // If we cannot consider two consecutives time slots
+            // it means there are no relevant constraints
+            return BTreeSet::new();
+        };
+
+        let variables_in_first_half = self.get_all_in_slot_variables_at(
+            student_num,
+            week,
+            weekday,
+            time.clone(),
+            half_time.clone(),
+            time_resolution,
+        );
+
+        let variables_in_second_half = self.get_all_in_slot_variables_at(
+            student_num,
+            week,
+            weekday,
+            half_time,
+            time,
+            time_resolution,
+        );
+
+        let mut output = BTreeSet::new();
+
+        for var1 in variables_in_first_half {
+            let v1 = Expr::var(var1);
+            for var2 in &variables_in_second_half {
+                let v2 = Expr::var(var2.clone());
+
+                let lhs = &v1 + &v2;
+                let rhs = Expr::constant(1);
+
+                let constraint = lhs.leq(&rhs);
+
+                output.insert(constraint);
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_constraints_for_student(
+        &self,
+        student_num: usize,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        let time_resolution = self.compute_needed_time_resolution();
+
+        for week in 0..self.data.general.week_count.get() {
+            for weekday in time::Weekday::iter() {
+                let init_time = time::Time::from_hm(0, 0).unwrap();
+                for time in init_time.iterate_until_end_of_day(time_resolution) {
+                    output.extend(self.build_not_consecutive_constraints_for_student_and_time(
+                        student_num,
+                        week,
+                        weekday,
+                        time,
+                        time_resolution,
+                    ));
+                }
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_for_students_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, student) in self.data.students.iter().enumerate() {
+            if student.non_consecutive_interrogations {
+                output.extend(self.build_not_consecutive_constraints_for_student(student_num));
+            }
+        }
+
+        output
+    }
+
     fn build_interrogations_per_day_objective_terms_for_student_week_and_day(
         &self,
         student_num: usize,
@@ -3005,6 +3159,7 @@ impl<'a> IlpTranslator<'a> {
         output.extend(self.build_student_incompat_max_count_constraints());
         output.extend(self.build_group_on_slot_selection_constraints());
         output.extend(self.build_balancing_constraints());
+        output.extend(self.build_not_consecutive_for_students_constraints());
 
         output
     }
