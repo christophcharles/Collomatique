@@ -208,6 +208,7 @@ impl GenColloscopeTranslator {
             interrogations_per_week_range_for_all_students: costs_adjustments
                 .interrogations_per_week_range_for_all_students,
             balancing: costs_adjustments.balancing,
+            consecutive_slots: costs_adjustments.consecutive_slots,
         }
     }
 }
