@@ -153,6 +153,7 @@ CREATE TABLE "students" (
     "firstname"	TEXT NOT NULL,
     "email"	TEXT,
     "phone"	TEXT,
+    "no_consecutive_slots"	INTEGER NOT NULL,
     PRIMARY KEY("student_id" AUTOINCREMENT)
 );
 
