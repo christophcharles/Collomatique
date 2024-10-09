@@ -8,41 +8,43 @@ pub struct Solver {
     disable_logging: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Objective {
+    None,
+    MinimumDistance,
+    MinimumObjectiveFn,
+}
+
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn find_closest_solution_with_time_limit<'a>(
         &self,
         config: &Config<'a, V, P>,
-        origin: Option<&FeasableConfig<'a, V, P>>,
-        _max_steps: Option<usize>,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        // When everything is solved for some reason this is sometimes an issue...
-        if let Some(result) = config.clone().into_feasable() {
-            return Some(result);
-        }
+        self.solve_internal(config, Objective::MinimumDistance, time_limit_in_seconds)
+    }
 
-        let problem = config.get_problem();
-
-        let mut highs_problem = self.build_problem(problem, config);
-        if let Some(o) = origin {
-            Self::add_origin_constraints(&mut highs_problem, config, &o);
-        }
-
-        use highs::Sense;
-        let mut model = highs_problem.problem.try_optimise(Sense::Minimise).ok()?;
-        if self.disable_logging {
-            model.make_quiet();
-        }
-
-        let solved_problem = model.try_solve().ok()?;
-
-        Self::reconstruct_config(problem, &solved_problem)
+    fn solve<'a>(
+        &self,
+        config_hint: &Config<'a, V, P>,
+        minimize_objective: bool,
+        time_limit_in_seconds: Option<u32>,
+    ) -> Option<FeasableConfig<'a, V, P>> {
+        self.solve_internal(
+            config_hint,
+            if minimize_objective {
+                Objective::MinimumObjectiveFn
+            } else {
+                Objective::None
+            },
+            time_limit_in_seconds,
+        )
     }
 }
 
-struct HighsProblem<V: VariableName> {
+struct HighsProblem {
     problem: highs::RowProblem,
-    cols: std::collections::BTreeMap<V, highs::Col>,
 }
 
 impl Default for Solver {
@@ -62,11 +64,42 @@ impl Solver {
         Solver { disable_logging }
     }
 
+    fn solve_internal<'a, V: VariableName, P: ProblemRepr<V>>(
+        &self,
+        init_config: &Config<'a, V, P>,
+        objective: Objective,
+        time_limit_in_seconds: Option<u32>,
+    ) -> Option<FeasableConfig<'a, V, P>> {
+        // When everything is solved for some reason this is sometimes an issue...
+        if let Some(result) = init_config.clone().into_feasable() {
+            return Some(result);
+        }
+
+        let problem = init_config.get_problem();
+
+        let highs_problem = self.build_problem(problem, init_config, objective);
+
+        use highs::Sense;
+        let mut model = highs_problem.problem.try_optimise(Sense::Minimise).ok()?;
+        if self.disable_logging {
+            model.make_quiet();
+        }
+
+        if let Some(time_limit) = time_limit_in_seconds {
+            model.set_option("time_limit", f64::from(time_limit));
+        }
+
+        let solved_problem = model.try_solve().ok()?;
+
+        Self::reconstruct_config(problem, &solved_problem)
+    }
+
     fn build_problem<V: VariableName, P: ProblemRepr<V>>(
         &self,
         problem: &Problem<V, P>,
-        config: &Config<'_, V, P>,
-    ) -> HighsProblem<V> {
+        init_config: &Config<'_, V, P>,
+        objective: Objective,
+    ) -> HighsProblem {
         use highs::RowProblem;
         use std::collections::BTreeMap;
 
@@ -76,21 +109,49 @@ impl Solver {
             .get_variables()
             .iter()
             .map(|var| {
-                let value = if config.get(var).expect("Variable should be valid") {
-                    1.
-                } else {
-                    0.
+                let col_factor = match objective {
+                    Objective::MinimumDistance => {
+                        let value = if init_config.get_bool(var).expect("Variable should be valid")
+                        {
+                            1.
+                        } else {
+                            0.
+                        };
+                        // Try minimizing the number of changes with respect to the config
+                        // So if a variable is true in the config, false should be penalized
+                        // And if a variable is false in the config, true should be penalized
+                        // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+                        1. - 2. * value
+                    }
+                    Objective::MinimumObjectiveFn => {
+                        let coef = problem
+                            .get_objective_contribs()
+                            .get(var)
+                            .copied()
+                            .unwrap_or(0.);
+                        coef
+                    }
+                    Objective::None => 0.,
                 };
-                // Try minimizing the number of changes with respect to the config
-                // So if a variable is true in the config, false should be penalized
-                // And if a variable is false in the config, true should be penalized
-                // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-                let col_factor = 1. - 2. * value;
 
                 let col = highs_problem.add_integer_column(col_factor, 0..=1);
                 (var.clone(), col)
             })
             .collect();
+
+        let obj_cols: Vec<_> = if objective == Objective::MinimumObjectiveFn {
+            problem
+                .get_objective_terms()
+                .iter()
+                .map(|obj_term| {
+                    let col =
+                        highs_problem.add_column(obj_term.coef, -f64::INFINITY..=f64::INFINITY);
+                    col
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         for constraint in problem.get_constraints() {
             let variables = constraint.variables();
@@ -112,33 +173,34 @@ impl Solver {
             };
         }
 
+        if objective == Objective::MinimumObjectiveFn {
+            for (i, obj_term) in problem.get_objective_terms().iter().enumerate() {
+                for expr in &obj_term.exprs {
+                    let variables = expr.variables();
+                    let row_factors = variables
+                        .iter()
+                        .map(|var| {
+                            let col = cols[var];
+                            let weight = f64::from(expr.get(var).unwrap());
+
+                            (col, weight)
+                        })
+                        .chain(std::iter::once({
+                            let col = obj_cols[i];
+                            let weight = -1.;
+
+                            (col, weight)
+                        }));
+
+                    let neg_constant = f64::from(-expr.get_constant());
+
+                    highs_problem.add_row(..=neg_constant, row_factors);
+                }
+            }
+        }
+
         HighsProblem {
             problem: highs_problem,
-            cols,
-        }
-    }
-
-    fn add_origin_constraints<'a, V: VariableName, P: ProblemRepr<V>>(
-        highs_problem: &mut HighsProblem<V>,
-        config: &Config<'a, V, P>,
-        origin: &FeasableConfig<'a, V, P>,
-    ) {
-        let changed_variables = config
-            .get_problem()
-            .get_variables()
-            .iter()
-            .filter(|var| config.get(var) != origin.get(var));
-
-        for var in changed_variables {
-            let col = highs_problem.cols[var];
-            let value = if config.get(var).expect("Variable should be valid") {
-                1.
-            } else {
-                0.
-            };
-
-            let row_factors = [(col, 1.0)];
-            highs_problem.problem.add_row(value..=value, row_factors);
         }
     }
 
@@ -146,35 +208,21 @@ impl Solver {
         problem: &'a Problem<V, P>,
         solved_model: &'b highs::SolvedModel,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        use highs::HighsModelStatus;
-        use std::collections::BTreeSet;
+        use std::collections::BTreeMap;
 
-        if solved_model.status() != HighsModelStatus::Optimal {
-            return None;
-        }
         let solution = solved_model.get_solution();
         let columns = solution.columns();
 
-        let vars: BTreeSet<_> = problem
+        let bool_vars: BTreeMap<_, _> = problem
             .get_variables()
             .iter()
             .enumerate()
-            .filter_map(|(i, var)| {
-                if columns[i] == 1. {
-                    Some(var.clone())
-                } else {
-                    None
-                }
-            })
+            .map(|(i, var)| (var.clone(), columns[i] > 0.5))
             .collect();
 
         let config = problem
-            .config_from(&vars)
+            .config_from(bool_vars)
             .expect("Variables should be valid");
-        Some(
-            config
-                .into_feasable()
-                .expect("Config from highs should be feasable"),
-        )
+        config.into_feasable()
     }
 }

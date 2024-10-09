@@ -6,8 +6,9 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedGroupListsOperation, AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation,
-    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedRegisterStudentOperation,
+    AnnotatedColloscopesOperation, AnnotatedGroupListsOperation,
+    AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation, AnnotatedIncompatsOperation,
+    AnnotatedOperation, AnnotatedRegisterStudentOperation, AnnotatedSlotSelectionsOperation,
     AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation,
     AnnotatedTeachersOperation, AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation,
     ModificationHistory, ReversibleOperation,
@@ -15,8 +16,9 @@ use history::{
 use update::private::ManagerInternal;
 
 pub use handles::{
-    GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle, StudentHandle,
-    SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle, WeekPatternHandle,
+    ColloscopeHandle, GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle,
+    SlotSelectionHandle, StudentHandle, SubjectGroupHandle, SubjectHandle, TeacherHandle,
+    TimeSlotHandle, WeekPatternHandle,
 };
 pub use update::{Manager, UpdateError};
 
@@ -36,6 +38,8 @@ pub enum Operation {
     Groupings(GroupingsOperation),
     GroupingIncompats(GroupingIncompatsOperation),
     RegisterStudent(RegisterStudentOperation),
+    Colloscopes(ColloscopesOperation),
+    SlotSelections(SlotSelectionsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,6 +125,26 @@ pub enum GroupingIncompatsOperation {
 pub enum RegisterStudentOperation {
     InSubjectGroup(StudentHandle, SubjectGroupHandle, Option<SubjectHandle>),
     InIncompat(StudentHandle, IncompatHandle, bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ColloscopesOperation {
+    Create(backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>),
+    Remove(ColloscopeHandle),
+    Update(
+        ColloscopeHandle,
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SlotSelectionsOperation {
+    Create(backend::SlotSelection<SubjectHandle, TimeSlotHandle>),
+    Remove(SlotSelectionHandle),
+    Update(
+        SlotSelectionHandle,
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+    ),
 }
 
 #[derive(Debug)]

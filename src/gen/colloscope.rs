@@ -12,6 +12,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
+    #[error("Invalid periodicity cut {0}. There are only {1} weeks.")]
+    InvalidPeriodicityCut(u32, u32),
     #[error("Subject {0} has empty students_per_slot: {1:?}")]
     SubjectWithInvalidStudentsPerSlotRange(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has the slot {1} placed after the week count ({2}) of the schedule")]
@@ -42,8 +44,16 @@ pub enum Error {
     SubjectWithTooFewGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has too many groups to satisfy the low bound on the range {1:?}")]
     SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
-    #[error("Subject {0} has a larger periodicity than the number of weeks {1}. A full period is needed for the algorithm to work")]
-    SubjectWithPeriodicityTooBig(u32, u32),
+    #[error("Subject {0} has a larger periodicity {1} than the number of weeks {2}. A full period is needed for the algorithm to work")]
+    SubjectWithPeriodicityTooBig(usize, u32, u32),
+    #[error("Subject {0} has overlapping slot selections in its balacing requirements for slot selection {1}")]
+    SubjectWithOverlappingSlotsInBalancingSlotSelection(usize, usize),
+    #[error("Subject {0} has empty slot selection ({1}) in its balacing requirements")]
+    SubjectWithEmptySlotSelectionInBalancing(usize, usize),
+    #[error("Subject {0} has empty slot group ({2}) in its balacing requirements for slot selection {1}")]
+    SubjectWithEmptySlotGroupInBalancing(usize, usize, usize),
+    #[error("Subject {0} has an invalid slot number ({1}) in its balacing requirements")]
+    SubjectWithInvalidSlotInBalancing(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error("Incompatibility {0} references an invalid incompatibility group ({1})")]
@@ -114,6 +124,7 @@ impl SlotWithDuration {
 pub struct SlotWithTeacher {
     pub teacher: usize,
     pub start: SlotStart,
+    pub cost: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,33 +139,276 @@ pub struct GroupsDesc {
     pub not_assigned: BTreeSet<usize>,
 }
 
-impl GroupsDesc {
-    fn students_iterator(&self) -> impl Iterator<Item = &usize> {
-        self.prefilled_groups
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BalancingConstraints {
+    OptimizeOnly,
+    OverallOnly,
+    StrictWithCuts,
+    StrictWithCutsAndOverall,
+    Strict,
+    OptimizeAndConsecutiveDifferentTeachers,
+    OverallAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndOverallAndConsecutiveDifferentTeachers,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingSlotGroup {
+    pub slots: BTreeSet<usize>,
+    pub count: usize,
+}
+
+impl BalancingSlotGroup {
+    pub fn extract_weeks(&self, slots: &Vec<SlotWithTeacher>) -> Option<BTreeSet<u32>> {
+        self.slots
             .iter()
-            .flat_map(|group| group.students.iter())
-            .chain(self.not_assigned.iter())
+            .map(|&slot_num| slots.get(slot_num).map(|slot| slot.start.week))
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingSlotSelection {
+    pub slot_groups: Vec<BalancingSlotGroup>,
+}
+
+impl BalancingSlotSelection {
+    pub fn contains_slot(&self, slot: usize) -> bool {
+        for slot_group in &self.slot_groups {
+            if slot_group.slots.contains(&slot) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn extract_slots(&self) -> BTreeSet<usize> {
+        self.slot_groups
+            .iter()
+            .flat_map(|slot_group| slot_group.slots.iter().copied())
+            .collect()
+    }
+
+    pub fn extract_weeks(&self, slots: &Vec<SlotWithTeacher>) -> Option<BTreeSet<u32>> {
+        let mut output = BTreeSet::new();
+
+        for slot_group in &self.slot_groups {
+            let weeks = slot_group.extract_weeks(slots)?;
+            output.extend(weeks);
+        }
+
+        Some(output)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BalancingRequirements {
-    pub teachers: bool,
-    pub timeslots: bool,
+    pub constraints: BalancingConstraints,
+    pub slot_selections: Vec<BalancingSlotSelection>,
 }
 
-impl Default for BalancingRequirements {
-    fn default() -> Self {
+impl BalancingRequirements {
+    pub fn extract_slots_by_selection(&self) -> Vec<BTreeSet<usize>> {
+        self.slot_selections
+            .iter()
+            .map(|slot_selection| slot_selection.extract_slots())
+            .collect()
+    }
+
+    fn build_data<T: BalancingData>(slots: &Vec<SlotWithTeacher>) -> Vec<BalancingSlotSelection> {
+        let mut week_map: BTreeMap<u32, BTreeMap<T, usize>> = BTreeMap::new();
+
+        for slot in slots {
+            let data = T::from_subject_slot(slot);
+
+            match week_map.get_mut(&slot.start.week) {
+                Some(val) => match val.get_mut(&data) {
+                    Some(value) => {
+                        *value += 1;
+                    }
+                    None => {
+                        val.insert(data, 1);
+                    }
+                },
+                None => {
+                    week_map.insert(slot.start.week, BTreeMap::from([(data, 1)]));
+                }
+            }
+        }
+
+        let mut slot_type_week_map: BTreeMap<BTreeMap<T, usize>, BTreeSet<u32>> = BTreeMap::new();
+
+        for (week, data) in week_map {
+            match slot_type_week_map.get_mut(&data) {
+                Some(value) => {
+                    value.insert(week);
+                }
+                None => {
+                    slot_type_week_map.insert(data, BTreeSet::from([week]));
+                }
+            }
+        }
+
+        slot_type_week_map
+            .into_iter()
+            .map(|(descs, weeks)| BalancingSlotSelection {
+                slot_groups: descs
+                    .into_iter()
+                    .map(|(slot_type, count)| BalancingSlotGroup {
+                        slots: slots
+                            .iter()
+                            .enumerate()
+                            .filter(|(_i, x)| {
+                                slot_type.is_slot_relevant(x) && weeks.contains(&x.start.week)
+                            })
+                            .map(|(i, _x)| i)
+                            .collect(),
+                        count,
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+
+    pub fn balance_teachers_from_slots(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> Vec<BalancingSlotSelection> {
+        Self::build_data::<TeacherBalancing>(slots)
+    }
+
+    pub fn balance_timeslots_from_slots(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> Vec<BalancingSlotSelection> {
+        Self::build_data::<TimeslotBalancing>(slots)
+    }
+
+    pub fn balance_teachers_and_timeslots_from_slots(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> Vec<BalancingSlotSelection> {
+        Self::build_data::<TeacherAndTimeslotBalancing>(slots)
+    }
+
+    pub fn default_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
         BalancingRequirements {
-            teachers: false,
-            timeslots: false,
+            constraints: BalancingConstraints::OptimizeOnly,
+            slot_selections: Self::balance_teachers_and_timeslots_from_slots(slots),
         }
     }
 }
 
-impl BalancingRequirements {
-    pub fn new() -> Self {
-        Self::default()
+trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self;
+
+    fn is_slot_relevant(&self, slot: &SlotWithTeacher) -> bool {
+        let other = Self::from_subject_slot(slot);
+        *self == other
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TeacherBalancing {
+    teacher: usize,
+}
+
+impl BalancingData for TeacherBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherBalancing {
+            teacher: slot.teacher,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TimeslotBalancing {
+    weekday: time::Weekday,
+    time: time::Time,
+}
+
+impl BalancingData for TimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TimeslotBalancing {
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TeacherAndTimeslotBalancing {
+    teacher: usize,
+    weekday: time::Weekday,
+    time: time::Time,
+}
+
+impl BalancingData for TeacherAndTimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherAndTimeslotBalancing {
+            teacher: slot.teacher,
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotsInformation {
+    pub slots: Vec<SlotWithTeacher>,
+    pub balancing_requirements: BalancingRequirements,
+}
+
+impl SlotsInformation {
+    pub fn from_slots(slots: Vec<SlotWithTeacher>) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements::default_from_slots(&slots),
+            slots,
+        }
+    }
+
+    pub fn balance_teachers_and_timeslots_from_slots(
+        slots: Vec<SlotWithTeacher>,
+        constraints: BalancingConstraints,
+    ) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements {
+                constraints,
+                slot_selections: BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                    &slots,
+                ),
+            },
+            slots,
+        }
+    }
+
+    pub fn balance_teachers_from_slots(
+        slots: Vec<SlotWithTeacher>,
+        constraints: BalancingConstraints,
+    ) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements {
+                constraints,
+                slot_selections: BalancingRequirements::balance_teachers_from_slots(&slots),
+            },
+            slots,
+        }
+    }
+
+    pub fn balance_timeslots_from_slots(
+        slots: Vec<SlotWithTeacher>,
+        constraints: BalancingConstraints,
+    ) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements {
+                constraints,
+                slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
+            },
+            slots,
+        }
+    }
+}
+
+impl Default for SlotsInformation {
+    fn default() -> Self {
+        Self::from_slots(vec![])
     }
 }
 
@@ -165,9 +419,8 @@ pub struct Subject {
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
-    pub balancing_requirements: BalancingRequirements,
     pub duration: NonZeroU32,
-    pub slots: Vec<SlotWithTeacher>,
+    pub slots_information: SlotsInformation,
     pub groups: GroupsDesc,
 }
 
@@ -179,9 +432,8 @@ impl Default for Subject {
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
-            balancing_requirements: BalancingRequirements::default(),
             duration: NonZeroU32::new(60).unwrap(),
-            slots: vec![],
+            slots_information: SlotsInformation::default(),
             groups: GroupsDesc::default(),
         }
     }
@@ -230,9 +482,33 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Student {
     pub incompatibilities: BTreeSet<usize>,
+    pub non_consecutive_interrogations: bool,
 }
 
 pub type StudentList = Vec<Student>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CostsAdjustments {
+    pub max_interrogations_per_day_for_single_student: i32,
+    pub max_interrogations_per_day_for_all_students: i32,
+    pub interrogations_per_week_range_for_single_student: i32,
+    pub interrogations_per_week_range_for_all_students: i32,
+    pub balancing: i32,
+    pub consecutive_slots: i32,
+}
+
+impl Default for CostsAdjustments {
+    fn default() -> Self {
+        CostsAdjustments {
+            max_interrogations_per_day_for_single_student: 1,
+            max_interrogations_per_day_for_all_students: 1,
+            interrogations_per_week_range_for_single_student: 1,
+            interrogations_per_week_range_for_all_students: 1,
+            balancing: 1,
+            consecutive_slots: 1,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneralData {
@@ -240,6 +516,8 @@ pub struct GeneralData {
     pub week_count: NonZeroU32,
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
+    pub periodicity_cuts: BTreeSet<NonZeroU32>,
+    pub costs_adjustments: CostsAdjustments,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -271,9 +549,51 @@ impl ValidatedData {
         slot_groupings: SlotGroupingList,
         grouping_incompats: SlotGroupingIncompatSet,
     ) -> Result<ValidatedData> {
+        for cut in &general.periodicity_cuts {
+            if cut.get() >= general.week_count.get() {
+                return Err(Error::InvalidPeriodicityCut(
+                    cut.get(),
+                    general.week_count.get(),
+                ));
+            }
+        }
+
         for (i, subject) in subjects.iter().enumerate() {
+            for (j, slot_selection) in subject
+                .slots_information
+                .balancing_requirements
+                .slot_selections
+                .iter()
+                .enumerate()
+            {
+                if slot_selection.slot_groups.is_empty() {
+                    return Err(Error::SubjectWithEmptySlotSelectionInBalancing(i, j));
+                }
+
+                let mut used_slots = BTreeSet::new();
+
+                for (k, slot_group) in slot_selection.slot_groups.iter().enumerate() {
+                    if slot_group.slots.is_empty() {
+                        return Err(Error::SubjectWithEmptySlotGroupInBalancing(i, j, k));
+                    }
+
+                    for &slot in &slot_group.slots {
+                        if used_slots.contains(&slot) {
+                            return Err(
+                                Error::SubjectWithOverlappingSlotsInBalancingSlotSelection(i, j),
+                            );
+                        }
+                        if slot >= subject.slots_information.slots.len() {
+                            return Err(Error::SubjectWithInvalidSlotInBalancing(i, slot));
+                        }
+                        used_slots.insert(slot);
+                    }
+                }
+            }
+
             if subject.period.get() > general.week_count.get() {
                 return Err(Error::SubjectWithPeriodicityTooBig(
+                    i,
                     subject.period.get(),
                     general.week_count.get(),
                 ));
@@ -286,7 +606,7 @@ impl ValidatedData {
                 ));
             }
 
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.teacher >= general.teacher_count {
                     return Err(Error::SubjectWithInvalidTeacher(i, j, slot.teacher));
                 }
@@ -439,7 +759,7 @@ impl ValidatedData {
                 if slot_ref.subject >= subjects.len() {
                     return Err(Error::SlotGroupingWithInvalidSubject(i, slot_ref.clone()));
                 }
-                if slot_ref.slot >= subjects[slot_ref.subject].slots.len() {
+                if slot_ref.slot >= subjects[slot_ref.subject].slots_information.slots.len() {
                     return Err(Error::SlotGroupingWithInvalidSlot(i, slot_ref.clone()));
                 }
                 match slot_grouping_previous_refs.get(slot_ref) {
@@ -501,9 +821,10 @@ pub enum Variable {
         slot: usize,
         group: usize,
     },
-    StudentNotInLastPeriod {
+    GroupOnSlotSelection {
         subject: usize,
-        student: usize,
+        slot_selection: usize,
+        group: usize,
     },
     DynamicGroupAssignment {
         subject: usize,
@@ -516,16 +837,44 @@ pub enum Variable {
         student: usize,
         group: usize,
     },
-    Periodicity {
-        subject: usize,
-        student: usize,
-        week_modulo: u32,
-    },
     UseGrouping(usize),
     IncompatGroupForStudent {
         incompat_group: usize,
         student: usize,
     },
+}
+
+impl Variable {
+    fn subject(&self) -> Option<usize> {
+        match self {
+            Variable::GroupInSlot {
+                subject,
+                slot: _,
+                group: _,
+            } => Some(*subject),
+            Variable::GroupOnSlotSelection {
+                subject,
+                slot_selection: _,
+                group: _,
+            } => Some(*subject),
+            Variable::DynamicGroupAssignment {
+                subject,
+                slot: _,
+                group: _,
+                student: _,
+            } => Some(*subject),
+            Variable::StudentInGroup {
+                subject,
+                student: _,
+                group: _,
+            } => Some(*subject),
+            Variable::UseGrouping(_) => None,
+            Variable::IncompatGroupForStudent {
+                incompat_group: _,
+                student: _,
+            } => None,
+        }
+    }
 }
 
 impl<'a> From<&'a Variable> for Variable {
@@ -542,9 +891,11 @@ impl std::fmt::Display for Variable {
                 slot,
                 group,
             } => write!(f, "GiS_{}_{}_{}", *subject, *slot, *group),
-            Variable::StudentNotInLastPeriod { subject, student } => {
-                write!(f, "SniLP_{}_{}", *subject, *student)
-            }
+            Variable::GroupOnSlotSelection {
+                subject,
+                slot_selection,
+                group,
+            } => write!(f, "GoSS_{}_{}_{}", *subject, *slot_selection, *group),
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -556,11 +907,6 @@ impl std::fmt::Display for Variable {
                 student,
                 group,
             } => write!(f, "SiG_{}_{}_{}", *subject, *student, *group),
-            Variable::Periodicity {
-                subject,
-                student,
-                week_modulo,
-            } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
             Variable::UseGrouping(num) => write!(f, "UG_{}", num),
             Variable::IncompatGroupForStudent {
                 incompat_group,
@@ -585,77 +931,13 @@ pub struct IlpTranslator<'a> {
     problem_builder_cache: RefCell<Option<ProblemBuilder<Variable>>>,
 }
 
-use crate::ilp::initializers::ConfigInitializer;
 use crate::ilp::linexpr::{Constraint, Expr};
-use crate::ilp::solvers::FeasabilitySolver;
-use crate::ilp::{Config, DefaultRepr, FeasableConfig, Problem, ProblemBuilder};
-
-pub trait GenericInitializer: ConfigInitializer<Variable, DefaultRepr<Variable>> {}
-
-impl<T: ConfigInitializer<Variable, DefaultRepr<Variable>>> GenericInitializer for T {}
-
-pub trait GenericSolver: FeasabilitySolver<Variable, DefaultRepr<Variable>> {}
-
-impl<S: FeasabilitySolver<Variable, DefaultRepr<Variable>>> GenericSolver for S {}
+use crate::ilp::{FeasableConfig, Problem, ProblemBuilder};
 
 enum StudentStatus {
     Assigned(usize),
     ToBeAssigned(BTreeSet<usize>),
     NotConcerned,
-}
-
-trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self;
-
-    fn is_slot_relevant(&self, slot: &SlotWithTeacher) -> bool {
-        let other = Self::from_subject_slot(slot);
-        *self == other
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct TeacherBalancing {
-    teacher: usize,
-}
-
-impl BalancingData for TeacherBalancing {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
-        TeacherBalancing {
-            teacher: slot.teacher,
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct TimeslotBalancing {
-    weekday: time::Weekday,
-    time: time::Time,
-}
-
-impl BalancingData for TimeslotBalancing {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
-        TimeslotBalancing {
-            weekday: slot.start.weekday,
-            time: slot.start.start_time.clone(),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct TeacherAndTimeslotBalancing {
-    teacher: usize,
-    weekday: time::Weekday,
-    time: time::Time,
-}
-
-impl BalancingData for TeacherAndTimeslotBalancing {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
-        TeacherAndTimeslotBalancing {
-            teacher: slot.teacher,
-            weekday: slot.start.weekday,
-            time: slot.start.start_time.clone(),
-        }
-    }
 }
 
 impl<'a> IlpTranslator<'a> {
@@ -670,7 +952,7 @@ impl<'a> IlpTranslator<'a> {
 
         for subject in &self.data.subjects {
             result = gcd(result, subject.duration.get());
-            for slot in &subject.slots {
+            for slot in &subject.slots_information.slots {
                 result = gcd(result, slot.start.start_time.get())
             }
         }
@@ -685,14 +967,6 @@ impl<'a> IlpTranslator<'a> {
         result
     }
 
-    fn is_last_period_incomplete(&self, subject: &Subject) -> bool {
-        self.data.general.week_count.get() % subject.period.get() != 0
-    }
-
-    fn subject_needs_periodicity_variables(&self, subject: &Subject) -> bool {
-        subject.period_is_strict || self.is_last_period_incomplete(subject)
-    }
-
     fn build_group_in_slot_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
@@ -700,6 +974,7 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject
+                    .slots_information
                     .slots
                     .iter()
                     .enumerate()
@@ -716,6 +991,32 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
+    fn build_group_on_slot_selection_variables(&self) -> BTreeSet<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .flat_map(|(i, subject)| {
+                subject
+                    .slots_information
+                    .balancing_requirements
+                    .slot_selections
+                    .iter()
+                    .enumerate()
+                    .flat_map(move |(j, _ws)| {
+                        subject.groups.prefilled_groups.iter().enumerate().map(
+                            move |(k, _group)| Variable::GroupOnSlotSelection {
+                                subject: i,
+                                slot_selection: j,
+                                group: k,
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
     fn build_dynamic_group_assignment_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
@@ -723,11 +1024,8 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject.groups.not_assigned.iter().flat_map(move |l| {
-                    subject
-                        .slots
-                        .iter()
-                        .enumerate()
-                        .flat_map(move |(j, _slot)| {
+                    subject.slots_information.slots.iter().enumerate().flat_map(
+                        move |(j, _slot)| {
                             subject
                                 .groups
                                 .prefilled_groups
@@ -745,7 +1043,8 @@ impl<'a> IlpTranslator<'a> {
                                         student: *l,
                                     })
                                 })
-                        })
+                        },
+                    )
                 })
             })
             .collect()
@@ -776,54 +1075,6 @@ impl<'a> IlpTranslator<'a> {
                         })
                 })
             })
-            .collect()
-    }
-
-    fn build_periodicity_variables(&self) -> BTreeSet<Variable> {
-        self.data
-            .subjects
-            .iter()
-            .enumerate()
-            .filter_map(|(i, subject)| {
-                if !self.subject_needs_periodicity_variables(subject) {
-                    return None;
-                }
-
-                let student_iterator = subject.groups.students_iterator();
-
-                Some(student_iterator.flat_map(move |j| {
-                    (0..subject.period.get())
-                        .into_iter()
-                        .map(move |k| Variable::Periodicity {
-                            subject: i,
-                            student: *j,
-                            week_modulo: k,
-                        })
-                }))
-            })
-            .flatten()
-            .collect()
-    }
-
-    fn build_student_not_in_last_period_variables(&self) -> BTreeSet<Variable> {
-        self.data
-            .subjects
-            .iter()
-            .enumerate()
-            .filter_map(|(i, subject)| {
-                if !self.is_last_period_incomplete(subject) {
-                    return None;
-                }
-
-                let student_iterator = subject.groups.students_iterator();
-                Some(
-                    student_iterator.map(move |k| Variable::StudentNotInLastPeriod {
-                        subject: i,
-                        student: *k,
-                    }),
-                )
-            })
-            .flatten()
             .collect()
     }
 
@@ -862,25 +1113,30 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .flat_map(|(i, subject)| {
-                subject.slots.iter().enumerate().map(move |(j, _slot)| {
-                    let mut expr = Expr::constant(0);
+                subject
+                    .slots_information
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .map(move |(j, _slot)| {
+                        let mut expr = Expr::constant(0);
 
-                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        expr = expr
-                            + Expr::var(Variable::GroupInSlot {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                            });
-                    }
+                        for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
 
-                    let max_groups_per_slot = subject
-                        .max_groups_per_slot
-                        .get()
-                        .try_into()
-                        .expect("Should be less than 2^31 maximum");
-                    expr.leq(&Expr::constant(max_groups_per_slot))
-                })
+                        let max_groups_per_slot = subject
+                            .max_groups_per_slot
+                            .get()
+                            .try_into()
+                            .expect("Should be less than 2^31 maximum");
+                        expr.leq(&Expr::constant(max_groups_per_slot))
+                    })
             })
             .collect()
     }
@@ -937,7 +1193,7 @@ impl<'a> IlpTranslator<'a> {
         let mut expr = Expr::<Variable>::constant(0);
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if Self::is_time_unit_in_slot(
                     week,
                     weekday,
@@ -1037,7 +1293,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
                 for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
@@ -1057,14 +1313,10 @@ impl<'a> IlpTranslator<'a> {
 
         assert!(current_period_length <= subject.period.get());
         if current_period_length < subject.period.get() {
-            expr = expr
-                + Expr::var(Variable::StudentNotInLastPeriod {
-                    subject: i,
-                    student,
-                });
+            expr.leq(&Expr::constant(1))
+        } else {
+            expr.eq(&Expr::constant(1))
         }
-
-        expr.eq(&Expr::constant(1))
     }
 
     fn build_one_interrogation_per_period_contraint_for_assigned_student(
@@ -1073,12 +1325,10 @@ impl<'a> IlpTranslator<'a> {
         subject: &Subject,
         period: std::ops::Range<u32>,
         k: usize,
-        _group: &GroupDesc,
-        student: usize,
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
                 expr = expr
                     + Expr::var(Variable::GroupInSlot {
@@ -1093,85 +1343,140 @@ impl<'a> IlpTranslator<'a> {
 
         assert!(current_period_length <= subject.period.get());
         if current_period_length < subject.period.get() {
-            expr = expr
-                + Expr::var(Variable::StudentNotInLastPeriod {
-                    subject: i,
-                    student,
-                });
+            expr.leq(&Expr::constant(1))
+        } else {
+            expr.eq(&Expr::constant(1))
         }
-
-        expr.eq(&Expr::constant(1))
     }
 
-    fn build_one_interrogation_per_period_contraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_one_interrogation_per_period_contraints_for_one_subject_period(
+        &self,
+        i: usize,
+        subject: &Subject,
+        period: std::ops::Range<u32>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for student in subject.groups.not_assigned.iter().copied() {
+            constraints.insert(
+                self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
+                    i,
+                    subject,
+                    period.clone(),
+                    student,
+                ),
+            );
+        }
+
+        for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+            if !group.students.is_empty() {
+                constraints.insert(
+                    self.build_one_interrogation_per_period_contraint_for_assigned_student(
+                        i,
+                        subject,
+                        period.clone(),
+                        k,
+                    ),
+                );
+            }
+        }
+
+        constraints
+    }
+
+    fn generate_period_list_for_range(
+        &self,
+        subject: &Subject,
+        strict: bool,
+        range: std::ops::Range<u32>,
+    ) -> Vec<std::ops::Range<u32>> {
+        let week_count = range.end - range.start;
+
+        if week_count < subject.period.get() {
+            return vec![range];
+        }
+
+        if strict {
+            (range.start..(range.end - subject.period.get() + 1))
+                .into_iter()
+                .map(|start| start..(start + subject.period.get()))
+                .collect()
+        } else {
+            let whole_period_count = week_count / subject.period.get();
+            let mut period_list: Vec<_> = (0..whole_period_count)
+                .into_iter()
+                .map(|p| {
+                    let start = range.start + p * subject.period.get();
+                    let period = start..(start + subject.period.get());
+                    period
+                })
+                .collect();
+
+            let week_remainder = week_count % subject.period.get();
+            let there_is_an_incomplete_period = week_remainder != 0;
+            if there_is_an_incomplete_period {
+                let first_week_to_add = range.end - week_remainder - subject.period.get() + 1;
+                for i in 0..week_remainder {
+                    let start = first_week_to_add + i;
+                    period_list.push(start..(start + subject.period.get()));
+                }
+            }
+
+            period_list
+        }
+    }
+
+    fn generate_period_list(&self, subject: &Subject, strict: bool) -> Vec<std::ops::Range<u32>> {
+        let mut output = Vec::new();
+
+        let mut start = 0;
+        for cut in &self.data.general.periodicity_cuts {
+            let range = start..cut.get();
+
+            output.extend(self.generate_period_list_for_range(subject, strict, range));
+
+            start = cut.get();
+        }
+
+        let week_count = self.data.general.week_count.get();
+        let range = start..week_count;
+        output.extend(self.generate_period_list_for_range(subject, strict, range));
+
+        output
+    }
+
+    fn build_one_interrogation_per_period_constraints_for_subject(
+        &self,
+        i: usize,
+        subject: &Subject,
+        strict: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        let period_list = self.generate_period_list(subject, strict);
+
+        for period in period_list {
+            constraints.extend(
+                self.build_one_interrogation_per_period_contraints_for_one_subject_period(
+                    i, subject, period,
+                ),
+            );
+        }
+
+        constraints
+    }
+
+    fn build_one_interrogation_per_period_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let whole_period_count = self.data.general.week_count.get() / subject.period.get();
-            for p in 0..whole_period_count {
-                let start = p * subject.period.get();
-                let period = start..(start + subject.period.get());
-
-                for student in subject.groups.not_assigned.iter().copied() {
-                    constraints.insert(
-                        self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
-                            i,
-                            subject,
-                            period.clone(),
-                            student,
-                        ),
-                    );
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    for student in group.students.iter().copied() {
-                        constraints.insert(
-                            self.build_one_interrogation_per_period_contraint_for_assigned_student(
-                                i,
-                                subject,
-                                period.clone(),
-                                k,
-                                group,
-                                student,
-                            ),
-                        );
-                    }
-                }
-            }
-
-            let there_is_an_incomplete_period =
-                self.data.general.week_count.get() % subject.period.get() != 0;
-            if there_is_an_incomplete_period {
-                let p = self.data.general.week_count.get() / subject.period.get();
-                let start = p * subject.period.get();
-                let period = start..self.data.general.week_count.get();
-
-                for student in subject.groups.not_assigned.iter().copied() {
-                    constraints.insert(
-                        self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
-                            i,
-                            subject,
-                            period.clone(),
-                            student,
-                        ),
-                    );
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    for student in group.students.iter().copied() {
-                        constraints.insert(
-                            self.build_one_interrogation_per_period_contraint_for_assigned_student(
-                                i,
-                                subject,
-                                period.clone(),
-                                k,
-                                group,
-                                student,
-                            ),
-                        );
-                    }
-                }
-            }
+            constraints.extend(
+                self.build_one_interrogation_per_period_constraints_for_subject(
+                    i,
+                    subject,
+                    subject.period_is_strict,
+                ),
+            );
         }
 
         constraints
@@ -1187,7 +1492,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
                 expr = expr
                     + Expr::var(Variable::GroupInSlot {
@@ -1373,7 +1678,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, _slot) in subject.slots.iter().enumerate() {
+            for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
                 for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
@@ -1417,7 +1722,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, _slot) in subject.slots.iter().enumerate() {
+            for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
                 for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
@@ -1428,183 +1733,6 @@ impl<'a> IlpTranslator<'a> {
                             );
                         }
                     }
-                }
-            }
-        }
-
-        constraints
-    }
-
-    fn build_one_periodicity_choice_per_student_constraint_for_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let mut expr = Expr::constant(0);
-
-        for week_modulo in 0..subject.period.get() {
-            expr = expr
-                + Expr::var(Variable::Periodicity {
-                    subject: i,
-                    student,
-                    week_modulo,
-                });
-        }
-
-        expr.eq(&Expr::constant(1))
-    }
-
-    fn build_one_periodicity_choice_per_student_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            if !self.subject_needs_periodicity_variables(subject) {
-                continue;
-            }
-            for student in subject.groups.students_iterator().copied() {
-                constraints.insert(
-                    self.build_one_periodicity_choice_per_student_constraint_for_student(
-                        i, subject, student,
-                    ),
-                );
-            }
-        }
-
-        constraints
-    }
-
-    fn is_periodicity_inequality_needed(&self, subject: &Subject, slot: &SlotWithTeacher) -> bool {
-        if subject.period_is_strict {
-            return true;
-        }
-        if !self.is_last_period_incomplete(subject) {
-            return false;
-        }
-
-        let full_period_count = self.data.general.week_count.get() / subject.period.get();
-        let period_number = slot.start.week / subject.period.get();
-
-        period_number + 1 >= full_period_count
-    }
-
-    fn build_periodicity_constraint_for_assigned_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let week_modulo = slot.start.week % subject.period.get();
-
-        let lhs = Expr::var(Variable::GroupInSlot {
-            subject: i,
-            slot: j,
-            group: k,
-        });
-        let rhs = Expr::var(Variable::Periodicity {
-            subject: i,
-            student,
-            week_modulo,
-        });
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_periodicity_constraint_for_not_assigned_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let week_modulo = slot.start.week % subject.period.get();
-
-        let lhs = Expr::var(Variable::DynamicGroupAssignment {
-            subject: i,
-            slot: j,
-            group: k,
-            student,
-        });
-        let rhs = Expr::var(Variable::Periodicity {
-            subject: i,
-            student,
-            week_modulo,
-        });
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_periodicity_constraint_for_incomplete_period(
-        &self,
-        i: usize,
-        subject: &Subject,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let lhs = Expr::var(Variable::StudentNotInLastPeriod {
-            subject: i,
-            student,
-        });
-
-        let mut rhs = Expr::constant(0);
-        let start = self.data.general.week_count.get() % subject.period.get();
-        let end = subject.period.get();
-        for week_modulo in start..end {
-            rhs = rhs
-                + Expr::var(Variable::Periodicity {
-                    subject: i,
-                    student,
-                    week_modulo,
-                });
-        }
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_periodicity_constraints(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
-                if !self.is_periodicity_inequality_needed(subject, slot) {
-                    continue;
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    for student in group.students.iter().copied() {
-                        constraints.insert(self.build_periodicity_constraint_for_assigned_student(
-                            i, subject, j, slot, k, student,
-                        ));
-                    }
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    if Self::is_group_fixed(group, subject) {
-                        continue;
-                    }
-                    for student in subject.groups.not_assigned.iter().copied() {
-                        constraints.insert(
-                            self.build_periodicity_constraint_for_not_assigned_student(
-                                i, subject, j, slot, k, student,
-                            ),
-                        );
-                    }
-                }
-            }
-
-            if self.is_last_period_incomplete(subject) {
-                for student in subject.groups.students_iterator().copied() {
-                    constraints.insert(
-                        self.build_periodicity_constraint_for_incomplete_period(
-                            i, subject, student,
-                        ),
-                    );
                 }
             }
         }
@@ -1625,7 +1753,7 @@ impl<'a> IlpTranslator<'a> {
                 // ignore tutorial sessions for interrogation count
                 continue;
             }
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
                 }
@@ -1706,7 +1834,7 @@ impl<'a> IlpTranslator<'a> {
                 // ignore tutorial sessions for interrogation count
                 continue;
             }
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
                 }
@@ -1831,47 +1959,21 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_max_min_balancing_from_expr(
-        &self,
-        subject: &Subject,
-        count: usize,
-        expr: Expr<Variable>,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let group_count = subject.groups.prefilled_groups.len();
-        let week_count = usize::try_from(self.data.general.week_count.get()).unwrap();
-        let period = usize::try_from(subject.period.get()).unwrap();
-        let needed_slots = (group_count * week_count) as f64 / (period as f64);
-
-        let updated_count = (count as f64) * needed_slots / (subject.slots.len() as f64);
-
-        let expected_use_per_group = updated_count / (group_count as f64);
-
-        let max_use = expected_use_per_group.ceil() as i32;
-        let min_use = expected_use_per_group.floor() as i32;
-
-        if max_use == min_use {
-            BTreeSet::from([expr.eq(&Expr::constant(max_use))])
-        } else {
-            BTreeSet::from([
-                expr.leq(&Expr::constant(max_use)),
-                expr.geq(&Expr::constant(min_use)),
-            ])
-        }
-    }
-
-    fn build_balancing_constraints_for_subject_and_group<T: BalancingData>(
+    fn build_balancing_constraints_for_subject_overall_internal_for_slot_group(
         &self,
         i: usize,
         subject: &Subject,
-        slot_type: &T,
+        j: usize,
+        week_span: u32,
+        relevant_slots: &BTreeSet<usize>,
         count: usize,
+        total_count: usize,
         k: usize,
-        _group: &GroupDesc,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
-            if !slot_type.is_slot_relevant(slot) {
+        for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
+            if !relevant_slots.contains(&j) {
                 continue;
             }
 
@@ -1883,75 +1985,512 @@ impl<'a> IlpTranslator<'a> {
                 });
         }
 
-        self.build_max_min_balancing_from_expr(subject, count, expr)
+        let period_count = (week_span as f64) / (subject.period.get() as f64);
+        let period_count_min = period_count.floor();
+        let period_count_max = period_count.ceil();
+
+        let expected_use_per_group_min = (count as f64) / (total_count as f64) * period_count_min;
+        let expected_use_per_group_max = (count as f64) / (total_count as f64) * period_count_max;
+
+        let max_use = expected_use_per_group_max.ceil() as i32;
+        let min_use = expected_use_per_group_min.floor() as i32;
+
+        let rhs_cond = Expr::var(Variable::GroupOnSlotSelection {
+            subject: i,
+            slot_selection: j,
+            group: k,
+        });
+
+        if max_use == min_use {
+            BTreeSet::from([expr.eq(&(max_use * &rhs_cond))])
+        } else {
+            BTreeSet::from([
+                expr.leq(&(max_use * &rhs_cond)),
+                expr.geq(&(min_use * &rhs_cond)),
+            ])
+        }
     }
 
-    fn build_balancing_constraints_for_subject<T: BalancingData>(
+    fn build_balancing_constraints_for_subject_overall_internal_for_slot_selection(
         &self,
         i: usize,
         subject: &Subject,
+        j: usize,
+        slot_selection: &BalancingSlotSelection,
     ) -> BTreeSet<Constraint<Variable>> {
-        let mut counts = BTreeMap::<T, usize>::new();
+        let weeks = slot_selection
+            .extract_weeks(&subject.slots_information.slots)
+            .expect("Slot number in slot selection should be valid");
+        let first_week_in_selection = weeks
+            .first()
+            .cloned()
+            .expect("There should be weeks in slot selection");
+        let last_week_in_selection = weeks
+            .last()
+            .cloned()
+            .expect("There should be weeks in slot selection");
 
-        for slot in &subject.slots {
-            let data = T::from_subject_slot(slot);
-            match counts.get_mut(&data) {
-                Some(c) => {
-                    *c += 1;
-                }
-                None => {
-                    counts.insert(data, 1);
-                }
-            }
-        }
+        let week_span = last_week_in_selection - first_week_in_selection + 1;
+
+        let total_count = slot_selection
+            .slot_groups
+            .iter()
+            .map(|slot_group| slot_group.count)
+            .sum();
 
         let mut constraints = BTreeSet::new();
 
-        for (slot_type, count) in counts {
-            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                constraints.extend(self.build_balancing_constraints_for_subject_and_group(
-                    i, subject, &slot_type, count, k, group,
-                ));
+        for slot_group in &slot_selection.slot_groups {
+            let relevant_slots = &slot_group.slots;
+            let count = slot_group.count;
+            for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                constraints.extend(
+                    self.build_balancing_constraints_for_subject_overall_internal_for_slot_group(
+                        i,
+                        subject,
+                        j,
+                        week_span,
+                        relevant_slots,
+                        count,
+                        total_count,
+                        k,
+                    ),
+                );
             }
         }
 
         constraints
     }
 
+    fn build_balancing_constraints_for_subject_overall(
+        &self,
+        i: usize,
+        subject: &Subject,
+        slot_selections: &Vec<BalancingSlotSelection>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (j, slot_selection) in slot_selections.iter().enumerate() {
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_overall_internal_for_slot_selection(
+                    i,
+                    subject,
+                    j,
+                    slot_selection,
+                ),
+            );
+        }
+
+        constraints
+    }
+
+    fn build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        relevant_slots: &BTreeSet<usize>,
+        count: usize,
+        window_size: u32,
+        range: &std::ops::Range<u32>,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for (slot_num, slot) in subject.slots_information.slots.iter().enumerate() {
+            if !range.contains(&slot.start.week) {
+                continue;
+            }
+            if !relevant_slots.contains(&slot_num) {
+                continue;
+            }
+
+            expr = expr
+                + Expr::var(Variable::GroupInSlot {
+                    subject: i,
+                    slot: slot_num,
+                    group: k,
+                });
+        }
+
+        let current_range_length = range.end - range.start;
+
+        assert!(current_range_length <= window_size);
+        let count_i32 = i32::try_from(count).expect("Slot count for balancing should fit in i32");
+        let goss = Expr::var(Variable::GroupOnSlotSelection {
+            subject: i,
+            slot_selection: j,
+            group: k,
+        });
+        if current_range_length < window_size {
+            expr.leq(&(count_i32 * goss))
+        } else {
+            expr.eq(&(count_i32 * goss))
+        }
+    }
+
+    fn generate_cuts_ranges(&self) -> Vec<std::ops::Range<u32>> {
+        let mut output = Vec::new();
+
+        let mut prev = 0;
+        for cut in &self.data.general.periodicity_cuts {
+            output.push(prev..cut.get());
+            prev = cut.get();
+        }
+
+        output.push(prev..self.data.general.week_count.get());
+
+        output
+    }
+
+    fn generate_rolling_ranges(
+        &self,
+        initial_ranges: Vec<std::ops::Range<u32>>,
+        window_size: u32,
+        period: u32,
+        start_end_inequalities: bool,
+    ) -> Vec<std::ops::Range<u32>> {
+        let mut output = Vec::new();
+
+        for range in initial_ranges {
+            let range_size = range.end - range.start;
+
+            // start (smaller than window size) ranges
+            if start_end_inequalities {
+                let max_size = range_size.min(window_size);
+                for i in (period..max_size).step_by(period.try_into().unwrap()) {
+                    let start = range.start;
+                    let end = start + i;
+                    output.push(start..end);
+                }
+            }
+
+            // mid-ranges : either all the window sized ranges or one range covering the whole period
+            if window_size >= range_size {
+                output.push(range.clone());
+            } else {
+                let start = range.start;
+                let end = range.end - window_size + 1;
+                for i in (start..end).step_by(period.try_into().unwrap()) {
+                    output.push(i..(i + window_size));
+                }
+            }
+
+            // end (smaller than window size) ranges
+            if start_end_inequalities {
+                let max_size = range_size.min(window_size);
+                for i in (period..max_size).step_by(period.try_into().unwrap()) {
+                    let start = range.end - max_size + i;
+                    let end = range.end;
+                    output.push(start..end);
+                }
+            }
+        }
+
+        output
+    }
+
+    fn generate_ranges_for_balancing(
+        &self,
+        subject: &Subject,
+        slot_selection: &BalancingSlotSelection,
+        allow_cuts: bool,
+        start_end_inequalities: bool,
+    ) -> (Vec<std::ops::Range<u32>>, u32) {
+        let total_count_usize: usize = slot_selection
+            .slot_groups
+            .iter()
+            .map(|slot_group| slot_group.count)
+            .sum();
+        let total_count = u32::try_from(total_count_usize)
+            .expect("Number of slots for balancing data should fit in u32");
+
+        let window_size = total_count * subject.period.get();
+
+        let initial_ranges = if allow_cuts {
+            self.generate_cuts_ranges()
+        } else {
+            vec![0..self.data.general.week_count.get()]
+        };
+
+        let rolling_ranges = self.generate_rolling_ranges(
+            initial_ranges,
+            window_size,
+            subject.period.get(),
+            start_end_inequalities,
+        );
+
+        let weeks = slot_selection
+            .extract_weeks(&subject.slots_information.slots)
+            .expect("Slot number in slot selection should be valid");
+        let first_week_in_selection = weeks
+            .first()
+            .cloned()
+            .expect("There should be weeks in slot selection");
+        let last_week_in_selection = weeks
+            .last()
+            .cloned()
+            .expect("There should be weeks in slot selection");
+
+        (
+            rolling_ranges
+                .into_iter()
+                .filter(|range| {
+                    (range.start >= first_week_in_selection)
+                        && (range.end <= last_week_in_selection + 1)
+                })
+                .collect(),
+            window_size,
+        )
+    }
+
+    fn build_balancing_constraints_for_subject_strict_internal_for_slot_selection(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        slot_selection: &BalancingSlotSelection,
+        allow_cuts: bool,
+        start_end_inequalities: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let (ranges, window_size) = self.generate_ranges_for_balancing(
+            subject,
+            slot_selection,
+            allow_cuts,
+            start_end_inequalities,
+        );
+
+        let mut output = BTreeSet::new();
+
+        for range in ranges {
+            for slot_group in &slot_selection.slot_groups {
+                let count = slot_group.count;
+                let relevant_slots = &slot_group.slots;
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    output.insert(
+                        self.build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_group(
+                            i,
+                            subject,
+                            j,
+                            relevant_slots,
+                            count,
+                            window_size,
+                            &range,
+                            k,
+                        )
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
+    fn build_balancing_constraints_for_subject_strict(
+        &self,
+        i: usize,
+        subject: &Subject,
+        slot_selections: &Vec<BalancingSlotSelection>,
+        allow_cuts: bool,
+        start_end_inequalities: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (j, slot_selection) in slot_selections.iter().enumerate() {
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_strict_internal_for_slot_selection(
+                    i,
+                    subject,
+                    j,
+                    slot_selection,
+                    allow_cuts,
+                    start_end_inequalities,
+                ),
+            );
+        }
+
+        constraints
+    }
+
+    fn build_balancing_constraints_for_non_consecutive_teacher_for_range_teacher_and_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        teacher: usize,
+        range: &std::ops::Range<u32>,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let mut lhs = Expr::constant(0);
+
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+            if !range.contains(&slot.start.week) {
+                continue;
+            }
+            if slot.teacher != teacher {
+                continue;
+            }
+
+            lhs = lhs
+                + Expr::var(Variable::GroupInSlot {
+                    subject: i,
+                    slot: j,
+                    group: k,
+                });
+        }
+
+        lhs.leq(&Expr::constant(1))
+    }
+
+    fn build_balancing_constraints_for_non_consecutive_teacher(
+        &self,
+        i: usize,
+        subject: &Subject,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let window_size = subject.period.get() * 2;
+
+        let ranges = (0..self.data.general.week_count.get())
+            .step_by(subject.period.get().try_into().unwrap())
+            .map(|start| {
+                let end = self.data.general.week_count.get().min(start + window_size);
+                start..end
+            });
+
+        let mut output = BTreeSet::new();
+
+        for range in ranges {
+            for teacher in 0..self.data.general.teacher_count {
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    output.insert(
+                        self.build_balancing_constraints_for_non_consecutive_teacher_for_range_teacher_and_group(
+                            i,
+                            subject,
+                            teacher,
+                            &range,
+                            k,
+                        )
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
     fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            match (
-                subject.balancing_requirements.teachers,
-                subject.balancing_requirements.timeslots,
-            ) {
-                (true, true) => {
+            let slot_selections = &subject
+                .slots_information
+                .balancing_requirements
+                .slot_selections;
+            match &subject.slots_information.balancing_requirements.constraints {
+                BalancingConstraints::OptimizeOnly => {} // Ignore, no strict constraint in this case
+                BalancingConstraints::OverallOnly => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ))
+                }
+                BalancingConstraints::Strict => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        false,
+                        false,
+                    ))
+                }
+                BalancingConstraints::StrictWithCuts => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                        false,
+                    ))
+                }
+                BalancingConstraints::StrictWithCutsAndOverall => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                        false,
+                    ));
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ));
+                }
+                BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers => {
                     constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(
-                            i,
-                            subject,
-                        )
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
                     );
                 }
-                (true, false) => {
+                BalancingConstraints::OverallAndConsecutiveDifferentTeachers => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ));
                     constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TeacherBalancing>(
-                            i, subject,
-                        ),
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
                     );
                 }
-                (false, true) => {
+                BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                        false,
+                    ));
                     constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TimeslotBalancing>(
-                            i, subject,
-                        ),
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
                     );
                 }
-                (false, false) => {
-                    // ignore, no balancing needed
+                BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                        false,
+                    ));
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ));
+                    constraints.extend(
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
+                    );
                 }
             }
+        }
+
+        constraints
+    }
+
+    fn build_balancing_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_strict(
+                    i,
+                    subject,
+                    &subject
+                        .slots_information
+                        .balancing_requirements
+                        .slot_selections,
+                    false,
+                    true,
+                ),
+            );
         }
 
         constraints
@@ -2066,7 +2605,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
-        for (l, slot) in subject.slots.iter().enumerate() {
+        for (l, slot) in subject.slots_information.slots.iter().enumerate() {
             for p in student.incompatibilities.iter().copied() {
                 let incompat = &self.data.incompatibilities[p];
                 for q in incompat.groups.iter().copied() {
@@ -2162,58 +2701,688 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_group_on_slot_selection_constraints_at_least_one_slot_in_selection(
+        &self,
+        i: usize,
+        j: usize,
+        slot_selection: &BalancingSlotSelection,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let mut expr_sum = Expr::constant(0);
+        let expr_goss = Expr::var(Variable::GroupOnSlotSelection {
+            subject: i,
+            slot_selection: j,
+            group: k,
+        });
+
+        for slot in slot_selection.extract_slots() {
+            let expr_gis = Expr::var(Variable::GroupInSlot {
+                subject: i,
+                slot,
+                group: k,
+            });
+
+            expr_sum = expr_sum + &expr_gis;
+        }
+
+        expr_goss.leq(&expr_sum)
+    }
+
+    fn build_group_on_slot_selection_constraints_slot_allowed_if_in_selection(
+        &self,
+        i: usize,
+        k: usize,
+        slot: usize,
+        slot_selections: &Vec<BalancingSlotSelection>,
+    ) -> Constraint<Variable> {
+        let mut expr_sum = Expr::constant(0);
+        let expr_gis = Expr::var(Variable::GroupInSlot {
+            subject: i,
+            slot,
+            group: k,
+        });
+
+        for (j, slot_selection) in slot_selections.iter().enumerate() {
+            if slot_selection.contains_slot(slot) {
+                let expr_goss = Expr::var(Variable::GroupOnSlotSelection {
+                    subject: i,
+                    slot_selection: j,
+                    group: k,
+                });
+
+                expr_sum = expr_sum + &expr_goss;
+            }
+        }
+
+        expr_gis.leq(&expr_sum)
+    }
+
+    fn build_group_on_slot_selection_constraints_choice_for_subject_and_group(
+        &self,
+        i: usize,
+        k: usize,
+        slot_selections: &Vec<BalancingSlotSelection>,
+    ) -> Constraint<Variable> {
+        let mut choice_expr = Expr::constant(0);
+
+        for (j, _slot_selection) in slot_selections.iter().enumerate() {
+            choice_expr = choice_expr
+                + Expr::var(Variable::GroupOnSlotSelection {
+                    subject: i,
+                    slot_selection: j,
+                    group: k,
+                });
+        }
+
+        choice_expr.eq(&Expr::constant(1))
+    }
+
+    fn build_group_on_slot_selection_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            let slot_selections = &subject
+                .slots_information
+                .balancing_requirements
+                .slot_selections;
+
+            for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                let choice_constraint = self
+                    .build_group_on_slot_selection_constraints_choice_for_subject_and_group(
+                        i,
+                        k,
+                        &slot_selections,
+                    );
+                constraints.insert(choice_constraint);
+
+                for (j, slot_selection) in slot_selections.iter().enumerate() {
+                    constraints.insert(
+                        self.build_group_on_slot_selection_constraints_at_least_one_slot_in_selection(
+                            i,
+                            j,
+                            slot_selection,
+                            k
+                        )
+                    );
+                }
+
+                for (slot, _) in subject.slots_information.slots.iter().enumerate() {
+                    constraints.insert(
+                        self.build_group_on_slot_selection_constraints_slot_allowed_if_in_selection(
+                            i,
+                            k,
+                            slot,
+                            &slot_selections,
+                        )
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
+    fn get_all_in_slot_variables_at(
+        &self,
+        student_num: usize,
+        week: u32,
+        weekday: time::Weekday,
+        at_time: time::Time,
+        not_at_time: time::Time,
+        time_resolution: u32,
+    ) -> BTreeSet<Variable> {
+        let mut output = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                continue;
+            }
+
+            let student_status = Self::get_student_status(student_num, subject);
+
+            if let StudentStatus::NotConcerned = student_status {
+                continue;
+            }
+
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+                if slot.start.weekday != weekday {
+                    continue;
+                }
+                if !at_time.fit_in(&slot.start.start_time, time_resolution) {
+                    continue;
+                }
+                if not_at_time.fit_in(&slot.start.start_time, time_resolution) {
+                    continue;
+                }
+
+                match student_status {
+                    StudentStatus::Assigned(k) => {
+                        output.insert(Variable::GroupInSlot {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                        });
+                    }
+                    StudentStatus::ToBeAssigned(ref group_list) => {
+                        for k in group_list {
+                            output.insert(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: *k,
+                                student: student_num,
+                            });
+                        }
+                    }
+                    StudentStatus::NotConcerned => {
+                        unreachable!("Last case should have already been filtered out")
+                    }
+                }
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_constraints_for_student_and_time(
+        &self,
+        student_num: usize,
+        week: u32,
+        weekday: time::Weekday,
+        time: time::Time,
+        time_resolution: u32,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let Some(half_time) = time.add(time_resolution) else {
+            // If we cannot consider two consecutives time slots
+            // it means there are no relevant constraints
+            return BTreeSet::new();
+        };
+
+        let variables_in_first_half = self.get_all_in_slot_variables_at(
+            student_num,
+            week,
+            weekday,
+            time.clone(),
+            half_time.clone(),
+            time_resolution,
+        );
+
+        let variables_in_second_half = self.get_all_in_slot_variables_at(
+            student_num,
+            week,
+            weekday,
+            half_time,
+            time,
+            time_resolution,
+        );
+
+        let mut output = BTreeSet::new();
+
+        for var1 in variables_in_first_half {
+            let v1 = Expr::var(var1.clone());
+            for var2 in &variables_in_second_half {
+                if var1.subject() == var2.subject() {
+                    // If it is the same subject, the periodicity constraints
+                    // already garantees that the two slots won't be consecutive
+                    continue;
+                }
+
+                let v2 = Expr::var(var2.clone());
+
+                let lhs = &v1 + &v2;
+                let rhs = Expr::constant(1);
+
+                let constraint = lhs.leq(&rhs);
+
+                output.insert(constraint);
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_constraints_for_student(
+        &self,
+        student_num: usize,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        let time_resolution = self.compute_needed_time_resolution();
+
+        for week in 0..self.data.general.week_count.get() {
+            for weekday in time::Weekday::iter() {
+                let init_time = time::Time::from_hm(0, 0).unwrap();
+                for time in init_time.iterate_until_end_of_day(time_resolution) {
+                    output.extend(self.build_not_consecutive_constraints_for_student_and_time(
+                        student_num,
+                        week,
+                        weekday,
+                        time,
+                        time_resolution,
+                    ));
+                }
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_for_students_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, student) in self.data.students.iter().enumerate() {
+            if student.non_consecutive_interrogations {
+                output.extend(self.build_not_consecutive_constraints_for_student(student_num));
+            }
+        }
+
+        output
+    }
+
+    fn build_not_consecutive_for_students_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            output.extend(self.build_not_consecutive_constraints_for_student(student_num));
+        }
+
+        output
+    }
+
+    fn build_interrogations_per_day_objective_terms_for_student_week_and_day(
+        &self,
+        student_num: usize,
+        week: u32,
+        day: crate::time::Weekday,
+    ) -> Expr<Variable> {
+        let mut lhs = Expr::<Variable>::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+                if slot.start.weekday != day {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student_num) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+
+                        let new_var = Variable::DynamicGroupAssignment {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                            student: student_num,
+                        };
+
+                        lhs = lhs + Expr::var(new_var);
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student_num) {
+                            let new_var = Variable::GroupInSlot {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                            };
+
+                            lhs = lhs + Expr::var(new_var);
+                        }
+                    }
+                }
+            }
+        }
+
+        lhs
+    }
+
+    fn build_interrogations_per_day_objective_terms(
+        &self,
+        cost: f64,
+    ) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let mut output = Vec::new();
+
+        let week_count = self.data.general.week_count.get();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            let mut obj_term = crate::ilp::ObjectiveTerm {
+                coef: cost,
+                exprs: BTreeSet::new(),
+            };
+
+            for week in 0..week_count {
+                for day in crate::time::Weekday::iter() {
+                    let expr = self
+                        .build_interrogations_per_day_objective_terms_for_student_week_and_day(
+                            student_num,
+                            week,
+                            day,
+                        );
+
+                    obj_term.exprs.insert(expr);
+                }
+            }
+
+            output.push(obj_term);
+        }
+
+        output
+    }
+
+    fn build_upper_bound_interrogations_per_week_objective_terms_for_student_and_week(
+        &self,
+        student_num: usize,
+        week: u32,
+    ) -> Expr<Variable> {
+        let mut lhs = Expr::<Variable>::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student_num) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+
+                        let new_var = Variable::DynamicGroupAssignment {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                            student: student_num,
+                        };
+
+                        lhs = lhs + Expr::var(new_var);
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student_num) {
+                            let new_var = Variable::GroupInSlot {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                            };
+
+                            lhs = lhs + Expr::var(new_var);
+                        }
+                    }
+                }
+            }
+        }
+
+        lhs
+    }
+
+    fn build_upper_bound_interrogations_per_week_objective_terms(
+        &self,
+        cost: f64,
+    ) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let mut output = Vec::new();
+
+        let week_count = self.data.general.week_count.get();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            let mut obj_term = crate::ilp::ObjectiveTerm {
+                coef: cost,
+                exprs: BTreeSet::new(),
+            };
+
+            for week in 0..week_count {
+                let expr = self
+                    .build_upper_bound_interrogations_per_week_objective_terms_for_student_and_week(
+                        student_num,
+                        week,
+                    );
+
+                obj_term.exprs.insert(expr);
+            }
+
+            output.push(obj_term);
+        }
+
+        output
+    }
+
+    fn build_variables(&self) -> BTreeSet<Variable> {
+        let mut output = BTreeSet::new();
+
+        output.extend(self.build_group_in_slot_variables());
+        output.extend(self.build_dynamic_group_assignment_variables());
+        output.extend(self.build_student_in_group_variables());
+        output.extend(self.build_use_grouping_variables());
+        output.extend(self.build_incompat_group_for_student_variables());
+        output.extend(self.build_group_on_slot_selection_variables());
+
+        output
+    }
+
+    fn build_objective_contribs(&self) -> BTreeMap<Variable, f64> {
+        let mut output = BTreeMap::new();
+
+        // Taking into account slots costs
+        let student_count_f64 = self.data.students.len() as f64;
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.cost == 0 {
+                    continue;
+                }
+
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    let cost_f64 = f64::from(slot.cost);
+
+                    output.insert(
+                        Variable::GroupInSlot {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                        },
+                        student_count_f64 * cost_f64,
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
+    fn constraints_to_objective_terms(
+        &self,
+        constraints: BTreeSet<Constraint<Variable>>,
+        cost: f64,
+    ) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let mut output = Vec::new();
+
+        for constraint in constraints.into_iter() {
+            let exprs = match constraint.get_sign() {
+                crate::ilp::linexpr::Sign::Equals => {
+                    let expr = constraint.get_lhs().clone();
+
+                    BTreeSet::from([expr.clone(), -expr])
+                }
+                crate::ilp::linexpr::Sign::LessThan => {
+                    let expr = constraint.get_lhs().clone();
+
+                    BTreeSet::from([expr, Expr::constant(0)])
+                }
+            };
+
+            let obj_term = crate::ilp::ObjectiveTerm { coef: cost, exprs };
+
+            output.push(obj_term);
+        }
+
+        output
+    }
+
+    fn build_objective_terms(&self) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let student_per_day_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustments
+                .max_interrogations_per_day_for_single_student,
+        );
+        let student_per_week_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustments
+                .interrogations_per_week_range_for_single_student,
+        );
+        let global_per_day_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustments
+                .max_interrogations_per_day_for_all_students,
+        );
+        let global_per_week_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustments
+                .interrogations_per_week_range_for_all_students,
+        );
+        let balancing_cost = f64::from(self.data.general.costs_adjustments.balancing);
+        let consecutive_cost = f64::from(self.data.general.costs_adjustments.consecutive_slots);
+
+        let student_count_f64 = self.data.students.len() as f64;
+
+        let mut output = Vec::new();
+
+        // Number of interrogations per day
+        let interrogations_per_day_objective_terms =
+            self.build_interrogations_per_day_objective_terms(student_per_day_cost);
+        output.extend(interrogations_per_day_objective_terms.clone());
+
+        // Global number of interrogations per day
+        output.push(crate::ilp::ObjectiveTerm {
+            coef: global_per_day_cost * student_count_f64,
+            exprs: interrogations_per_day_objective_terms
+                .into_iter()
+                .flat_map(|obj_term| obj_term.exprs)
+                .collect(),
+        });
+
+        // Stable number of interrogations per week
+        let upper_bound_interrogations_per_week_objective_terms =
+            self.build_upper_bound_interrogations_per_week_objective_terms(student_per_week_cost);
+        output.extend(upper_bound_interrogations_per_week_objective_terms.clone());
+
+        let lower_bound_interrogations_per_week_objective_terms: Vec<_> =
+            upper_bound_interrogations_per_week_objective_terms
+                .iter()
+                .map(|obj_term| crate::ilp::ObjectiveTerm {
+                    coef: obj_term.coef,
+                    exprs: obj_term.exprs.iter().map(|e| -e).collect(),
+                })
+                .collect();
+        output.extend(lower_bound_interrogations_per_week_objective_terms.clone());
+
+        // Global stable number of interrogations per week
+        output.push(crate::ilp::ObjectiveTerm {
+            coef: global_per_week_cost * student_count_f64,
+            exprs: upper_bound_interrogations_per_week_objective_terms
+                .into_iter()
+                .flat_map(|obj_term| obj_term.exprs)
+                .collect(),
+        });
+
+        output.push(crate::ilp::ObjectiveTerm {
+            coef: global_per_week_cost * student_count_f64,
+            exprs: lower_bound_interrogations_per_week_objective_terms
+                .into_iter()
+                .flat_map(|obj_term| obj_term.exprs)
+                .collect(),
+        });
+
+        // Soft constraints
+        let balancing_optimizer_constraints = self.build_balancing_optimizer();
+        output.extend(
+            self.constraints_to_objective_terms(balancing_optimizer_constraints, balancing_cost),
+        );
+
+        let not_consecutive_constraints = self.build_not_consecutive_for_students_optimizer();
+        output.extend(
+            self.constraints_to_objective_terms(not_consecutive_constraints, consecutive_cost),
+        );
+
+        output
+    }
+
+    fn build_hard_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        output.extend(self.build_at_most_max_groups_per_slot_constraints());
+        output.extend(self.build_at_most_one_interrogation_per_time_unit_constraints());
+        output.extend(self.build_one_interrogation_per_period_constraints());
+        output
+            .extend(self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints());
+        output.extend(self.build_students_per_group_count_constraints());
+        output.extend(self.build_student_in_single_group_constraints());
+        output.extend(self.build_dynamic_groups_student_in_group_constraints());
+        output.extend(self.build_dynamic_groups_group_in_slot_constraints());
+        output.extend(self.build_interrogations_per_week_constraints());
+        output.extend(self.build_max_interrogations_per_day_constraints());
+        output.extend(self.build_grouping_constraints());
+        output.extend(self.build_grouping_incompats_constraints());
+        output.extend(self.build_incompat_group_for_student_constraints());
+        output.extend(self.build_student_incompat_max_count_constraints());
+        output.extend(self.build_group_on_slot_selection_constraints());
+        output.extend(self.build_balancing_constraints());
+        output.extend(self.build_not_consecutive_for_students_constraints());
+
+        output
+    }
+
     fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
-        ProblemBuilder::new()
-            .add_variables(self.build_group_in_slot_variables())
+        //let soft_problem = self.problem_builder_soft().build();
+        //let subjects = self.data.subjects.clone();
+
+        let hard_problem_builder = ProblemBuilder::new()
+            .add_bool_variables(self.build_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_dynamic_group_assignment_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_student_in_group_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_periodicity_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_student_not_in_last_period_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_use_grouping_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_incompat_group_for_student_variables())
-            .expect("Should not have duplicates")
-            .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_one_interrogation_per_period_contraints())
-            .expect("Variables should be declared")
-            .add_constraints(
-                self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints(),
-            )
-            .expect("Variables should be declared")
-            .add_constraints(self.build_students_per_group_count_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_student_in_single_group_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_dynamic_groups_group_in_slot_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_periodicity_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_interrogations_per_week_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_max_interrogations_per_day_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_grouping_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_grouping_incompats_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_incompat_group_for_student_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_student_incompat_max_count_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_balancing_constraints())
-            .expect("Variables should be declared")
+            .add_constraints(self.build_hard_constraints())
+            .expect("Variables should be defined")
+            .add_objective_terms(self.build_objective_terms())
+            .expect("Variables should be defined")
+            .set_objective_contribs(self.build_objective_contribs())
+            .expect("Variables should be defined");
+        // Comment out for now, we are going to need this code for the linear optimization
+        /*      .eval_fn(crate::debuggable!(move |x| {
+            let bool_vars = x.get_bool_vars();
+            let i32_vars = x.get_i32_vars();
+
+            let mut manual_costs = 0.;
+            for (var, &value) in &bool_vars {
+                if let Variable::GroupInSlot {
+                    subject,
+                    slot,
+                    group: _,
+                } = var
+                {
+                    if value {
+                        manual_costs += f64::from(
+                            subjects[*subject].slots_information.slots[*slot].cost,
+                        );
+                    }
+                }
+            }
+
+            let soft_config = soft_problem
+                .config_from(bool_vars, i32_vars)
+                .expect("Variables should match");
+            // If some constraints are inequalities, this will still measure the difference to equality
+            let sq2_cost = soft_config.compute_lhs_sq_norm2();
+
+            sq2_cost + manual_costs
+        }));*/
+        hard_problem_builder
     }
 
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
@@ -2234,95 +3403,6 @@ impl<'a> IlpTranslator<'a> {
         self.problem_builder().build()
     }
 
-    fn compute_period_length(&self) -> NonZeroU32 {
-        use crate::math::lcm;
-
-        let mut result = 1;
-        for subject in &self.data.subjects {
-            result = lcm(result, subject.period.get());
-        }
-
-        NonZeroU32::new(result).unwrap()
-    }
-
-    pub fn incremental_initializer<T: GenericInitializer, S: GenericSolver>(
-        &self,
-        initializer: T,
-        solver: S,
-        max_steps: Option<usize>,
-        retries: usize,
-    ) -> IncrementalInitializer<T, S> {
-        let period_length = self.compute_period_length();
-
-        let last_period_full = (self.data.general.week_count.get() % period_length.get()) != 0;
-        let period_count = NonZeroU32::new(
-            (self.data.general.week_count.get() + period_length.get() - 1) / period_length.get(),
-        )
-        .unwrap();
-
-        let subject_week_map = self
-            .data
-            .subjects
-            .iter()
-            .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
-            .collect();
-        let subject_strictness = self
-            .data
-            .subjects
-            .iter()
-            .map(|subject| subject.period_is_strict)
-            .collect();
-        let subject_period = self
-            .data
-            .subjects
-            .iter()
-            .map(|subject| subject.period)
-            .collect();
-        let grouping_week_map = self
-            .data
-            .slot_groupings
-            .iter()
-            .map(|grouping| {
-                grouping
-                    .slots
-                    .iter()
-                    .map(|slot_ref| {
-                        self.data.subjects[slot_ref.subject].slots[slot_ref.slot]
-                            .start
-                            .week
-                    })
-                    .collect()
-            })
-            .collect();
-        let incompat_groups_week_map = self
-            .data
-            .incompatibility_groups
-            .iter()
-            .map(|incompat_group| {
-                incompat_group
-                    .slots
-                    .iter()
-                    .map(|slot| slot.start.week)
-                    .collect()
-            })
-            .collect();
-
-        IncrementalInitializer {
-            period_length,
-            last_period_full,
-            period_count,
-            subject_strictness,
-            subject_week_map,
-            subject_period,
-            grouping_week_map,
-            incompat_groups_week_map,
-            max_steps,
-            retries,
-            initializer,
-            solver,
-        }
-    }
-
     fn read_subject(
         &self,
         config: &FeasableConfig<'_, Variable>,
@@ -2341,7 +3421,7 @@ impl<'a> IlpTranslator<'a> {
 
             for student in subject.groups.not_assigned.iter().copied() {
                 if config
-                    .get(&Variable::StudentInGroup {
+                    .get_bool(&Variable::StudentInGroup {
                         subject: i,
                         student,
                         group: k,
@@ -2355,14 +3435,14 @@ impl<'a> IlpTranslator<'a> {
             groups.push(output);
         }
 
-        let mut slots = Vec::with_capacity(subject.slots.len());
+        let mut slots = Vec::with_capacity(subject.slots_information.slots.len());
 
-        for (j, _slot) in subject.slots.iter().enumerate() {
+        for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
             let mut assigned_groups = BTreeSet::new();
 
             for k in 0..subject.groups.prefilled_groups.len() {
                 if config
-                    .get(&Variable::GroupInSlot {
+                    .get_bool(&Variable::GroupInSlot {
                         subject: i,
                         slot: j,
                         group: k,
@@ -2399,259 +3479,4 @@ pub struct Colloscope {
 pub struct ColloscopeSubject {
     pub groups: Vec<BTreeSet<usize>>,
     pub slots: Vec<BTreeSet<usize>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
-    period_length: NonZeroU32,
-    last_period_full: bool,
-    period_count: NonZeroU32,
-    subject_strictness: Vec<bool>,
-    subject_week_map: Vec<Vec<u32>>,
-    subject_period: Vec<NonZeroU32>,
-    grouping_week_map: Vec<BTreeSet<u32>>,
-    incompat_groups_week_map: Vec<BTreeSet<u32>>,
-    max_steps: Option<usize>,
-    retries: usize,
-    initializer: T,
-    solver: S,
-}
-
-impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, DefaultRepr<Variable>>
-    for IncrementalInitializer<T, S>
-{
-    fn build_init_config<'a, 'b>(
-        &'a self,
-        problem: &'b Problem<Variable, DefaultRepr<Variable>>,
-    ) -> Config<'b, Variable, DefaultRepr<Variable>> {
-        let mut set_variables = BTreeMap::new();
-
-        let _ = self.build_init_config_internal(problem, &mut set_variables);
-
-        let vars: BTreeSet<_> = set_variables
-            .iter()
-            .filter_map(|(v, val)| if *val { Some(v.clone()) } else { None })
-            .collect();
-
-        problem
-            .config_from(&vars)
-            .expect("Should be valid variables")
-    }
-}
-
-impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
-    fn build_init_config_internal<'a, 'b>(
-        &'a self,
-        problem: &'b Problem<Variable, DefaultRepr<Variable>>,
-        set_variables: &mut BTreeMap<Variable, bool>,
-    ) -> Option<()> {
-        let problem_builder = problem.clone().into_builder();
-
-        let first_period_problem_no_periodicity = self.construct_period_problem(
-            problem_builder.clone().filter_variables(|v| {
-                if let Variable::Periodicity {
-                    subject: _,
-                    student: _,
-                    week_modulo: _,
-                } = v
-                {
-                    false
-                } else {
-                    true
-                }
-            }),
-            &set_variables,
-            0,
-        );
-        let first_period_config_no_periodicity =
-            self.construct_init_config(&first_period_problem_no_periodicity)?;
-        Self::update_set_variables(set_variables, &first_period_config_no_periodicity);
-
-        for period in 0..self.period_count.get() {
-            let period_problem =
-                self.construct_period_problem(problem_builder.clone(), &set_variables, period);
-
-            let partial_config = self.construct_init_config(&period_problem)?;
-            Self::update_set_variables(set_variables, &partial_config);
-        }
-
-        Some(())
-    }
-
-    fn construct_init_config<'a, 'b>(
-        &'a self,
-        problem: &'b Problem<Variable>,
-    ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
-        for _i in 0..self.retries {
-            if let Some(config) = self.construct_init_config_one_try(problem) {
-                return Some(config);
-            }
-        }
-        None
-    }
-
-    fn construct_init_config_one_try<'a, 'b>(
-        &'a self,
-        problem: &'b Problem<Variable>,
-    ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
-        let init_config = self.initializer.build_init_config(&problem);
-        self.solver
-            .restore_feasability_with_max_steps(&init_config, self.max_steps.clone())
-    }
-
-    fn update_set_variables(
-        set_variables: &mut BTreeMap<Variable, bool>,
-        config: &FeasableConfig<'_, Variable, DefaultRepr<Variable>>,
-    ) {
-        for var in config
-            .get_problem()
-            .get_variables()
-            .into_iter()
-            .chain(config.get_problem().get_constants())
-        {
-            if !set_variables.contains_key(var) {
-                set_variables.insert(
-                    var.clone(),
-                    config.get(var).expect("var should be a valid variable"),
-                );
-            }
-        }
-    }
-
-    fn is_week_in_period(&self, week: u32, period: u32) -> bool {
-        let period_for_week = week / self.period_length.get();
-
-        period_for_week == period
-    }
-
-    fn is_subject_concerned_by_period(&self, subject: usize, period: u32) -> bool {
-        for week in self.subject_week_map[subject].iter().copied() {
-            if self.is_week_in_period(week, period) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn is_grouping_concerned_by_period(&self, grouping: usize, period: u32) -> bool {
-        for week in self.grouping_week_map[grouping].iter().copied() {
-            if self.is_week_in_period(week, period) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn is_incompat_group_concerned_by_period(&self, incompat_group: usize, period: u32) -> bool {
-        for week in self.incompat_groups_week_map[incompat_group]
-            .iter()
-            .copied()
-        {
-            if self.is_week_in_period(week, period) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn are_subject_and_period_concerned_with_periodicity(
-        &self,
-        subject: usize,
-        period: u32,
-    ) -> bool {
-        if self.subject_strictness[subject] {
-            return true;
-        }
-
-        // Normally this should be true or we should not have any Periodicity variables
-        assert!(!self.last_period_full);
-
-        if period == self.period_count.get() - 1 {
-            return true;
-        }
-
-        assert!(self.period_count.get() >= 2);
-        assert!(period != self.period_count.get() - 2);
-
-        // If we are on the second to last period, we might need to fix periodicity
-        // if the penultimate subject period (which might be shorter) leaks on that period
-        (2 * self.subject_period[subject].get()) > self.period_length.get()
-    }
-
-    fn filter_relevant_variables(
-        &self,
-        problem_builder: ProblemBuilder<Variable>,
-        period: u32,
-    ) -> ProblemBuilder<Variable> {
-        problem_builder.filter_variables(|v| match v {
-            Variable::GroupInSlot {
-                subject,
-                slot,
-                group: _,
-            } => {
-                let week = self.subject_week_map[*subject][*slot];
-                self.is_week_in_period(week, period)
-            }
-            Variable::StudentNotInLastPeriod {
-                subject: _,
-                student: _,
-            } => period == self.period_count.get() - 1,
-            Variable::DynamicGroupAssignment {
-                subject,
-                slot,
-                group: _,
-                student: _,
-            } => {
-                let week = self.subject_week_map[*subject][*slot];
-                self.is_week_in_period(week, period)
-            }
-            Variable::StudentInGroup {
-                subject,
-                student: _,
-                group: _,
-            } => self.is_subject_concerned_by_period(*subject, period),
-            Variable::Periodicity {
-                subject,
-                student: _,
-                week_modulo: _,
-            } => self.are_subject_and_period_concerned_with_periodicity(*subject, period),
-            Variable::UseGrouping(grouping) => {
-                self.is_grouping_concerned_by_period(*grouping, period)
-            }
-            Variable::IncompatGroupForStudent {
-                incompat_group,
-                student: _,
-            } => self.is_incompat_group_concerned_by_period(*incompat_group, period),
-        })
-    }
-
-    fn set_relevant_variables(
-        &self,
-        mut problem_builder: ProblemBuilder<Variable>,
-        set_variables: &BTreeMap<Variable, bool>,
-    ) -> ProblemBuilder<Variable> {
-        let variables = problem_builder.get_variables().clone();
-        for var in &variables {
-            if let Some(val) = set_variables.get(var) {
-                problem_builder = problem_builder
-                    .add_constraint(crate::ilp::linexpr::Expr::var(var.clone()).eq(
-                        &crate::ilp::linexpr::Expr::constant(if *val { 1 } else { 0 }),
-                    ))
-                    .expect("Should be a valid constraint");
-            }
-        }
-        problem_builder
-    }
-
-    fn construct_period_problem(
-        &self,
-        problem_builder: ProblemBuilder<Variable>,
-        set_variables: &BTreeMap<Variable, bool>,
-        period: u32,
-    ) -> Problem<Variable> {
-        let filtered_problem = self.filter_relevant_variables(problem_builder, period);
-        self.set_relevant_variables(filtered_problem, set_variables)
-            .simplify_trivial_constraints()
-            .build()
-    }
 }

@@ -1,7 +1,4 @@
-pub mod dbg;
-pub mod initializers;
 pub mod linexpr;
-pub mod optimizers;
 pub mod random;
 pub mod solvers;
 
@@ -21,36 +18,30 @@ use mat_repr::{ConfigRepr, ProblemRepr};
 pub enum Error<V: VariableName> {
     #[error("Variable {0} is not valid for this problem")]
     InvalidVariable(V),
-    #[error("Variable {0} is actually a constant and cannot be set")]
-    ConstantNotVariable(V),
 }
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
 
-pub type EvalFn<V, P> = dbg::Debuggable<dyn Sync + Send + Fn(&FeasableConfig<V, P>) -> f64>;
-
-impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
-    fn default() -> Self {
-        crate::debuggable!(|_x| 0.)
-    }
-}
-
 pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 #[derive(Debug, Clone)]
-pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
+pub struct ObjectiveTerm<V: VariableName> {
+    pub coef: f64,
+    pub exprs: BTreeSet<linexpr::Expr<V>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProblemBuilder<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    eval_fn: EvalFn<V, P>,
     variables: BTreeSet<V>,
-    constants: BTreeMap<V, bool>,
+    objective_terms: Vec<ObjectiveTerm<V>>,
+    objective_contribs: BTreeMap<V, f64>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum VarError<V: VariableName> {
     #[error("Variable {0} already declared")]
     VariableAlreadyDeclared(V),
-    #[error("Constant {0} already declared")]
-    ConstantAlreadyDeclared(V),
 }
 
 pub type VarResult<T, V> = std::result::Result<T, VarError<V>>;
@@ -63,18 +54,18 @@ pub enum ConstraintError<V: VariableName> {
 
 pub type ConstraintResult<T, V> = std::result::Result<T, ConstraintError<V>>;
 
-impl<V: VariableName, P: ProblemRepr<V>> Default for ProblemBuilder<V, P> {
+impl<V: VariableName> Default for ProblemBuilder<V> {
     fn default() -> Self {
         ProblemBuilder {
             constraints: BTreeSet::new(),
-            eval_fn: EvalFn::default(),
             variables: BTreeSet::new(),
-            constants: BTreeMap::new(),
+            objective_terms: Vec::new(),
+            objective_contribs: BTreeMap::new(),
         }
     }
 }
 
-impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
+impl<V: VariableName> ProblemBuilder<V> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -84,11 +75,9 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         constraint: linexpr::Constraint<V>,
     ) -> ConstraintResult<Self, V> {
         let constraint_vars = constraint.variables();
-        if !self.variables.is_superset(&constraint_vars) {
-            for var in constraint_vars {
-                if !self.variables.contains(&var) {
-                    return Err(ConstraintError::UndeclaredVariable(var));
-                }
+        for var in constraint_vars {
+            if !self.variables.contains(&var) {
+                return Err(ConstraintError::UndeclaredVariable(var));
             }
         }
 
@@ -106,56 +95,76 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         Ok(self)
     }
 
-    pub fn eval_fn(mut self, func: EvalFn<V, P>) -> Self {
-        self.eval_fn = func;
-        self
-    }
-
-    fn check_var<'a, T>(&self, var: &'a T) -> VarResult<(), V>
+    pub fn add_objective_term<I>(mut self, coef: f64, exprs: I) -> ConstraintResult<Self, V>
     where
-        V: std::borrow::Borrow<T>,
-        T: Ord + ?Sized,
-        &'a T: Into<V>,
+        I: IntoIterator<Item = linexpr::Expr<V>>,
     {
-        if self.constants.contains_key(var) {
-            return Err(VarError::ConstantAlreadyDeclared(var.into()));
+        let exprs = BTreeSet::from_iter(exprs);
+        for expr in &exprs {
+            for var in expr.variables() {
+                if !self.variables.contains(&var) {
+                    return Err(ConstraintError::UndeclaredVariable(var));
+                }
+            }
         }
-        if self.variables.contains(var) {
-            return Err(VarError::VariableAlreadyDeclared(var.into()));
-        }
-        Ok(())
-    }
 
-    pub fn add_variable<T: Into<V>>(mut self, var: T) -> VarResult<Self, V> {
-        let var = var.into();
-        self.check_var(&var)?;
-        self.variables.insert(var);
+        self.objective_terms.push(ObjectiveTerm { coef, exprs });
         Ok(self)
     }
 
-    pub fn add_variables<U: Into<V>, T: IntoIterator<Item = U>>(
+    pub fn add_objective_terms<I>(mut self, obj_terms: I) -> ConstraintResult<Self, V>
+    where
+        I: IntoIterator<Item = ObjectiveTerm<V>>,
+    {
+        for obj_term in obj_terms {
+            self = self.add_objective_term(obj_term.coef, obj_term.exprs)?;
+        }
+        Ok(self)
+    }
+
+    pub fn set_objective_contrib<T>(mut self, var: T, coef: f64) -> ConstraintResult<Self, V>
+    where
+        T: Into<V>,
+    {
+        let v = var.into();
+        match self.objective_contribs.get_mut(&v) {
+            Some(val) => *val = coef,
+            None => {
+                if !self.variables.contains(&v) {
+                    return Err(ConstraintError::UndeclaredVariable(v));
+                }
+                self.objective_contribs.insert(v, coef);
+            }
+        }
+
+        Ok(self)
+    }
+
+    pub fn set_objective_contribs<I>(mut self, coefs: I) -> ConstraintResult<Self, V>
+    where
+        I: IntoIterator<Item = (V, f64)>,
+    {
+        for (v, coef) in coefs {
+            self = self.set_objective_contrib(v, coef)?;
+        }
+        Ok(self)
+    }
+
+    pub fn add_bool_variable<T: Into<V>>(mut self, var: T) -> VarResult<Self, V> {
+        let v = var.into();
+        if self.variables.contains(&v) {
+            return Err(VarError::VariableAlreadyDeclared(v.into()));
+        }
+        self.variables.insert(v);
+        Ok(self)
+    }
+
+    pub fn add_bool_variables<U: Into<V>, T: IntoIterator<Item = U>>(
         mut self,
         vars: T,
     ) -> VarResult<Self, V> {
         for var in vars {
-            self = self.add_variable(var)?;
-        }
-        Ok(self)
-    }
-
-    pub fn add_constant<T: Into<V>>(mut self, var: T, val: bool) -> VarResult<Self, V> {
-        let var = var.into();
-        self.check_var(&var)?;
-        self.constants.insert(var, val);
-        Ok(self)
-    }
-
-    pub fn add_constants<U: Into<V>, T: IntoIterator<Item = (U, bool)>>(
-        mut self,
-        vars: T,
-    ) -> VarResult<Self, V> {
-        for (var, val) in vars {
-            self = self.add_constant(var, val)?;
+            self = self.add_bool_variable(var)?;
         }
         Ok(self)
     }
@@ -164,45 +173,27 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         &self.variables
     }
 
-    pub fn build(self) -> Problem<V, P> {
+    pub fn build<P: ProblemRepr<V>>(self) -> Problem<V, P> {
         let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
         let mut variables_lookup = BTreeMap::new();
         for (i, var) in variables_vec.iter().enumerate() {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let nd_problem = P::new(&variables_vec, &self.constraints);
+        let pb_repr = P::new(&variables_vec, &self.constraints);
 
         Problem {
             variables: self.variables,
             variables_vec,
             variables_lookup,
             constraints: self.constraints,
-            constants: self.constants,
-            eval_fn: self.eval_fn,
-            pb_repr: nd_problem,
+            pb_repr,
+            objective_terms: self.objective_terms,
+            objective_contribs: self.objective_contribs,
         }
     }
 
-    pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V, P> {
-        let (constraints, constants) = Self::iterate_simplify(&self.constraints);
-
-        let variables: BTreeSet<_> = self
-            .variables
-            .iter()
-            .filter(|&x| !constants.contains_key(x))
-            .cloned()
-            .collect();
-
-        ProblemBuilder {
-            constraints,
-            eval_fn: self.eval_fn,
-            variables,
-            constants,
-        }
-    }
-
-    pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V, P>
+    pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V>
     where
         F: FnMut(&V) -> bool,
     {
@@ -213,73 +204,38 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             .filter(|c: &Constraint<V>| c.variables().iter().all(&mut predicate))
             .collect();
         let variables = self.variables.into_iter().filter(&mut predicate).collect();
-        let constants = self
-            .constants
+        let objective_terms = self
+            .objective_terms
             .into_iter()
-            .filter(|(v, _val)| predicate(v))
+            .filter_map(|obj_term| {
+                let exprs: BTreeSet<_> = obj_term
+                    .exprs
+                    .into_iter()
+                    .filter(|e| e.variables().iter().all(&mut predicate))
+                    .collect();
+
+                if exprs.is_empty() {
+                    return None;
+                }
+
+                Some(ObjectiveTerm {
+                    coef: obj_term.coef,
+                    exprs,
+                })
+            })
+            .collect();
+        let objective_contribs = self
+            .objective_contribs
+            .into_iter()
+            .filter(|(v, _c)| predicate(v))
             .collect();
 
         ProblemBuilder {
             constraints,
-            eval_fn: self.eval_fn,
             variables,
-            constants,
+            objective_terms,
+            objective_contribs,
         }
-    }
-}
-
-impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
-    fn simple_simplify(
-        constraints: &mut BTreeSet<linexpr::Constraint<V>>,
-    ) -> linexpr::SimpleSolution<V> {
-        let mut attr_opt = None;
-
-        for constraint in constraints.iter() {
-            use linexpr::SimpleSolution;
-            match constraint.simple_solve() {
-                SimpleSolution::NoSolution => {
-                    return SimpleSolution::NoSolution;
-                }
-                SimpleSolution::NotSimpleSolvable => {}
-                SimpleSolution::Solution(attr) => {
-                    attr_opt = Some((constraint.clone(), attr));
-                    break;
-                }
-            }
-        }
-
-        if let Some((c, attr)) = attr_opt {
-            constraints.remove(&c);
-
-            if let Some((v, val)) = &attr {
-                let attr_map = BTreeMap::from([(v.clone(), *val)]);
-                let output: BTreeSet<_> =
-                    constraints.iter().map(|c| c.reduced(&attr_map)).collect();
-
-                *constraints = output;
-            }
-
-            linexpr::SimpleSolution::Solution(attr)
-        } else {
-            linexpr::SimpleSolution::NotSimpleSolvable
-        }
-    }
-
-    fn iterate_simplify(
-        constraints: &BTreeSet<linexpr::Constraint<V>>,
-    ) -> (BTreeSet<linexpr::Constraint<V>>, BTreeMap<V, bool>) {
-        let mut constraints_output = constraints.clone();
-        let mut vars_output = BTreeMap::new();
-
-        while let linexpr::SimpleSolution::Solution(attr) =
-            Self::simple_simplify(&mut constraints_output)
-        {
-            if let Some((v, val)) = attr {
-                vars_output.insert(v, val);
-            }
-        }
-
-        (constraints_output, vars_output)
     }
 }
 
@@ -291,9 +247,9 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    constants: BTreeMap<V, bool>,
-    eval_fn: EvalFn<V, P>,
     pb_repr: P,
+    objective_terms: Vec<ObjectiveTerm<V>>,
+    objective_contribs: BTreeMap<V, f64>,
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
@@ -304,20 +260,21 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
         }
         write!(f, " ]\n")?;
 
-        write!(f, "constants : [")?;
-        for (i, (c, val)) in self.constants.iter().enumerate() {
-            if i != 0 {
-                write!(f, ",")?;
-            }
-            write!(f, " {} = {}", c, if *val { 1 } else { 0 })?;
-        }
-        write!(f, " ]\n")?;
-
-        write!(f, "evaluation function : {:?}\n", self.eval_fn)?;
-
-        write!(f, "constraints :")?;
+        write!(f, "constraints :\n")?;
         for (i, c) in self.constraints.iter().enumerate() {
-            write!(f, "\n{}) {}", i, c)?;
+            write!(f, "{}) {}\n", i, c)?;
+        }
+
+        write!(f, "objectives terms :\n")?;
+        for (i, o) in self.objective_terms.iter().enumerate() {
+            let strings: Vec<_> = o.exprs.iter().map(|x| x.to_string()).collect();
+            write!(
+                f,
+                "{}) coefficient: {}, expressions: {}",
+                i,
+                o.coef,
+                strings.join(", ")
+            )?;
         }
 
         Ok(())
@@ -325,40 +282,37 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
-    pub fn into_builder(self) -> ProblemBuilder<V, P> {
+    pub fn into_builder(self) -> ProblemBuilder<V> {
         ProblemBuilder {
             constraints: self.constraints,
-            eval_fn: self.eval_fn,
             variables: self.variables,
-            constants: self.constants,
+            objective_terms: self.objective_terms,
+            objective_contribs: self.objective_contribs,
         }
     }
 
     pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
-        self.config_from(&[])
+        self.config_from::<V, _>([])
             .expect("Valid variables as no variables are used")
     }
 
-    pub fn config_from<'a, 'b, U, T: IntoIterator<Item = &'b U>>(
-        &'a self,
-        vars: T,
-    ) -> Result<Config<'a, V, P>, V>
+    pub fn config_from<'a, U, I1>(&'a self, bool_vars: I1) -> Result<Config<'a, V, P>, V>
     where
-        V: std::borrow::Borrow<U>,
-        U: Ord + ?Sized + 'b,
-        &'b U: Into<V>,
+        U: Into<V>,
+        I1: IntoIterator<Item = (U, bool)>,
     {
-        let mut vars_repr = BTreeSet::new();
+        let mut vars_repr = BTreeMap::new();
 
-        for v in vars {
-            match self.variables_lookup.get(v) {
-                Some(num) => {
-                    vars_repr.insert(*num);
-                }
-                None => {
-                    return Err(Error::InvalidVariable(v.into()));
-                }
-            }
+        for (var, value) in bool_vars {
+            let v = var.into();
+
+            let num = self
+                .variables_lookup
+                .get(&v)
+                .copied()
+                .ok_or(Error::InvalidVariable(v.clone()))?;
+
+            vars_repr.insert(num, if value { 1 } else { 0 });
         }
 
         Ok(Config {
@@ -376,8 +330,12 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         &self.variables
     }
 
-    pub fn get_constants(&self) -> impl Iterator<Item = &V> {
-        self.constants.keys()
+    pub fn get_objective_terms(&self) -> &Vec<ObjectiveTerm<V>> {
+        &self.objective_terms
+    }
+
+    pub fn get_objective_contribs(&self) -> &BTreeMap<V, f64> {
+        &self.objective_contribs
     }
 }
 
@@ -418,37 +376,40 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         self.problem
     }
 
-    pub fn get<'b, T>(&self, var: &'b T) -> Result<bool, V>
+    pub fn get_bool<'b, T>(&self, var: &'b T) -> Result<bool, V>
     where
         V: std::borrow::Borrow<T>,
         T: Ord + ?Sized,
         &'b T: Into<V>,
     {
-        if let Some(val) = self.problem.constants.get(var) {
-            return Ok(*val);
-        }
-
-        let i = match self.problem.variables_lookup.get(var) {
-            Some(i) => i,
-            None => return Err(Error::InvalidVariable(var.into())),
-        };
+        let i = self
+            .problem
+            .variables_lookup
+            .get(var)
+            .ok_or(Error::InvalidVariable(var.into()))?;
         Ok(unsafe { self.cfg_repr.get_unchecked(*i) == 1 })
     }
 
-    pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
+    pub fn get_bool_vars(&self) -> BTreeMap<V, bool> {
+        let mut output = BTreeMap::new();
+        for (var, i) in &self.problem.variables_lookup {
+            let is_true = unsafe { self.cfg_repr.get_unchecked(*i) == 1 };
+            output.insert(var.clone(), is_true);
+        }
+        output
+    }
+
+    pub fn set_bool<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
     where
         V: std::borrow::Borrow<T>,
         T: Ord + ?Sized,
         &'b T: Into<V>,
     {
-        if let Some(_val) = self.problem.constants.get(var) {
-            return Err(Error::ConstantNotVariable(var.into()));
-        }
-
-        let i = match self.problem.variables_lookup.get(var) {
-            Some(i) => i,
-            None => return Err(Error::InvalidVariable(var.into())),
-        };
+        let i = self
+            .problem
+            .variables_lookup
+            .get(var)
+            .ok_or(Error::InvalidVariable(var.into()))?;
         unsafe {
             self.cfg_repr.set_unchecked(*i, if val { 1 } else { 0 });
         }
@@ -456,51 +417,19 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         Ok(())
     }
 
-    pub fn neighbour(&self, i: usize) -> Config<'a, V, P> {
-        assert!(i < self.problem.variables.len());
-
-        let cfg_repr = self.cfg_repr.neighbour(i);
-        let precomputation = self.clone_precomputation();
-
-        let mut output = Config {
-            problem: self.problem,
-            cfg_repr,
-            precomputation,
-        };
-
-        output.invalidate_precomputation(i);
-
-        output
-    }
-
-    pub fn random_neighbour<T: random::RandomGen>(
-        &self,
-        random_gen: &T,
-    ) -> Option<Config<'a, V, P>> {
-        if self.problem.variables.is_empty() {
-            return None;
-        }
-
-        let i = random_gen.rand_in_range(0..self.problem.variables.len());
-        Some(self.neighbour(i))
-    }
-
-    pub fn neighbours(&self) -> Vec<Config<'a, V, P>> {
-        (0..self.problem.variables.len())
-            .into_iter()
-            .map(|x| self.neighbour(x))
-            .collect()
-    }
-
-    pub fn max_distance_to_constraint(&self) -> f32 {
-        self.cfg_repr
-            .max_distance_to_constraint(&self.problem.pb_repr)
-    }
-
     pub fn compute_lhs(&self) -> BTreeMap<linexpr::Constraint<V>, i32> {
         let precomputation = self.get_precomputation();
         self.cfg_repr
             .compute_lhs(&self.problem.pb_repr, &*precomputation)
+    }
+
+    pub fn compute_lhs_sq_norm2(&self) -> f64 {
+        let lhs = self.compute_lhs();
+        let mut tot = 0.;
+        for (_constraint, val) in lhs {
+            tot += f64::from(val * val);
+        }
+        tot
     }
 
     pub fn is_feasable(&self) -> bool {
@@ -575,23 +504,15 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Config<'a, V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut variables: BTreeMap<_, _> = self
+        let variables_iter = self
             .problem
-            .constants
+            .variables_vec
             .iter()
-            .map(|(k, v)| (k.clone(), if *v { 1 } else { 0 }))
-            .collect();
-        variables.extend(
-            self.problem
-                .variables_vec
-                .iter()
-                .enumerate()
-                .map(|(i, var)| (var.clone(), unsafe { self.cfg_repr.get_unchecked(i) })),
-        );
+            .enumerate()
+            .map(|(i, var)| (var.clone(), unsafe { self.cfg_repr.get_unchecked(i) }));
 
         write!(f, "[ ")?;
-        let slice: Vec<_> = variables
-            .iter()
+        let slice: Vec<_> = variables_iter
             .map(|(var, val)| format!("{}: {}", var, val))
             .collect();
         write!(f, "{}", slice.join(", "))?;
@@ -661,10 +582,6 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> FeasableConfig<'a, V, P> {
 
     pub fn inner(&self) -> &Config<'a, V, P> {
         &self.0
-    }
-
-    pub fn eval(&self) -> f64 {
-        (self.0.problem.eval_fn)(self)
     }
 }
 

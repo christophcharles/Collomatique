@@ -126,16 +126,16 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
         }
     }
 
-    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config {
+    fn config_from(&self, vars: &BTreeMap<usize, i32>) -> Self::Config {
         let mut indices = vec![];
         let mut data = vec![];
 
         let p = self.leq_mat.shape().1;
 
-        for i in 0..p {
-            if vars.contains(&i) {
+        for (&i, &val) in vars {
+            if val != 0 {
                 indices.push(i);
-                data.push(1);
+                data.push(val);
             }
         }
 
@@ -191,42 +191,6 @@ impl<V: VariableName> PartialOrd for SprsConfig<V> {
 impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
     type Problem = SprsProblem<V>;
     type Precomputation = (CsVec<i32>, CsVec<i32>);
-
-    fn max_distance_to_constraint(&self, problem: &SprsProblem<V>) -> f32 {
-        let mut max_dist = 0.0f32;
-
-        let leq_column = &problem.leq_mat * &self.values + &problem.leq_constants;
-
-        for (i, v) in leq_column.iter() {
-            let slice = problem.leq_mat.slice_outer(i..i + 1);
-            let mut norm2 = 0.0f32;
-            for (v, _) in slice.iter() {
-                norm2 += ((*v) as f32).powi(2);
-            }
-            let dist = ((*v as f32) / norm2.sqrt()).min(0.0f32);
-
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-
-        let eq_column = &problem.eq_mat * &self.values + &problem.eq_constants;
-
-        for (i, v) in eq_column.iter() {
-            let slice = problem.eq_mat.slice_outer(i..i + 1);
-            let mut norm2 = 0.0f32;
-            for (v, _) in slice.iter() {
-                norm2 += ((*v) as f32).powi(2);
-            }
-            let dist = ((*v as f32) / norm2.sqrt()).abs();
-
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-
-        max_dist
-    }
 
     fn precompute(&self, problem: &Self::Problem) -> Self::Precomputation {
         let leq_column = &problem.leq_mat * &self.values + &problem.leq_constants;
@@ -332,31 +296,12 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
         true
     }
 
-    fn neighbour(&self, i: usize) -> Self {
-        self.flip(i)
-    }
-
     unsafe fn get_unchecked(&self, i: usize) -> i32 {
         self.values.get(i).copied().unwrap_or(0)
     }
 
     unsafe fn set_unchecked(&mut self, i: usize, val: i32) {
-        assert!(val >= 0);
-        assert!(val <= 1);
-
-        match self.values.get(i) {
-            Some(v) => {
-                assert!(*v == 1);
-                if val == 0 {
-                    *self = self.flip(i);
-                }
-            }
-            None => {
-                if val == 1 {
-                    *self = self.flip(i);
-                }
-            }
-        }
+        Self::change_bit(&mut self.values, i, val);
     }
 }
 
@@ -393,39 +338,5 @@ impl<V: VariableName> SprsConfig<V> {
             }
         }
         *values = CsVec::new(values.dim(), indices, data);
-    }
-
-    fn flip(&self, i: usize) -> SprsConfig<V> {
-        let mut indices = vec![];
-        let mut data = vec![];
-
-        let mut prev = 0usize;
-        for (j, v) in self.values.iter() {
-            assert!(*v == 1);
-
-            if j == i {
-                prev = j + 1;
-                continue;
-            }
-
-            if prev <= i && j > i {
-                indices.push(i);
-                data.push(1);
-            }
-
-            indices.push(j);
-            data.push(*v);
-
-            prev = j + 1;
-        }
-        if prev <= i && self.values.dim() > i {
-            indices.push(i);
-            data.push(1);
-        }
-
-        SprsConfig {
-            values: CsVec::new(self.values.dim(), indices, data),
-            _phantom: std::marker::PhantomData,
-        }
     }
 }

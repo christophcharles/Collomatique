@@ -10,9 +10,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        workspace = pkgs.callPackage ./collomatique.nix {
-          cbc = pkgs.callPackage ./cbc.nix {};
-        };
+        workspace = pkgs.callPackage ./collomatique.nix {};
       in rec {
         packages = rec {
           collomatique = workspace;

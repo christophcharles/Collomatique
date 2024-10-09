@@ -111,7 +111,7 @@ impl PythonCode {
 
                 let locals = vars.into_py_dict_bound(py);
 
-                py.run_bound(&self.code, None, Some(&locals))?;
+                py.run_bound(&self.code, Some(&locals), None)?;
 
                 PyResult::Ok(())
             })?;

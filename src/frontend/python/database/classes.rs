@@ -13,13 +13,48 @@ pub struct GeneralData {
     max_interrogations_per_day: Option<NonZeroU32>,
     #[pyo3(get, set)]
     week_count: NonZeroU32,
+    #[pyo3(get, set)]
+    periodicity_cuts: BTreeSet<NonZeroU32>,
+    #[pyo3(get, set)]
+    max_interrogations_per_day_for_single_student_cost: i32,
+    #[pyo3(get, set)]
+    max_interrogations_per_day_for_all_students_cost: i32,
+    #[pyo3(get, set)]
+    interrogations_per_week_range_for_single_student_cost: i32,
+    #[pyo3(get, set)]
+    interrogations_per_week_range_for_all_students_cost: i32,
+    #[pyo3(get, set)]
+    balancing_cost: i32,
+    #[pyo3(get, set)]
+    consecutive_slots_cost: i32,
 }
 
 #[pymethods]
 impl GeneralData {
+    #[new]
+    fn new(week_count: NonZeroU32) -> Self {
+        GeneralData {
+            interrogations_per_week_range: None,
+            max_interrogations_per_day: None,
+            week_count,
+            periodicity_cuts: BTreeSet::new(),
+            max_interrogations_per_day_for_single_student_cost: 1,
+            max_interrogations_per_day_for_all_students_cost: 1,
+            interrogations_per_week_range_for_single_student_cost: 1,
+            interrogations_per_week_range_for_all_students_cost: 1,
+            balancing_cost: 1,
+            consecutive_slots_cost: 1,
+        }
+    }
+
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let periodicity_cuts_strings: Vec<_> = self_
+            .periodicity_cuts
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
         let output = format!(
-            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {} }}",
+            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {}, periodicity_cuts = [{}], max_interrogations_per_day_for_single_student_cost = {}, max_interrogations_per_day_for_all_students_cost = {}, interrogations_per_week_range_for_single_student_cost = {}, interrogations_per_week_range_for_all_students_cost = {}, balancing_cost = {}, consecutive_slots_cost = {} }}",
             match self_.interrogations_per_week_range {
                 Some(val) => format!("{}..{}", val.0, val.1 as i64),
                 None => String::from("none"),
@@ -29,6 +64,13 @@ impl GeneralData {
                 None => String::from("none"),
             },
             self_.week_count,
+            periodicity_cuts_strings.join(","),
+            self_.max_interrogations_per_day_for_single_student_cost,
+            self_.max_interrogations_per_day_for_all_students_cost,
+            self_.interrogations_per_week_range_for_single_student_cost,
+            self_.interrogations_per_week_range_for_all_students_cost,
+            self_.balancing_cost,
+            self_.consecutive_slots_cost,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -44,6 +86,21 @@ impl From<&backend::GeneralData> for GeneralData {
                 .map(|range| (range.start, range.end)),
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
+            periodicity_cuts: value.periodicity_cuts.clone(),
+            max_interrogations_per_day_for_single_student_cost: value
+                .costs_adjustments
+                .max_interrogations_per_day_for_single_student,
+            max_interrogations_per_day_for_all_students_cost: value
+                .costs_adjustments
+                .max_interrogations_per_day_for_all_students,
+            interrogations_per_week_range_for_single_student_cost: value
+                .costs_adjustments
+                .interrogations_per_week_range_for_single_student,
+            interrogations_per_week_range_for_all_students_cost: value
+                .costs_adjustments
+                .interrogations_per_week_range_for_all_students,
+            balancing_cost: value.costs_adjustments.balancing,
+            consecutive_slots_cost: value.costs_adjustments.consecutive_slots,
         }
     }
 }
@@ -62,6 +119,19 @@ impl From<&GeneralData> for backend::GeneralData {
                 .map(|tuple| tuple.0..tuple.1),
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
+            periodicity_cuts: value.periodicity_cuts.clone(),
+            costs_adjustments: backend::CostsAdjustments {
+                max_interrogations_per_day_for_single_student: value
+                    .max_interrogations_per_day_for_single_student_cost,
+                max_interrogations_per_day_for_all_students: value
+                    .max_interrogations_per_day_for_all_students_cost,
+                interrogations_per_week_range_for_single_student: value
+                    .interrogations_per_week_range_for_single_student_cost,
+                interrogations_per_week_range_for_all_students: value
+                    .interrogations_per_week_range_for_all_students_cost,
+                balancing: value.balancing_cost,
+                consecutive_slots: value.consecutive_slots_cost,
+            },
         }
     }
 }
@@ -328,6 +398,8 @@ pub struct Student {
     email: Option<String>,
     #[pyo3(set, get)]
     phone: Option<String>,
+    #[pyo3(set, get)]
+    no_consecutive_slots: bool,
 }
 
 #[pymethods]
@@ -339,12 +411,13 @@ impl Student {
             firstname,
             email: None,
             phone: None,
+            no_consecutive_slots: false,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
-            "{{ surname = {}, firstname = {}, email = {}, phone = {} }}",
+            "{{ surname = {}, firstname = {}, email = {}, phone = {}, no_consecutive_slots = {} }}",
             self_.surname,
             self_.firstname,
             match &self_.email {
@@ -355,6 +428,7 @@ impl Student {
                 Some(phone) => phone.clone(),
                 None => "none".to_string(),
             },
+            self_.no_consecutive_slots,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -368,6 +442,7 @@ impl From<&backend::Student> for Student {
             firstname: value.firstname.clone(),
             email: value.email.clone(),
             phone: value.phone.clone(),
+            no_consecutive_slots: value.no_consecutive_slots,
         }
     }
 }
@@ -385,6 +460,7 @@ impl From<&Student> for backend::Student {
             firstname: value.firstname.clone(),
             email: value.email.clone(),
             phone: value.phone.clone(),
+            no_consecutive_slots: value.no_consecutive_slots,
         }
     }
 }
@@ -532,7 +608,7 @@ impl From<IncompatHandle> for state::IncompatHandle {
 }
 
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Weekday {
     Monday,
     Tuesday,
@@ -613,7 +689,7 @@ impl From<Weekday> for crate::time::Weekday {
 }
 
 #[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Time {
     #[pyo3(get)]
     hour: u32,
@@ -692,7 +768,7 @@ impl From<Time> for crate::time::Time {
 }
 
 #[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotStart {
     #[pyo3(set, get)]
     day: Weekday,
@@ -748,14 +824,14 @@ impl From<SlotStart> for backend::SlotStart {
     }
 }
 
-#[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncompatSlot {
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     week_pattern_handle: WeekPatternHandle,
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     start: SlotStart,
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     duration: NonZeroU32,
 }
 
@@ -825,7 +901,7 @@ pub struct Incompat {
     #[pyo3(set, get)]
     max_count: usize,
     #[pyo3(set, get)]
-    groups: BTreeSet<BTreeSet<IncompatSlot>>,
+    groups: Vec<BTreeSet<IncompatSlot>>,
 }
 
 #[pymethods]
@@ -835,7 +911,7 @@ impl Incompat {
         Incompat {
             name,
             max_count: 0,
-            groups: BTreeSet::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -1134,6 +1210,184 @@ impl From<SubjectHandle> for state::SubjectHandle {
     }
 }
 
+#[pyclass(eq, eq_int)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BalancingConstraints {
+    OptimizeOnly,
+    OverallOnly,
+    StrictWithCuts,
+    StrictWithCutsAndOverall,
+    Strict,
+    OptimizeAndConsecutiveDifferentTeachers,
+    OverallAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndOverallAndConsecutiveDifferentTeachers,
+}
+
+impl std::fmt::Display for BalancingConstraints {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                BalancingConstraints::OptimizeOnly => "OptimizeOnly",
+                BalancingConstraints::OverallOnly => "OverallOnly",
+                BalancingConstraints::StrictWithCuts => "StrictWithCuts",
+                BalancingConstraints::StrictWithCutsAndOverall => "StrictWithCutsAndOverall",
+                BalancingConstraints::Strict => "Strict",
+                BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers =>
+                    "OptimizeAndConsecutiveDifferentTeachers",
+                BalancingConstraints::OverallAndConsecutiveDifferentTeachers =>
+                    "OverallAndConsecutiveDifferentTeachers",
+                BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers =>
+                    "StrictWithCutsAndConsecutiveDifferentTeachers",
+                BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers =>
+                    "StrictWithCutsAndOverallAndConsecutiveDifferentTeachers",
+            }
+        )
+    }
+}
+
+#[pymethods]
+impl BalancingConstraints {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = self_.to_string();
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&crate::backend::BalancingConstraints> for BalancingConstraints {
+    fn from(value: &crate::backend::BalancingConstraints) -> Self {
+        use crate::backend::BalancingConstraints as BC;
+        match value {
+            BC::OptimizeOnly => BalancingConstraints::OptimizeOnly,
+            BC::OverallOnly => BalancingConstraints::OverallOnly,
+            BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
+            BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
+            BC::Strict => BalancingConstraints::Strict,
+            BC::OptimizeAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers
+            }
+            BC::OverallAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::OverallAndConsecutiveDifferentTeachers
+            }
+            BC::StrictWithCutsAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers
+            }
+            BC::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers
+            }
+        }
+    }
+}
+
+impl From<crate::backend::BalancingConstraints> for BalancingConstraints {
+    fn from(value: crate::backend::BalancingConstraints) -> Self {
+        BalancingConstraints::from(&value)
+    }
+}
+
+impl From<&BalancingConstraints> for crate::backend::BalancingConstraints {
+    fn from(value: &BalancingConstraints) -> Self {
+        use crate::backend::BalancingConstraints as BC;
+        match value {
+            BalancingConstraints::OptimizeOnly => BC::OptimizeOnly,
+            BalancingConstraints::OverallOnly => BC::OverallOnly,
+            BalancingConstraints::StrictWithCuts => BC::StrictWithCuts,
+            BalancingConstraints::StrictWithCutsAndOverall => BC::StrictWithCutsAndOverall,
+            BalancingConstraints::Strict => BC::Strict,
+            BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers => {
+                BC::OptimizeAndConsecutiveDifferentTeachers
+            }
+            BalancingConstraints::OverallAndConsecutiveDifferentTeachers => {
+                BC::OverallAndConsecutiveDifferentTeachers
+            }
+            BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers => {
+                BC::StrictWithCutsAndConsecutiveDifferentTeachers
+            }
+            BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
+                BC::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers
+            }
+        }
+    }
+}
+
+impl From<BalancingConstraints> for crate::backend::BalancingConstraints {
+    fn from(value: BalancingConstraints) -> Self {
+        crate::backend::BalancingConstraints::from(&value)
+    }
+}
+
+#[pyclass(eq, eq_int)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BalancingSlotSelections {
+    TeachersAndTimeSlots,
+    Teachers,
+    TimeSlots,
+    Manual,
+}
+
+impl std::fmt::Display for BalancingSlotSelections {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                BalancingSlotSelections::Manual => "Manual",
+                BalancingSlotSelections::Teachers => "Teachers",
+                BalancingSlotSelections::TimeSlots => "TimeSlots",
+                BalancingSlotSelections::TeachersAndTimeSlots => "TeachersAndTimeSlots",
+            }
+        )
+    }
+}
+
+#[pymethods]
+impl BalancingSlotSelections {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = self_.to_string();
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&crate::backend::BalancingSlotSelections> for BalancingSlotSelections {
+    fn from(value: &crate::backend::BalancingSlotSelections) -> Self {
+        use crate::backend::BalancingSlotSelections as BSS;
+        match value {
+            BSS::Manual => BalancingSlotSelections::Manual,
+            BSS::Teachers => BalancingSlotSelections::Teachers,
+            BSS::TimeSlots => BalancingSlotSelections::TimeSlots,
+            BSS::TeachersAndTimeSlots => BalancingSlotSelections::TeachersAndTimeSlots,
+        }
+    }
+}
+
+impl From<crate::backend::BalancingSlotSelections> for BalancingSlotSelections {
+    fn from(value: crate::backend::BalancingSlotSelections) -> Self {
+        BalancingSlotSelections::from(&value)
+    }
+}
+
+impl From<&BalancingSlotSelections> for crate::backend::BalancingSlotSelections {
+    fn from(value: &BalancingSlotSelections) -> Self {
+        use crate::backend::BalancingSlotSelections as BSS;
+        match value {
+            BalancingSlotSelections::Manual => BSS::Manual,
+            BalancingSlotSelections::Teachers => BSS::Teachers,
+            BalancingSlotSelections::TimeSlots => BSS::TimeSlots,
+            BalancingSlotSelections::TeachersAndTimeSlots => BSS::TeachersAndTimeSlots,
+        }
+    }
+}
+
+impl From<BalancingSlotSelections> for crate::backend::BalancingSlotSelections {
+    fn from(value: BalancingSlotSelections) -> Self {
+        crate::backend::BalancingSlotSelections::from(&value)
+    }
+}
+
 #[pyclass(eq)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subject {
@@ -1158,9 +1412,9 @@ pub struct Subject {
     #[pyo3(set, get)]
     max_groups_per_slot: NonZeroUsize,
     #[pyo3(set, get)]
-    balance_teachers: bool,
+    balancing_constraints: BalancingConstraints,
     #[pyo3(set, get)]
-    balance_timeslots: bool,
+    balancing_slot_selections: BalancingSlotSelections,
 }
 
 #[pymethods]
@@ -1181,14 +1435,14 @@ impl Subject {
             period_is_strict: false,
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
-            balance_teachers: false,
-            balance_timeslots: false,
+            balancing_constraints: BalancingConstraints::OptimizeOnly,
+            balancing_slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
-            "{{ name = {}, subject_group_handle = {:?}, incompat_handle = {}, group_list_handle = {}, duration = {}, students_per_group_range = {}..={}, period = {}, period_is_strict = {}, is_tutorial = {}, max_groups_per_slot = {}, balance_teachers = {}, balance_timeslots = {} }}",
+            "{{ name = {}, subject_group_handle = {:?}, incompat_handle = {}, group_list_handle = {}, duration = {}, students_per_group_range = {}..={}, period = {}, period_is_strict = {}, is_tutorial = {}, max_groups_per_slot = {}, balancing_constraints = {}, balancing_slot_selections = {} }}",
             self_.name,
             self_.subject_group_handle,
             match &self_.incompat_handle {
@@ -1214,8 +1468,8 @@ impl Subject {
             self_.period_is_strict,
             self_.is_tutorial,
             self_.max_groups_per_slot.get(),
-            self_.balance_teachers,
-            self_.balance_timeslots,
+            self_.balancing_constraints,
+            self_.balancing_slot_selections,
 
         );
 
@@ -1249,8 +1503,8 @@ impl
             period_is_strict: value.period_is_strict,
             is_tutorial: value.is_tutorial,
             max_groups_per_slot: value.max_groups_per_slot,
-            balance_teachers: value.balancing_requirements.teachers,
-            balance_timeslots: value.balancing_requirements.timeslots,
+            balancing_constraints: value.balancing_requirements.constraints.into(),
+            balancing_slot_selections: value.balancing_requirements.slot_selections.into(),
         }
     }
 }
@@ -1286,8 +1540,8 @@ impl From<&Subject>
             is_tutorial: value.is_tutorial,
             max_groups_per_slot: value.max_groups_per_slot,
             balancing_requirements: backend::BalancingRequirements {
-                teachers: value.balance_teachers,
-                timeslots: value.balance_timeslots,
+                constraints: value.balancing_constraints.into(),
+                slot_selections: value.balancing_slot_selections.into(),
             },
         }
     }
@@ -1354,6 +1608,8 @@ pub struct TimeSlot {
     week_pattern_handle: WeekPatternHandle,
     #[pyo3(set, get)]
     room: String,
+    #[pyo3(set, get)]
+    cost: u32,
 }
 
 #[pymethods]
@@ -1373,17 +1629,19 @@ impl TimeSlot {
             },
             week_pattern_handle,
             room: String::new(),
+            cost: 0,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
-            "{{ subject_handle = {:?}, teacher_handle = {:?}, start = {}, week_pattern_handle = {:?}, room = {} }}",
+            "{{ subject_handle = {:?}, teacher_handle = {:?}, start = {}, week_pattern_handle = {:?}, room = {}, cost = {} }}",
             self_.subject_handle,
             self_.teacher_handle,
             self_.start,
             self_.week_pattern_handle,
             self_.room,
+            self_.cost,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -1406,6 +1664,7 @@ impl From<&backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::
             start: value.start.clone().into(),
             week_pattern_handle: value.week_pattern_id.clone().into(),
             room: value.room.clone(),
+            cost: value.cost,
         }
     }
 }
@@ -1434,6 +1693,7 @@ impl From<&TimeSlot>
             start: value.start.clone().into(),
             week_pattern_id: value.week_pattern_handle.clone().into(),
             room: value.room.clone(),
+            cost: value.cost,
         }
     }
 }
@@ -1648,5 +1908,173 @@ impl From<&GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle
 impl From<GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle> {
     fn from(value: GroupingIncompat) -> Self {
         backend::GroupingIncompat::from(&value)
+    }
+}
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotGroup {
+    #[pyo3(set, get)]
+    count: usize,
+    #[pyo3(set, get)]
+    slots: BTreeSet<TimeSlotHandle>,
+}
+
+#[pymethods]
+impl SlotGroup {
+    #[new]
+    fn new(count: usize) -> Self {
+        SlotGroup {
+            count,
+            slots: BTreeSet::new(),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let slots_strings: Vec<_> = self_.slots.iter().map(|x| format!("{:?}", x)).collect();
+
+        let output = format!(
+            "{{ count = {}, slots = {{ {} }} }}",
+            self_.count,
+            slots_strings.join(","),
+        );
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
+    fn from(value: &backend::SlotGroup<state::TimeSlotHandle>) -> Self {
+        SlotGroup {
+            count: value.count,
+            slots: value.slots.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
+    fn from(value: backend::SlotGroup<state::TimeSlotHandle>) -> Self {
+        SlotGroup::from(&value)
+    }
+}
+
+impl From<&SlotGroup> for backend::SlotGroup<state::TimeSlotHandle> {
+    fn from(value: &SlotGroup) -> Self {
+        backend::SlotGroup {
+            count: value.count,
+            slots: value.slots.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<SlotGroup> for backend::SlotGroup<state::TimeSlotHandle> {
+    fn from(value: SlotGroup) -> Self {
+        backend::SlotGroup::from(&value)
+    }
+}
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SlotSelectionHandle {
+    pub handle: state::SlotSelectionHandle,
+}
+
+#[pymethods]
+impl SlotSelectionHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&state::SlotSelectionHandle> for SlotSelectionHandle {
+    fn from(value: &state::SlotSelectionHandle) -> Self {
+        SlotSelectionHandle {
+            handle: value.clone(),
+        }
+    }
+}
+
+impl From<state::SlotSelectionHandle> for SlotSelectionHandle {
+    fn from(value: state::SlotSelectionHandle) -> Self {
+        SlotSelectionHandle::from(&value)
+    }
+}
+
+impl From<&SlotSelectionHandle> for state::SlotSelectionHandle {
+    fn from(value: &SlotSelectionHandle) -> Self {
+        value.handle.clone()
+    }
+}
+
+impl From<SlotSelectionHandle> for state::SlotSelectionHandle {
+    fn from(value: SlotSelectionHandle) -> Self {
+        state::SlotSelectionHandle::from(&value)
+    }
+}
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotSelection {
+    #[pyo3(set, get)]
+    subject_handle: SubjectHandle,
+    #[pyo3(set, get)]
+    slot_groups: Vec<SlotGroup>,
+}
+
+#[pymethods]
+impl SlotSelection {
+    #[new]
+    fn new(subject_handle: SubjectHandle) -> Self {
+        SlotSelection {
+            subject_handle,
+            slot_groups: Vec::new(),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let slot_groups_strings: Vec<_> = self_
+            .slot_groups
+            .iter()
+            .map(|x| format!("{:?}", x))
+            .collect();
+
+        let output = format!(
+            "{{ subject_handle = {:?}, slot_groups = {{ {} }} }}",
+            self_.subject_handle,
+            slot_groups_strings.join(","),
+        );
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
+    fn from(value: &backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
+        SlotSelection {
+            subject_handle: value.subject_id.into(),
+            slot_groups: value.slot_groups.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
+    fn from(value: backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
+        SlotSelection::from(&value)
+    }
+}
+
+impl From<&SlotSelection> for backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
+    fn from(value: &SlotSelection) -> Self {
+        backend::SlotSelection {
+            subject_id: (&value.subject_handle).into(),
+            slot_groups: value.slot_groups.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<SlotSelection> for backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
+    fn from(value: SlotSelection) -> Self {
+        backend::SlotSelection::from(&value)
     }
 }

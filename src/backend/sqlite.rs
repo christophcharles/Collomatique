@@ -53,10 +53,35 @@ use sqlx::migrate::MigrateDatabase;
 use std::num::NonZeroU32;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+struct CostsAdjustmentsDb {
+    max_interrogations_per_day_for_single_student: i32,
+    max_interrogations_per_day_for_all_students: i32,
+    interrogations_per_week_range_for_single_student: i32,
+    interrogations_per_week_range_for_all_students: i32,
+    balancing: i32,
+    consecutive_slots: i32,
+}
+
+impl Default for CostsAdjustmentsDb {
+    fn default() -> Self {
+        CostsAdjustmentsDb {
+            max_interrogations_per_day_for_single_student: 1,
+            max_interrogations_per_day_for_all_students: 1,
+            interrogations_per_week_range_for_single_student: 1,
+            interrogations_per_week_range_for_all_students: 1,
+            balancing: 1,
+            consecutive_slots: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct GeneralDataDb {
     interrogations_per_week: Option<std::ops::Range<u32>>,
     max_interrogations_per_day: Option<NonZeroU32>,
     week_count: NonZeroU32,
+    periodicity_cuts: BTreeSet<NonZeroU32>,
+    costs_adjustments: CostsAdjustmentsDb,
 }
 
 impl Store {
@@ -68,13 +93,6 @@ impl Store {
     async fn fill_empty_db(pool: &SqlitePool) -> sqlx::Result<()> {
         sqlx::query(
             r#"
-CREATE TABLE "colloscopes" (
-    "colloscope_id"	INTEGER NOT NULL,
-    "name"	TEXT NOT NULL UNIQUE,
-    PRIMARY KEY("colloscope_id" AUTOINCREMENT)
-);
-INSERT INTO "colloscopes" ( "name" ) VALUES ( "Colloscope_1" );
-
 CREATE TABLE "incompats" (
     "incompat_id"	INTEGER NOT NULL,
     "name"	TEXT NOT NULL,
@@ -135,6 +153,7 @@ CREATE TABLE "students" (
     "firstname"	TEXT NOT NULL,
     "email"	TEXT,
     "phone"	TEXT,
+    "no_consecutive_slots"	INTEGER NOT NULL,
     PRIMARY KEY("student_id" AUTOINCREMENT)
 );
 
@@ -163,13 +182,13 @@ CREATE TABLE "subjects" (
 	"period_is_strict"	INTEGER NOT NULL,
 	"is_tutorial"	INTEGER NOT NULL,
 	"max_groups_per_slot"	INTEGER NOT NULL,
-	"balance_teachers"	INTEGER NOT NULL,
-	"balance_timeslots"	INTEGER NOT NULL,
 	"group_list_id"	INTEGER,
-	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	"balancing_constraints"	INTEGER NOT NULL,
+	"balancing_slot_selections"	INTEGER NOT NULL,
 	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
-	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
-	PRIMARY KEY("subject_id" AUTOINCREMENT)
+	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	PRIMARY KEY("subject_id" AUTOINCREMENT),
+	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id")
 );
 
 CREATE TABLE "groupings" (
@@ -200,6 +219,7 @@ CREATE TABLE "time_slots" (
     "start_time"	INTEGER NOT NULL,
     "week_pattern_id"	INTEGER NOT NULL,
     "room"	TEXT NOT NULL,
+    "cost"	INTEGER NOT NULL,
     FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id"),
     PRIMARY KEY("time_slot_id" AUTOINCREMENT),
     FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
@@ -254,12 +274,97 @@ CREATE TABLE "group_items" (
     FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
     PRIMARY KEY("student_id","group_list_id","group_id"),
     FOREIGN KEY ("group_list_id", "group_id") REFERENCES group_list_items("group_list_id", "group_id")
+);
+
+CREATE TABLE "colloscopes" (
+    "colloscope_id"	INTEGER NOT NULL,
+    "name"	TEXT NOT NULL,
+    PRIMARY KEY("colloscope_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "collo_subjects" (
+	"collo_subject_id"	INTEGER NOT NULL,
+	"colloscope_id"	INTEGER NOT NULL,
+	"subject_id"	INTEGER NOT NULL,
+	"group_list_name"	TEXT NOT NULL,
+	PRIMARY KEY("collo_subject_id" AUTOINCREMENT),
+	FOREIGN KEY("colloscope_id") REFERENCES "colloscopes"("colloscope_id"),
+	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	UNIQUE("colloscope_id","subject_id")
+);
+
+CREATE TABLE "collo_time_slots" (
+	"collo_time_slot_id"	INTEGER NOT NULL,
+	"collo_subject_id"	INTEGER NOT NULL,
+	"teacher_id"	INTEGER NOT NULL,
+	"start_day"	INTEGER NOT NULL,
+	"start_time"	INTEGER NOT NULL,
+	"room"	TEXT NOT NULL,
+	FOREIGN KEY("teacher_id") REFERENCES "teachers"("teacher_id"),
+	PRIMARY KEY("collo_time_slot_id" AUTOINCREMENT),
+	FOREIGN KEY("collo_subject_id") REFERENCES "collo_subjects"("collo_subject_id")
+);
+
+CREATE TABLE "collo_weeks" (
+	"collo_week_id"	INTEGER NOT NULL,
+	"collo_time_slot_id"	INTEGER NOT NULL,
+	"week"	INTEGER NOT NULL,
+	FOREIGN KEY("collo_time_slot_id") REFERENCES "collo_time_slots"("collo_time_slot_id"),
+	PRIMARY KEY("collo_week_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "collo_groups" (
+	"collo_group_id"	INTEGER NOT NULL,
+	"collo_subject_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	FOREIGN KEY("collo_subject_id") REFERENCES "collo_subjects"("collo_subject_id"),
+	PRIMARY KEY("collo_group_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "collo_week_items" (
+	"collo_week_id"	INTEGER NOT NULL,
+	"collo_group_id"	INTEGER NOT NULL,
+	FOREIGN KEY("collo_group_id") REFERENCES "collo_groups"("collo_group_id"),
+	FOREIGN KEY("collo_week_id") REFERENCES "collo_weeks"("collo_week_id")
+);
+
+CREATE TABLE "collo_group_items" (
+	"collo_group_id"	INTEGER NOT NULL,
+	"student_id"	INTEGER NOT NULL,
+	FOREIGN KEY("collo_group_id") REFERENCES "collo_groups"("collo_group_id"),
+	FOREIGN KEY("student_id") REFERENCES "students"("student_id")
+);
+
+CREATE TABLE "slot_selections" (
+	"slot_selection_id"	INTEGER NOT NULL,
+	"subject_id"	INTEGER NOT NULL,
+	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	PRIMARY KEY("slot_selection_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "slot_groups" (
+	"slot_group_id"	INTEGER NOT NULL,
+	"slot_selection_id"	INTEGER NOT NULL,
+	"count"	INTEGER NOT NULL,
+	FOREIGN KEY("slot_selection_id") REFERENCES "slot_selections"("slot_selection_id"),
+	PRIMARY KEY("slot_group_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "slot_group_items" (
+	"slot_group_item_id"	INTEGER NOT NULL,
+	"slot_group_id"	INTEGER NOT NULL,
+	"time_slot_id"	INTEGER NOT NULL,
+	FOREIGN KEY("slot_group_id") REFERENCES "slot_groups"("slot_group_id"),
+	FOREIGN KEY("time_slot_id") REFERENCES "time_slots"("time_slot_id"),
+	PRIMARY KEY("slot_group_item_id" AUTOINCREMENT)
 );"#,
         )
         .bind(serde_json::to_string(&GeneralDataDb {
             interrogations_per_week: None,
             max_interrogations_per_day: None,
             week_count: NonZeroU32::new(30).unwrap(),
+            periodicity_cuts: BTreeSet::new(),
+            costs_adjustments: CostsAdjustmentsDb::default(),
         }).expect("should serialize to valid json"))
         .execute(pool)
         .await?;
@@ -305,11 +410,13 @@ CREATE TABLE "group_items" (
 
 use super::*;
 
+mod colloscopes;
 mod group_lists;
 mod grouping_incompats;
 mod groupings;
 mod incompat_for_student;
 mod incompats;
+mod slot_selections;
 mod students;
 mod subject_group_for_student;
 mod subject_groups;
@@ -329,6 +436,8 @@ impl Storage for Store {
     type TimeSlotId = time_slots::Id;
     type GroupingId = groupings::Id;
     type GroupingIncompatId = grouping_incompats::Id;
+    type ColloscopeId = colloscopes::Id;
+    type SlotSelectionId = slot_selections::Id;
 
     type InternalError = Error;
 
@@ -340,6 +449,23 @@ impl Storage for Store {
             interrogations_per_week: general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: general_data.max_interrogations_per_day.clone(),
             week_count: general_data.week_count,
+            periodicity_cuts: general_data.periodicity_cuts.clone(),
+            costs_adjustments: CostsAdjustmentsDb {
+                max_interrogations_per_day_for_single_student: general_data
+                    .costs_adjustments
+                    .max_interrogations_per_day_for_single_student,
+                max_interrogations_per_day_for_all_students: general_data
+                    .costs_adjustments
+                    .max_interrogations_per_day_for_all_students,
+                interrogations_per_week_range_for_single_student: general_data
+                    .costs_adjustments
+                    .interrogations_per_week_range_for_single_student,
+                interrogations_per_week_range_for_all_students: general_data
+                    .costs_adjustments
+                    .interrogations_per_week_range_for_all_students,
+                balancing: general_data.costs_adjustments.balancing,
+                consecutive_slots: general_data.costs_adjustments.consecutive_slots,
+            },
         };
 
         let mut conn = self.pool.acquire().await.map_err(Error::from)?;
@@ -390,6 +516,23 @@ impl Storage for Store {
             interrogations_per_week: general_data_json.interrogations_per_week,
             max_interrogations_per_day: general_data_json.max_interrogations_per_day,
             week_count: general_data_json.week_count,
+            periodicity_cuts: general_data_json.periodicity_cuts,
+            costs_adjustments: CostsAdjustments {
+                max_interrogations_per_day_for_single_student: general_data_json
+                    .costs_adjustments
+                    .max_interrogations_per_day_for_single_student,
+                max_interrogations_per_day_for_all_students: general_data_json
+                    .costs_adjustments
+                    .max_interrogations_per_day_for_all_students,
+                interrogations_per_week_range_for_single_student: general_data_json
+                    .costs_adjustments
+                    .interrogations_per_week_range_for_single_student,
+                interrogations_per_week_range_for_all_students: general_data_json
+                    .costs_adjustments
+                    .interrogations_per_week_range_for_all_students,
+                balancing: general_data_json.costs_adjustments.balancing,
+                consecutive_slots: general_data_json.costs_adjustments.consecutive_slots,
+            },
         };
 
         Ok(general_data)
@@ -878,5 +1021,106 @@ impl Storage for Store {
         >,
     > + Send {
         incompat_for_student::get(&self.pool, student_id, incompat_id)
+    }
+
+    fn colloscopes_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::ColloscopeId,
+                Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        colloscopes::get_all(&self.pool)
+    }
+
+    fn colloscopes_get(
+        &self,
+        index: Self::ColloscopeId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+            IdError<Self::InternalError, Self::ColloscopeId>,
+        >,
+    > + Send {
+        colloscopes::get(&self.pool, index)
+    }
+
+    unsafe fn colloscopes_add_unchecked(
+        &mut self,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::ColloscopeId, Self::InternalError>,
+    > + Send {
+        colloscopes::add(&self.pool, colloscope)
+    }
+
+    unsafe fn colloscopes_remove_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        colloscopes::remove(&self.pool, index)
+    }
+
+    unsafe fn colloscopes_update_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        colloscopes::update(&self.pool, index, colloscope)
+    }
+
+    fn slot_selections_get(
+        &self,
+        index: Self::SlotSelectionId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+            IdError<Self::InternalError, Self::SlotSelectionId>,
+        >,
+    > + Send {
+        slot_selections::get(&self.pool, index)
+    }
+
+    fn slot_selections_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::SlotSelectionId, SlotSelection<Self::SubjectId, Self::TimeSlotId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        slot_selections::get_all(&self.pool)
+    }
+
+    unsafe fn slot_selections_add_unchecked(
+        &mut self,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::SlotSelectionId, Self::InternalError>,
+    > + Send {
+        slot_selections::add(&self.pool, slot_selection)
+    }
+
+    unsafe fn slot_selections_remove_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        slot_selections::remove(&self.pool, index)
+    }
+
+    unsafe fn slot_selections_update_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        slot_selections::update(&self.pool, index, slot_selection)
     }
 }

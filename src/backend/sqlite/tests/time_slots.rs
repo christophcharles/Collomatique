@@ -5,13 +5,13 @@ async fn prepare_db(pool: sqlx::SqlitePool) -> Store {
 
     let _ = sqlx::query!(
         r#"
-INSERT INTO students (surname, firstname)
-VALUES ("Roth", ""), ("Marin", ""), ("Bordes", ""), ("Bresson", ""), ("Gosset",""),
-("Martel", ""), ("Delarue", ""), ("Chauvet", ""), ("Bourdon", ""), ("Lafond", ""),
-("Rondeau", ""), ("Vigneron", ""), ("Davy", ""), ("Gosselin", ""), ("Jeannin", ""),
-("Sicard", ""), ("Mounier", ""), ("Lafon", ""), ("Brun", ""), ("Hardy", ""),
-("Girault", ""), ("Delahaye", ""), ("Levasseur", ""), ("Gonthier", "");
-        
+INSERT INTO students (surname, firstname, no_consecutive_slots)
+VALUES ("Roth", "", 0), ("Marin", "", 0), ("Bordes", "", 0), ("Bresson", "", 0), ("Gosset","", 0),
+("Martel", "", 0), ("Delarue", "", 0), ("Chauvet", "", 0), ("Bourdon", "", 0), ("Lafond", "", 0),
+("Rondeau", "", 0), ("Vigneron", "", 0), ("Davy", "", 0), ("Gosselin", "", 0), ("Jeannin", "", 0),
+("Sicard", "", 0), ("Mounier", "", 0), ("Lafon", "", 0), ("Brun", "", 0), ("Hardy", "", 0),
+("Girault", "", 0), ("Delahaye", "", 0), ("Levasseur", "", 0), ("Gonthier", "", 0);
+                
 INSERT INTO groups (name, extendable)
 VALUES ("1", 0), ("2", 0), ("3", 0), ("4", 0), ("5", 0), ("6", 0), ("7", 0), ("8", 0),
 ("5", 0), ("6", 0), ("3+7", 0), ("P", 0), ("I", 0);
@@ -54,15 +54,15 @@ VALUES (1,1,1,600,60), (2,1,0,720,60), (2, 1, 3, 720, 120), (3, 1, 0, 480, 120),
 INSERT INTO subjects
 (name, subject_group_id, incompat_id, group_list_id,
 duration, min_students_per_group, max_students_per_group, period, period_is_strict,
-is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots)
+is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections)
 VALUES
 ("HGG", 1, NULL, 2, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("ESH", 1, 1, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("Lettres-Philo", 5, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("LV2 - Espagnol", 2, 2, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("LV2 - Allemand", 2, 3, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("TP Info", 6, NULL, 3, 120, 10, 19, 2, 0, 1, 1, 0, 0);
 
 
@@ -101,16 +101,16 @@ async fn prepare_example_db(pool: sqlx::SqlitePool) -> Store {
     let _ = sqlx::query!(
         r#"
 INSERT INTO time_slots
-(subject_id, teacher_id, start_day, start_time, week_pattern_id, room)
+(subject_id, teacher_id, start_day, start_time, week_pattern_id, room, cost)
 VALUES
-(1, 1, 3, 960, 1, ""), (1, 1, 3, 1020, 2, ""),
-(2, 2, 1, 840, 1, ""), (2, 2, 1, 960, 1, ""), (2, 3, 3, 960, 1, ""), (2, 4, 3, 1020, 1, ""),
-(3, 5, 0, 840, 1, ""), (3, 5, 3, 960, 1, ""), (3, 6, 3, 960, 1, ""), (3, 7, 2, 1020, 1, ""),
-(4, 8, 0, 900, 1, ""), (4, 9, 0, 900, 1, ""), (4, 10, 2, 1020, 1, ""), (4, 11, 3, 1020, 1, ""),
-(7, 12, 0, 840, 1, ""), (7, 13, 0, 840, 1, ""), (7, 14, 1, 960, 1, ""), (7, 14, 1, 1020, 1, ""),
-(5, 15, 0, 840, 1, ""), (5, 16, 0, 900, 1, ""), (5, 17, 4, 1020, 1, ""),
-(6, 18, 3, 780, 1, ""),
-(8, 14, 2, 960, 1, ""); 
+(1, 1, 3, 960, 1, "", 0), (1, 1, 3, 1020, 2, "", 100),
+(2, 2, 1, 840, 1, "", 0), (2, 2, 1, 960, 1, "", 0), (2, 3, 3, 960, 1, "", 0), (2, 4, 3, 1020, 1, "", 0),
+(3, 5, 0, 840, 1, "", 0), (3, 5, 3, 960, 1, "", 0), (3, 6, 3, 960, 1, "", 0), (3, 7, 2, 1020, 1, "", 0),
+(4, 8, 0, 900, 1, "", 0), (4, 9, 0, 900, 1, "", 0), (4, 10, 2, 1020, 1, "", 0), (4, 11, 3, 1020, 1, "", 0),
+(7, 12, 0, 840, 1, "", 0), (7, 13, 0, 840, 1, "", 0), (7, 14, 1, 960, 1, "", 0), (7, 14, 1, 1020, 1, "", 0),
+(5, 15, 0, 840, 1, "", 0), (5, 16, 0, 900, 1, "", 0), (5, 17, 4, 1020, 1, "", 0),
+(6, 18, 3, 780, 1, "", 0),
+(8, 14, 2, 960, 1, "", 0); 
         "#
     )
     .execute(&store.pool)
@@ -138,6 +138,7 @@ async fn time_slots_get_one_1(pool: sqlx::SqlitePool) {
         },
         week_pattern_id: super::super::week_patterns::Id(1),
         room: String::from(""),
+        cost: 0,
     };
 
     assert_eq!(time_slot, time_slot_expected);
@@ -161,6 +162,7 @@ async fn time_slots_get_one_2(pool: sqlx::SqlitePool) {
         },
         week_pattern_id: super::super::week_patterns::Id(2),
         room: String::from(""),
+        cost: 100,
     };
 
     assert_eq!(time_slot, time_slot_expected);
@@ -184,6 +186,7 @@ async fn time_slots_get_one_3(pool: sqlx::SqlitePool) {
         },
         week_pattern_id: super::super::week_patterns::Id(1),
         room: String::from(""),
+        cost: 0,
     };
 
     assert_eq!(time_slot, time_slot_expected);
@@ -207,6 +210,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -220,6 +224,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(2),
                 room: String::from(""),
+                cost: 100,
             },
         ),
         (
@@ -233,6 +238,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -246,6 +252,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -259,6 +266,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -272,6 +280,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -285,6 +294,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -298,6 +308,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -311,6 +322,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -324,6 +336,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -337,6 +350,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -350,6 +364,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -363,6 +378,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -376,6 +392,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -389,6 +406,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -402,6 +420,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -415,6 +434,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -428,6 +448,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -441,6 +462,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -454,6 +476,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -467,6 +490,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -480,6 +504,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
         (
@@ -493,6 +518,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(1),
                 room: String::from(""),
+                cost: 0,
             },
         ),
     ]);
@@ -517,6 +543,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(1),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -538,11 +565,13 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
                 },
                 week_pattern_id: super::super::week_patterns::Id(2),
                 room: String::from(""),
+                cost: 100,
             },
         ),
         (
             super::super::time_slots::Id(3),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -556,6 +585,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(4),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -569,6 +599,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(6),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
@@ -582,6 +613,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(7),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -595,6 +627,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(8),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -608,6 +641,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(9),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(6),
                 start: SlotStart {
@@ -621,6 +655,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(10),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(7),
                 start: SlotStart {
@@ -634,6 +669,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(11),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(8),
                 start: SlotStart {
@@ -647,6 +683,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(12),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(9),
                 start: SlotStart {
@@ -660,6 +697,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(13),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(10),
                 start: SlotStart {
@@ -673,6 +711,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(14),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(11),
                 start: SlotStart {
@@ -686,6 +725,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(15),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(12),
                 start: SlotStart {
@@ -699,6 +739,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(16),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(13),
                 start: SlotStart {
@@ -712,6 +753,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(17),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -725,6 +767,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(18),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -738,6 +781,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(19),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(15),
                 start: SlotStart {
@@ -751,6 +795,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(20),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(16),
                 start: SlotStart {
@@ -764,6 +809,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(21),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(17),
                 start: SlotStart {
@@ -777,6 +823,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(22),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(6),
                 teacher_id: super::super::teachers::Id(18),
                 start: SlotStart {
@@ -790,6 +837,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(23),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(8),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -817,6 +865,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
     }
     let id = unsafe {
         store.time_slots_add_unchecked(&TimeSlot {
+            cost: 50,
             subject_id: super::super::subjects::Id(3),
             teacher_id: super::super::teachers::Id(4),
             start: SlotStart {
@@ -837,6 +886,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(1),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -850,6 +900,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(2),
             TimeSlot {
+                cost: 100,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -863,6 +914,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(3),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -876,6 +928,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(4),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -889,6 +942,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(6),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
@@ -902,6 +956,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(7),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -915,6 +970,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(8),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -928,6 +984,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(9),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(6),
                 start: SlotStart {
@@ -941,6 +998,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(10),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(7),
                 start: SlotStart {
@@ -954,6 +1012,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(11),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(8),
                 start: SlotStart {
@@ -967,6 +1026,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(12),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(9),
                 start: SlotStart {
@@ -980,6 +1040,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(13),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(10),
                 start: SlotStart {
@@ -993,6 +1054,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(14),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(11),
                 start: SlotStart {
@@ -1006,6 +1068,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(15),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(12),
                 start: SlotStart {
@@ -1019,6 +1082,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(16),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(13),
                 start: SlotStart {
@@ -1032,6 +1096,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(17),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1045,6 +1110,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(18),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1058,6 +1124,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(19),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(15),
                 start: SlotStart {
@@ -1071,6 +1138,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(20),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(16),
                 start: SlotStart {
@@ -1084,6 +1152,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(21),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(17),
                 start: SlotStart {
@@ -1097,6 +1166,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(22),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(6),
                 teacher_id: super::super::teachers::Id(18),
                 start: SlotStart {
@@ -1110,6 +1180,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(23),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(8),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1123,6 +1194,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(24),
             TimeSlot {
+                cost: 50,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
@@ -1147,6 +1219,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
             .time_slots_update_unchecked(
                 super::super::time_slots::Id(5),
                 &TimeSlot {
+                    cost: 25,
                     subject_id: super::super::subjects::Id(3),
                     teacher_id: super::super::teachers::Id(4),
                     start: SlotStart {
@@ -1167,6 +1240,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(1),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -1180,6 +1254,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(2),
             TimeSlot {
+                cost: 100,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -1193,6 +1268,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(3),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -1206,6 +1282,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(4),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -1219,6 +1296,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(5),
             TimeSlot {
+                cost: 25,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
@@ -1232,6 +1310,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(6),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
@@ -1245,6 +1324,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(7),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -1258,6 +1338,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(8),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -1271,6 +1352,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(9),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(6),
                 start: SlotStart {
@@ -1284,6 +1366,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(10),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(7),
                 start: SlotStart {
@@ -1297,6 +1380,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(11),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(8),
                 start: SlotStart {
@@ -1310,6 +1394,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(12),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(9),
                 start: SlotStart {
@@ -1323,6 +1408,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(13),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(10),
                 start: SlotStart {
@@ -1336,6 +1422,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(14),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(11),
                 start: SlotStart {
@@ -1349,6 +1436,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(15),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(12),
                 start: SlotStart {
@@ -1362,6 +1450,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(16),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(13),
                 start: SlotStart {
@@ -1375,6 +1464,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(17),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1388,6 +1478,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(18),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1401,6 +1492,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(19),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(15),
                 start: SlotStart {
@@ -1414,6 +1506,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(20),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(16),
                 start: SlotStart {
@@ -1427,6 +1520,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(21),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(17),
                 start: SlotStart {
@@ -1440,6 +1534,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(22),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(6),
                 teacher_id: super::super::teachers::Id(18),
                 start: SlotStart {
@@ -1453,6 +1548,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(23),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(8),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1474,6 +1570,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
 
     let id = unsafe {
         store.time_slots_add_unchecked(&TimeSlot {
+            cost: 75,
             subject_id: super::super::subjects::Id(3),
             teacher_id: super::super::teachers::Id(4),
             start: SlotStart {
@@ -1494,6 +1591,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(1),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -1507,6 +1605,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(2),
             TimeSlot {
+                cost: 100,
                 subject_id: super::super::subjects::Id(1),
                 teacher_id: super::super::teachers::Id(1),
                 start: SlotStart {
@@ -1520,6 +1619,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(3),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -1533,6 +1633,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(4),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(2),
                 start: SlotStart {
@@ -1546,6 +1647,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(5),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(3),
                 start: SlotStart {
@@ -1559,6 +1661,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(6),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(2),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
@@ -1572,6 +1675,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(7),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -1585,6 +1689,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(8),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(5),
                 start: SlotStart {
@@ -1598,6 +1703,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(9),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(6),
                 start: SlotStart {
@@ -1611,6 +1717,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(10),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(7),
                 start: SlotStart {
@@ -1624,6 +1731,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(11),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(8),
                 start: SlotStart {
@@ -1637,6 +1745,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(12),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(9),
                 start: SlotStart {
@@ -1650,6 +1759,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(13),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(10),
                 start: SlotStart {
@@ -1663,6 +1773,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(14),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(4),
                 teacher_id: super::super::teachers::Id(11),
                 start: SlotStart {
@@ -1676,6 +1787,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(15),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(12),
                 start: SlotStart {
@@ -1689,6 +1801,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(16),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(13),
                 start: SlotStart {
@@ -1702,6 +1815,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(17),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1715,6 +1829,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(18),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(7),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1728,6 +1843,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(19),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(15),
                 start: SlotStart {
@@ -1741,6 +1857,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(20),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(16),
                 start: SlotStart {
@@ -1754,6 +1871,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(21),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(5),
                 teacher_id: super::super::teachers::Id(17),
                 start: SlotStart {
@@ -1767,6 +1885,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(22),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(6),
                 teacher_id: super::super::teachers::Id(18),
                 start: SlotStart {
@@ -1780,6 +1899,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(23),
             TimeSlot {
+                cost: 0,
                 subject_id: super::super::subjects::Id(8),
                 teacher_id: super::super::teachers::Id(14),
                 start: SlotStart {
@@ -1793,6 +1913,7 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
         (
             super::super::time_slots::Id(24),
             TimeSlot {
+                cost: 75,
                 subject_id: super::super::subjects::Id(3),
                 teacher_id: super::super::teachers::Id(4),
                 start: SlotStart {
