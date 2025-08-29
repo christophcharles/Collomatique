@@ -392,7 +392,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
             ),
             Space::with_height(2),
             icon_button(
-                tools::Icon::SaveAs,
+                tools::Icon::Save,
                 button::primary,
                 "Enregistrer",
                 if state.is_saved() {
@@ -402,7 +402,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 }
             ),
             icon_button(
-                tools::Icon::SaveAs,
+                tools::Icon::Download,
                 button::primary,
                 "Enregistrer sous",
                 Some(Message::SaveAsClicked.into()),

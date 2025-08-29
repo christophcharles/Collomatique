@@ -32,13 +32,32 @@ pub fn icon_with_codepoint<'a, Message>(codepoint: char) -> Element<'a, Message>
     text(codepoint).font(ICON_FONT).into()
 }
 
+#[allow(dead_code)]
 pub enum Icon {
     Undo,
     Redo,
     Open,
     New,
-    SaveAs,
+    Save,
     Close,
+    Check,
+    Error,
+    Cogs,
+    Edit,
+    Download,
+    Delete,
+    Add,
+    SortDown,
+    SortUp,
+    SortLettersDown,
+    SortLettersUp,
+    SortNumbersDown,
+    SortNumbersUp,
+    Spinner,
+    Magic,
+    Wrench,
+    Dials,
+    Docs,
 }
 
 pub fn icon<'a, Message>(ico: Icon) -> Element<'a, Message> {
@@ -47,7 +66,25 @@ pub fn icon<'a, Message>(ico: Icon) -> Element<'a, Message> {
         Icon::Redo => '\u{E800}',
         Icon::Open => '\u{F115}',
         Icon::New => '\u{E804}',
-        Icon::SaveAs => '\u{E803}',
+        Icon::Save => '\u{E803}',
         Icon::Close => '\u{E802}',
+        Icon::Check => '\u{E805}',
+        Icon::Error => '\u{E806}',
+        Icon::Cogs => '\u{E807}',
+        Icon::Edit => '\u{E808}',
+        Icon::Download => '\u{E809}',
+        Icon::Delete => '\u{E80A}',
+        Icon::Add => '\u{E80B}',
+        Icon::SortDown => '\u{F161}',
+        Icon::SortUp => '\u{F160}',
+        Icon::SortLettersDown => '\u{F15E}',
+        Icon::SortLettersUp => '\u{F15D}',
+        Icon::SortNumbersDown => '\u{F163}',
+        Icon::SortNumbersUp => '\u{F163}',
+        Icon::Spinner => '\u{F110}',
+        Icon::Magic => '\u{F0D0}',
+        Icon::Wrench => '\u{E80C}',
+        Icon::Dials => '\u{F1DE}',
+        Icon::Docs => '\u{F0C5}',
     })
 }
