@@ -107,8 +107,8 @@ use std::num::NonZeroUsize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectWeekBlock {
-    delay: usize,
-    size: NonZeroUsize,
+    pub delay: usize,
+    pub size: NonZeroUsize,
 }
 
 impl From<SubjectPeriodicityMsg> for collomatique_state_colloscopes::SubjectPeriodicity {
