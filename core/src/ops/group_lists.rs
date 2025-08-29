@@ -199,11 +199,11 @@ impl GroupListsUpdateOp {
 
                 let mut output = vec![];
 
-                for (student_id, _group_num) in &old_group_list.prefilled_groups.student_map {
-                    if params.excluded_students.contains(student_id) {
+                for student_id in old_group_list.prefilled_groups.iter_students() {
+                    if params.excluded_students.contains(&student_id) {
                         output.push(GroupListsUpdateWarning::LoosePrefilledGroupList(
                             *group_list_id,
-                            *student_id,
+                            student_id,
                         ));
                     }
                 }
@@ -308,9 +308,9 @@ impl GroupListsUpdateOp {
 
                 let mut new_prefilled_groups = group_list.prefilled_groups.clone();
                 let mut update_prefilled_groups = false;
-                for (student_id, _group_num) in &group_list.prefilled_groups.student_map {
-                    if params.excluded_students.contains(student_id) {
-                        new_prefilled_groups.student_map.remove(student_id);
+                for student_id in group_list.prefilled_groups.iter_students() {
+                    if params.excluded_students.contains(&student_id) {
+                        new_prefilled_groups.remove_student(student_id);
                         update_prefilled_groups = true;
                     }
                 }
@@ -417,11 +417,11 @@ impl GroupListsUpdateOp {
                     return Err(PrefillGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
 
-                for (student_id, _group_num) in &prefilled_groups.student_map {
-                    if group_list.params.excluded_students.contains(student_id) {
+                for student_id in prefilled_groups.iter_students() {
+                    if group_list.params.excluded_students.contains(&student_id) {
                         return Err(PrefillGroupListError::StudentIsExcluded(
                             *group_list_id,
-                            *student_id,
+                            student_id,
                         )
                         .into());
                     }
@@ -429,9 +429,9 @@ impl GroupListsUpdateOp {
                         .get_data()
                         .get_students()
                         .student_map
-                        .contains_key(student_id)
+                        .contains_key(&student_id)
                     {
-                        return Err(PrefillGroupListError::InvalidStudentId(*student_id).into());
+                        return Err(PrefillGroupListError::InvalidStudentId(student_id).into());
                     }
                 }
 

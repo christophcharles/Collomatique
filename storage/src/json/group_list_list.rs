@@ -28,8 +28,7 @@ pub struct GroupList {
 /// JSON desc of a single group list prefilled groups
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupListPrefilledGroups {
-    #[serde(with = "serde_with::rust::maps_duplicate_key_is_error")]
-    pub student_map: BTreeMap<u64, u32>,
+    pub groups: Vec<PrefilledGroup>,
 }
 
 impl From<&collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>
@@ -37,11 +36,7 @@ impl From<&collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups
 {
     fn from(value: &collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups) -> Self {
         GroupListPrefilledGroups {
-            student_map: value
-                .student_map
-                .iter()
-                .map(|(student_id, group_num)| (student_id.inner(), *group_num))
-                .collect(),
+            groups: value.groups.iter().map(|x| x.into()).collect(),
         }
     }
 }
@@ -51,7 +46,34 @@ impl From<GroupListPrefilledGroups>
 {
     fn from(value: GroupListPrefilledGroups) -> Self {
         collomatique_state_colloscopes::group_lists::GroupListPrefilledGroupsExternalData {
-            student_map: value.student_map.clone(),
+            groups: value.groups.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+/// JSON desc of a single prefilled group
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrefilledGroup {
+    pub students: BTreeSet<u64>,
+    pub sealed: bool,
+}
+
+impl From<&collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
+    fn from(value: &collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
+        PrefilledGroup {
+            students: value.students.iter().map(|x| x.inner()).collect(),
+            sealed: value.sealed,
+        }
+    }
+}
+
+impl From<PrefilledGroup>
+    for collomatique_state_colloscopes::group_lists::PrefilledGroupExternalData
+{
+    fn from(value: PrefilledGroup) -> Self {
+        collomatique_state_colloscopes::group_lists::PrefilledGroupExternalData {
+            students: value.students,
+            sealed: value.sealed,
         }
     }
 }
