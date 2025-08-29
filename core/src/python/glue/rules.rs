@@ -39,7 +39,29 @@ impl From<RuleId> for crate::rpc::cmd_msg::MsgRuleId {
     }
 }
 
-#[pyclass]
+#[pyclass(eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rule {
+    #[pyo3(set, get)]
+    pub name: String,
+    #[pyo3(set, get)]
+    pub logic_rule: LogicRule,
+}
+
+#[pymethods]
+impl Rule {
+    #[new]
+    fn new(name: String, logic_rule: LogicRule) -> Self {
+        Rule { name, logic_rule }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+#[pyclass(eq)]
 #[derive(Clone, Debug)]
 pub enum LogicRule {
     And(Py<LogicRule>, Py<LogicRule>),
@@ -47,6 +69,47 @@ pub enum LogicRule {
     Not(Py<LogicRule>),
     Variable(slots::SlotId),
 }
+
+impl PartialEq for LogicRule {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            LogicRule::And(pl1a, pl2a) => match other {
+                LogicRule::And(pl1b, pl2b) => {
+                    let l1a = Python::with_gil(|py| pl1a.borrow(py).clone());
+                    let l2a = Python::with_gil(|py| pl2a.borrow(py).clone());
+                    let l1b = Python::with_gil(|py| pl1b.borrow(py).clone());
+                    let l2b = Python::with_gil(|py| pl2b.borrow(py).clone());
+                    ((l1a == l1b) && (l2a == l2b)) || ((l1a == l2b) && (l2a == l1b))
+                }
+                _ => false,
+            },
+            LogicRule::Or(pl1a, pl2a) => match other {
+                LogicRule::Or(pl1b, pl2b) => {
+                    let l1a = Python::with_gil(|py| pl1a.borrow(py).clone());
+                    let l2a = Python::with_gil(|py| pl2a.borrow(py).clone());
+                    let l1b = Python::with_gil(|py| pl1b.borrow(py).clone());
+                    let l2b = Python::with_gil(|py| pl2b.borrow(py).clone());
+                    ((l1a == l1b) && (l2a == l2b)) || ((l1a == l2b) && (l2a == l1b))
+                }
+                _ => false,
+            },
+            LogicRule::Not(pla) => match other {
+                LogicRule::Not(plb) => {
+                    let la = Python::with_gil(|py| pla.borrow(py).clone());
+                    let lb = Python::with_gil(|py| plb.borrow(py).clone());
+                    la == lb
+                }
+                _ => false,
+            },
+            LogicRule::Variable(id) => match other {
+                LogicRule::Variable(id2) => id == id2,
+                _ => false,
+            },
+        }
+    }
+}
+
+impl Eq for LogicRule {}
 
 #[pymethods]
 impl LogicRule {
