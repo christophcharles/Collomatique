@@ -9,6 +9,7 @@ mod file_loader;
 #[derive(Debug)]
 pub enum LoadingInput {
     Load(PathBuf),
+    StopLoading,
 
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
     Failed(PathBuf, String),
@@ -79,6 +80,9 @@ impl SimpleComponent for LoadingPanel {
                 "Ouvrir" => super::OpenAction,
             },
             section! {
+                "Fermer" => super::CloseAction
+            },
+            section! {
                 "À propos" => super::AboutAction
             }
         }
@@ -120,6 +124,10 @@ impl SimpleComponent for LoadingPanel {
                     .send(file_loader::FileLoadingInput::Load(path))
                     .unwrap();
                 self.worker = Some(worker);
+            }
+            LoadingInput::StopLoading => {
+                self.path = None;
+                self.worker = None;
             }
             LoadingInput::Failed(path, error) => {
                 if Some(&path) != self.path.as_ref() {
