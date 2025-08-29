@@ -1042,9 +1042,9 @@ async fn main() -> Result<()> {
 
     /*let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
 
-    let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
+    let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
-        100,
+        0.01,
     )
     .unwrap();
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
@@ -1072,9 +1072,9 @@ async fn main() -> Result<()> {
         );
     }*/
 
-    let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
+    let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
-        100,
+        0.01,
     )
     .unwrap();
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
