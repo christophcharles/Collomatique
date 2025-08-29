@@ -21,6 +21,7 @@ enum GuiMessage {
     EditorMessage(editor::Message),
     DialogMessage(dialogs::Message),
     FileSelected(Option<dialogs::FileDesc>),
+    FileLoaded(editor::ConnectDbResult<editor::State>),
     OpenExistingFile,
     OpenNewFile,
     GoToWelcomeScreen,
@@ -51,11 +52,18 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
         GuiMessage::WelcomeMessage(msg) => welcome::update(state, msg),
         GuiMessage::DialogMessage(msg) => dialogs::update(state, msg),
         GuiMessage::FileSelected(result) => match result {
-            Some(file_desc) => {
-                *state = GuiState::Editor(editor::State::new(file_desc.path));
+            Some(file_desc) => Task::perform(
+                editor::State::new(file_desc.create, file_desc.path),
+                GuiMessage::FileLoaded,
+            ),
+            None => Task::none(),
+        },
+        GuiMessage::FileLoaded(result) => match result {
+            Ok(editor_state) => {
+                *state = GuiState::Editor(editor_state);
                 Task::none()
             }
-            None => Task::none(),
+            Err(_e) => Task::none(),
         },
         GuiMessage::OpenExistingFile => Task::done(
             dialogs::Message::FileChooserDialog(
@@ -112,14 +120,18 @@ pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
         .subscription(exit_subscription)
         .run_with(move || {
             (
-                match &db {
-                    Some(file) => GuiState::Editor(editor::State::new(file.clone())),
-                    None => GuiState::Welcome,
-                },
-                if create && db.is_none() {
-                    iced::Task::done(GuiMessage::OpenNewFile)
+                GuiState::Welcome,
+                if let Some(file) = &db {
+                    iced::Task::done(GuiMessage::FileSelected(Some(dialogs::FileDesc {
+                        path: file.clone(),
+                        create,
+                    })))
                 } else {
-                    iced::Task::none()
+                    if create {
+                        iced::Task::done(GuiMessage::OpenNewFile)
+                    } else {
+                        iced::Task::none()
+                    }
                 },
             )
         })?;
