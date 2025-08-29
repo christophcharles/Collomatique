@@ -33,7 +33,7 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Exécuter un script Python"),
+            set_title: Some("Exécution du script Python"),
 
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {

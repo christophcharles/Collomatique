@@ -14,8 +14,8 @@ use collomatique_state_colloscopes::Data;
 
 use crate::tools;
 
+mod check_script;
 mod general_planning;
-mod run_script;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -85,7 +85,7 @@ pub struct EditorPanel {
     show_particular_panel: Option<PanelNumbers>,
 
     general_planning: Controller<general_planning::GeneralPlanning>,
-    run_script_dialog: Controller<run_script::Dialog>,
+    check_script_dialog: Controller<check_script::Dialog>,
 }
 
 impl EditorPanel {
@@ -315,7 +315,7 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(EditorUpdateOp::GeneralPlanning(op))
             });
 
-        let run_script_dialog = run_script::Dialog::builder()
+        let check_script_dialog = check_script::Dialog::builder()
             .launch(())
             .forward(sender.input_sender(), |_| EditorInput::Ignore);
 
@@ -335,7 +335,7 @@ impl Component for EditorPanel {
             pages_titles_map,
             show_particular_panel: None,
             general_planning,
-            run_script_dialog,
+            check_script_dialog,
         };
         let widgets = view_output!();
 
@@ -492,9 +492,9 @@ impl Component for EditorPanel {
             }
             EditorCommandOutput::ScriptNotChosen => {}
             EditorCommandOutput::ScriptLoaded(text) => {
-                self.run_script_dialog
+                self.check_script_dialog
                     .sender()
-                    .send(run_script::DialogInput::Show(text))
+                    .send(check_script::DialogInput::Show(text))
                     .unwrap();
             }
             EditorCommandOutput::ScriptLoadingFailed(path, error) => {
