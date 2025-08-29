@@ -13,6 +13,7 @@ use incompats::IncompatsExternalData;
 use ops::AnnotatedGroupListOp;
 use periods::{Periods, PeriodsExternalData};
 use slots::{Slots, SlotsExternalData};
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
@@ -193,6 +194,10 @@ pub enum PeriodError {
         "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed"
     )]
     PeriodStillHasNonTrivialAssignments(PeriodId, SubjectId),
+
+    /// Some non-default group list association are still present for the period
+    #[error("period id ({0:?}) has non-default group list associations and cannot be removed")]
+    PeriodStillHasNonTrivialGroupListAssociation(PeriodId),
 }
 
 /// Errors for subject operations
@@ -1625,6 +1630,10 @@ impl Data {
                             .collect(),
                     },
                 );
+                self.inner_data
+                    .group_lists
+                    .subjects_associations
+                    .insert(*period_id, BTreeMap::new());
                 Ok(())
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
@@ -1657,6 +1666,10 @@ impl Data {
                             .collect(),
                     },
                 );
+                self.inner_data
+                    .group_lists
+                    .subjects_associations
+                    .insert(*period_id, BTreeMap::new());
                 Ok(())
             }
             AnnotatedPeriodOp::Remove(period_id) => {
@@ -1698,8 +1711,24 @@ impl Data {
                     }
                 }
 
+                let subject_map = self
+                    .inner_data
+                    .group_lists
+                    .subjects_associations
+                    .get(period_id)
+                    .expect("Period id should be valid at this point");
+                if !subject_map.is_empty() {
+                    return Err(PeriodError::PeriodStillHasNonTrivialGroupListAssociation(
+                        *period_id,
+                    ));
+                }
+
                 self.inner_data.periods.ordered_period_list.remove(position);
                 self.inner_data.assignments.period_map.remove(period_id);
+                self.inner_data
+                    .group_lists
+                    .subjects_associations
+                    .remove(period_id);
 
                 Ok(())
             }
