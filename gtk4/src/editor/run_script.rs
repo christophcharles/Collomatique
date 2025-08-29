@@ -19,6 +19,7 @@ pub struct Dialog {
     hidden: bool,
     path: PathBuf,
     is_running: bool,
+    end_with_error: bool,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
@@ -103,7 +104,15 @@ impl Component for Dialog {
                         set_size_request: (50, 50),
                         set_icon_size: gtk::IconSize::Large,
                         #[watch]
-                        set_visible: !model.is_running,
+                        set_visible: !model.is_running && !model.end_with_error,
+                    },
+                    gtk::Image::from_icon_name("emblem-error-symbolic") {
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_size_request: (50, 50),
+                        set_icon_size: gtk::IconSize::Large,
+                        #[watch]
+                        set_visible: !model.is_running && model.end_with_error,
                     },
                     gtk::Label {
                         set_margin_all: 5,
@@ -180,6 +189,7 @@ impl Component for Dialog {
             warning_running,
             rpc_logger,
             is_running: false,
+            end_with_error: false,
             commands,
             adjust_scrolling: false,
             app_session: None,
@@ -201,6 +211,7 @@ impl Component for Dialog {
                 self.app_session = Some(AppSession::new(app_state));
                 self.commands.guard().clear();
                 self.is_running = true;
+                self.end_with_error = false;
                 self.rpc_logger
                     .sender()
                     .send(rpc_server::RpcLoggerInput::RunRcpEngine(
@@ -307,6 +318,7 @@ impl Component for Dialog {
                 self.is_running = false;
             }
             DialogInput::Error(error) => {
+                self.end_with_error = true;
                 self.error_dialog
                     .sender()
                     .send(error_dialog::DialogInput::Show(error))
