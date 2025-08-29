@@ -72,7 +72,7 @@ fn test_dijkstra() {
     let solution = dijkstra_solver.restore_feasability(&config);
 
     assert_eq!(
-        solution.expect("Solution found").into_inner(),
+        solution.expect("Solution should be found").into_inner(),
         pb.config_from(["x11", "y12", "y21", "x22"])
     );
 }
