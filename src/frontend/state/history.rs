@@ -5,6 +5,7 @@ use super::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedOperation {
     General(AnnotatedGeneralOperation),
+    GeneralData(backend::GeneralData),
     WeekPatterns(AnnotatedWeekPatternsOperation),
 }
 
@@ -65,6 +66,7 @@ impl AnnotatedOperation {
             Operation::General(op) => {
                 AnnotatedOperation::General(AnnotatedGeneralOperation::annotate(op))
             }
+            Operation::GeneralData(data) => AnnotatedOperation::GeneralData(data),
             Operation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 AnnotatedWeekPatternsOperation::annotate(op, handle_managers),
             ),

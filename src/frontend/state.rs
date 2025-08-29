@@ -23,6 +23,7 @@ use self::history::AggregatedOperations;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
     General(GeneralOperation),
+    GeneralData(backend::GeneralData),
     WeekPatterns(WeekPatternsOperation),
 }
 

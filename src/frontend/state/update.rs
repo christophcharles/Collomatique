@@ -355,6 +355,38 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_general_data_state<T: ManagerInternal>(
+        manager: &mut T,
+        general_data: &backend::GeneralData,
+    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        if let Some(range) = &general_data.interrogations_per_week {
+            if range.is_empty() {
+                return Err(UpdateError::InterrogationsPerWeekRangeIsEmpty);
+            }
+        }
+
+        manager
+            .get_backend_logic_mut()
+            .general_data_set(&general_data)
+            .await
+            .map_err(|e| match e {
+                backend::CheckedError::CheckFailed(data) => {
+                    let translated_data = data
+                        .into_iter()
+                        .map(|id| {
+                            manager
+                                .get_handle_managers_mut()
+                                .week_patterns
+                                .get_handle(id)
+                        })
+                        .collect();
+                    UpdateError::WeekPatternsNeedTruncating(translated_data)
+                }
+                backend::CheckedError::InternalError(int_error) => UpdateError::Internal(int_error),
+            })?;
+        Ok(())
+    }
+
     pub async fn update_week_patterns_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedWeekPatternsOperation,
@@ -459,6 +491,9 @@ pub(super) mod private {
     ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
             AnnotatedOperation::General(op) => update_general_state(manager, op).await?,
+            AnnotatedOperation::GeneralData(data) => {
+                update_general_data_state(manager, data).await?
+            }
             AnnotatedOperation::WeekPatterns(op) => update_week_patterns_state(manager, op).await?,
         }
         Ok(())
@@ -532,6 +567,12 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_general_data<T: ManagerInternal>(
+        manager: &T,
+    ) -> Result<backend::GeneralData, <T::Storage as backend::Storage>::InternalError> {
+        manager.get_backend_logic().general_data_get().await
+    }
+
     pub async fn build_backward_week_patterns_op<T: ManagerInternal>(
         manager: &T,
         op: &AnnotatedWeekPatternsOperation,
@@ -589,6 +630,9 @@ pub(super) mod private {
         let backward = match &forward {
             AnnotatedOperation::General(op) => {
                 AnnotatedOperation::General(build_backward_general_op(manager, op).await?)
+            }
+            AnnotatedOperation::GeneralData(_data) => {
+                AnnotatedOperation::GeneralData(build_backward_general_data(manager).await?)
             }
             AnnotatedOperation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 build_backward_week_patterns_op(manager, op).await?,
