@@ -83,7 +83,46 @@ impl StudentsUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateStudent(student_id, student) => {
-                let result = data
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return Err(UpdateStudentError::InvalidStudentId(*student_id).into());
+                };
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if old_student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    if !student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
+                    {
+                        if excluded_students.contains(student_id) {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Assignment(
+                                        collomatique_state_colloscopes::AssignmentOp::Assign(
+                                            *period_id,
+                                            *student_id,
+                                            *subject_id,
+                                            true,
+                                        ),
+                                    ),
+                                    "Restaurer l'état par défaut sur une affectation de l'élève"
+                                        .into(),
+                                )
+                                .expect("All data should be valid at this point");
+
+                            assert!(result.is_none());
+                        }
+                    }
+                }
+
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Update(
@@ -91,7 +130,7 @@ impl StudentsUpdateOp {
                                 student.clone(),
                             ),
                         ),
-                        self.get_desc(),
+                        "Mise à jour effective de l'élève".into(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Student(se) = e {
@@ -114,10 +153,37 @@ impl StudentsUpdateOp {
 
                 assert!(result.is_none());
 
+                *data = session.commit(self.get_desc());
+
                 Ok(None)
             }
             Self::DeleteStudent(student_id) => {
                 let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
+                    {
+                        if excluded_students.contains(student_id) {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Assignment(
+                                        collomatique_state_colloscopes::AssignmentOp::Assign(
+                                            *period_id,
+                                            *student_id,
+                                            *subject_id,
+                                            true,
+                                        ),
+                                    ),
+                                    "Restaurer l'état par défaut sur une affectation de l'élève"
+                                        .into(),
+                                )
+                                .expect("All data should be valid at this point");
+
+                            assert!(result.is_none());
+                        }
+                    }
+                }
 
                 let result = session
                     .apply(
