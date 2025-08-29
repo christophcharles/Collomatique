@@ -224,14 +224,16 @@ async fn subject_group_for_student_get(pool: sqlx::SqlitePool) {
 async fn subject_group_for_student_set(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .subject_group_for_student_set(
-            super::super::students::Id(5),
-            super::super::subject_groups::Id(1),
-            Some(super::super::subjects::Id(1)),
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .subject_group_for_student_set_unchecked(
+                super::super::students::Id(5),
+                super::super::subject_groups::Id(1),
+                Some(super::super::subjects::Id(1)),
+            )
+            .await
+            .unwrap();
+    }
 
     let id = store
         .subject_group_for_student_get(
@@ -243,14 +245,16 @@ async fn subject_group_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(id, Some(super::super::subjects::Id(1)));
 
-    store
-        .subject_group_for_student_set(
-            super::super::students::Id(10),
-            super::super::subject_groups::Id(6),
-            None,
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .subject_group_for_student_set_unchecked(
+                super::super::students::Id(10),
+                super::super::subject_groups::Id(6),
+                None,
+            )
+            .await
+            .unwrap();
+    }
 
     let id = store
         .subject_group_for_student_get(
@@ -262,14 +266,16 @@ async fn subject_group_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(id, None);
 
-    store
-        .subject_group_for_student_set(
-            super::super::students::Id(24),
-            super::super::subject_groups::Id(6),
-            Some(super::super::subjects::Id(8)),
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .subject_group_for_student_set_unchecked(
+                super::super::students::Id(24),
+                super::super::subject_groups::Id(6),
+                Some(super::super::subjects::Id(8)),
+            )
+            .await
+            .unwrap();
+    }
 
     let id = store
         .subject_group_for_student_get(
