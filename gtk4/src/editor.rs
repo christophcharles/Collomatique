@@ -178,7 +178,7 @@ impl SimpleAsyncComponent for EditorPanel {
                 //sender.input(Msg::Increment);
             })
         };
-        let close_action: RelmAction<RedoAction> = {
+        let close_action: RelmAction<CloseAction> = {
             RelmAction::new_stateless(move |_| {
                 //sender.input(Msg::Increment);
             })
