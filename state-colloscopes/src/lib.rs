@@ -68,6 +68,14 @@ pub struct Data {
     student_list: BTreeMap<StudentId, PersonWithContact>,
 }
 
+impl PartialEq for Data {
+    fn eq(&self, other: &Self) -> bool {
+        self.student_list == other.student_list
+    }
+}
+
+impl Eq for Data {}
+
 use thiserror::Error;
 
 /// Errors for colloscopes modification
