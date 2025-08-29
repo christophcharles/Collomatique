@@ -30,6 +30,7 @@ async fn general_data_get_1(pool: SqlitePool) {
         max_interrogations_per_day: None,
         week_count: NonZeroU32::new(30).unwrap(),
         periodicity_cuts: BTreeSet::new(),
+        costs_adjustements: CostsAdjustements::default(),
     };
 
     assert_eq!(general_data, general_data_expected);
@@ -57,6 +58,7 @@ WHERE id = 1
         max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
         week_count: NonZeroU32::new(25).unwrap(),
         periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
+        costs_adjustements: CostsAdjustements::default(),
     };
 
     assert_eq!(general_data, general_data_expected);
@@ -72,6 +74,7 @@ async fn general_data_set(pool: SqlitePool) {
             max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
             week_count: NonZeroU32::new(25).unwrap(),
             periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
+            costs_adjustements: CostsAdjustements::default(),
         })
     }
     .await
@@ -84,6 +87,7 @@ async fn general_data_set(pool: SqlitePool) {
         max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
         week_count: NonZeroU32::new(25).unwrap(),
         periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
+        costs_adjustements: CostsAdjustements::default(),
     };
 
     assert_eq!(general_data, general_data_expected);

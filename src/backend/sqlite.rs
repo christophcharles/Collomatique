@@ -475,6 +475,7 @@ impl Storage for Store {
             max_interrogations_per_day: general_data_json.max_interrogations_per_day,
             week_count: general_data_json.week_count,
             periodicity_cuts: general_data_json.periodicity_cuts,
+            costs_adjustements: CostsAdjustements::default(),
         };
 
         Ok(general_data)

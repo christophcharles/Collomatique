@@ -614,12 +614,34 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     ) -> std::result::Result<(), Self::InternalError>;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CostsAdjustements {
+    pub max_interrogations_per_day_for_single_student: i32,
+    pub max_interrogations_per_day_for_all_students: i32,
+    pub interrogations_per_week_range_for_single_student: i32,
+    pub interrogations_per_week_range_for_all_students: i32,
+    pub balancing: i32,
+}
+
+impl Default for CostsAdjustements {
+    fn default() -> Self {
+        CostsAdjustements {
+            max_interrogations_per_day_for_single_student: 1,
+            max_interrogations_per_day_for_all_students: 1,
+            interrogations_per_week_range_for_single_student: 1,
+            interrogations_per_week_range_for_all_students: 1,
+            balancing: 1,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneralData {
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
     pub week_count: NonZeroU32,
     pub periodicity_cuts: BTreeSet<NonZeroU32>,
+    pub costs_adjustements: CostsAdjustements,
 }
 
 use std::collections::BTreeSet;

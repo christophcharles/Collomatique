@@ -190,7 +190,24 @@ impl GenColloscopeTranslator {
             interrogations_per_week: data.general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: data.general_data.max_interrogations_per_day,
             periodicity_cuts: data.general_data.periodicity_cuts.clone(),
-            costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+            costs_adjustements: Self::build_costs_adjustements(data),
+        }
+    }
+
+    fn build_costs_adjustements(
+        data: &GenColloscopeData,
+    ) -> crate::gen::colloscope::CostsAdjustements {
+        let costs_adjustements = &data.general_data.costs_adjustements;
+        crate::gen::colloscope::CostsAdjustements {
+            max_interrogations_per_day_for_single_student: costs_adjustements
+                .max_interrogations_per_day_for_single_student,
+            max_interrogations_per_day_for_all_students: costs_adjustements
+                .max_interrogations_per_day_for_all_students,
+            interrogations_per_week_range_for_single_student: costs_adjustements
+                .interrogations_per_week_range_for_single_student,
+            interrogations_per_week_range_for_all_students: costs_adjustements
+                .interrogations_per_week_range_for_all_students,
+            balancing: costs_adjustements.balancing,
         }
     }
 }
