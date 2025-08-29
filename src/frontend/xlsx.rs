@@ -81,10 +81,13 @@ const COL_SLOT: u16 = 5;
 const COL_ROOM: u16 = 6;
 const COL_FIRST_WEEK: u16 = 7;
 
+const BORDER_BIG: FormatBorder = FormatBorder::Medium;
+const BORDER_SMALL: FormatBorder = FormatBorder::Thin;
+
 fn build_main_worksheet_first_line(
     worksheet: &mut Worksheet,
     colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
-) -> Result<()> {
+) -> Result<u16> {
     let week_count = colloscope
         .subjects
         .iter()
@@ -114,7 +117,8 @@ fn build_main_worksheet_first_line(
 
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border(BORDER_BIG);
 
     worksheet.write_with_format(
         ROW_COLLOSCOPE_TITLES,
@@ -144,11 +148,107 @@ fn build_main_worksheet_first_line(
         &format,
     )?;
 
+    let format = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG)
+        .set_border_left(BORDER_SMALL)
+        .set_border_right(BORDER_SMALL);
+    let format_first = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG)
+        .set_border_left(BORDER_BIG)
+        .set_border_right(BORDER_SMALL);
+    let format_last = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG)
+        .set_border_left(BORDER_SMALL)
+        .set_border_right(BORDER_BIG);
+
     for i in 0..week_count {
-        worksheet.write_with_format(ROW_COLLOSCOPE_TITLES, i + COL_FIRST_WEEK, i + 1, &format)?;
+        if i == 0 {
+            worksheet.write_with_format(
+                ROW_COLLOSCOPE_TITLES,
+                i + COL_FIRST_WEEK,
+                i + 1,
+                &format_first,
+            )?;
+        } else if i == week_count - 1 {
+            worksheet.write_with_format(
+                ROW_COLLOSCOPE_TITLES,
+                i + COL_FIRST_WEEK,
+                i + 1,
+                &format_last,
+            )?;
+        } else {
+            worksheet.write_with_format(
+                ROW_COLLOSCOPE_TITLES,
+                i + COL_FIRST_WEEK,
+                i + 1,
+                &format,
+            )?;
+        }
     }
 
-    Ok(())
+    Ok(week_count)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VerticalPosition {
+    First,
+    Middle,
+    Last,
+    Only,
+}
+
+impl VerticalPosition {
+    fn propagate(self, i: usize, count: usize) -> Self {
+        match self {
+            VerticalPosition::Only => match i {
+                0 if count == 1 => VerticalPosition::Only,
+                0 => VerticalPosition::First,
+                x if x == count - 1 => VerticalPosition::Last,
+                _ => VerticalPosition::Middle,
+            },
+            VerticalPosition::First => {
+                if i == 0 {
+                    VerticalPosition::First
+                } else {
+                    VerticalPosition::Middle
+                }
+            }
+            VerticalPosition::Last => {
+                if i == count - 1 {
+                    VerticalPosition::Last
+                } else {
+                    VerticalPosition::Middle
+                }
+            }
+            VerticalPosition::Middle => VerticalPosition::Middle,
+        }
+    }
+
+    fn apply(self, format: Format) -> Format {
+        match self {
+            VerticalPosition::First => format
+                .set_border_top(BORDER_BIG)
+                .set_border_bottom(BORDER_SMALL),
+            VerticalPosition::Middle => format
+                .set_border_top(BORDER_SMALL)
+                .set_border_bottom(BORDER_SMALL),
+            VerticalPosition::Last => format
+                .set_border_top(BORDER_SMALL)
+                .set_border_bottom(BORDER_BIG),
+            VerticalPosition::Only => format
+                .set_border_top(BORDER_BIG)
+                .set_border_bottom(BORDER_BIG),
+        }
+    }
 }
 
 fn build_main_worksheet_timeslot(
@@ -156,10 +256,15 @@ fn build_main_worksheet_timeslot(
     start_line: u32,
     time_slot: backend::ColloscopeTimeSlot<TeacherHandle>,
     group_list: &backend::ColloscopeGroupList<StudentHandle>,
+    week_count: u16,
+    position: VerticalPosition,
 ) -> Result<u32> {
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border_left(BORDER_BIG)
+        .set_border_right(BORDER_BIG);
+    let format = position.apply(format);
 
     let slot = format!(
         "{} {:02}h{:02}",
@@ -186,7 +291,36 @@ fn build_main_worksheet_timeslot(
             + u16::try_from(week.get()).expect(
                 "Week numbers should have already been checked when constructing first line",
             );
-        worksheet.write_with_format(start_line, column, group_names.join(","), &format)?;
+        worksheet.write(start_line, column, group_names.join(","))?;
+    }
+
+    let format = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_left(BORDER_SMALL)
+        .set_border_right(BORDER_SMALL);
+    let format = position.apply(format);
+    let format_first = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_left(BORDER_BIG)
+        .set_border_right(BORDER_SMALL);
+    let format_first = position.apply(format_first);
+    let format_last = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_left(BORDER_SMALL)
+        .set_border_right(BORDER_BIG);
+    let format_last = position.apply(format_last);
+    for week in 0..week_count {
+        let column = COL_FIRST_WEEK + week;
+        match week {
+            0 => worksheet.set_cell_format(start_line, column, &format_first)?,
+            x if x == week_count - 1 => {
+                worksheet.set_cell_format(start_line, column, &format_last)?
+            }
+            _ => worksheet.set_cell_format(start_line, column, &format)?,
+        };
     }
 
     Ok(start_line + 1)
@@ -199,18 +333,31 @@ fn build_main_worksheet_teacher(
     group_list: &backend::ColloscopeGroupList<StudentHandle>,
     teacher_handle: TeacherHandle,
     teachers: &BTreeMap<TeacherHandle, backend::Teacher>,
+    week_count: u16,
+    position: VerticalPosition,
 ) -> Result<u32> {
     let mut current_line = start_line;
-    for time_slot in time_slots {
-        current_line =
-            build_main_worksheet_timeslot(worksheet, current_line, time_slot, group_list)?;
+    let count = time_slots.len();
+    for (i, time_slot) in time_slots.into_iter().enumerate() {
+        let ts_position = position.propagate(i, count);
+        current_line = build_main_worksheet_timeslot(
+            worksheet,
+            current_line,
+            time_slot,
+            group_list,
+            week_count,
+            ts_position,
+        )?;
     }
 
     let teacher = teachers.get(&teacher_handle).ok_or(Error::BadColloscope)?;
     let name = format!("{} {}", teacher.firstname, teacher.surname,);
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border_left(BORDER_BIG)
+        .set_border_right(BORDER_BIG);
+    let format = position.apply(format);
     merge_if_needed(
         worksheet,
         start_line,
@@ -243,11 +390,20 @@ fn build_main_worksheet_subject(
         SubjectHandle,
         backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
+    week_count: u16,
 ) -> Result<u32> {
     let sorted_time_slots = sort_with(subject.time_slots, |time_slot| Ok(time_slot.teacher_id))?;
 
     let mut current_line = start_line;
-    for (teacher_handle, time_slots) in sorted_time_slots {
+    let count = sorted_time_slots.len();
+    for (i, (teacher_handle, time_slots)) in sorted_time_slots.into_iter().enumerate() {
+        let position = match i {
+            0 if count == 1 => VerticalPosition::Only,
+            0 => VerticalPosition::First,
+            x if x == count - 1 => VerticalPosition::Last,
+            _ => VerticalPosition::Middle,
+        };
+
         current_line = build_main_worksheet_teacher(
             worksheet,
             current_line,
@@ -255,12 +411,15 @@ fn build_main_worksheet_subject(
             &subject.group_list,
             teacher_handle,
             teachers,
+            week_count,
+            position,
         )?;
     }
 
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border(BORDER_BIG);
 
     let subject_name = &subjects
         .get(&subject_handle)
@@ -302,6 +461,7 @@ fn build_main_worksheet_subject_group(
         backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
     subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
+    week_count: u16,
 ) -> Result<u32> {
     let mut current_line = start_line;
     for (subject_handle, subject) in selected_subjects {
@@ -312,6 +472,7 @@ fn build_main_worksheet_subject_group(
             subject_handle,
             teachers,
             subjects,
+            week_count,
         )?;
     }
 
@@ -321,7 +482,8 @@ fn build_main_worksheet_subject_group(
         .name;
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border(BORDER_BIG);
     merge_if_needed(
         worksheet,
         start_line,
@@ -332,7 +494,55 @@ fn build_main_worksheet_subject_group(
         &format,
     )?;
 
-    Ok(current_line + 1)
+    Ok(current_line)
+}
+
+fn build_empty_line(worksheet: &mut Worksheet, start_line: u32, week_count: u16) -> Result<u32> {
+    let format = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border(BORDER_BIG);
+    worksheet.set_cell_format(start_line, COL_SUBJECT_GROUP, &format)?;
+    worksheet.set_cell_format(start_line, COL_SUBJECT, &format)?;
+    worksheet.set_cell_format(start_line, COL_GROUP_LIST, &format)?;
+    worksheet.set_cell_format(start_line, COL_TEACHER, &format)?;
+    worksheet.set_cell_format(start_line, COL_TEACHER_CONTACT, &format)?;
+    worksheet.set_cell_format(start_line, COL_SLOT, &format)?;
+    worksheet.set_cell_format(start_line, COL_ROOM, &format)?;
+
+    let format = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG)
+        .set_border_left(BORDER_SMALL)
+        .set_border_right(BORDER_SMALL);
+    let format_first = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG)
+        .set_border_left(BORDER_BIG)
+        .set_border_right(BORDER_SMALL);
+    let format_last = Format::new()
+        .set_align(FormatAlign::VerticalCenter)
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG)
+        .set_border_left(BORDER_SMALL)
+        .set_border_right(BORDER_BIG);
+
+    for i in 0..week_count {
+        if i == 0 {
+            worksheet.set_cell_format(start_line, i + COL_FIRST_WEEK, &format_first)?;
+        } else if i == week_count - 1 {
+            worksheet.set_cell_format(start_line, i + COL_FIRST_WEEK, &format_last)?;
+        } else {
+            worksheet.set_cell_format(start_line, i + COL_FIRST_WEEK, &format)?;
+        }
+    }
+
+    Ok(start_line + 1)
 }
 
 fn build_main_worksheet(
@@ -346,8 +556,9 @@ fn build_main_worksheet(
     subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
 ) -> Result<()> {
     worksheet.set_name("Colloscope")?;
+    worksheet.set_landscape();
 
-    build_main_worksheet_first_line(worksheet, colloscope)?;
+    let week_count = build_main_worksheet_first_line(worksheet, colloscope)?;
 
     let sorted_subjects = sort_with(colloscope.subjects.clone(), |(subject_id, _subject)| {
         subjects
@@ -357,7 +568,11 @@ fn build_main_worksheet(
     })?;
 
     let mut start_line = ROW_FIRST_TIME_SLOT;
-    for (subject_group_handle, selected_subjects) in sorted_subjects {
+    for (i, (subject_group_handle, selected_subjects)) in sorted_subjects.into_iter().enumerate() {
+        if i != 0 {
+            start_line = build_empty_line(worksheet, start_line, week_count)?;
+        }
+
         start_line = build_main_worksheet_subject_group(
             worksheet,
             start_line,
@@ -366,6 +581,7 @@ fn build_main_worksheet(
             teachers,
             subjects,
             subject_groups,
+            week_count,
         )?;
     }
 
