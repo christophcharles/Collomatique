@@ -224,6 +224,8 @@ where
     InternalError(#[from] IntError),
     #[error("Cannot set week_count: some week_patterns must be truncated")]
     CannotSetWeekCountWeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
+    #[error("Cannot set interrogations_per_week range: the range must be non-empty")]
+    CannotSetInterrogationsPerWeekRangeIsEmpty,
 }
 
 impl<T: backend::Storage> AppState<T> {
@@ -301,6 +303,11 @@ impl<T: backend::Storage> AppState<T> {
                 Ok(())
             }
             Operation::GeneralSetInterrogationPerWeekRange(new_max_interrogation_per_week) => {
+                if let Some(range) = new_max_interrogation_per_week {
+                    if range.is_empty() {
+                        return Err(UpdateError::CannotSetInterrogationsPerWeekRangeIsEmpty);
+                    }
+                }
                 let mut general_data = self.backend_logic.general_data_get().await?;
                 general_data.interrogations_per_week = new_max_interrogation_per_week.clone();
                 self.backend_logic
