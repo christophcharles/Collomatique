@@ -72,6 +72,7 @@ enum ShellExtraCommand {
     Undo,
     /// Redo previously undone command
     Redo,
+    PrintHistory,
     /// Exit shell
     Exit,
 }
@@ -1361,11 +1362,19 @@ async fn respond(
         ShellCommand::Global(command) => execute_cli_command(command, app_state).await?,
         ShellCommand::Extra(extra_command) => {
             match extra_command {
-                ShellExtraCommand::Undo => app_state.undo().await?,
-                ShellExtraCommand::Redo => app_state.redo().await?,
+                ShellExtraCommand::Undo => {
+                    app_state.undo().await?;
+                    None
+                }
+                ShellExtraCommand::Redo => {
+                    app_state.redo().await?;
+                    None
+                }
+                ShellExtraCommand::PrintHistory => {
+                    Some(format!("{:?}", app_state.get_aggregated_history()))
+                }
                 ShellExtraCommand::Exit => return Ok(true),
             }
-            None
         }
     };
     if let Some(msg) = output {

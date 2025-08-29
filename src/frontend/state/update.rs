@@ -63,6 +63,7 @@ pub trait Manager: ManagerInternal {
     async fn redo(
         &mut self,
     ) -> Result<(), RedoError<<Self::Storage as backend::Storage>::InternalError>>;
+    fn get_aggregated_history(&self) -> AggregatedOperations;
 }
 
 impl<T: ManagerInternal> Manager for T {
@@ -261,6 +262,10 @@ impl<T: ManagerInternal> Manager for T {
                 None => Err(RedoError::HistoryFullyRewounded),
             }
         }
+    }
+
+    fn get_aggregated_history(&self) -> AggregatedOperations {
+        self.get_history().build_aggregated_ops()
     }
 }
 
