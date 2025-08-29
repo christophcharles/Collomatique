@@ -143,6 +143,14 @@ impl State {
 
         *app_state.get_logic().get_storage() != self.init_state
     }
+
+    fn is_saved(&self) -> bool {
+        if self.is_modified() {
+            return false;
+        }
+
+        self.path.is_some()
+    }
 }
 
 type UndoErr = collomatique::frontend::state::UndoError<
@@ -388,9 +396,14 @@ pub fn view(state: &State) -> Element<GuiMessage> {
 }
 
 pub fn title(state: &State) -> String {
+    let main_title = if state.is_saved() {
+        "Collomatique"
+    } else {
+        "Collomatique*"
+    };
     match &state.path {
-        Some(p) => format!("Collomatique - {}", p.to_string_lossy()),
-        None => format!("Collomatique"),
+        Some(p) => format!("{} - {}", main_title, p.to_string_lossy()),
+        None => format!("{}", main_title),
     }
 }
 
