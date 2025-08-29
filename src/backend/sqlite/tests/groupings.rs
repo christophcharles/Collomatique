@@ -404,3 +404,40 @@ async fn groupings_remove_then_add(pool: SqlitePool) {
 
     assert_eq!(groupings, groupings_expected);
 }
+
+#[sqlx::test]
+async fn groupings_update(pool: SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .groupings_update(
+            super::super::groupings::Id(1),
+            &Grouping {
+                name: String::from("G3"),
+                slots: BTreeSet::from([super::super::time_slots::Id(5)]),
+            },
+        )
+        .await
+        .unwrap();
+
+    let groupings = store.groupings_get_all().await.unwrap();
+
+    let groupings_expected = BTreeMap::from([
+        (
+            super::super::groupings::Id(1),
+            Grouping {
+                name: String::from("G3"),
+                slots: BTreeSet::from([super::super::time_slots::Id(5)]),
+            },
+        ),
+        (
+            super::super::groupings::Id(2),
+            Grouping {
+                name: String::from("G2"),
+                slots: BTreeSet::from([super::super::time_slots::Id(4)]),
+            },
+        ),
+    ]);
+
+    assert_eq!(groupings, groupings_expected);
+}
