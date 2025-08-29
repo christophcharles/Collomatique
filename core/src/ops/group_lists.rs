@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use super::*;
 
 #[derive(Debug)]
@@ -69,7 +67,7 @@ pub enum GroupListsUpdateOp {
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     PrefillGroupList(
         collomatique_state_colloscopes::GroupListId,
-        BTreeMap<collomatique_state_colloscopes::StudentId, u32>,
+        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups,
     ),
     AssignGroupListToSubject(
         collomatique_state_colloscopes::SubjectId,
@@ -181,7 +179,7 @@ impl GroupListsUpdateOp {
 
                 let mut output = vec![];
 
-                for (student_id, _group_num) in &old_group_list.prefilled_groups {
+                for (student_id, _group_num) in &old_group_list.prefilled_groups.student_map {
                     if params.excluded_students.contains(student_id) {
                         output.push(GroupListsUpdateWarning::LoosePrefilledGroupList(
                             *group_list_id,
@@ -283,9 +281,9 @@ impl GroupListsUpdateOp {
 
                 let mut new_prefilled_groups = group_list.prefilled_groups.clone();
                 let mut update_prefilled_groups = false;
-                for (student_id, _group_num) in &group_list.prefilled_groups {
+                for (student_id, _group_num) in &group_list.prefilled_groups.student_map {
                     if params.excluded_students.contains(student_id) {
-                        new_prefilled_groups.remove(student_id);
+                        new_prefilled_groups.student_map.remove(student_id);
                         update_prefilled_groups = true;
                     }
                 }
@@ -338,7 +336,7 @@ impl GroupListsUpdateOp {
                             collomatique_state_colloscopes::Op::GroupList(
                                 collomatique_state_colloscopes::GroupListOp::PreFill(
                                     *group_list_id,
-                                    BTreeMap::new(),
+                                    collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups::default(),
                                 ),
                             ),
                             "Vidage du préremplissage de la liste de groupes".into(),
@@ -389,7 +387,7 @@ impl GroupListsUpdateOp {
                     return Err(PrefillGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
 
-                for (student_id, _group_num) in prefilled_groups {
+                for (student_id, _group_num) in &prefilled_groups.student_map {
                     if group_list.params.excluded_students.contains(student_id) {
                         return Err(PrefillGroupListError::StudentIsExcluded(
                             *group_list_id,

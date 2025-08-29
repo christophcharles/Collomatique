@@ -13,7 +13,7 @@ use incompats::IncompatsExternalData;
 use ops::AnnotatedGroupListOp;
 use periods::{Periods, PeriodsExternalData};
 use slots::{Slots, SlotsExternalData};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
 use teachers::{Teachers, TeachersExternalData};
@@ -1185,19 +1185,35 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// Checks that an incompat is valid
+    fn validate_group_list_prefilled_groups_internal(
+        prefilled_groups: &group_lists::GroupListPrefilledGroups,
+        students: &students::Students,
+        excluded_students: &BTreeSet<StudentId>,
+    ) -> Result<(), GroupListError> {
+        for (student_id, _group_num) in &prefilled_groups.student_map {
+            if !students.student_map.contains_key(student_id) {
+                return Err(GroupListError::InvalidStudentId(*student_id));
+            }
+            if excluded_students.contains(student_id) {
+                return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that an incompat is valid
     fn validate_group_list_internal(
         group_list: &group_lists::GroupList,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
         Self::validate_group_list_params_internal(&group_list.params, students)?;
-        for (student_id, _group_num) in &group_list.prefilled_groups {
-            if !students.student_map.contains_key(student_id) {
-                return Err(GroupListError::InvalidStudentId(*student_id));
-            }
-            if group_list.params.excluded_students.contains(student_id) {
-                return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
-            }
-        }
+        Self::validate_group_list_prefilled_groups_internal(
+            &group_list.prefilled_groups,
+            students,
+            &group_list.params.excluded_students,
+        )?;
         Ok(())
     }
 
@@ -1498,7 +1514,7 @@ impl Data {
                             *group_list_id,
                         ));
                     }
-                    if group_list.prefilled_groups.contains_key(id) {
+                    if group_list.prefilled_groups.contains_student(*id) {
                         return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
                             *id,
                             *group_list_id,
@@ -2359,7 +2375,7 @@ impl Data {
                 };
                 let new_group_list = group_lists::GroupList {
                     params: params.clone(),
-                    prefilled_groups: BTreeMap::new(),
+                    prefilled_groups: group_lists::GroupListPrefilledGroups::default(),
                 };
 
                 self.validate_group_list(&new_group_list)?;

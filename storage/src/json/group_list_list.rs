@@ -22,8 +22,38 @@ pub struct List {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupList {
     pub params: GroupListParameters,
+    pub prefilled_groups: GroupListPrefilledGroups,
+}
+
+/// JSON desc of a single group list prefilled groups
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupListPrefilledGroups {
     #[serde(with = "serde_with::rust::maps_duplicate_key_is_error")]
-    pub prefilled_groups: BTreeMap<u64, u32>,
+    pub student_map: BTreeMap<u64, u32>,
+}
+
+impl From<&collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>
+    for GroupListPrefilledGroups
+{
+    fn from(value: &collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups) -> Self {
+        GroupListPrefilledGroups {
+            student_map: value
+                .student_map
+                .iter()
+                .map(|(student_id, group_num)| (student_id.inner(), *group_num))
+                .collect(),
+        }
+    }
+}
+
+impl From<GroupListPrefilledGroups>
+    for collomatique_state_colloscopes::group_lists::GroupListPrefilledGroupsExternalData
+{
+    fn from(value: GroupListPrefilledGroups) -> Self {
+        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroupsExternalData {
+            student_map: value.student_map.clone(),
+        }
+    }
 }
 
 /// JSON desc of a single group list parameters
@@ -69,11 +99,7 @@ impl From<&collomatique_state_colloscopes::group_lists::GroupList> for GroupList
     fn from(value: &collomatique_state_colloscopes::group_lists::GroupList) -> Self {
         GroupList {
             params: (&value.params).into(),
-            prefilled_groups: value
-                .prefilled_groups
-                .iter()
-                .map(|(student_id, group_num)| (student_id.inner(), *group_num))
-                .collect(),
+            prefilled_groups: (&value.prefilled_groups).into(),
         }
     }
 }
@@ -82,7 +108,7 @@ impl From<GroupList> for collomatique_state_colloscopes::group_lists::GroupListE
     fn from(value: GroupList) -> Self {
         collomatique_state_colloscopes::group_lists::GroupListExternalData {
             params: value.params.into(),
-            prefilled_groups: value.prefilled_groups,
+            prefilled_groups: value.prefilled_groups.into(),
         }
     }
 }

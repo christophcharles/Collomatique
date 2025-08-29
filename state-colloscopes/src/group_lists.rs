@@ -28,12 +28,47 @@ pub struct GroupList {
     /// parameters for the group list
     pub params: GroupListParameters,
     /// Prefilled groups
+    pub prefilled_groups: GroupListPrefilledGroups,
+}
+
+/// Parameters for a single group list
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct GroupListPrefilledGroups {
+    /// student map
     /// To each student, associate a group number
     /// A student that appears in [GroupListParameters::excluded_students]
     /// should not appear here
     ///
     /// If a student appears in neither there is no prefilled association
-    pub prefilled_groups: BTreeMap<StudentId, u32>,
+    pub student_map: BTreeMap<StudentId, u32>,
+}
+
+impl GroupListPrefilledGroups {
+    pub fn contains_student(&self, student_id: StudentId) -> bool {
+        self.student_map.contains_key(&student_id)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.student_map.is_empty()
+    }
+}
+
+impl GroupListPrefilledGroups {
+    /// Builds an interrogation slot from external data
+    ///
+    /// No checks is done for consistency so this is unsafe.
+    /// See [GroupListPrefilledGroupsExternalData::validate].
+    pub(crate) unsafe fn from_external_data(
+        external_data: GroupListPrefilledGroupsExternalData,
+    ) -> GroupListPrefilledGroups {
+        GroupListPrefilledGroups {
+            student_map: external_data
+                .student_map
+                .into_iter()
+                .map(|(id, group_num)| (unsafe { StudentId::new(id) }, group_num))
+                .collect(),
+        }
+    }
 }
 
 /// Parameters for a single group list
@@ -80,11 +115,9 @@ impl GroupList {
     pub(crate) unsafe fn from_external_data(external_data: GroupListExternalData) -> GroupList {
         GroupList {
             params: unsafe { GroupListParameters::from_external_data(external_data.params) },
-            prefilled_groups: external_data
-                .prefilled_groups
-                .into_iter()
-                .map(|(id, group_num)| (unsafe { StudentId::new(id) }, group_num))
-                .collect(),
+            prefilled_groups: unsafe {
+                GroupListPrefilledGroups::from_external_data(external_data.prefilled_groups)
+            },
         }
     }
 }
@@ -181,14 +214,19 @@ pub struct GroupListExternalData {
     /// Parameters for the group list
     pub params: GroupListParametersExternalData,
     /// Prefilled groups
+    pub prefilled_groups: GroupListPrefilledGroupsExternalData,
+}
+
+/// Parameters for a single group list but unchecked
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupListPrefilledGroupsExternalData {
+    /// student map
     /// To each student, associate a group number
-    /// Group numbers should be in the values allowed by [GroupList::group_count]
-    ///
-    /// A student that appears in [GroupList::excluded_students]
+    /// A student that appears in [GroupListParameters::excluded_students]
     /// should not appear here
     ///
     /// If a student appears in neither there is no prefilled association
-    pub prefilled_groups: BTreeMap<u64, u32>,
+    pub student_map: BTreeMap<u64, u32>,
 }
 
 /// Parameters of a single group list but unchecked
@@ -216,15 +254,10 @@ impl GroupListExternalData {
         if !self.params.validate(student_ids) {
             return false;
         }
-        if !self.prefilled_groups.iter().all(|(id, _group_num)| {
-            if !student_ids.contains(id) {
-                return false;
-            }
-            if self.params.excluded_students.contains(id) {
-                return false;
-            }
-            true
-        }) {
+        if !self
+            .prefilled_groups
+            .validate(student_ids, &self.params.excluded_students)
+        {
             return false;
         }
         true
@@ -235,8 +268,34 @@ impl From<GroupList> for GroupListExternalData {
     fn from(value: GroupList) -> Self {
         GroupListExternalData {
             params: value.params.into(),
-            prefilled_groups: value
-                .prefilled_groups
+            prefilled_groups: value.prefilled_groups.into(),
+        }
+    }
+}
+
+impl GroupListPrefilledGroupsExternalData {
+    /// Checks the validity of a [GroupListPrefilledGroupsExternalData]
+    pub fn validate(&self, student_ids: &BTreeSet<u64>, excluded_students: &BTreeSet<u64>) -> bool {
+        if !self.student_map.iter().all(|(id, _group_num)| {
+            if !student_ids.contains(id) {
+                return false;
+            }
+            if excluded_students.contains(id) {
+                return false;
+            }
+            true
+        }) {
+            return false;
+        }
+        true
+    }
+}
+
+impl From<GroupListPrefilledGroups> for GroupListPrefilledGroupsExternalData {
+    fn from(value: GroupListPrefilledGroups) -> Self {
+        GroupListPrefilledGroupsExternalData {
+            student_map: value
+                .student_map
                 .into_iter()
                 .map(|(id, group)| (id.inner(), group))
                 .collect(),
