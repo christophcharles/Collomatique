@@ -2285,6 +2285,7 @@ impl<'a> IlpTranslator<'a> {
         solver: S,
         max_steps: Option<usize>,
         retries: usize,
+        quick_init: bool,
     ) -> IncrementalInitializer<T, S> {
         let period_length = self.compute_period_length();
 
@@ -2338,6 +2339,7 @@ impl<'a> IlpTranslator<'a> {
             retries,
             initializer,
             solver,
+            quick_init,
         }
     }
 
@@ -2430,6 +2432,7 @@ pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     retries: usize,
     initializer: T,
     solver: S,
+    quick_init: bool,
 }
 
 impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, DefaultRepr<Variable>>
@@ -2496,8 +2499,14 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         problem: &'b Problem<Variable>,
     ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
         let init_config = self.initializer.build_init_config(&problem);
+        let hint_only = self.quick_init;
         self.solver
-            .restore_feasability_with_max_steps(&init_config, self.max_steps.clone())
+            .restore_feasability_with_origin_and_max_steps_and_hint_only(
+                &init_config,
+                None,
+                self.max_steps.clone(),
+                hint_only,
+            )
     }
 
     fn update_set_variables(

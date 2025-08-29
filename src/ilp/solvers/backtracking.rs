@@ -117,11 +117,12 @@ use crate::ilp::mat_repr::ProblemRepr;
 impl<V: VariableName, H: heuristics::Heuristic, P: ProblemRepr<V>> FeasabilitySolver<V, P>
     for Solver<H>
 {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
         &self,
         config: &Config<'a, V, P>,
         origin: Option<&FeasableConfig<'a, V, P>>,
         mut max_steps: Option<usize>,
+        _hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
         let mut available_variables = match origin {
             Some(o) => config

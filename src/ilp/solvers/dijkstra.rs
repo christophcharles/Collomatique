@@ -18,11 +18,12 @@ use crate::ilp::mat_repr::ProblemRepr;
 use std::collections::BTreeSet;
 
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
         &self,
         config: &Config<'a, V, P>,
         origin: Option<&FeasableConfig<'a, V, P>>,
         mut max_steps: Option<usize>,
+        _hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
         use std::collections::VecDeque;
 

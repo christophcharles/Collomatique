@@ -24,6 +24,7 @@ pub struct Optimizer<'a, V: VariableName, P: ProblemRepr<V>> {
     temp_profile: TemperatureFn,
     max_steps: Option<usize>,
     init_max_steps: Option<usize>,
+    first_config_is_only_hint: bool,
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
@@ -33,6 +34,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
             temp_profile: TemperatureFn::default(),
             max_steps: None,
             init_max_steps: None,
+            first_config_is_only_hint: false,
         }
     }
 
@@ -52,6 +54,10 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
         self.init_max_steps = init_max_steps;
     }
 
+    pub fn set_first_config_is_only_hint(&mut self, first_config_is_only_hint: bool) {
+        self.first_config_is_only_hint = first_config_is_only_hint;
+    }
+
     pub fn iterate<R: RandomGen, S: FeasabilitySolver<V, P>, M: MutationPolicy<V, P>>(
         &self,
         solver: S,
@@ -68,6 +74,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
             max_steps: self.max_steps.clone(),
             current_max_steps: self.init_max_steps.clone(),
             mutation_policy,
+            first_config_is_only_hint: self.first_config_is_only_hint,
         }
     }
 }
@@ -94,6 +101,7 @@ pub struct OptimizerIterator<
     max_steps: Option<usize>,
     current_max_steps: Option<usize>,
     mutation_policy: M,
+    first_config_is_only_hint: bool,
 }
 
 impl<
@@ -118,17 +126,21 @@ impl<
         //
         // But if we are on a step after that, we might have chosen a bad current_config
         // So we must try again with a "better" neighbour on next try.
-        let sol = match self.solver.restore_feasability_with_origin_and_max_steps(
-            &self.current_config,
-            origin,
-            self.current_max_steps,
-        ) {
+        let sol = match self
+            .solver
+            .restore_feasability_with_origin_and_max_steps_and_hint_only(
+                &self.current_config,
+                origin,
+                self.current_max_steps,
+                self.first_config_is_only_hint,
+            ) {
             Some(s) => s,
             None => match &self.previous_config {
                 Some((c, _)) => c.as_ref().clone(),
                 None => return None,
             },
         };
+        self.first_config_is_only_hint = false; // disable hint after first resolution
         self.current_max_steps = self.max_steps;
         let config = Rc::new(sol);
 

@@ -10,11 +10,12 @@ pub struct Solver {
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
         &self,
         config: &Config<'a, V, P>,
         origin: Option<&FeasableConfig<'a, V, P>>,
         _max_steps: Option<usize>,
+        hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
         // When everything is solved for some reason this is sometimes an issue...
         if let Some(result) = config.clone().into_feasable() {
@@ -23,7 +24,7 @@ impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
 
         let problem = config.get_problem();
 
-        let mut highs_problem = self.build_problem(problem, config);
+        let mut highs_problem = self.build_problem(problem, config, hint_only);
         if let Some(o) = origin {
             Self::add_origin_constraints(&mut highs_problem, config, &o);
         }
@@ -66,6 +67,7 @@ impl Solver {
         &self,
         problem: &Problem<V, P>,
         config: &Config<'_, V, P>,
+        hint_only: bool,
     ) -> HighsProblem<V> {
         use highs::RowProblem;
         use std::collections::BTreeMap;
@@ -85,7 +87,7 @@ impl Solver {
                 // So if a variable is true in the config, false should be penalized
                 // And if a variable is false in the config, true should be penalized
                 // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-                let col_factor = 1. - 2. * value;
+                let col_factor = if hint_only { 0. } else { 1. - 2. * value };
 
                 let col = highs_problem.add_integer_column(col_factor, 0..=1);
                 (var.clone(), col)
