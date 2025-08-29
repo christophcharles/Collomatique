@@ -8,6 +8,14 @@ pub mod solvers;
 #[cfg(test)]
 mod tests;
 
+use thiserror::Error;
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum ProblemError {
+    #[error("Variable {1} is used in constraint {0} but not explicitly declared")]
+    UndeclaredVariable(usize, String),
+}
+
 pub type EvalFn = dbg::Debuggable<dyn Fn(&FeasableConfig) -> f64>;
 
 impl Default for EvalFn {
@@ -49,7 +57,7 @@ impl ProblemBuilder {
         self
     }
 
-    pub fn build(mut self) -> Problem {
+    pub fn build(mut self) -> Result<Problem, ProblemError> {
         let mut variables = self.variables;
 
         for c in self.constraints.iter_mut() {
@@ -60,11 +68,11 @@ impl ProblemBuilder {
             variables.append(&mut c.variables());
         }
 
-        Problem {
+        Ok(Problem {
             variables,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
-        }
+        })
     }
 }
 

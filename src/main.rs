@@ -64,7 +64,8 @@ fn main() {
         } else {
             0.0
         }))
-        .build();
+        .build()
+        .unwrap();
 
     let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb);
 
