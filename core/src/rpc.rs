@@ -9,7 +9,7 @@ use std::io::Write;
 use serde::{Deserialize, Serialize};
 
 pub mod cmd_msg;
-pub use cmd_msg::CmdMsg;
+pub use cmd_msg::{CmdMsg, UpdateMsg};
 
 pub mod error_msg;
 pub use error_msg::ErrorMsg;
@@ -20,10 +20,41 @@ pub enum InitMsg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InternalDataStream {
+    serialized: String,
+}
+
+impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
+    fn from(value: &collomatique_state_colloscopes::Data) -> Self {
+        InternalDataStream {
+            serialized: collomatique_storage::serialize_data(value),
+        }
+    }
+}
+
+impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
+    fn from(value: InternalDataStream) -> Self {
+        let (data, caveats) = collomatique_storage::deserialize_data(&value.serialized)
+            .expect("Correctly formatted serialization");
+        if !caveats.is_empty() {
+            panic!("There should be no caveats when decoding data stream from RPC");
+        }
+        data
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultMsg {
     InvalidMsg,
     Ack,
+    Data(InternalDataStream),
     Error(ErrorMsg),
+}
+
+impl ResultMsg {
+    pub fn generate_data_msg(data: &collomatique_state_colloscopes::Data) -> ResultMsg {
+        ResultMsg::Data(data.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

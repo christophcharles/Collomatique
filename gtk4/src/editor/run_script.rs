@@ -1,4 +1,4 @@
-use collomatique_core::rpc::ResultMsg;
+use collomatique_core::rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
@@ -232,7 +232,21 @@ impl Component for Dialog {
                         .as_mut()
                         .expect("there should be some current state to accept");
                     let data = app_session.get_data();
-                    let op = match cmd_msg.promote(data) {
+
+                    let update_msg = match cmd_msg {
+                        CmdMsg::GetData => {
+                            self.rpc_logger
+                                .sender()
+                                .send(rpc_server::RpcLoggerInput::SendMsg(
+                                    ResultMsg::generate_data_msg(data),
+                                ))
+                                .unwrap();
+                            return;
+                        }
+                        CmdMsg::Update(update_msg) => update_msg,
+                    };
+
+                    let op = match update_msg.promote(data) {
                         Ok(op) => op,
                         Err(e) => {
                             self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
