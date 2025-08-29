@@ -1,7 +1,7 @@
 #[test]
 fn coin_cbc() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     // We test on a simple scheduling problem.
     //
@@ -75,7 +75,7 @@ fn coin_cbc() {
         .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb.default_config();
 
     let solver = super::Solver::new();
@@ -98,7 +98,7 @@ fn coin_cbc() {
 #[test]
 fn coin_cbc_2() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     // We test on a simple scheduling problem.
     //
@@ -172,7 +172,7 @@ fn coin_cbc_2() {
         .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb
         .config_from_bools([("y21", true), ("y22", true), ("x11", true)])
         .unwrap();
@@ -197,7 +197,7 @@ fn coin_cbc_2() {
 #[test]
 fn coin_cbc_impossible() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     let x11 = Expr::<String>::var("x11");
     let x12 = Expr::<String>::var("x12");
@@ -217,7 +217,7 @@ fn coin_cbc_impossible() {
             (&x11 + &x22).eq(&one),
         ])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb.config_from_bools([("x11", true)]).unwrap();
 
     let solver = super::Solver::new();

@@ -1,4 +1,3 @@
-pub mod dbg;
 pub mod linexpr;
 pub mod random;
 pub mod solvers;
@@ -27,14 +26,6 @@ pub enum Error<V: VariableName> {
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
 
-pub type EvalFn<V, P> = dbg::Debuggable<dyn Sync + Send + Fn(&FeasableConfig<V, P>) -> f64>;
-
-impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
-    fn default() -> Self {
-        crate::debuggable!(|_x| 0.)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VariableType {
     Bool,
@@ -44,9 +35,8 @@ pub enum VariableType {
 pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 #[derive(Debug, Clone)]
-pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
+pub struct ProblemBuilder<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    eval_fn: EvalFn<V, P>,
     variables: BTreeMap<V, VariableType>,
 }
 
@@ -66,17 +56,16 @@ pub enum ConstraintError<V: VariableName> {
 
 pub type ConstraintResult<T, V> = std::result::Result<T, ConstraintError<V>>;
 
-impl<V: VariableName, P: ProblemRepr<V>> Default for ProblemBuilder<V, P> {
+impl<V: VariableName> Default for ProblemBuilder<V> {
     fn default() -> Self {
         ProblemBuilder {
             constraints: BTreeSet::new(),
-            eval_fn: EvalFn::default(),
             variables: BTreeMap::new(),
         }
     }
 }
 
-impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
+impl<V: VariableName> ProblemBuilder<V> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -104,11 +93,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             self = self.add_constraint(constraint)?;
         }
         Ok(self)
-    }
-
-    pub fn eval_fn(mut self, func: EvalFn<V, P>) -> Self {
-        self.eval_fn = func;
-        self
     }
 
     fn check_var<'a, T>(&self, var: &'a T) -> VarResult<(), V>
@@ -163,7 +147,7 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         &self.variables
     }
 
-    pub fn build(self) -> Problem<V, P> {
+    pub fn build<P: ProblemRepr<V>>(self) -> Problem<V, P> {
         let variables_vec: Vec<_> = self.variables.iter().map(|(v, _t)| v.clone()).collect();
         let mut variables_lookup = BTreeMap::new();
         for (i, var) in variables_vec.iter().enumerate() {
@@ -177,12 +161,11 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             variables_vec,
             variables_lookup,
             constraints: self.constraints,
-            eval_fn: self.eval_fn,
             pb_repr,
         }
     }
 
-    pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V, P>
+    pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V>
     where
         F: FnMut(&V) -> bool,
     {
@@ -200,7 +183,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
 
         ProblemBuilder {
             constraints,
-            eval_fn: self.eval_fn,
             variables,
         }
     }
@@ -214,7 +196,6 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    eval_fn: EvalFn<V, P>,
     pb_repr: P,
 }
 
@@ -226,8 +207,6 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
         }
         write!(f, " ]\n")?;
 
-        write!(f, "evaluation function : {:?}\n", self.eval_fn)?;
-
         write!(f, "constraints :")?;
         for (i, c) in self.constraints.iter().enumerate() {
             write!(f, "\n{}) {}", i, c)?;
@@ -238,10 +217,9 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
-    pub fn into_builder(self) -> ProblemBuilder<V, P> {
+    pub fn into_builder(self) -> ProblemBuilder<V> {
         ProblemBuilder {
             constraints: self.constraints,
-            eval_fn: self.eval_fn,
             variables: self.variables,
         }
     }
@@ -672,10 +650,6 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> FeasableConfig<'a, V, P> {
 
     pub fn inner(&self) -> &Config<'a, V, P> {
         &self.0
-    }
-
-    pub fn eval(&self) -> f64 {
-        (self.0.problem.eval_fn)(self)
     }
 }
 

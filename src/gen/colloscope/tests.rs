@@ -6520,7 +6520,7 @@ fn colloscope_with_dynamic_groups() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let problem = ilp_translator.problem_builder().build(); // Avoid problem() as it simplifies constraints
+    let problem = ilp_translator.problem();
     let constraints = problem.get_constraints().clone();
 
     #[rustfmt::skip]

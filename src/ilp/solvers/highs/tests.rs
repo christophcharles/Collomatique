@@ -1,7 +1,7 @@
 #[test]
 fn highs() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     // We test on a simple scheduling problem.
     //
@@ -75,7 +75,7 @@ fn highs() {
         .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb.default_config();
 
     let solver = super::Solver::new();
@@ -98,7 +98,7 @@ fn highs() {
 #[test]
 fn highs_2() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     // We test on a simple scheduling problem.
     //
@@ -172,7 +172,7 @@ fn highs_2() {
         .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb
         .config_from_bools([("y21", true), ("y22", true), ("x11", true)])
         .unwrap();
@@ -197,7 +197,7 @@ fn highs_2() {
 #[test]
 fn highs_impossible() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     let x11 = Expr::<String>::var("x11");
     let x12 = Expr::<String>::var("x12");
@@ -217,7 +217,7 @@ fn highs_impossible() {
             (&x11 + &x22).eq(&one),
         ])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb.config_from_bools([("x11", true)]).unwrap();
 
     let solver = super::Solver::new();

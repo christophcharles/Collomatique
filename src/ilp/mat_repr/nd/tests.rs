@@ -3,7 +3,7 @@ use super::*;
 fn nd_problem_definition() {
     use crate::ilp::linexpr::Expr;
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["a", "b", "c", "d", "e"])
         .unwrap()
         .add_constraint(
@@ -21,7 +21,7 @@ fn nd_problem_definition() {
                 .eq(&(-1 * Expr::var("e") + Expr::var("c"))),
         )
         .unwrap()
-        .build();
+        .build::<NdProblem<_>>();
 
     use ndarray::array;
 
@@ -44,7 +44,7 @@ fn test_is_feasable() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["a", "b", "c", "d"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -53,7 +53,7 @@ fn test_is_feasable() {
         .unwrap()
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .unwrap()
-        .build();
+        .build::<NdProblem<_>>();
 
     let config_0 = pb.default_config();
     let config_1 = pb.config_from_bools([("a", true)]).unwrap();
@@ -232,14 +232,14 @@ fn nd_config_ord() {
     let b = Expr::<String>::var("b");
     let c = Expr::<String>::var("c");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["a", "b", "c"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
         .unwrap()
         .add_constraint((&c + &b).leq(&Expr::constant(1)))
         .unwrap()
-        .build();
+        .build::<NdProblem<_>>();
 
     let config_0 = pb.default_config();
     let config_1 = pb.config_from_bools([("a", true)]).unwrap();
@@ -315,7 +315,7 @@ fn compute_lhs() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["a", "b", "c", "d"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -324,7 +324,7 @@ fn compute_lhs() {
         .unwrap()
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .unwrap()
-        .build();
+        .build::<NdProblem<_>>();
 
     let config_0 = pb.default_config();
     let config_1 = pb.config_from_bools([("a", true)]).unwrap();
@@ -527,7 +527,7 @@ fn update_precomputation() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["a", "b", "c", "d"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -536,7 +536,7 @@ fn update_precomputation() {
         .unwrap()
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .unwrap()
-        .build();
+        .build::<NdProblem<_>>();
 
     let config_0 = pb.default_config();
     let _ = config_0.get_precomputation();
