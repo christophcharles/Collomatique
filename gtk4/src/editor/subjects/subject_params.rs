@@ -72,6 +72,8 @@ pub enum DialogInput {
     AddArbitraryBlock,
     UpdateEmptyWeeksBeforeBlock(usize, u32),
     UpdateDurationInWeeksOfGivenBlock(usize, NonZeroU32),
+    UpdateInterrogationCountMinimum(usize, u32),
+    UpdateInterrogationCountMaximum(usize, u32),
     UpdateAmountForEveryArbitraryBlockSeparation(u32),
     DeleteBlock(usize),
 }
@@ -653,6 +655,12 @@ impl SimpleComponent for Dialog {
                     DialogInput::UpdateDurationInWeeksOfGivenBlock(block_num, new_duration)
                 }
                 BlockOutput::DeleteBlock(block_num) => DialogInput::DeleteBlock(block_num),
+                BlockOutput::UpdateInterrogationCountMinimum(block_num, new_min) => {
+                    DialogInput::UpdateInterrogationCountMinimum(block_num, new_min)
+                }
+                BlockOutput::UpdateInterrogationCountMaximum(block_num, new_max) => {
+                    DialogInput::UpdateInterrogationCountMaximum(block_num, new_max)
+                }
             });
 
         let mut model = Dialog {
@@ -863,6 +871,22 @@ impl SimpleComponent for Dialog {
                     new_duration;
                 self.synchronize_block_factory();
             }
+            DialogInput::UpdateInterrogationCountMinimum(block_num, new_min) => {
+                let old_max = *self.amount_for_every_arbitrary_block_params.blocks[block_num]
+                    .interrogation_count_in_block
+                    .end();
+                assert!(new_min <= old_max);
+                self.amount_for_every_arbitrary_block_params.blocks[block_num]
+                    .interrogation_count_in_block = new_min..=old_max;
+            }
+            DialogInput::UpdateInterrogationCountMaximum(block_num, new_max) => {
+                let old_min = *self.amount_for_every_arbitrary_block_params.blocks[block_num]
+                    .interrogation_count_in_block
+                    .start();
+                assert!(old_min <= new_max);
+                self.amount_for_every_arbitrary_block_params.blocks[block_num]
+                    .interrogation_count_in_block = old_min..=new_max;
+            }
             DialogInput::DeleteBlock(block_num) => {
                 self.amount_for_every_arbitrary_block_params
                     .blocks
@@ -913,6 +937,8 @@ pub enum BlockInput {
     DeleteBlock,
     UpdateEmptyWeeks(u32),
     UpdateDurationInWeeks(NonZeroU32),
+    UpdateInterrogationCountMinimum(u32),
+    UpdateInterrogationCountMaximum(u32),
 }
 
 #[derive(Debug)]
@@ -920,6 +946,8 @@ pub enum BlockOutput {
     UpdateEmptyWeeks(usize, u32),
     UpdateDurationInWeeks(usize, NonZeroU32),
     DeleteBlock(usize),
+    UpdateInterrogationCountMinimum(usize, u32),
+    UpdateInterrogationCountMaximum(usize, u32),
 }
 
 impl Block {
@@ -1008,6 +1036,52 @@ impl FactoryComponent for Block {
                     );
                 },
             },
+            adw::SpinRow {
+                set_hexpand: true,
+                set_title: "Nombre de colles (minimum)",
+                #[wrap(Some)]
+                set_adjustment = &gtk::Adjustment {
+                    set_lower: 0.,
+                    #[watch]
+                    set_upper: *self.data.block_params.interrogation_count_in_block.end() as f64,
+                    set_step_increment: 1.,
+                    set_page_increment: 5.,
+                },
+                set_wrap: false,
+                set_snap_to_ticks: true,
+                set_numeric: true,
+                #[track(self.should_redraw)]
+                set_value: *self.data.block_params.interrogation_count_in_block.start() as f64,
+                connect_value_notify[sender] => move |widget| {
+                    let value_u32 = widget.value() as u32;
+                    sender.input(
+                        BlockInput::UpdateInterrogationCountMinimum(value_u32)
+                    );
+                },
+            },
+            adw::SpinRow {
+                set_hexpand: true,
+                set_title: "Nombre de colles (maximum)",
+                #[wrap(Some)]
+                set_adjustment = &gtk::Adjustment {
+                    #[watch]
+                    set_lower: *self.data.block_params.interrogation_count_in_block.start() as f64,
+                    set_upper: u32::MAX as f64,
+                    set_step_increment: 1.,
+                    set_page_increment: 5.,
+                },
+                set_wrap: false,
+                set_snap_to_ticks: true,
+                set_numeric: true,
+                #[track(self.should_redraw)]
+                set_value: *self.data.block_params.interrogation_count_in_block.end() as f64,
+                connect_value_notify[sender] => move |widget| {
+                    let value_u32 = widget.value() as u32;
+                    sender.input(
+                        BlockInput::UpdateInterrogationCountMaximum(value_u32)
+                    );
+                },
+            },
         }
     }
 
@@ -1067,6 +1141,36 @@ impl FactoryComponent for Block {
                     .send(BlockOutput::UpdateEmptyWeeks(
                         self.index.current_index(),
                         new_count,
+                    ))
+                    .unwrap();
+            }
+            BlockInput::UpdateInterrogationCountMinimum(new_min) => {
+                if *self.data.block_params.interrogation_count_in_block.start() == new_min {
+                    return;
+                }
+                let old_max = *self.data.block_params.interrogation_count_in_block.end();
+                assert!(new_min <= old_max);
+                self.data.block_params.interrogation_count_in_block = new_min..=old_max;
+                sender
+                    .output_sender()
+                    .send(BlockOutput::UpdateInterrogationCountMinimum(
+                        self.index.current_index(),
+                        new_min,
+                    ))
+                    .unwrap();
+            }
+            BlockInput::UpdateInterrogationCountMaximum(new_max) => {
+                if *self.data.block_params.interrogation_count_in_block.end() == new_max {
+                    return;
+                }
+                let old_min = *self.data.block_params.interrogation_count_in_block.start();
+                assert!(old_min <= new_max);
+                self.data.block_params.interrogation_count_in_block = old_min..=new_max;
+                sender
+                    .output_sender()
+                    .send(BlockOutput::UpdateInterrogationCountMaximum(
+                        self.index.current_index(),
+                        new_max,
                     ))
                     .unwrap();
             }
