@@ -816,6 +816,7 @@ name = "collomatique-ilp"
 version = "0.1.0"
 dependencies = [
  "ordered-float",
+ "thiserror",
 ]
 
 [[package]]
