@@ -76,6 +76,27 @@ impl SubjectSlots {
                 .collect(),
         }
     }
+
+    pub fn find_slot_position(&self, slot_id: SlotId) -> Option<usize> {
+        for (pos, (id, _slot)) in self.ordered_slots.iter().enumerate() {
+            if slot_id == *id {
+                return Some(pos);
+            }
+        }
+        None
+    }
+
+    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
+        let pos = self.find_slot_position(slot_id)?;
+
+        Some(
+            &self
+                .ordered_slots
+                .get(pos)
+                .expect("Position should be valid at this point")
+                .1,
+        )
+    }
 }
 
 impl Slots {
@@ -95,6 +116,30 @@ impl Slots {
                 })
                 .collect(),
         }
+    }
+
+    pub fn find_slot_subject_and_position(&self, slot_id: SlotId) -> Option<(SubjectId, usize)> {
+        for (subject_id, subject_slots) in &self.subject_map {
+            if let Some(pos) = subject_slots.find_slot_position(slot_id) {
+                return Some((*subject_id, pos));
+            }
+        }
+        None
+    }
+
+    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
+        let (subject_id, pos) = self.find_slot_subject_and_position(slot_id)?;
+
+        Some(
+            &self
+                .subject_map
+                .get(&subject_id)
+                .expect("Subject id should be valid at this point")
+                .ordered_slots
+                .get(pos)
+                .expect("Position should be valid at this point")
+                .1,
+        )
     }
 }
 

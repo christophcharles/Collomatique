@@ -30,6 +30,8 @@ pub enum Op {
     Assignment(AssignmentOp),
     /// Operation on week patterns
     WeekPattern(WeekPatternOp),
+    /// Operation on slots
+    Slot(SlotOp),
 }
 
 impl Operation for Op {}
@@ -121,6 +123,23 @@ pub enum WeekPatternOp {
     Update(WeekPatternId, week_patterns::WeekPattern),
 }
 
+/// Slot operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// slots we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SlotOp {
+    /// Add a slot after an existing slot
+    /// If `None`, it is placed first
+    AddAfter(SubjectId, Option<SlotId>, slots::Slot),
+    /// Remove an existing slot
+    Remove(SlotId),
+    /// Move a subject to another position in the list
+    ChangePosition(SlotId, usize),
+    /// Update the parameters of an existing subject
+    Update(SlotId, slots::Slot),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -142,6 +161,8 @@ pub enum AnnotatedOp {
     Assignment(AnnotatedAssignmentOp),
     /// Operation on week patterns
     WeekPattern(AnnotatedWeekPatternOp),
+    /// Operation on slots
+    Slot(AnnotatedSlotOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -177,6 +198,12 @@ impl From<AnnotatedAssignmentOp> for AnnotatedOp {
 impl From<AnnotatedWeekPatternOp> for AnnotatedOp {
     fn from(value: AnnotatedWeekPatternOp) -> Self {
         AnnotatedOp::WeekPattern(value)
+    }
+}
+
+impl From<AnnotatedSlotOp> for AnnotatedOp {
+    fn from(value: AnnotatedSlotOp) -> Self {
+        AnnotatedOp::Slot(value)
     }
 }
 
@@ -273,7 +300,7 @@ pub enum AnnotatedAssignmentOp {
 
 /// Week pattern operation enumeration
 ///
-/// Compared to [AssignmentOp], this is a annotated operation,
+/// Compared to [WeekPatternOp], this is a annotated operation,
 /// meaning the operation has been annotated to contain
 /// all the necessary data to make it *reproducible*.
 ///
@@ -287,6 +314,27 @@ pub enum AnnotatedWeekPatternOp {
     Remove(WeekPatternId),
     /// Update the parameters of an existing week pattern
     Update(WeekPatternId, week_patterns::WeekPattern),
+}
+
+/// Slot operation enumeration
+///
+/// Compared to [SlotOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedSlotOp {
+    /// Add a slot after an existing slot
+    /// If `None`, it is placed first
+    /// First parameter is the slot id for the new slot
+    AddAfter(SlotId, SubjectId, Option<SlotId>, slots::Slot),
+    /// Remove an existing slot
+    Remove(SlotId),
+    /// Move a subject to another position in the list
+    ChangePosition(SlotId, usize),
+    /// Update the parameters of an existing subject
+    Update(SlotId, slots::Slot),
 }
 
 impl Operation for AnnotatedOp {}
@@ -325,6 +373,10 @@ impl AnnotatedOp {
             }
             Op::WeekPattern(week_pattern_op) => {
                 let (op, id) = AnnotatedWeekPatternOp::annotate(week_pattern_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Slot(slot_op) => {
+                let (op, id) = AnnotatedSlotOp::annotate(slot_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
         }
@@ -458,6 +510,28 @@ impl AnnotatedWeekPatternOp {
             WeekPatternOp::Update(id, new_week_pattern) => {
                 (AnnotatedWeekPatternOp::Update(id, new_week_pattern), None)
             }
+        }
+    }
+}
+
+impl AnnotatedSlotOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [SlotOp].
+    fn annotate(slot_op: SlotOp, id_issuer: &mut IdIssuer) -> (AnnotatedSlotOp, Option<SlotId>) {
+        match slot_op {
+            SlotOp::AddAfter(subject_id, after_id, slot) => {
+                let new_id = id_issuer.get_slot_id();
+                (
+                    AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot),
+                    Some(new_id),
+                )
+            }
+            SlotOp::ChangePosition(slot_id, new_pos) => {
+                (AnnotatedSlotOp::ChangePosition(slot_id, new_pos), None)
+            }
+            SlotOp::Remove(slot_id) => (AnnotatedSlotOp::Remove(slot_id), None),
+            SlotOp::Update(slot_id, slot) => (AnnotatedSlotOp::Update(slot_id, slot), None),
         }
     }
 }
