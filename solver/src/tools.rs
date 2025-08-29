@@ -49,7 +49,7 @@ pub struct AggregatedVariableConstraintDesc<ProblemVariable> {
 /// - provides the type and name of the ouput variable
 /// - returns a list of linear constraints for the ILP problem
 /// - provides a reconstruction function for programmatic reconstruction.
-pub trait AggregatedVariable<ProblemVariable>
+pub trait AggregatedVariable<ProblemVariable>: Send + Sync
 where
     ProblemVariable: UsableData + 'static,
 {

@@ -56,6 +56,28 @@ pub trait SimpleBaseProblem: Send + Sync {
     /// See [crate::BaseProblem] for the full discussion.
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable>;
 
+    /// Definition of the aggregated variables for the problem
+    ///
+    /// This is a list of variables all satisfying the [crate::tools::AggregatedVariable]
+    /// constructed, directly or indirectly, from the main variables
+    /// (returned by [SimpleBaseProblem::main_variables]).
+    ///
+    /// The order of variables is important: each variable should be reconstructable
+    /// from the main variables and the variables before it in the list. We
+    /// cannot have circular dependancies.
+    ///
+    /// The variable names should all be of type [SimpleBaseProblem::StructureVariable].
+    /// Doing otherwise will lead to failed assertion in rebuilding the structure variables.
+    fn aggregated_variables(
+        &self,
+    ) -> Vec<
+        Box<
+            dyn crate::tools::AggregatedVariable<
+                crate::generics::BaseVariable<Self::MainVariable, Self::StructureVariable>,
+            >,
+        >,
+    >;
+
     /// Converts a [SimpleBaseProblem::PartialSolution] into a set of values for the main variables.
     ///
     /// The description should be exactly one to one. This means two things:
@@ -113,6 +135,33 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
 
     /// Checks if the extension is compatible with the given problem
     fn is_fit_for_problem(&self, desc: &T) -> bool;
+
+    /// Definition of the aggregated variables specific to this constraint set.
+    ///
+    /// This is a list of variables all satisfying the [crate::tools::AggregatedVariable]
+    /// constructed, directly or indirectly, from the main variables
+    /// (returned by [crate::BaseProblem::main_variables]) and possibly from
+    /// the base problem structure variables (returned by [crate::BaseProblem::structure_variables]).
+    ///
+    /// The order of variables is important: each variable should be reconstructable
+    /// from the main variables and the variables before it in the list. We
+    /// cannot have circular dependancies.
+    ///
+    /// The variable names should all be of type [SimpleProblemConstraints::StructureVariable].
+    /// Doing otherwise will lead to failed assertion in rebuilding the structure variables.
+    fn extra_aggregated_variables(
+        &self,
+    ) -> Vec<
+        Box<
+            dyn crate::tools::AggregatedVariable<
+                crate::generics::ExtraVariable<
+                    T::MainVariable,
+                    T::StructureVariable,
+                    Self::StructureVariable,
+                >,
+            >,
+        >,
+    >;
 
     /// Definition of the general constraints
     ///
