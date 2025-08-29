@@ -28,6 +28,12 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
     fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> NdProblem<V> {
         let p = variables_vec.len();
 
+        let variable_map: BTreeMap<_, _> = variables_vec
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (v.clone(), i))
+            .collect();
+
         let mut leq_count = 0usize;
         let mut eq_count = 0usize;
 
@@ -56,20 +62,18 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
         for c in constraints {
             match c.get_sign() {
                 linexpr::Sign::Equals => {
-                    for (j, var) in variables_vec.iter().enumerate() {
-                        if let Some(val) = c.get_var(var.clone()) {
-                            eq_mat[(eq_index, j)] = val;
-                        }
+                    for (var, val) in c.coefs() {
+                        let j = variable_map[var];
+                        eq_mat[(eq_index, j)] = *val;
                     }
                     constraints_map.insert(c.clone(), ConstraintRef::Eq(eq_index));
                     eq_constants[eq_index] = c.get_constant();
                     eq_index += 1;
                 }
                 linexpr::Sign::LessThan => {
-                    for (j, var) in variables_vec.iter().enumerate() {
-                        if let Some(val) = c.get_var(var.clone()) {
-                            leq_mat[(leq_index, j)] = val;
-                        }
+                    for (var, val) in c.coefs() {
+                        let j = variable_map[var];
+                        leq_mat[(leq_index, j)] = *val;
                     }
                     constraints_map.insert(c.clone(), ConstraintRef::Leq(leq_index));
                     leq_constants[leq_index] = c.get_constant();
