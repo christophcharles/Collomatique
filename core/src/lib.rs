@@ -29,7 +29,7 @@
 //! and possibly [ProblemConstraints] on a few others.
 //! A generic usage example is provided in the [examples::simple_schedule] module.
 
-pub mod colloscopes;
+pub mod colloscopes_draft;
 pub mod time;
 
 pub mod examples;
