@@ -1,6 +1,7 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::factory::FactoryView;
 use relm4::gtk;
-use relm4::prelude::{DynamicIndex, FactoryComponent};
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidgetExt};
 use relm4::FactorySender;
 
 #[derive(Debug, Clone)]
@@ -16,8 +17,8 @@ pub struct Entry {
     index: DynamicIndex,
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     first_week_num: usize,
-    desc: Vec<bool>,
     period_id: collomatique_state_colloscopes::PeriodId,
+    weeks: FactoryVecDeque<Week>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +28,8 @@ pub enum EntryInput {
     EditClicked,
     DeleteClicked,
     CutClicked,
+
+    WeekStatusUpdated(usize, bool),
 }
 
 #[derive(Debug)]
@@ -34,11 +37,12 @@ pub enum EntryOutput {
     EditClicked(collomatique_state_colloscopes::PeriodId),
     DeleteClicked(collomatique_state_colloscopes::PeriodId),
     CutClicked(collomatique_state_colloscopes::PeriodId),
+    WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
 impl Entry {
     fn generate_title_text(&self) -> String {
-        let week_count = self.desc.len();
+        let week_count = self.weeks.len();
         let index = self.index.current_index() + 1;
 
         if week_count == 0 {
@@ -72,6 +76,20 @@ impl Entry {
                     index, start_week, end_week,
                 )
             }
+        }
+    }
+
+    fn update_week(
+        global_first_week: Option<collomatique_time::NaiveMondayDate>,
+        first_week_in_period: usize,
+        week_num_in_period: usize,
+        state: bool,
+    ) -> WeekData {
+        WeekData {
+            global_first_week: global_first_week,
+            first_week_in_period,
+            week_num_in_period,
+            state,
         }
     }
 }
@@ -117,6 +135,12 @@ impl FactoryComponent for Entry {
                     add_css_class: "flat",
                     connect_clicked => EntryInput::DeleteClicked,
                 },
+            },
+            #[local_ref]
+            weeks_list -> gtk::ListBox {
+                set_hexpand: true,
+                add_css_class: "boxed-list",
+                set_selection_mode: gtk::SelectionMode::None,
             },
             /*gtk::ListBox {
                 set_hexpand: true,
@@ -172,14 +196,50 @@ impl FactoryComponent for Entry {
         },
     }
 
-    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self {
+    fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
+        let weeks = FactoryVecDeque::builder()
+            .launch(gtk::ListBox::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                WeekOutput::StatusChanged(week_num, status) => {
+                    EntryInput::WeekStatusUpdated(week_num, status)
+                }
+            });
+
+        let mut model = Self {
             index: index.clone(),
             global_first_week: data.global_first_week,
             first_week_num: data.first_week_num,
-            desc: data.desc,
             period_id: data.period_id,
-        }
+            weeks,
+        };
+
+        crate::tools::factories::update_vec_deque(
+            &mut model.weeks,
+            data.desc.into_iter().enumerate().map(|(num, state)| {
+                Self::update_week(
+                    model.global_first_week.clone(),
+                    model.first_week_num,
+                    num,
+                    state,
+                )
+            }),
+            |x| WeekInput::UpdateData(x),
+        );
+
+        model
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let weeks_list = self.weeks.widget();
+        let widgets = view_output!();
+
+        widgets
     }
 
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
@@ -187,8 +247,19 @@ impl FactoryComponent for Entry {
             EntryInput::UpdateData(new_data) => {
                 self.global_first_week = new_data.global_first_week;
                 self.first_week_num = new_data.first_week_num;
-                self.desc = new_data.desc;
                 self.period_id = new_data.period_id;
+                crate::tools::factories::update_vec_deque(
+                    &mut self.weeks,
+                    new_data.desc.into_iter().enumerate().map(|(num, state)| {
+                        Self::update_week(
+                            self.global_first_week.clone(),
+                            self.first_week_num,
+                            num,
+                            state,
+                        )
+                    }),
+                    |x| WeekInput::UpdateData(x),
+                );
             }
             EntryInput::EditClicked => {
                 sender
@@ -205,6 +276,141 @@ impl FactoryComponent for Entry {
                     .output(EntryOutput::DeleteClicked(self.period_id))
                     .unwrap();
             }
+            EntryInput::WeekStatusUpdated(num, state) => {
+                sender
+                    .output(EntryOutput::WeekStatusUpdated(self.period_id, num, state))
+                    .unwrap();
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WeekData {
+    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub first_week_in_period: usize,
+    pub week_num_in_period: usize,
+    pub state: bool,
+}
+
+#[derive(Debug)]
+pub struct Week {
+    data: WeekData,
+}
+
+#[derive(Debug, Clone)]
+pub enum WeekInput {
+    UpdateData(WeekData),
+
+    StatusChanged(bool),
+}
+
+#[derive(Debug)]
+pub enum WeekOutput {
+    StatusChanged(usize, bool),
+}
+
+impl Week {
+    fn generate_title_text(&self) -> String {
+        let week_number = self.data.first_week_in_period + self.data.week_num_in_period;
+        match &self.data.global_first_week {
+            Some(global_start_date) => {
+                let start_date = global_start_date
+                    .inner()
+                    .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
+                    .expect("Valid start date");
+                let end_date = start_date
+                    .checked_add_days(chrono::Days::new(6))
+                    .expect("Valid end date");
+                format!(
+                    "Semaine {} du {} au {}",
+                    week_number + 1,
+                    start_date.format("%d/%m/%Y").to_string(),
+                    end_date.format("%d/%m/%Y").to_string(),
+                )
+            }
+            None => {
+                format!("Semaine {}", week_number + 1)
+            }
+        }
+    }
+}
+
+#[relm4::factory(pub)]
+impl FactoryComponent for Week {
+    type Init = WeekData;
+    type Input = WeekInput;
+    type Output = WeekOutput;
+    type CommandOutput = ();
+    type ParentWidget = gtk::ListBox;
+
+    view! {
+        #[root]
+        root_widget = gtk::Box {
+            set_hexpand: true,
+            set_margin_all: 5,
+            set_orientation: gtk::Orientation::Horizontal,
+            gtk::Label {
+                set_margin_all: 5,
+                #[watch]
+                set_label: &self.generate_title_text(),
+            },
+            gtk::Box {
+                set_hexpand: true,
+            },
+            gtk::Switch {
+                set_active: self.data.state,
+                #[watch]
+                set_state: self.data.state,
+                connect_state_set[sender] => move |_widget,state| {
+                    sender.input(WeekInput::StatusChanged(state));
+                    gtk::glib::Propagation::Stop
+                }
+            },
+        }
+    }
+
+    fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self { data }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+
+        if !self.data.state {
+            widgets.root_widget.add_css_class("dimmed");
+        }
+
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        match msg {
+            WeekInput::UpdateData(new_data) => {
+                self.data = new_data;
+            }
+            WeekInput::StatusChanged(status) => {
+                sender
+                    .output(WeekOutput::StatusChanged(
+                        self.data.week_num_in_period,
+                        status,
+                    ))
+                    .unwrap();
+            }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.data.state {
+            widgets.root_widget.remove_css_class("dimmed");
+        } else {
+            widgets.root_widget.add_css_class("dimmed");
         }
     }
 }

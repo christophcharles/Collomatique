@@ -3,11 +3,9 @@ use relm4::prelude::{DynamicIndex, FactoryComponent};
 
 pub fn update_vec_deque<'a, C: FactoryComponent<Index = DynamicIndex>>(
     factory: &'a mut FactoryVecDeque<C>,
-    iterator: impl ExactSizeIterator<Item = &'a C::Init>,
-    update_fn: impl Fn(&'a C::Init) -> C::Input,
-) where
-    C::Init: Clone,
-{
+    iterator: impl ExactSizeIterator<Item = C::Init>,
+    update_fn: impl Fn(C::Init) -> C::Input,
+) {
     let new_len = iterator.len();
     let is_empty = new_len == 0;
 
@@ -27,7 +25,7 @@ pub fn update_vec_deque<'a, C: FactoryComponent<Index = DynamicIndex>>(
             if i < current_len {
                 guard.send(i, update_fn(item));
             } else {
-                guard.push_back(item.clone());
+                guard.push_back(item);
             }
         }
     }
