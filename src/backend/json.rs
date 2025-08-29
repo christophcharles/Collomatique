@@ -328,6 +328,22 @@ pub enum ValidationError {
     DuplicatedId(u64),
     #[error("Week pattern id {0:?} is referenced but does not exist")]
     BadWeekPatternId(WeekPatternId),
+    #[error("Subject group id {0:?} is referenced but does not exist")]
+    BadSubjectGroupId(SubjectGroupId),
+    #[error("Subject id {0:?} is referenced but does not exist")]
+    BadSubjectId(SubjectId),
+    #[error("Incompat id {0:?} is referenced but does not exist")]
+    BadIncompatId(IncompatId),
+    #[error("Student id {0:?} is referenced but does not exist")]
+    BadStudentId(StudentId),
+    #[error("Group list id {0:?} is referenced but does not exist")]
+    BadGroupListId(GroupListId),
+    #[error("Teacher id {0:?} is referenced but does not exist")]
+    BadTeacherId(TeacherId),
+    #[error("Time slot id {0:?} is referenced but does not exist")]
+    BadTimeSlotId(TimeSlotId),
+    #[error("Grouping id {0:?} is referenced but does not exist")]
+    BadGroupingId(GroupingId),
 }
 
 pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
@@ -401,7 +417,22 @@ impl JsonData {
     }
 
     fn validate_students(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, student) in &self.students {
+            for (subject_group_id, subject_id) in &student.subject_groups {
+                if !self.subject_groups.contains_key(subject_group_id) {
+                    return Err(ValidationError::BadSubjectGroupId(*subject_group_id));
+                }
+                if !self.subjects.contains_key(subject_id) {
+                    return Err(ValidationError::BadSubjectId(*subject_id));
+                }
+            }
+            for incompat_id in &student.incompats {
+                if !self.incompats.contains_key(incompat_id) {
+                    return Err(ValidationError::BadIncompatId(*incompat_id));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_incompats(&self) -> ValidationResult<()> {
@@ -419,31 +450,107 @@ impl JsonData {
     }
 
     fn validate_group_lists(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, group_list) in &self.group_lists {
+            for (student_id, _) in &group_list.students_mapping {
+                if !self.students.contains_key(student_id) {
+                    return Err(ValidationError::BadStudentId(*student_id));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_subjects(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, subject) in &self.subjects {
+            if !self.subject_groups.contains_key(&subject.subject_group_id) {
+                return Err(ValidationError::BadSubjectGroupId(subject.subject_group_id));
+            }
+            if let Some(incompat_id) = &subject.incompat_id {
+                if !self.incompats.contains_key(incompat_id) {
+                    return Err(ValidationError::BadIncompatId(*incompat_id));
+                }
+            }
+            if let Some(group_list_id) = &subject.group_list_id {
+                if !self.group_lists.contains_key(group_list_id) {
+                    return Err(ValidationError::BadGroupListId(*group_list_id));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_time_slots(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, time_slot) in &self.time_slots {
+            if !self.subjects.contains_key(&time_slot.subject_id) {
+                return Err(ValidationError::BadSubjectId(time_slot.subject_id));
+            }
+            if !self.teachers.contains_key(&time_slot.teacher_id) {
+                return Err(ValidationError::BadTeacherId(time_slot.teacher_id));
+            }
+            if !self.week_patterns.contains_key(&time_slot.week_pattern_id) {
+                return Err(ValidationError::BadWeekPatternId(time_slot.week_pattern_id));
+            }
+        }
+        Ok(())
     }
 
     fn validate_groupings(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, grouping) in &self.groupings {
+            for time_slot_id in &grouping.slots {
+                if !self.time_slots.contains_key(time_slot_id) {
+                    return Err(ValidationError::BadTimeSlotId(*time_slot_id));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_grouping_incompats(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, grouping_incompat) in &self.grouping_incompats {
+            for grouping_id in &grouping_incompat.groupings {
+                if !self.groupings.contains_key(grouping_id) {
+                    return Err(ValidationError::BadGroupingId(*grouping_id));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_colloscopes(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, colloscope) in &self.colloscopes {
+            for (subject_id, subject) in &colloscope.subjects {
+                if !self.subjects.contains_key(subject_id) {
+                    return Err(ValidationError::BadSubjectId(*subject_id));
+                }
+                for time_slot in &subject.time_slots {
+                    if !self.teachers.contains_key(&time_slot.teacher_id) {
+                        return Err(ValidationError::BadTeacherId(time_slot.teacher_id));
+                    }
+                }
+                for (student_id, _) in &subject.group_list.students_mapping {
+                    if !self.students.contains_key(student_id) {
+                        return Err(ValidationError::BadStudentId(*student_id));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_slot_selections(&self) -> ValidationResult<()> {
-        todo!();
+        for (_, slot_selection) in &self.slot_selections {
+            if !self.subjects.contains_key(&slot_selection.subject_id) {
+                return Err(ValidationError::BadSubjectId(slot_selection.subject_id));
+            }
+            for slot_group in &slot_selection.slot_groups {
+                for time_slot_id in &slot_group.slots {
+                    if !self.time_slots.contains_key(time_slot_id) {
+                        return Err(ValidationError::BadTimeSlotId(*time_slot_id));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate(self) -> ValidationResult<ValidatedJson> {
