@@ -1,0 +1,12 @@
+//! Student list submodule
+//!
+//! This module contains the code for decoding StudentList entries
+
+use super::*;
+
+pub fn decode_entry(
+    student_list: &json::student_list::List,
+    pre_data: &mut PreData,
+) -> Result<(), DecodeError> {
+    todo!()
+}

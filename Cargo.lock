@@ -322,6 +322,7 @@ dependencies = [
 name = "collomatique-storage"
 version = "0.1.0"
 dependencies = [
+ "collomatique-state",
  "collomatique-state-colloscopes",
  "serde",
  "serde_json",

@@ -5,9 +5,9 @@
 //!
 //! The main function for this is [self::decode]
 
-use crate::json::*;
-
 use super::*;
+use crate::json::*;
+use std::collections::BTreeMap;
 
 /// Error type when decoding a [json::JsonData]
 ///
@@ -22,6 +22,19 @@ pub enum DecodeError {
     MismatchedSpecRequirementInEntry,
     #[error("An entry of type {0:?} is duplicated")]
     DuplicatedEntry(EntryTag),
+    #[error("Duplicated ID found in file")]
+    DuplicatedID,
+    #[error("generating new IDs is not secure, half the usable IDs have been used already")]
+    EndOfTheUniverse,
+}
+
+impl From<collomatique_state::tools::IdError> for DecodeError {
+    fn from(value: collomatique_state::tools::IdError) -> Self {
+        match value {
+            collomatique_state::tools::IdError::DuplicatedId => DecodeError::DuplicatedID,
+            collomatique_state::tools::IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
+        }
+    }
 }
 
 /// Caveats type
@@ -102,8 +115,30 @@ pub fn decode(json_data: &JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeEr
     Ok((data, caveats))
 }
 
-fn decode_entries(_entries: &[Entry]) -> Result<Data, DecodeError> {
-    todo!()
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+struct PreData {
+    student_list: BTreeMap<u64, collomatique_state_colloscopes::PersonWithContacts>,
+}
+
+mod student_list;
+
+fn decode_entries(entries: &[Entry]) -> Result<Data, DecodeError> {
+    let mut pre_data = PreData::default();
+
+    for entry in entries {
+        let EntryContent::ValidEntry(valid_entry) = &entry.content else {
+            continue;
+        };
+
+        match valid_entry {
+            ValidEntry::StudentList(student_list) => {
+                student_list::decode_entry(student_list, &mut pre_data)?;
+            }
+        }
+    }
+
+    let data = Data::from_lists(pre_data.student_list)?;
+    Ok(data)
 }
 
 /// Type of entries that can be found in a file
