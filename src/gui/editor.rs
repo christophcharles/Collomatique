@@ -113,7 +113,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             Task::none()
         }
         Message::NewClicked => Task::done(
-            super::dialogs::Message::AlertDialog(
+            super::dialogs::Message::YesNoAlertDialog(
                 "Créer un nouveau colloscope ?".into(),
                 "Le colloscope actuel sera fermé.".into(),
                 std::sync::Arc::new(|result| {
@@ -127,7 +127,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             .into(),
         ),
         Message::OpenClicked => Task::done(
-            super::dialogs::Message::AlertDialog(
+            super::dialogs::Message::YesNoAlertDialog(
                 "Ouvrir un colloscope ?".into(),
                 "Le colloscope actuel sera fermé.".into(),
                 std::sync::Arc::new(|result| {
@@ -141,7 +141,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             .into(),
         ),
         Message::CloseClicked => Task::done(
-            super::dialogs::Message::AlertDialog(
+            super::dialogs::Message::YesNoAlertDialog(
                 "Fermer le colloscope ?".into(),
                 "Les modifications sont enregistrées.".into(),
                 std::sync::Arc::new(|result| {
@@ -155,7 +155,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             .into(),
         ),
         Message::ExitRequest(id) => Task::done(
-            super::dialogs::Message::AlertDialog(
+            super::dialogs::Message::YesNoAlertDialog(
                 "Quitter Collomatique ?".into(),
                 "Les modifications sont enregistrées.".into(),
                 std::sync::Arc::new(move |result| {

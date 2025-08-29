@@ -17,12 +17,12 @@ pub enum Message {
         std::sync::Arc<dyn Fn(Option<FileDesc>) -> GuiMessage + Send + Sync>,
     ),
     FileChooserDialogClosed(Option<FileDesc>),
-    AlertDialog(
+    YesNoAlertDialog(
         String,
         String,
         std::sync::Arc<dyn Fn(bool) -> GuiMessage + Send + Sync>,
     ),
-    AlertDialogClosed(bool),
+    YesNoAlertDialogClosed(bool),
     ErrorDialog(String, String),
     ErrorDialogClosed,
 }
@@ -38,11 +38,11 @@ impl std::fmt::Debug for Message {
             Message::FileChooserDialogClosed(file_desc) => {
                 write!(f, "Message::FileChooserDialogClosed({:?}", file_desc)
             }
-            Message::AlertDialog(title, txt, _msg) => {
-                write!(f, "Message::AlertDialog({:?}, {:?}, Fn)", title, txt)
+            Message::YesNoAlertDialog(title, txt, _msg) => {
+                write!(f, "Message::YesNoAlertDialog({:?}, {:?}, Fn)", title, txt)
             }
-            Message::AlertDialogClosed(result) => {
-                write!(f, "Message::AlertDialogClose({:?})", result)
+            Message::YesNoAlertDialogClosed(result) => {
+                write!(f, "Message::YesNoAlertDialogClosed({:?})", result)
             }
             Message::ErrorDialog(title, txt) => {
                 write!(f, "Message::ErrorDialog({:?}, {:?})", title, txt)
@@ -57,7 +57,7 @@ impl std::fmt::Debug for Message {
 #[derive(Clone)]
 pub enum DialogShown {
     FileChooser(std::sync::Arc<dyn Fn(Option<FileDesc>) -> GuiMessage + Send + Sync>),
-    Alert(
+    YesNoAlert(
         String,
         String,
         std::sync::Arc<dyn Fn(bool) -> GuiMessage + Send + Sync>,
@@ -69,8 +69,8 @@ impl std::fmt::Debug for DialogShown {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DialogShown::FileChooser(_msg) => write!(f, "DialogShown::FileChooser(Fn)"),
-            DialogShown::Alert(title, txt, _msg) => {
-                write!(f, "DialogShown::Alert({:?}, {:?}, Fn)", title, txt)
+            DialogShown::YesNoAlert(title, txt, _msg) => {
+                write!(f, "DialogShown::YesNoAlert({:?}, {:?}, Fn)", title, txt)
             }
             DialogShown::Error(title, txt) => {
                 write!(f, "DialogShown::Error({:?}, {:?})", title, txt)
@@ -107,19 +107,20 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             *state = dialog_state.previous_state.as_ref().clone();
             Task::done(msg(file_desc))
         }
-        Message::AlertDialog(title, txt, msg) => {
+        Message::YesNoAlertDialog(title, txt, msg) => {
             *state = GuiState::DialogShown(State {
                 previous_state: Box::new(state.clone()),
-                dialog_shown: DialogShown::Alert(title, txt, msg),
+                dialog_shown: DialogShown::YesNoAlert(title, txt, msg),
             });
             Task::none()
         }
-        Message::AlertDialogClosed(result) => {
+        Message::YesNoAlertDialogClosed(result) => {
             let GuiState::DialogShown(dialog_state) = state else {
                 panic!("Dialog message but not in dialog state");
             };
-            let DialogShown::Alert(_title, _txt, msg) = dialog_state.dialog_shown.clone() else {
-                panic!("Alert dialog message but not in alert dialog state");
+            let DialogShown::YesNoAlert(_title, _txt, msg) = dialog_state.dialog_shown.clone()
+            else {
+                panic!("Yes/No Alert dialog message but not in Yes/No alert dialog state");
             };
 
             *state = dialog_state.previous_state.as_ref().clone();
@@ -166,7 +167,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
 
     let content: Element<GuiMessage> = match &state.dialog_shown {
         DialogShown::FileChooser(_msg) => Space::new(Length::Shrink, Length::Shrink).into(),
-        DialogShown::Alert(title, txt, _msg) => {
+        DialogShown::YesNoAlert(title, txt, _msg) => {
             let mut bold_font = iced::Font::default();
             bold_font.weight = iced::font::Weight::Bold;
 
@@ -184,11 +185,11 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                         button(container("Oui").center_x(Length::Fill))
                             .style(button::danger)
                             .width(Length::Fill)
-                            .on_press(Message::AlertDialogClosed(true).into()),
+                            .on_press(Message::YesNoAlertDialogClosed(true).into()),
                         button(container("Non").center_x(Length::Fill))
                             .style(button::primary)
                             .width(Length::Fill)
-                            .on_press(Message::AlertDialogClosed(false).into()),
+                            .on_press(Message::YesNoAlertDialogClosed(false).into()),
                     ]
                     .spacing(2)
                 ]
