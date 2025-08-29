@@ -91,7 +91,7 @@ fn main() {
 
     sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
 
-    let solver = collomatique::ilp::solvers::a_star::Solver::new();
+    let solver = collomatique::ilp::solvers::backtracking::Solver::new();
     let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
