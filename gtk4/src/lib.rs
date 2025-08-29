@@ -189,13 +189,15 @@ impl SimpleComponent for AppModel {
         app.set_accelerators_for_action::<OpenAction>(&["<primary>O"]);
 
         let new_action: RelmAction<NewAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestNewColloscope);
             })
         };
         let open_action: RelmAction<OpenAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestOpenExistingColloscopeWithDialog);
             })
         };
         let about_action: RelmAction<AboutAction> = {
