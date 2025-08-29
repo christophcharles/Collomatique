@@ -1898,38 +1898,6 @@ impl<'a> IlpTranslator<'a> {
         }
     }
 
-    fn build_balancing_constraints_for_subject_and_not_assigned_student<T: BalancingData>(
-        &self,
-        i: usize,
-        subject: &Subject,
-        slot_type: &T,
-        count: usize,
-        student: usize,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut expr = Expr::constant(0);
-
-        for (j, slot) in subject.slots.iter().enumerate() {
-            if !slot_type.is_slot_relevant(slot) {
-                continue;
-            }
-
-            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                if Self::is_group_fixed(group, subject) {
-                    continue;
-                }
-                expr = expr
-                    + Expr::var(Variable::DynamicGroupAssignment {
-                        subject: i,
-                        slot: j,
-                        group: k,
-                        student,
-                    });
-            }
-        }
-
-        self.build_max_min_balancing_from_expr(subject, count, expr)
-    }
-
     fn build_balancing_constraints_for_subject_and_group<T: BalancingData>(
         &self,
         i: usize,
@@ -1979,21 +1947,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (slot_type, count) in counts {
-            for student in subject.groups.not_assigned.iter().copied() {
-                constraints.extend(
-                    self.build_balancing_constraints_for_subject_and_not_assigned_student(
-                        i, subject, &slot_type, count, student,
-                    ),
-                );
-            }
-
             for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                if group.students.is_empty() {
-                    // Ignore empty groups
-                    // But groups with students assigned (the group might be fixed or dynamic, it does not matter)
-                    // should have a constraint
-                    continue;
-                }
                 constraints.extend(self.build_balancing_constraints_for_subject_and_group(
                     i, subject, &slot_type, count, k, group,
                 ));
