@@ -1,3 +1,4 @@
+use collomatique_rpc::{CmdMsg, OutMsg};
 use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
@@ -8,6 +9,13 @@ use std::path::PathBuf;
 mod error_dialog;
 mod warning_running;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CmdDesc {
+    Success(String),
+    Warning(String),
+    Error(String),
+}
+
 pub struct Dialog {
     hidden: bool,
     path: PathBuf,
@@ -15,6 +23,7 @@ pub struct Dialog {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
+    commands: Vec<CmdDesc>,
 }
 
 #[derive(Debug)]
@@ -196,6 +205,7 @@ impl Component for Dialog {
             warning_running,
             rpc_logger,
             is_running: false,
+            commands: vec![],
         };
 
         let widgets = view_output!();
@@ -208,6 +218,7 @@ impl Component for Dialog {
             DialogInput::Run(path, _script) => {
                 self.hidden = false;
                 self.path = path;
+                self.commands = vec![];
                 self.is_running = true;
                 self.rpc_logger
                     .sender()
@@ -233,7 +244,25 @@ impl Component for Dialog {
                     .send(rpc_server::RpcLoggerInput::KillProcess)
                     .unwrap();
             }
-            DialogInput::Cmd(_) => {}
+            DialogInput::Cmd(cmd) => match cmd {
+                Ok(cmd_msg) => {
+                    self.commands.push(match cmd_msg {
+                        CmdMsg::Success => CmdDesc::Success("Successful command".into()),
+                        CmdMsg::Warning => CmdDesc::Warning("Failed command".into()),
+                    });
+                    self.rpc_logger
+                        .sender()
+                        .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Ack))
+                        .unwrap();
+                }
+                Err(e) => {
+                    self.commands.push(CmdDesc::Error(e));
+                    self.rpc_logger
+                        .sender()
+                        .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Invalid))
+                        .unwrap();
+                }
+            },
             DialogInput::Accept => {}
             DialogInput::ProcessFinished => {
                 self.is_running = false;

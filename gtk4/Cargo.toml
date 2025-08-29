@@ -18,3 +18,4 @@ rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "process"] }
 chrono.workspace = true
+anyhow.workspace = true
