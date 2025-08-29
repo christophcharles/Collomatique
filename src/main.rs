@@ -1011,11 +1011,14 @@ async fn generate_colloscope_data(
 async fn main() -> Result<()> {
     let args = Args::parse();
 
+    println!("Opening database...");
     let db = connect_db(args.create, args.db.as_path()).await?;
 
     let data = generate_colloscope_data(&db, args.name).await?;
 
     let ilp_translator = data.ilp_translator();
+
+    println!("Generating ILP problem...");
     let problem = ilp_translator.problem();
 
     println!("{}", problem);
