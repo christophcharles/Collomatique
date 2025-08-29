@@ -63,6 +63,13 @@ use thiserror::Error;
 pub use linexpr::{Constraint, LinExpr};
 
 use mat_repr::{ConfigRepr, ProblemRepr};
+
+/// Default matrix representation for [Problem].
+/// 
+/// In most cases, the default representation is just fine
+/// and there is no reason to change it.
+/// 
+/// See [mat_repr] for more information.
 pub type DefaultRepr<V> = mat_repr::nd::NdProblem<V>;
 
 /// Trait for displayable, ordonnable, comparable, clonable, sendable data

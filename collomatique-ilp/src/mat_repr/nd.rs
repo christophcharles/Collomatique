@@ -1,3 +1,17 @@
+//! Matrix representation based on [ndarray].
+//! 
+//! This representation simply represents matrices using [ndarray].
+//! It is quite straightforward but mostly used for testing.
+//! 
+//! Indeed, in Collomatique, the ILP problems can have tens of thousands (or even
+//! hundreds of thousands) of constraints and variables. As such, the matrix
+//! representations can quickly lead to *gigabytes* of data.
+//! 
+//! Therefore, it is usually better to use a sparse matrix representation (like [super::sparse])
+//! which is more efficient and well-suited to typical scheduling problems.
+//! 
+//! Still, this representation is sufficiently straightforward for testing purposes.
+
 use super::{ConfigRepr, ProblemRepr};
 use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable};
 
@@ -7,6 +21,10 @@ use std::collections::BTreeMap;
 #[cfg(test)]
 mod tests;
 
+/// Implementation of a problem representation ([ProblemRepr])
+/// using [ndarray] as a backend.
+/// 
+/// See [super::nd] documentation for more details.
 #[derive(Debug, Clone, Default)]
 pub struct NdProblem<V: UsableData> {
     mat: Array2<f64>,
@@ -137,6 +155,10 @@ impl<V: UsableData> PartialOrd for NdProblem<V> {
     }
 }
 
+/// Implementation of a configuration representation ([ConfigRepr])
+/// using [ndarray] as a backend.
+/// 
+/// See [super::nd] documentation for more details.
 #[derive(Debug, Clone)]
 pub struct NdConfig<'a, V: UsableData> {
     pb_repr: &'a NdProblem<V>,
