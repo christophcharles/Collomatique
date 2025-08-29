@@ -238,12 +238,10 @@ impl<V: VariableName> Constraint<V> {
                     } else {
                         SimpleSolution::Solution(Some((v.clone(), true)))
                     }
+                } else if false_is_solution {
+                    SimpleSolution::Solution(Some((v.clone(), false)))
                 } else {
-                    if false_is_solution {
-                        SimpleSolution::Solution(Some((v.clone(), false)))
-                    } else {
-                        SimpleSolution::NoSolution
-                    }
+                    SimpleSolution::NoSolution
                 }
             }
             _ => SimpleSolution::NotSimpleSolvable,
