@@ -4,16 +4,15 @@ mod tests;
 use crate::ilp::tools::{ConfigRepr, MatRepr};
 use crate::ilp::{Config, Problem};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Solver<'a> {
-    problem: &'a Problem,
     mat_repr: MatRepr<'a>,
 }
 
 impl<'a> Solver<'a> {
     pub fn new(problem: &'a Problem) -> Self {
         let mat_repr = MatRepr::new(problem);
-        Solver { problem, mat_repr }
+        Solver { mat_repr }
     }
 }
 
