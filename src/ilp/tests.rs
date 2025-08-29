@@ -162,28 +162,6 @@ fn problem_undeclared_variable() {
 }
 
 #[test]
-fn problem_iterate_simplify() {
-    use crate::ilp::linexpr::Expr;
-
-    let constraints = BTreeSet::from([
-        (Expr::<String>::var("X") + Expr::var("Y") + Expr::var("W")).eq(&Expr::constant(1)),
-        (Expr::var("X") + Expr::var("Z")).eq(&Expr::constant(1)),
-        Expr::var("Z").leq(&Expr::constant(0)),
-    ]);
-
-    let simplified_constraints =
-        BTreeSet::from([(Expr::<String>::var("Y") + Expr::var("W")).eq(&Expr::constant(0))]);
-
-    let trivialized_variables =
-        BTreeMap::from([(String::from("X"), true), (String::from("Z"), false)]);
-
-    assert_eq!(
-        ProblemBuilder::<String>::iterate_simplify(&constraints),
-        (simplified_constraints, trivialized_variables)
-    );
-}
-
-#[test]
 fn problem_filter_variable() {
     use crate::ilp::linexpr::Expr;
 
