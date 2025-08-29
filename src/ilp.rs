@@ -294,7 +294,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
         Config {
             problem: self,
-            cfg_repr: self.pb_repr.default_nd_config(),
+            cfg_repr: self.pb_repr.default_config(),
         }
     }
 
@@ -319,7 +319,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'_, V, P> {
         Config {
             problem: self,
-            cfg_repr: self.pb_repr.random_nd_config(random_gen),
+            cfg_repr: self.pb_repr.random_config(random_gen),
         }
     }
 
