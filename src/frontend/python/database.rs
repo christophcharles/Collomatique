@@ -46,16 +46,6 @@ impl From<GeneralData> for backend::GeneralData {
 
 #[pymethods]
 impl Database {
-    fn test(self_: PyRef<'_, Self>, num: u32) -> u32 {
-        let Answer::Test(val) =
-            SessionConnection::send_command(self_.py(), &self_.sender, Command::Test(num))
-        else {
-            panic!("Bad answer type");
-        };
-
-        val
-    }
-
     fn general_data_get(self_: PyRef<'_, Self>) -> PyResult<GeneralData> {
         let Answer::GeneralDataGet(val) =
             SessionConnection::send_command(self_.py(), &self_.sender, Command::GeneralDataGet)
@@ -74,7 +64,6 @@ use crate::frontend::state;
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    Test(u32),
     GeneralDataGet,
     Exit,
 }
@@ -94,7 +83,6 @@ impl std::error::Error for PythonError {}
 
 #[derive(Debug)]
 pub enum Answer {
-    Test(u32),
     GeneralDataGet(PyResult<GeneralData>),
 }
 
@@ -170,7 +158,6 @@ impl<'scope> SessionConnection<'scope> {
 
     async fn execute_job<T: state::Manager>(command: &Command, manager: &mut T) -> Answer {
         match command {
-            Command::Test(val) => Answer::Test(val + 1),
             Command::GeneralDataGet => {
                 let general_data = manager
                     .general_data_get()
