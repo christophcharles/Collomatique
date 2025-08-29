@@ -5,6 +5,7 @@
 //!
 
 use collomatique_state::{tools, InMemoryData, Operation};
+use periods::{Periods, PeriodsExternalData};
 use std::collections::BTreeMap;
 
 pub mod ids;
@@ -13,6 +14,8 @@ pub use ids::StudentId;
 pub mod ops;
 use ops::AnnotatedStudentOp;
 pub use ops::{AnnotatedOp, Op, StudentOp};
+
+pub mod periods;
 
 /// Description of a person with contacts
 ///
@@ -62,6 +65,7 @@ pub struct PersonWithContact {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InnerData {
     student_list: BTreeMap<StudentId, PersonWithContact>,
+    periods: periods::Periods,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -141,18 +145,21 @@ impl Data {
     /// state of a new file
     pub fn new() -> Data {
         let student_list = BTreeMap::new();
-        Self::from_lists(student_list).expect("Lists are empty and should be valid")
+        Self::from_data(student_list, PeriodsExternalData::default())
+            .expect("Default data should be valid")
     }
 
-    /// Create a new [Data] from existing lists
+    /// Create a new [Data] from existing data
     ///
-    /// This will check the consistency of the lists
+    /// This will check the consistency of the data
     /// and will also do some internal checks, so this might fail.
-    pub fn from_lists(
+    pub fn from_data(
         student_list: BTreeMap<u64, PersonWithContact>,
+        periods: periods::PeriodsExternalData,
     ) -> Result<Data, tools::IdError> {
         let student_ids = student_list.keys().copied();
-        let id_issuer = IdIssuer::new(student_ids)?;
+        let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
+        let id_issuer = IdIssuer::new(student_ids, period_ids)?;
 
         // Ids have been validated
         let student_list = unsafe {
@@ -161,16 +168,25 @@ impl Data {
                 .map(|(key, value)| (StudentId::new(key), value))
                 .collect()
         };
+        let periods = unsafe { Periods::from_external_data(periods) };
 
         Ok(Data {
             id_issuer,
-            inner_data: InnerData { student_list },
+            inner_data: InnerData {
+                student_list,
+                periods,
+            },
         })
     }
 
     /// Get the student list
     pub fn get_student_list(&self) -> &BTreeMap<StudentId, PersonWithContact> {
         &self.inner_data.student_list
+    }
+
+    /// Return the description of the periods
+    pub fn get_periods(&self) -> &periods::Periods {
+        &self.inner_data.periods
     }
 
     /// Used internally

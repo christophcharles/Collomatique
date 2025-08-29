@@ -182,3 +182,44 @@ impl SlotWithDuration {
         }
     }
 }
+
+/// Represents a date that is necessarily a monday
+///
+/// This is useful for instance to represent the beginning
+/// of a specific week.
+///
+/// Internally it is just a [chrono::NaiveDate].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NaiveMondayDate(chrono::NaiveDate);
+
+impl NaiveMondayDate {
+    /// Builds a [NaiveMondayDate] from a [chrono::NaiveDate]
+    ///
+    /// Returns `None` if the date is not a monday.
+    pub fn new(date: chrono::NaiveDate) -> Option<NaiveMondayDate> {
+        let week = date.week(chrono::Weekday::Mon);
+        let first_day = week.checked_first_day()?;
+        if first_day != date {
+            return None;
+        }
+
+        Some(NaiveMondayDate(date))
+    }
+}
+
+impl NaiveMondayDate {
+    pub fn inner(&self) -> &chrono::NaiveDate {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> chrono::NaiveDate {
+        self.0
+    }
+}
+
+impl std::ops::Deref for NaiveMondayDate {
+    type Target = chrono::NaiveDate;
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
