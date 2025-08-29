@@ -14,14 +14,6 @@ pub enum UpdateMsg {
     GeneralPlanning(GeneralPlanningCmdMsg),
 }
 
-impl From<crate::ops::UpdateOp> for UpdateMsg {
-    fn from(value: crate::ops::UpdateOp) -> Self {
-        match value {
-            crate::ops::UpdateOp::GeneralPlanning(op) => UpdateMsg::GeneralPlanning(op.into()),
-        }
-    }
-}
-
 impl UpdateMsg {
     pub fn promote(
         self,
