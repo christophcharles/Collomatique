@@ -302,19 +302,34 @@ impl Variable {
     }
 }
 
+/// Sense for the objectiove function
+/// 
+/// This enum represents the sense in which
+/// we try to optimize the objective function
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum ObjectiveSense {
+    /// Minimize the objective function (default)
+    #[default]
+    Minimize,
+    /// Maximize the objective function
+    Maximize,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: UsableData, C: UsableData> {
     constraints: BTreeMap<Constraint<V>, C>,
     variables: BTreeMap<V, Variable>,
     objective_func: LinExpr<V>,
+    objective_sense: ObjectiveSense,
 }
 
 impl<V: UsableData, C: UsableData> Default for ProblemBuilder<V, C> {
     fn default() -> Self {
         ProblemBuilder {
-            constraints: BTreeMap::new(),
-            variables: BTreeMap::new(),
-            objective_func: LinExpr::constant(0.0),
+            constraints: BTreeMap::default(),
+            variables: BTreeMap::default(),
+            objective_func: LinExpr::default(),
+            objective_sense: ObjectiveSense::default(),
         }
     }
 }
@@ -350,6 +365,11 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
 
     pub fn set_objective_func(mut self, obj_fn: LinExpr<V>) -> Self {
         self.objective_func = obj_fn;
+        self
+    }
+
+    pub fn set_objective_sense(mut self, obj_sense: ObjectiveSense) -> Self {
+        self.objective_sense = obj_sense;
         self
     }
 }
