@@ -4,12 +4,27 @@ mod tests;
 use std::collections::BTreeMap;
 
 pub trait VariableName:
-    std::fmt::Debug + std::fmt::Display + PartialOrd + Ord + PartialEq + Eq + Clone
+    std::fmt::Debug
+    + std::fmt::Display
+    + PartialOrd
+    + Ord
+    + PartialEq
+    + Eq
+    + Clone
+    + for<'a> From<&'a Self>
 {
 }
 
-impl<T: std::fmt::Debug + std::fmt::Display + PartialOrd + Ord + PartialEq + Eq + Clone>
-    VariableName for T
+impl<
+        T: std::fmt::Debug
+            + std::fmt::Display
+            + PartialOrd
+            + Ord
+            + PartialEq
+            + Eq
+            + Clone
+            + for<'a> From<&'a T>,
+    > VariableName for T
 {
 }
 

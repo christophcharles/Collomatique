@@ -241,13 +241,18 @@ impl<V: VariableName> Problem<V> {
         }
     }
 
-    pub fn config_from<'a, U: Into<V>, T: IntoIterator<Item = U>>(
+    pub fn config_from<'a, 'b, U, T: IntoIterator<Item = &'b U>>(
         &'a self,
         vars: T,
-    ) -> Result<Config<'a, V>, V> {
+    ) -> Result<Config<'a, V>, V>
+    where
+        V: std::borrow::Borrow<U>,
+        U: Ord + ?Sized + 'b,
+        &'b U: Into<V>,
+    {
         let mut config = self.default_config();
 
-        for v in vars.into_iter() {
+        for v in vars {
             config.set(v, true)?;
         }
 
@@ -287,28 +292,36 @@ impl<'a, V: VariableName> Config<'a, V> {
         self.problem
     }
 
-    pub fn get<T: Into<V>>(&self, var: T) -> Result<bool, V> {
-        let name = var.into();
-        if let Some(val) = self.problem.trivialized_variables.get(&name) {
+    pub fn get<'b, T>(&self, var: &'b T) -> Result<bool, V>
+    where
+        V: std::borrow::Borrow<T>,
+        T: Ord + ?Sized,
+        &'b T: Into<V>,
+    {
+        if let Some(val) = self.problem.trivialized_variables.get(var) {
             return Ok(*val);
         }
 
-        let i = match self.problem.variables_lookup.get(&name) {
+        let i = match self.problem.variables_lookup.get(var) {
             Some(i) => i,
-            None => return Err(Error::InvalidVariable(name)),
+            None => return Err(Error::InvalidVariable(var.into())),
         };
         Ok(unsafe { self.nd_config.get_unchecked(*i) == 1 })
     }
 
-    pub fn set<T: Into<V>>(&mut self, var: T, val: bool) -> Result<(), V> {
-        let name = var.into();
-        if let Some(_val) = self.problem.trivialized_variables.get(&name) {
-            return Err(Error::TrivialVariable(name));
+    pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
+    where
+        V: std::borrow::Borrow<T>,
+        T: Ord + ?Sized,
+        &'b T: Into<V>,
+    {
+        if let Some(_val) = self.problem.trivialized_variables.get(var) {
+            return Err(Error::TrivialVariable(var.into()));
         }
 
-        let i = match self.problem.variables_lookup.get(&name) {
+        let i = match self.problem.variables_lookup.get(var) {
             Some(i) => i,
-            None => return Err(Error::InvalidVariable(name)),
+            None => return Err(Error::InvalidVariable(var.into())),
         };
         unsafe {
             self.nd_config.set_unchecked(*i, if val { 1 } else { 0 });
@@ -423,11 +436,21 @@ impl<'a, V: VariableName> PartialOrd for Config<'a, V> {
 pub struct FeasableConfig<'a, V: VariableName>(Config<'a, V>);
 
 impl<'a, V: VariableName> FeasableConfig<'a, V> {
-    pub fn set<T: Into<V>>(&mut self, var: T, val: bool) -> Result<(), V> {
+    pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
+    where
+        V: std::borrow::Borrow<T>,
+        T: Ord + ?Sized,
+        &'b T: Into<V>,
+    {
         self.0.set(var, val)
     }
 
-    pub fn get<T: Into<V>>(&self, var: T) -> Result<bool, V> {
+    pub fn get<'b, T>(&self, var: &'b T) -> Result<bool, V>
+    where
+        V: std::borrow::Borrow<T>,
+        T: Ord + ?Sized,
+        &'b T: Into<V>,
+    {
         self.0.get(var)
     }
 

@@ -55,10 +55,10 @@ impl Solver {
         var: V,
     ) {
         let current_val = config
-            .get(var.clone())
+            .get(&var)
             .expect("Variable should be available to get");
         config
-            .set(var.clone(), !current_val)
+            .set(&var, !current_val)
             .expect("Variable should be available to set");
         available_variables.remove(&var);
         choice_stack.push(var);
@@ -70,10 +70,10 @@ impl Solver {
         var: V,
     ) {
         let current_val = config
-            .get(var.clone())
+            .get(&var)
             .expect("Variable should be available to get");
         config
-            .set(var.clone(), !current_val)
+            .set(&var, !current_val)
             .expect("Variable should be available to set");
         available_variables.insert(var);
     }
@@ -125,8 +125,7 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
                 .get_variables()
                 .iter()
                 .filter(|var| {
-                    (config.get((*var).clone()) == o.get((*var).clone()))
-                        && !(trivialized_variables.contains_key(*var))
+                    (config.get(var) == o.get(var)) && !(trivialized_variables.contains_key(*var))
                 })
                 .cloned()
                 .collect(),
