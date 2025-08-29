@@ -13,7 +13,7 @@
 //!
 //! The problem itself is described by [SimpleScheduleBase].
 
-use collomatique_ilp::{ConfigData, Constraint, Variable};
+use collomatique_ilp::{ConfigData, Constraint, LinExpr, Variable};
 use std::collections::BTreeMap;
 
 use super::*;
@@ -45,38 +45,34 @@ pub struct SimpleScheduleBase {
 /// Variables for the simple scheduling problem
 ///
 /// They are all binary variables.
-/// The variable is 1 if indeed the group [Self::group_index]
-/// attends to the course [Self::course_index] on week
-/// [Self::week_index].
+/// The variable is 1 if indeed the group [Self::group]
+/// attends to the course [Self::course] on week
+/// [Self::week].
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SimpleScheduleVariable {
     /// Index of a group
     ///
-    /// The variable is 1 if indeed the group [Self::group_index]
-    /// attends to the course [Self::course_index] on week
-    /// [Self::week_index].
-    pub group_index: u32,
+    /// The variable is 1 if indeed the group [Self::group]
+    /// attends to the course [Self::course] on week
+    /// [Self::week].
+    pub group: u32,
     /// Index of a course
     ///
-    /// The variable is 1 if indeed the group [Self::group_index]
-    /// attends to the course [Self::course_index] on week
-    /// [Self::week_index].
-    pub course_index: u32,
+    /// The variable is 1 if indeed the group [Self::group]
+    /// attends to the course [Self::course] on week
+    /// [Self::week].
+    pub course: u32,
     /// Index of a week
     ///
-    /// The variable is 1 if indeed the group [Self::group_index]
-    /// attends to the course [Self::course_index] on week
-    /// [Self::week_index].
-    pub week_index: u32,
+    /// The variable is 1 if indeed the group [Self::group]
+    /// attends to the course [Self::course] on week
+    /// [Self::week].
+    pub week: u32,
 }
 
 impl std::fmt::Display for SimpleScheduleVariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "GiCoW_{}_{}_{}",
-            self.group_index, self.course_index, self.week_index
-        )
+        write!(f, "GiCoW_{}_{}_{}", self.group, self.course, self.week)
     }
 }
 
@@ -136,22 +132,118 @@ impl std::fmt::Display for SimpleScheduleConstraint {
 pub struct SimpleScheduleSolution {}
 
 impl SimpleScheduleBase {
+    fn generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(
+        &self,
+        group: u32,
+        week: u32,
+    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
+        let mut lhs = LinExpr::constant(0.);
+
+        for course in 0..self.course_count {
+            lhs = lhs
+                + LinExpr::var(SimpleScheduleVariable {
+                    group,
+                    week,
+                    course,
+                });
+        }
+
+        let rhs = LinExpr::constant(1.0);
+
+        (
+            lhs.leq(&rhs),
+            SimpleScheduleConstraint::AtMostOneCoursePerWeekForAGivenGroup { group, week },
+        )
+    }
+
     fn generate_at_most_one_course_per_week_for_a_given_group_constraints(
         &self,
     ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
-        todo![]
+        let mut output = vec![];
+
+        for group in 0..self.group_count {
+            for week in 0..self.week_count {
+                output.push(self.generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(group, week));
+            }
+        }
+
+        output
+    }
+
+    fn generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(
+        &self,
+        week: u32,
+        course: u32,
+    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
+        let mut lhs = LinExpr::constant(0.);
+
+        for group in 0..self.course_count {
+            lhs = lhs
+                + LinExpr::var(SimpleScheduleVariable {
+                    group,
+                    week,
+                    course,
+                });
+        }
+
+        let rhs = LinExpr::constant(1.0);
+
+        (
+            lhs.leq(&rhs),
+            SimpleScheduleConstraint::AtMostOneGroupPerCourseOnAGivenWeek { course, week },
+        )
     }
 
     fn generate_at_most_one_group_per_course_on_a_given_week_constraints(
         &self,
     ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
-        todo![]
+        let mut output = vec![];
+
+        for week in 0..self.week_count {
+            for course in 0..self.course_count {
+                output.push(self.generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(week, course));
+            }
+        }
+
+        output
+    }
+
+    fn generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(
+        &self,
+        group: u32,
+        course: u32,
+    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
+        let mut lhs = LinExpr::constant(0.);
+
+        for week in 0..self.week_count {
+            lhs = lhs
+                + LinExpr::var(SimpleScheduleVariable {
+                    group,
+                    week,
+                    course,
+                });
+        }
+
+        let rhs = LinExpr::constant(1.0);
+
+        (
+            lhs.eq(&rhs),
+            SimpleScheduleConstraint::EachGroupShouldAttendEachCourseExactlyOnce { course, group },
+        )
     }
 
     fn generate_each_group_should_attend_each_course_exactly_once_constraints(
         &self,
     ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
-        todo![]
+        let mut output = vec![];
+
+        for group in 0..self.week_count {
+            for course in 0..self.course_count {
+                output.push(self.generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(group, course));
+            }
+        }
+
+        output
     }
 }
 
@@ -165,14 +257,14 @@ impl BaseConstraints for SimpleScheduleBase {
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable> {
         let mut output = BTreeMap::new();
 
-        for group_index in 0..self.group_count {
-            for course_index in 0..self.course_count {
-                for week_index in 0..self.week_count {
+        for group in 0..self.group_count {
+            for course in 0..self.course_count {
+                for week in 0..self.week_count {
                     output.insert(
                         SimpleScheduleVariable {
-                            group_index,
-                            course_index,
-                            week_index,
+                            group,
+                            course,
+                            week,
                         },
                         Variable::binary(),
                     );
