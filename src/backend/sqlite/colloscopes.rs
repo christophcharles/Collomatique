@@ -417,5 +417,170 @@ pub async fn update(
     index: Id,
     colloscope: &Colloscope<super::teachers::Id, super::subjects::Id, super::students::Id>,
 ) -> std::result::Result<(), Error> {
-    todo!()
+    let colloscope_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let rows_affected = sqlx::query!(
+        "UPDATE colloscopes SET name = ?1 WHERE colloscope_id = ?2",
+        colloscope.name,
+        colloscope_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if rows_affected > 1 {
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple colloscopes with id {:?}",
+            index
+        )));
+    }
+
+    let _ = sqlx::query!(
+        r#"
+DELETE FROM collo_week_items
+WHERE collo_week_id IN
+(
+    SELECT collo_week_id FROM collo_weeks
+    WHERE collo_time_slot_id IN
+    (
+        SELECT collo_time_slot_id FROM collo_time_slots
+        WHERE collo_subject_id IN
+        (
+            SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+        )
+    )
+);
+
+DELETE FROM collo_weeks
+WHERE collo_time_slot_id IN
+(
+    SELECT collo_time_slot_id FROM collo_time_slots
+    WHERE collo_subject_id IN
+    (
+        SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+    )
+);
+
+DELETE FROM collo_time_slots
+WHERE collo_subject_id IN
+(
+    SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+);
+
+DELETE FROM collo_group_items
+WHERE collo_group_id IN
+(
+    SELECT collo_group_id FROM collo_groups
+    WHERE collo_subject_id IN
+    (
+        SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+    )
+);
+
+DELETE FROM collo_groups
+WHERE collo_subject_id IN
+(
+    SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+);
+
+DELETE FROM collo_subjects WHERE colloscope_id = ?;
+        "#,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    for (subject_id, subject) in &colloscope.subjects {
+        let collo_subject_id = sqlx::query!(
+            "INSERT INTO collo_subjects (colloscope_id, subject_id, group_list_name) VALUES (?1, ?2, ?3)",
+            colloscope_id,
+            subject_id.0,
+            subject.group_list.name,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .last_insert_rowid();
+
+        let mut group_map = Vec::new();
+
+        for group in &subject.group_list.groups {
+            let collo_group_id = sqlx::query!(
+                "INSERT INTO collo_groups (collo_subject_id, name) VALUES (?1, ?2)",
+                collo_subject_id,
+                *group,
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::from)?
+            .last_insert_rowid();
+
+            group_map.push(collo_group_id);
+        }
+
+        for (student, student_group) in &subject.group_list.students_mapping {
+            let _ = sqlx::query!(
+                "INSERT INTO collo_group_items (collo_group_id, student_id) VALUES (?1, ?2)",
+                group_map[*student_group],
+                student.0,
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::from)?;
+        }
+
+        for time_slot in &subject.time_slots {
+            let start_day: i64 = usize::from(time_slot.start.day)
+                .try_into()
+                .expect("day number should fit in i64");
+            let start_time = time_slot.start.time.get();
+
+            let collo_time_slot_id = sqlx::query!(
+                "INSERT INTO collo_time_slots (collo_subject_id, teacher_id, start_day, start_time, room) VALUES (?1, ?2, ?3, ?4, ?5)",
+                collo_subject_id,
+                time_slot.teacher_id.0,
+                start_day,
+                start_time,
+                time_slot.room,
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::from)?
+            .last_insert_rowid();
+
+            for (week, groups) in &time_slot.group_assignments {
+                let collo_week_id = sqlx::query!(
+                    "INSERT INTO collo_weeks (collo_time_slot_id, week) VALUES (?1, ?2)",
+                    collo_time_slot_id,
+                    week.0,
+                )
+                .execute(&mut *conn)
+                .await
+                .map_err(Error::from)?
+                .last_insert_rowid();
+
+                for group in groups {
+                    let _ = sqlx::query!(
+                        "INSERT INTO collo_week_items (collo_week_id, collo_group_id) VALUES (?1, ?2)",
+                        collo_week_id,
+                        group_map[*group],
+                    )
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(Error::from)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
