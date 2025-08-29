@@ -34,6 +34,7 @@ pub struct PeriodEntry {
     subjects_dropdown: Controller<crate::widgets::droplist::Widget>,
     current_subject: Option<collomatique_state_colloscopes::SubjectId>,
     column_view: DynamicColumnView<StudentItem, gtk::SingleSelection>,
+    shown: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +49,7 @@ pub enum PeriodEntryInput {
     SubjectDropdownChanged(Option<usize>),
     AssignAll,
     UnassignAll,
+    ToggleShown,
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +100,22 @@ impl FactoryComponent for PeriodEntry {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Horizontal,
                 set_spacing: 5,
+                gtk::Button {
+                    #[watch]
+                    set_icon_name: if self.shown {
+                        "go-up"
+                    } else {
+                        "go-down"
+                    },
+                    add_css_class: "flat",
+                    #[watch]
+                    set_tooltip_text: Some(if self.shown {
+                        "Masquer la période"
+                    } else {
+                        "Afficher la période"
+                    }),
+                    connect_clicked => PeriodEntryInput::ToggleShown,
+                },
                 gtk::Label {
                     set_halign: gtk::Align::Start,
                     #[watch]
@@ -119,7 +137,7 @@ impl FactoryComponent for PeriodEntry {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 5,
                     #[watch]
-                    set_visible: !self.data.filtered_students.is_empty() && !self.data.filtered_subjects.is_empty(),
+                    set_visible: !self.data.filtered_students.is_empty() && !self.data.filtered_subjects.is_empty() && self.shown,
                     append = &gtk::Box {
                         set_hexpand: true,
                     },
@@ -151,7 +169,7 @@ impl FactoryComponent for PeriodEntry {
             },
             gtk::Label {
                 #[watch]
-                set_visible: self.data.filtered_students.is_empty(),
+                set_visible: self.data.filtered_students.is_empty() && self.shown,
                 set_halign: gtk::Align::Start,
                 set_label: "<i>Pas d'élèves inscrits sur la période</i>",
                 set_use_markup: true,
@@ -159,11 +177,11 @@ impl FactoryComponent for PeriodEntry {
             gtk::ScrolledWindow {
                 set_hexpand: true,
                 set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Never),
+                #[watch]
+                set_visible: !self.data.filtered_students.is_empty() && self.shown,
                 #[local_ref]
                 column_view_widget -> gtk::ColumnView {
                     add_css_class: "frame",
-                    #[watch]
-                    set_visible: !self.data.filtered_students.is_empty(),
                 },
             },
         },
@@ -191,6 +209,7 @@ impl FactoryComponent for PeriodEntry {
             column_view,
             subjects_dropdown,
             current_subject: None,
+            shown: index.current_index() == 0,
         };
 
         model.rebuild_columns();
@@ -280,6 +299,9 @@ impl FactoryComponent for PeriodEntry {
                         false,
                     ))
                     .unwrap();
+            }
+            PeriodEntryInput::ToggleShown => {
+                self.shown = !self.shown;
             }
         }
     }
