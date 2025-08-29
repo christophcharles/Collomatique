@@ -391,6 +391,7 @@ pub enum Variable {
         student: usize,
         week_modulo: u32,
     },
+    UseGrouping(usize),
 }
 
 impl std::fmt::Display for Variable {
@@ -420,6 +421,7 @@ impl std::fmt::Display for Variable {
                 student,
                 week_modulo,
             } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
+            Variable::UseGrouping(num) => write!(f, "UG_{}", num),
         }
     }
 }
@@ -591,7 +593,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_student_not_in_last_period(&self) -> BTreeSet<Variable> {
+    fn build_student_not_in_last_period_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -610,6 +612,15 @@ impl<'a> IlpTranslator<'a> {
                 )
             })
             .flatten()
+            .collect()
+    }
+
+    fn build_use_grouping_variables(&self) -> BTreeSet<Variable> {
+        self.data
+            .slot_groupings
+            .iter()
+            .enumerate()
+            .map(|(i, _grouping)| Variable::UseGrouping(i))
             .collect()
     }
 
@@ -1433,7 +1444,8 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_dynamic_group_assignment_variables())
             .add_variables(self.build_student_in_group_variables())
             .add_variables(self.build_periodicity_variables())
-            .add_variables(self.build_student_not_in_last_period())
+            .add_variables(self.build_student_not_in_last_period_variables())
+            .add_variables(self.build_use_grouping_variables())
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .add_constraints(self.build_one_interrogation_per_period_contraints())
