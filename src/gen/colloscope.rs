@@ -2107,20 +2107,42 @@ impl<'a> IlpTranslator<'a> {
         &self,
         initial_ranges: Vec<std::ops::Range<u32>>,
         window_size: u32,
+        start_end_inequalities: bool,
     ) -> Vec<std::ops::Range<u32>> {
         let mut output = Vec::new();
 
         for range in initial_ranges {
             let range_size = range.end - range.start;
-            if window_size >= range_size {
-                output.push(range);
-                continue;
+
+            // start (smaller than window size) ranges
+            if start_end_inequalities {
+                let max_size = range_size.min(window_size);
+                for i in 1..max_size {
+                    let start = range.start;
+                    let end = start + i;
+                    output.push(start..end);
+                }
             }
 
-            let start = range.start;
-            let end = range.end - window_size + 1;
-            for i in start..end {
-                output.push(i..(i + window_size));
+            // mid-ranges : either all the window sized ranges or one range covering the whole period
+            if window_size >= range_size {
+                output.push(range.clone());
+            } else {
+                let start = range.start;
+                let end = range.end - window_size + 1;
+                for i in start..end {
+                    output.push(i..(i + window_size));
+                }
+            }
+
+            // end (smaller than window size) ranges
+            if start_end_inequalities {
+                let max_size = range_size.min(window_size);
+                for i in 1..max_size {
+                    let start = range.end - max_size + i;
+                    let end = range.end;
+                    output.push(start..end);
+                }
             }
         }
 
@@ -2132,6 +2154,7 @@ impl<'a> IlpTranslator<'a> {
         subject: &Subject,
         slot_selection: &BalancingSlotSelection,
         allow_cuts: bool,
+        start_end_inequalities: bool,
     ) -> (Vec<std::ops::Range<u32>>, u32) {
         let total_count_usize: usize = slot_selection
             .slot_groups
@@ -2149,7 +2172,8 @@ impl<'a> IlpTranslator<'a> {
             vec![0..self.data.general.week_count.get()]
         };
 
-        let rolling_ranges = self.generate_rolling_ranges(initial_ranges, window_size);
+        let rolling_ranges =
+            self.generate_rolling_ranges(initial_ranges, window_size, start_end_inequalities);
 
         let weeks = slot_selection
             .extract_weeks(&subject.slots_information.slots)
@@ -2182,9 +2206,14 @@ impl<'a> IlpTranslator<'a> {
         j: usize,
         slot_selection: &BalancingSlotSelection,
         allow_cuts: bool,
+        start_end_inequalities: bool,
     ) -> BTreeSet<Constraint<Variable>> {
-        let (ranges, window_size) =
-            self.generate_ranges_for_balancing(subject, slot_selection, allow_cuts);
+        let (ranges, window_size) = self.generate_ranges_for_balancing(
+            subject,
+            slot_selection,
+            allow_cuts,
+            start_end_inequalities,
+        );
 
         let mut output = BTreeSet::new();
 
@@ -2218,6 +2247,7 @@ impl<'a> IlpTranslator<'a> {
         subject: &Subject,
         slot_selections: &Vec<BalancingSlotSelection>,
         allow_cuts: bool,
+        start_end_inequalities: bool,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
@@ -2229,6 +2259,7 @@ impl<'a> IlpTranslator<'a> {
                     j,
                     slot_selection,
                     allow_cuts,
+                    start_end_inequalities,
                 ),
             );
         }
@@ -2259,6 +2290,7 @@ impl<'a> IlpTranslator<'a> {
                         subject,
                         slot_selections,
                         false,
+                        false,
                     ))
                 }
                 BalancingConstraints::StrictWithCuts => {
@@ -2267,6 +2299,7 @@ impl<'a> IlpTranslator<'a> {
                         subject,
                         slot_selections,
                         true,
+                        false,
                     ))
                 }
                 BalancingConstraints::StrictWithCutsAndOverall => {
@@ -2275,6 +2308,7 @@ impl<'a> IlpTranslator<'a> {
                         subject,
                         slot_selections,
                         true,
+                        false,
                     ));
                     constraints.extend(self.build_balancing_constraints_for_subject_overall(
                         i,
@@ -2301,6 +2335,7 @@ impl<'a> IlpTranslator<'a> {
                         .balancing_requirements
                         .slot_selections,
                     false,
+                    true,
                 ),
             );
         }
