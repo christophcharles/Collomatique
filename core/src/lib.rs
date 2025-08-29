@@ -16,7 +16,7 @@
 //! make the translation algorithm as thin as possible, and its verification as easy as
 //! possible, I strive to make the colloscopes constraints and the actual colloscopes
 //! representation the least redundant possible.
-//! 
+//!
 //! Also to keep this part lean, a lot of information is not represented as it is not
 //! needed to build the constraint system. For instance, the name of the students or
 //! the name of the teachers are not stored in the structures of this modules. Students
@@ -24,3 +24,27 @@
 //! from collomatique to provide necessary utilities to make working the algorithm
 //! somewhat pleasant.
 //!
+
+pub mod time;
+
+use std::collections::BTreeSet;
+
+// Description of the information pertinent to a single student
+// for the colloscope.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Student {
+    // List of times the student is not available for interrogations or tutorial
+    //
+    // Using BTreeSet garantees that there are no duplications.
+    pub incompatibilities: BTreeSet<time::SlotWithDuration>,
+
+    // Whether the student can have two consecutive interrogations.
+    pub non_consecutive_interrogations: bool,
+}
+
+// Description of all the data describing a colloscope constraints
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeConstraints {
+    // List of students with their relevant constraints
+    pub students: Vec<Student>,
+}
