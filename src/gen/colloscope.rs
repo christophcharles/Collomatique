@@ -16,8 +16,8 @@ pub enum Error {
     SlotOverlapsNextDay,
     #[error("Teacher number is invalid")]
     InvalidTeacherNumber,
-    #[error("Subject number is invalid")]
-    InvalidSubjectNumber,
+    #[error("Student {0} references an invalid subject number ({1})")]
+    StudentWithInvalidSubject(usize, usize),
     #[error("Incompatibility number is invalid")]
     InvalidIncompatibilityNumber,
     #[error("Slot groupings {0} and {1} are duplicates of each other")]
@@ -165,10 +165,10 @@ impl ValidatedData {
             }
         }
 
-        for student in &students {
+        for (i, student) in students.iter().enumerate() {
             for &subject in &student.subjects {
                 if subject >= subjects.len() {
-                    return Err(Error::InvalidSubjectNumber);
+                    return Err(Error::StudentWithInvalidSubject(i, subject));
                 }
             }
 
