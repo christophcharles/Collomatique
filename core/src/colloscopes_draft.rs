@@ -1,6 +1,6 @@
 //! This modules defines all the main constraints to build a colloscope.
 
-use super::time;
+use collomatique_time as time;
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;

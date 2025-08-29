@@ -1,0 +1,8 @@
+[package]
+name = "collomatique-time"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+chrono = { version = "0.4", features = [ "serde" ] }
