@@ -113,7 +113,7 @@ impl CbcSolver {
                     VariableType::Integer => model.add_integer(),
                     VariableType::Continuous => model.add_col(),
                 };
-                
+
                 match desc.get_min() {
                     Some(m) => model.set_col_lower(col, m),
                     None => model.set_col_lower(col, -f64::INFINITY),
