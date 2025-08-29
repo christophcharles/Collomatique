@@ -6668,69 +6668,74 @@ fn balancing_teachers() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Wednesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Wednesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::Teachers,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::teachers_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Wednesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Wednesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
@@ -6871,69 +6876,74 @@ fn balancing_timeslots() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Wednesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Wednesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::Timeslots,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::timeslots_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Wednesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Wednesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
@@ -7083,69 +7093,74 @@ fn balancing_timeslots_2() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::Timeslots,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::timeslots_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
@@ -7286,69 +7301,74 @@ fn balancing_teachers_and_timeslots() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::TeachersAndTimeslots,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::teachers_and_timeslots_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
@@ -7503,7 +7523,7 @@ fn no_balancing() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::None,
+        balancing_requirements: None,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -7643,159 +7663,164 @@ fn balancing_timeslots_with_ghost_group() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 3,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 3,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 3,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 3,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::Timeslots,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::timeslots_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 3,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 3,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 3,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 3,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
@@ -7984,123 +8009,128 @@ fn balancing_timeslots_with_ghost_group_2() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 0,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+        SlotWithTeacher {
+            cost: 0,
+            teacher: 1,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::Timeslots,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::timeslots_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 0,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                cost: 0,
-                teacher: 1,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
@@ -8275,69 +8305,74 @@ fn balancing_timeslots_with_partial_last_period() {
         max_interrogations_per_day: None,
     };
 
+    let slots = vec![
+        SlotWithTeacher {
+            teacher: 0,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+            cost: 0,
+        },
+        SlotWithTeacher {
+            teacher: 0,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+            cost: 0,
+        },
+        SlotWithTeacher {
+            teacher: 0,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+            cost: 0,
+        },
+        SlotWithTeacher {
+            teacher: 1,
+            start: SlotStart {
+                week: 0,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+            cost: 0,
+        },
+        SlotWithTeacher {
+            teacher: 1,
+            start: SlotStart {
+                week: 1,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+            cost: 0,
+        },
+        SlotWithTeacher {
+            teacher: 1,
+            start: SlotStart {
+                week: 2,
+                weekday: time::Weekday::Tuesday,
+                start_time: time::Time::from_hm(8, 0).unwrap(),
+            },
+            cost: 0,
+        },
+    ];
+
     let subjects = vec![Subject {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements::Timeslots,
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::default(),
+            object: BalancingObject::timeslots_from_slots(&slots),
+        }),
         duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-                cost: 0,
-            },
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-                cost: 0,
-            },
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-                cost: 0,
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-                cost: 0,
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-                cost: 0,
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 2,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-                cost: 0,
-            },
-        ],
+        slots,
         groups: GroupsDesc {
             prefilled_groups: vec![
                 GroupDesc {
