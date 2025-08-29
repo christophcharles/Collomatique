@@ -3,14 +3,16 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use crate::rpc::{
-    cmd_msg::{ExtensionDesc, MsgStudentId, OpenFileDialogMsg},
+    cmd_msg::{ExtensionDesc, MsgStudentId, MsgWeekPatternId, OpenFileDialogMsg},
     error_msg::{
         AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
         AssignmentsError, CutPeriodError, DeletePeriodError, DeleteStudentError,
-        DeleteSubjectError, DeleteTeacherError, DuplicatePreviousPeriodError, GeneralPlanningError,
-        MergeWithPreviousPeriodError, MoveDownError, MoveUpError, StudentsError, SubjectsError,
-        TeachersError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateStudentError,
-        UpdateSubjectError, UpdateTeacherError, UpdateWeekStatusError,
+        DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
+        DuplicatePreviousPeriodError, GeneralPlanningError, MergeWithPreviousPeriodError,
+        MoveDownError, MoveUpError, StudentsError, SubjectsError, TeachersError,
+        UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateStudentError,
+        UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
+        WeekPatternsError,
     },
     ErrorMsg, GuiAnswer, ResultMsg,
 };
@@ -87,6 +89,8 @@ mod time;
 use teachers::{Teacher, TeacherId};
 mod students;
 use students::{Student, StudentId};
+mod week_patterns;
+use week_patterns::{WeekPattern, WeekPatternId};
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
@@ -815,6 +819,80 @@ impl Session {
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
+    }
+
+    fn week_patterns_add(
+        self_: PyRef<'_, Self>,
+        week_pattern: week_patterns::WeekPattern,
+    ) -> WeekPatternId {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::WeekPatterns(
+                crate::rpc::cmd_msg::WeekPatternsCmdMsg::AddNewWeekPattern(week_pattern.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::WeekPatternId(id))) => id.into(),
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn week_patterns_update(
+        self_: PyRef<'_, Self>,
+        id: WeekPatternId,
+        new_week_pattern: week_patterns::WeekPattern,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::WeekPatterns(
+                crate::rpc::cmd_msg::WeekPatternsCmdMsg::UpdateWeekPattern(
+                    id.into(),
+                    new_week_pattern.into(),
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::WeekPatterns(WeekPatternsError::UpdateWeekPattern(e))) => {
+                match e {
+                    UpdateWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                        format!("Invalid week pattern id {:?}", id),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn week_patterns_delete(self_: PyRef<'_, Self>, id: WeekPatternId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::WeekPatterns(
+                crate::rpc::cmd_msg::WeekPatternsCmdMsg::DeleteWeekPattern(id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::WeekPatterns(WeekPatternsError::DeleteWeekPattern(e))) => {
+                match e {
+                    DeleteWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                        format!("Invalid week pattern id {:?}", id),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn week_patterns_get_list(self_: PyRef<'_, Self>) -> BTreeMap<WeekPatternId, WeekPattern> {
+        self_
+            .token
+            .get_data()
+            .get_week_patterns()
+            .week_pattern_map
+            .iter()
+            .map(|(id, data)| (MsgWeekPatternId::from(*id).into(), data.clone().into()))
+            .collect()
     }
 }
 
