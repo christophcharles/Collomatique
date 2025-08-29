@@ -311,7 +311,8 @@ fn restricted_interrogations_per_week() {
     let ilp_translator = data.ilp_translator();
     let problem = ilp_translator.problem();
 
-    let solver = collomatique::ilp::solvers::backtracking::Solver::new();
+    use collomatique::ilp::solvers::backtracking::heuristics::Connolly1992;
+    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Connolly1992::default());
 
     use collomatique::gen::colloscope::Variable;
     // Through testing this one caused issue when trying to put GiS_2_0_2 to 1
