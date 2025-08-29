@@ -5,11 +5,14 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
-    /// Create new database if does not exist already
+    /// Create new database - won't override an existing one
     #[arg(short, long, default_value_t = false)]
     create: bool,
     /// Sqlite file (to open or create) that contains the database
     db: std::path::PathBuf,
+    /// Select what colloscope to compute (default is the first one in the db)
+    #[arg(short, long)]
+    name: Option<String>,
 }
 
 use sqlx::migrate::MigrateDatabase;
@@ -27,8 +30,12 @@ async fn create_db(db_url: &str) -> Result<SqlitePool> {
         return Err(anyhow!("Database \"{}\" already exists", db_url));
     }
 
-    sqlx::Sqlite::create_database(db_url).await?;
-    let db = SqlitePool::connect(&db_url).await?;
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
+    use std::str::FromStr;
+    let options = SqliteConnectOptions::from_str(db_url)?
+        .journal_mode(SqliteJournalMode::Delete)
+        .create_if_missing(true);
+    let db = SqlitePool::connect_with(options).await?;
 
     sqlx::query(
         r#"
@@ -180,7 +187,10 @@ async fn open_db(db_url: &str) -> Result<SqlitePool> {
         return Err(anyhow!("Database \"{}\" does not exist", db_url));
     }
 
-    Ok(SqlitePool::connect(db_url).await?)
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
+    use std::str::FromStr;
+    let options = SqliteConnectOptions::from_str(db_url)?.journal_mode(SqliteJournalMode::Delete);
+    Ok(SqlitePool::connect_with(options).await?)
 }
 
 async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqlitePool> {
@@ -593,10 +603,32 @@ async fn generate_grouping_incompats(
     Ok(set)
 }
 
+async fn get_colloscope_id(db_conn: &SqlitePool, colloscope: Option<String>) -> Result<i64> {
+    match colloscope {
+        Some(name) => {
+            let id = sqlx::query!("SELECT colloscope_id FROM colloscopes WHERE name = ?", name)
+                .fetch_optional(db_conn)
+                .await?;
+            id.map(|x| x.colloscope_id)
+                .ok_or(anyhow!("Colloscope {} does not exist", name))
+        }
+        None => {
+            let id = sqlx::query!("SELECT colloscope_id FROM colloscopes")
+                .fetch_optional(db_conn)
+                .await?;
+            id.map(|x| x.colloscope_id)
+                .ok_or(anyhow!("No available colloscope to fill in"))
+        }
+    }
+}
+
 async fn generate_colloscope_data(
     db_conn: &SqlitePool,
+    colloscope: Option<String>,
 ) -> Result<collomatique::gen::colloscope::ValidatedData> {
     use collomatique::gen::colloscope::*;
+
+    let collo_id = get_colloscope_id(db_conn, colloscope).await?;
 
     let general = generate_general_data(db_conn);
     let incompatibilities = generate_incompatibilies(db_conn).await?;
@@ -621,9 +653,32 @@ async fn main() -> Result<()> {
 
     let db = connect_db(args.create, args.db.as_path()).await?;
 
-    let result = generate_colloscope_data(&db).await?;
+    let data = generate_colloscope_data(&db, args.name).await?;
 
-    println!("{:?}", result);
+    let ilp_translator = data.ilp_translator();
+    let problem = ilp_translator.problem();
+
+    println!("{}", problem);
+
+    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
+
+    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+
+    sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
+    sa_optimizer.set_max_steps(Some(1000));
+
+    use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
+    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
+    let iterator = sa_optimizer.iterate(solver, &mut random_gen);
+
+    for (i, (sol, cost)) in iterator.enumerate() {
+        println!(
+            "{}: {} - {:?}",
+            i,
+            cost,
+            ilp_translator.read_solution(sol.as_ref())
+        );
+    }
 
     Ok(())
 }
