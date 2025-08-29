@@ -342,6 +342,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "collomatique-python",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
@@ -365,6 +366,10 @@ dependencies = [
  "sprs",
  "thiserror",
 ]
+
+[[package]]
+name = "collomatique-python"
+version = "0.1.0"
 
 [[package]]
 name = "collomatique-solver"

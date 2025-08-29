@@ -12,6 +12,10 @@ use std::path::PathBuf;
 #[command(author, version, about, long_about = None)]
 /// Collomatique gtk4 UI
 struct Args {
+    /// Ignore all other parameters and run the python engine
+    #[arg(long, default_value_t = false)]
+    python_engine: bool,
+
     /// Open Collomatique directly editing a new colloscope
     #[arg(short, long, default_value_t = false)]
     new: bool,
@@ -26,6 +30,11 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+
+    if args.python_engine {
+        collomatique_python::run_python_engine();
+        return;
+    }
 
     let payload = collomatique_gtk4::AppInit {
         new: args.new,
