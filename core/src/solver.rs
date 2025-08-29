@@ -901,6 +901,18 @@ where
     pub fn into_inner(self) -> DecoratedCompleteSolution<'a, M, S, T, P> {
         self.0
     }
+
+    /// Directly returns the partial solution (without decoration)
+    pub fn solution(&self) -> &T::PartialSolution {
+        self.0.inner()
+    }
+
+    /// Directly returns the partial solution (without decoration)
+    ///
+    /// This method works like [Self::solution] but consumes the [DecoratedFeasableSolution].
+    pub fn into_solution(self) -> T::PartialSolution {
+        self.0.into_inner()
+    }
 }
 
 impl<'a, M, S, T, P> std::ops::Deref for DecoratedFeasableSolution<'a, M, S, T, P>
