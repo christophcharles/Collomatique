@@ -19,6 +19,7 @@ mod check_script;
 mod general_planning;
 mod run_script;
 mod subjects;
+mod teachers;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -75,6 +76,7 @@ enum ToastInfo {
 enum PanelNumbers {
     GeneralPlanning = 0,
     Subjects = 1,
+    Teachers = 2,
 }
 
 pub struct EditorPanel {
@@ -91,6 +93,7 @@ pub struct EditorPanel {
 
     general_planning: Controller<general_planning::GeneralPlanning>,
     subjects: Controller<subjects::Subjects>,
+    teachers: Controller<teachers::Teachers>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
 }
@@ -158,6 +161,7 @@ impl EditorPanel {
                 Some(PanelNumbers::GeneralPlanning)
             }
             collomatique_state_colloscopes::AnnotatedOp::Subject(_) => Some(PanelNumbers::Subjects),
+            collomatique_state_colloscopes::AnnotatedOp::Teacher(_) => Some(PanelNumbers::Teachers),
             _ => None,
         }
     }
@@ -352,6 +356,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Subjects(op))
             });
 
+        let teachers = teachers::Teachers::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Teachers(op))
+            });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -375,11 +385,11 @@ impl Component for EditorPanel {
             .launch(())
             .detach();
 
-        let pages_names = vec!["general_planning", "subjects", "test3"];
+        let pages_names = vec!["general_planning", "subjects", "teachers"];
         let pages_titles_map = BTreeMap::from([
             ("general_planning", "Planning général"),
             ("subjects", "Matières"),
-            ("test3", "Test3"),
+            ("teachers", "Colleurs"),
         ]);
 
         let model = EditorPanel {
@@ -393,6 +403,7 @@ impl Component for EditorPanel {
             error_dialog,
             general_planning,
             subjects,
+            teachers,
             check_script_dialog,
             run_script_dialog,
         };
@@ -409,7 +420,7 @@ impl Component for EditorPanel {
             model.pages_titles_map.get(model.pages_names[1]).unwrap(),
         );
         widgets.main_stack.add_titled(
-            &gtk::Label::new(Some("Test3 - content")),
+            model.teachers.widget(),
             Some(model.pages_names[2]),
             model.pages_titles_map.get(model.pages_names[2]).unwrap(),
         );
