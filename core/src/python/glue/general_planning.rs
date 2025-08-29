@@ -232,7 +232,9 @@ impl SessionPeriods {
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Period {
+    #[pyo3(set, get)]
     id: PeriodId,
+    #[pyo3(set, get)]
     weeks_status: Vec<bool>,
 }
 

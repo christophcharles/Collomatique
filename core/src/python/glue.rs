@@ -30,12 +30,19 @@ pub struct Session {
 }
 
 mod general_planning;
+mod subjects;
 mod time;
 
 #[pymethods]
 impl Session {
     fn periods(self_: PyRef<'_, Self>) -> general_planning::SessionPeriods {
         general_planning::SessionPeriods {
+            token: self_.token.clone(),
+        }
+    }
+
+    fn subjects(self_: PyRef<'_, Self>) -> subjects::SessionSubjects {
+        subjects::SessionSubjects {
             token: self_.token.clone(),
         }
     }
