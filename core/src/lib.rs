@@ -16,7 +16,11 @@
 //! make the translation algorithm as thin as possible, and its verification as easy as
 //! possible, I strive to make the colloscopes constraints and the actual colloscopes
 //! representation the least redundant possible.
-//!
-//! It is the job of other crates to provide necessary utilities to make working the algorithm
+//! 
+//! Also to keep this part lean, a lot of information is not represented as it is not
+//! needed to build the constraint system. For instance, the name of the students or
+//! the name of the teachers are not stored in the structures of this modules. Students
+//! and teachers are represented with numbers and that's it. It is the job of other crates
+//! from collomatique to provide necessary utilities to make working the algorithm
 //! somewhat pleasant.
 //!
