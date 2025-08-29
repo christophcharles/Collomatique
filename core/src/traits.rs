@@ -352,15 +352,40 @@ pub trait ExtraConstraints<T: BaseConstraints> {
     ) -> ConfigData<Self::StructureVariable>;
 }
 
+/// Soft enforcement of extra constraints.
+/// 
+/// Sometimes, we do not want to implement strictly a set of constraints.
+/// A typical example is regularity constraints in school schedules.
+/// 
+/// We might want the courses to be fairly regular in a schedule. It is
+/// usually somewhat easy to write a set of constraints enforcing *perfect*
+/// regularity. However, such a strict regularity might not be possible
+/// or even desirable if it conflicts with some other constraints.
+/// 
+/// This structure is built from some [ExtraConstraints] that implements
+/// strictly a set of constraints. It transforms those constraints into
+/// an objective that should be optimized. If the objective is perfectly
+/// optimized then the constraints are perfectly satisfied. But it is
+/// also possible to not completly satisfy the constraints.
+/// 
+/// This also allows the introduction of weights between different objectives
+/// and thus fine-tune which schedule is preferable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoftConstraints<T: BaseConstraints, E: ExtraConstraints<T>> {
+    /// Original [ExtraConstraints] describing the strict constraints.
     internal_extra: E,
+    /// Phantom type because of generic `T`.
     phantom: std::marker::PhantomData<T>,
 }
 
+/// Structure variable used for the definition of [SoftConstraints].
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SoftVariable<S: UsableData, C: UsableData> {
+    /// This represents a structure variable from the original
+    /// strict constraint set.
     Orig(S),
+    /// This is a new structure variable used to measure the degree
+    /// of non-satisfaction of a constraint.
     Soft(usize, C),
 }
 
@@ -375,9 +400,16 @@ impl<S: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display> std::
     }
 }
 
+/// Structure constraint used for the definition of [SoftConstraints].
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SoftConstraint<S: UsableData, C: UsableData> {
+    /// This represents a structure constraint from the original
+    /// strict constraint set.
     Orig(S),
+    /// This is a new structure constraint used to define a [SoftVariable::Soft] variable.
+    /// 
+    /// The first two parameters define the corresponding soft variable. The last one
+    /// defines the equation symbol (either `<=` if `false` or `>=` if `true`).
     Soft(usize, C, bool),
 }
 
@@ -553,6 +585,8 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
 }
 
 impl<T: BaseConstraints, E: ExtraConstraints<T>> SoftConstraints<T, E> {
+    /// Builds a [SoftConstraints] from an existing strict
+    /// constraint set defined in a structure implementing [ExtraConstraints].
     pub fn new(extra: E) -> Self {
         SoftConstraints {
             internal_extra: extra,
