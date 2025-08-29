@@ -32,11 +32,22 @@ impl NonZeroDurationInMinutes {
     pub fn time_delta(self) -> chrono::TimeDelta {
         chrono::TimeDelta::minutes(self.0.get().into())
     }
+
+    /// Returns the number of minutes
+    pub fn get(&self) -> NonZeroU32 {
+        self.0
+    }
 }
 
 impl From<NonZeroDurationInMinutes> for chrono::TimeDelta {
     fn from(value: NonZeroDurationInMinutes) -> Self {
         value.time_delta()
+    }
+}
+
+impl From<NonZeroU32> for NonZeroDurationInMinutes {
+    fn from(value: NonZeroU32) -> Self {
+        NonZeroDurationInMinutes(value)
     }
 }
 

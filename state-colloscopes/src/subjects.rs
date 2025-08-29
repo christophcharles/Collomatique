@@ -194,7 +194,7 @@ impl Subjects {
     pub(crate) unsafe fn from_external_data(external_data: SubjectsExternalData) -> Subjects {
         Subjects {
             ordered_subject_list: external_data
-                .ordered_period_list
+                .ordered_subject_list
                 .into_iter()
                 .map(|(id, data)| {
                     (unsafe { SubjectId::new(id) }, unsafe {
@@ -233,7 +233,7 @@ pub struct SubjectsExternalData {
     ///
     /// Each item represent a subject. It is described
     /// by what should be a unique id and a description of type [SubjectExternalData]
-    pub ordered_period_list: Vec<(u64, SubjectExternalData)>,
+    pub ordered_subject_list: Vec<(u64, SubjectExternalData)>,
 }
 
 impl SubjectsExternalData {
@@ -244,7 +244,7 @@ impl SubjectsExternalData {
     ///
     /// **Beware**, this does not check the validity of the ids for the subjects!
     pub fn validate_all(&self, period_ids: &BTreeSet<u64>, week_count: usize) -> bool {
-        self.ordered_period_list
+        self.ordered_subject_list
             .iter()
             .all(|(_id, data)| data.validate(period_ids, week_count))
     }

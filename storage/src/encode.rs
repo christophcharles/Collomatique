@@ -50,14 +50,27 @@ fn generate_period_list(data: &Data) -> period_list::List {
     }
 }
 
+fn generate_subject_list(data: &Data) -> subject_list::List {
+    let orig_subjects = data.get_subjects();
+
+    subject_list::List {
+        ordered_subject_list: orig_subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, desc)| (id.inner(), desc.into()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
+    let subject_list_entry = ValidEntry::SubjectList(generate_subject_list(data));
 
     JsonData {
         header,
-        entries: vec![student_list_entry, period_list_entry]
+        entries: vec![student_list_entry, period_list_entry, subject_list_entry]
             .into_iter()
             .map(|x| Entry {
                 minimum_spec_version: x.minimum_spec_version(),
