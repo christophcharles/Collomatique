@@ -20,6 +20,14 @@ pub enum Error {
     InvalidSubjectNumber,
     #[error("Incompatibility number is invalid")]
     InvalidIncompatibilityNumber,
+    #[error(
+        "The slot grouping {0:?} has an invalid slot ref {1:?} with invalid subject reference"
+    )]
+    SlotGroupingWithInvalidSubject(SlotGrouping, SlotRef),
+    #[error("The slot grouping {0:?} has an invalid slot ref {1:?} with invalid interrogation reference")]
+    SlotGroupingWithInvalidInterrogation(SlotGrouping, SlotRef),
+    #[error("The slot grouping {0:?} has an invalid slot ref {1:?} with invalid slot reference")]
+    SlotGroupingWithInvalidSlot(SlotGrouping, SlotRef),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
