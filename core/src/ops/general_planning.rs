@@ -578,16 +578,14 @@ impl GeneralPlanningUpdateOp {
 
                 let new_desc = desc.split_off(*new_week_count);
 
-                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
-
-                let result = session
+                let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::AddAfter(
                                 *period_id, new_desc,
                             ),
                         ),
-                        "Ajouter une période".into(),
+                        self.get_desc(),
                     )
                     .expect("At this point, period id should be valid");
                 let new_id = match result {
@@ -595,11 +593,12 @@ impl GeneralPlanningUpdateOp {
                     _ => panic!("Unexpected result! {:?}", result),
                 };
 
-                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                let ordered_subject_list = data.get_data().get_subjects().ordered_subject_list.clone();
+                for (subject_id, subject) in &ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         let mut new_subject = subject.clone();
                         new_subject.excluded_periods.insert(new_id.clone());
-                        let result = session
+                        let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::Subject(
                                     collomatique_state_colloscopes::SubjectOp::Update(
@@ -607,7 +606,7 @@ impl GeneralPlanningUpdateOp {
                                         new_subject,
                                     ),
                                 ),
-                                "Dupliquer l'état de la période découpée sur une matière".into(),
+                                self.get_desc(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
@@ -616,18 +615,19 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                let rule_map = data.get_data().get_rules().rule_map.clone();
+                for (rule_id, rule) in &rule_map {
                     if rule.excluded_periods.contains(period_id) {
                         let mut new_rule = rule.clone();
                         new_rule.excluded_periods.insert(new_id.clone());
-                        let result = session
+                        let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::Rule(
                                     collomatique_state_colloscopes::RuleOp::Update(
                                         *rule_id, new_rule,
                                     ),
                                 ),
-                                "Dupliquer l'état de la période découpée sur une règle".into(),
+                                self.get_desc(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
@@ -636,11 +636,12 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in &data.get_data().get_students().student_map {
+                let student_map = data.get_data().get_students().student_map.clone();
+                for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.insert(new_id.clone());
-                        let result = session
+                        let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::Student(
                                     collomatique_state_colloscopes::StudentOp::Update(
@@ -648,7 +649,7 @@ impl GeneralPlanningUpdateOp {
                                         new_student,
                                     ),
                                 ),
-                                "Dupliquer l'état de la période découpée sur un élève".into(),
+                                self.get_desc(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
@@ -667,14 +668,14 @@ impl GeneralPlanningUpdateOp {
 
                 for (subject_id, assigned_students) in period_assignments.subject_map {
                     for student_id in assigned_students {
-                        let result = session
+                        let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
                                     collomatique_state_colloscopes::AssignmentOp::Assign(
                                         new_id, student_id, subject_id, true,
                                     ),
                                 ),
-                                "Dupliquer l'affectation d'un élève sur la période découpée".into(),
+                                self.get_desc(),
                             )
                             .expect("All data should be valid at this point");
 
@@ -689,18 +690,19 @@ impl GeneralPlanningUpdateOp {
                     .get_group_lists()
                     .subjects_associations
                     .get(period_id)
+                    .cloned()
                 {
                     for (subject_id, group_list_id) in subject_map {
-                        let result = session
+                        let result = data
                             .apply(
                                 collomatique_state_colloscopes::Op::GroupList(
                                     collomatique_state_colloscopes::GroupListOp::AssignToSubject(
                                         new_id,
-                                        *subject_id,
-                                        Some(*group_list_id),
+                                        subject_id,
+                                        Some(group_list_id),
                                     ),
                                 ),
-                                "Dupliquer une association de liste de groupes sur la période découpée".into(),
+                                self.get_desc(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
@@ -709,19 +711,18 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let result = session
+                let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                         ),
-                        "Raccourcir une période".into(),
+                        self.get_desc(),
                     )
                     .expect("At this point, period id should be valid");
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit(self.get_desc());
                 Ok(Some(new_id))
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {

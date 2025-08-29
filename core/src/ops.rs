@@ -11,7 +11,7 @@
 //! to a simple command in a cli or a click of a button in a gui.
 //!
 
-use collomatique_state::{traits::Manager, AppSession};
+use collomatique_state::AppSession;
 use collomatique_state_colloscopes::Data;
 
 use std::collections::BTreeSet;
