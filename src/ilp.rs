@@ -334,47 +334,6 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         Ok(())
     }
 
-    pub fn neighbour(&self, i: usize) -> Config<'a, V, P> {
-        assert!(i < self.problem.variables.len());
-
-        let cfg_repr = self.cfg_repr.neighbour(i);
-        let precomputation = self.clone_precomputation();
-
-        let mut output = Config {
-            problem: self.problem,
-            cfg_repr,
-            precomputation,
-        };
-
-        output.invalidate_precomputation(i);
-
-        output
-    }
-
-    pub fn random_neighbour<T: random::RandomGen>(
-        &self,
-        random_gen: &T,
-    ) -> Option<Config<'a, V, P>> {
-        if self.problem.variables.is_empty() {
-            return None;
-        }
-
-        let i = random_gen.rand_in_range(0..self.problem.variables.len());
-        Some(self.neighbour(i))
-    }
-
-    pub fn neighbours(&self) -> Vec<Config<'a, V, P>> {
-        (0..self.problem.variables.len())
-            .into_iter()
-            .map(|x| self.neighbour(x))
-            .collect()
-    }
-
-    pub fn max_distance_to_constraint(&self) -> f32 {
-        self.cfg_repr
-            .max_distance_to_constraint(&self.problem.pb_repr)
-    }
-
     pub fn compute_lhs(&self) -> BTreeMap<linexpr::Constraint<V>, i32> {
         let precomputation = self.get_precomputation();
         self.cfg_repr

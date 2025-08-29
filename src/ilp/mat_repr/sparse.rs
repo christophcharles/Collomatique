@@ -192,42 +192,6 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
     type Problem = SprsProblem<V>;
     type Precomputation = (CsVec<i32>, CsVec<i32>);
 
-    fn max_distance_to_constraint(&self, problem: &SprsProblem<V>) -> f32 {
-        let mut max_dist = 0.0f32;
-
-        let leq_column = &problem.leq_mat * &self.values + &problem.leq_constants;
-
-        for (i, v) in leq_column.iter() {
-            let slice = problem.leq_mat.slice_outer(i..i + 1);
-            let mut norm2 = 0.0f32;
-            for (v, _) in slice.iter() {
-                norm2 += ((*v) as f32).powi(2);
-            }
-            let dist = ((*v as f32) / norm2.sqrt()).min(0.0f32);
-
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-
-        let eq_column = &problem.eq_mat * &self.values + &problem.eq_constants;
-
-        for (i, v) in eq_column.iter() {
-            let slice = problem.eq_mat.slice_outer(i..i + 1);
-            let mut norm2 = 0.0f32;
-            for (v, _) in slice.iter() {
-                norm2 += ((*v) as f32).powi(2);
-            }
-            let dist = ((*v as f32) / norm2.sqrt()).abs();
-
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-
-        max_dist
-    }
-
     fn precompute(&self, problem: &Self::Problem) -> Self::Precomputation {
         let leq_column = &problem.leq_mat * &self.values + &problem.leq_constants;
         let eq_column = &problem.eq_mat * &self.values + &problem.eq_constants;
@@ -330,10 +294,6 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
             }
         }
         true
-    }
-
-    fn neighbour(&self, i: usize) -> Self {
-        self.flip(i)
     }
 
     unsafe fn get_unchecked(&self, i: usize) -> i32 {

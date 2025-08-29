@@ -18,8 +18,6 @@ pub trait ConfigRepr<V: VariableName>:
     type Problem: ProblemRepr<V, Config = Self>;
     type Precomputation: std::fmt::Debug + Clone + Send + Sync;
 
-    fn max_distance_to_constraint(&self, problem: &Self::Problem) -> f32;
-
     fn precompute(&self, problem: &Self::Problem) -> Self::Precomputation;
     fn update_precomputation(
         &self,
@@ -33,7 +31,7 @@ pub trait ConfigRepr<V: VariableName>:
         precomputation: &Self::Precomputation,
     ) -> BTreeMap<linexpr::Constraint<V>, i32>;
     fn is_feasable(&self, problem: &Self::Problem, precomputation: &Self::Precomputation) -> bool;
-    fn neighbour(&self, i: usize) -> Self;
+
     unsafe fn get_unchecked(&self, i: usize) -> i32;
     unsafe fn set_unchecked(&mut self, i: usize, val: i32);
 }
