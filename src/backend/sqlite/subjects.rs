@@ -394,10 +394,39 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
     Ok(())
 }
 
+impl CheckIds
+    for Cross3IdError<
+        Error,
+        Id,
+        super::subject_groups::Id,
+        super::incompats::Id,
+        super::group_lists::Id,
+    >
+{
+    async fn check_ids(
+        pool: &SqlitePool,
+        subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
+    ) -> std::result::Result<(), Self> {
+        if let Some(subject_group_id) = search_invalid_subject_group_id(pool, subject).await? {
+            return Err(Cross3IdError::InvalidCrossId1(subject_group_id));
+        }
+
+        if let Some(incompat_id) = search_invalid_incompat_id(pool, subject).await? {
+            return Err(Cross3IdError::InvalidCrossId2(incompat_id));
+        }
+
+        if let Some(group_list_id) = search_invalid_group_list_id(pool, subject).await? {
+            return Err(Cross3IdError::InvalidCrossId3(group_list_id));
+        }
+
+        Ok(())
+    }
+}
+
 pub async fn update(
-    _pool: &SqlitePool,
-    _index: Id,
-    _subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
+    pool: &SqlitePool,
+    index: Id,
+    subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
 ) -> std::result::Result<
     (),
     Cross3IdError<
@@ -408,5 +437,86 @@ pub async fn update(
         super::group_lists::Id,
     >,
 > {
-    todo!()
+    Cross3IdError::check_ids(pool, subject).await?;
+
+    let subject_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let min_students_per_group =
+        i64::try_from(subject.students_per_group.start().get()).map_err(|_| {
+            Error::RepresentationError(format!(
+                "cannot represent as i64 min_students_per_group with value {}",
+                subject.students_per_group.start().get()
+            ))
+        })?;
+    let max_students_per_group =
+        i64::try_from(subject.students_per_group.end().get()).map_err(|_| {
+            Error::RepresentationError(format!(
+                "cannot represent as i64 max_students_per_group with value {}",
+                subject.students_per_group.end().get()
+            ))
+        })?;
+
+    let max_groups_per_slot = i64::try_from(subject.max_groups_per_slot.get()).map_err(|_| {
+        Error::RepresentationError(format!(
+            "cannot represent as i64 max_groups_per_slot with value {}",
+            subject.max_groups_per_slot.get()
+        ))
+    })?;
+
+    let incompat_id = subject.incompat_id.map(|x| x.0);
+    let group_list_id = subject.group_list_id.map(|x| x.0);
+    let duration = subject.duration.get();
+    let period = subject.period.get();
+    let period_is_strict = if subject.period_is_strict { 1 } else { 0 };
+    let is_tutorial = if subject.is_tutorial { 1 } else { 0 };
+    let balance_teachers = if subject.balancing_requirements.teachers {
+        1
+    } else {
+        0
+    };
+    let balance_timeslots = if subject.balancing_requirements.timeslots {
+        1
+    } else {
+        0
+    };
+
+    let rows_affected = sqlx::query!(
+        r#"
+UPDATE subjects
+SET name = ?1, subject_group_id = ?2, incompat_id = ?3, group_list_id = ?4,
+duration = ?5, min_students_per_group = ?6, max_students_per_group = ?7, period = ?8, period_is_strict = ?9,
+is_tutorial = ?10, max_groups_per_slot = ?11, balance_teachers = ?12, balance_timeslots = ?13
+WHERE subject_id = ?14
+        "#,
+        subject.name,
+        subject.subject_group_id.0,
+        incompat_id,
+        group_list_id,
+        duration,
+        min_students_per_group,
+        max_students_per_group,
+        period,
+        period_is_strict,
+        is_tutorial,
+        max_groups_per_slot,
+        balance_teachers,
+        balance_timeslots,
+        subject_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if rows_affected > 1 {
+        return Err(Cross3IdError::InternalError(Error::CorruptedDatabase(
+            format!("Multiple subjects with id {:?}", index),
+        )));
+    } else if rows_affected == 0 {
+        return Err(Cross3IdError::InvalidId(index));
+    }
+
+    Ok(())
 }
