@@ -102,6 +102,8 @@ pub enum AppInput {
     RequestRedo,
     RequestAbout,
     UpdateActions,
+    StartOpenSaveDialog,
+    EndOpenSaveDialog,
 }
 
 #[derive(Debug)]
@@ -178,6 +180,8 @@ impl Component for AppModel {
                 editor::EditorOutput::PythonLoadingError(path, error) => {
                     AppInput::PythonLoadingFailed(path, error)
                 }
+                editor::EditorOutput::StartOpenSaveDialog => AppInput::StartOpenSaveDialog,
+                editor::EditorOutput::EndOpenSaveDialog => AppInput::EndOpenSaveDialog,
             },
         );
 
@@ -382,7 +386,7 @@ impl Component for AppModel {
                 self.send_but_check_dirty(sender, AppInput::OpenExistingColloscopeWithDialog);
             }
             AppInput::OpenExistingColloscopeWithDialog => {
-                self.main_window_sensitive = false;
+                sender.input(AppInput::StartOpenSaveDialog);
                 sender.oneshot_command(async move {
                     match tools::open_save::open_dialog().await {
                         Some(path) => AppCommandOutput::OpenFileSelected(path),
@@ -546,6 +550,12 @@ impl Component for AppModel {
                     .redo_action
                     .set_enabled(self.controllers.editor.model().can_redo());
             }
+            AppInput::StartOpenSaveDialog => {
+                self.main_window_sensitive = false;
+            }
+            AppInput::EndOpenSaveDialog => {
+                self.main_window_sensitive = true;
+            }
         }
     }
 
@@ -569,10 +579,10 @@ impl Component for AppModel {
     ) {
         match message {
             AppCommandOutput::OpenFileNotSelected => {
-                self.main_window_sensitive = true;
+                sender.input(AppInput::EndOpenSaveDialog);
             }
             AppCommandOutput::OpenFileSelected(path) => {
-                self.main_window_sensitive = true;
+                sender.input(AppInput::EndOpenSaveDialog);
                 sender.input(AppInput::LoadColloscope(path));
             }
         }
