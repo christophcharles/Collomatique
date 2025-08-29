@@ -11,6 +11,10 @@ pub struct Dialog {
     should_redraw: bool,
     teacher_data: collomatique_state_colloscopes::teachers::Teacher,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
+    filtered_subjects: Vec<(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::Subject,
+    )>,
     subject_entries: FactoryVecDeque<SubjectEntry>,
 }
 
@@ -180,6 +184,7 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             teacher_data,
             subjects,
+            filtered_subjects: vec![],
             subject_entries,
         };
 
@@ -197,15 +202,19 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.subjects = subjects;
                 self.teacher_data = teacher_data;
+                self.filtered_subjects = self
+                    .subjects
+                    .ordered_subject_list
+                    .iter()
+                    .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+                    .cloned()
+                    .collect();
                 crate::tools::factories::update_vec_deque(
                     &mut self.subject_entries,
-                    self.subjects
-                        .ordered_subject_list
-                        .iter()
-                        .map(|(id, sub)| SubjectData {
-                            name: sub.parameters.name.clone(),
-                            enable: self.teacher_data.subjects.contains(id),
-                        }),
+                    self.filtered_subjects.iter().map(|(id, sub)| SubjectData {
+                        name: sub.parameters.name.clone(),
+                        enable: self.teacher_data.subjects.contains(id),
+                    }),
                     |data| SubjectInput::UpdateData(data),
                 );
             }
@@ -245,8 +254,8 @@ impl SimpleComponent for Dialog {
                 self.teacher_data.desc.email = email_opt;
             }
             DialogInput::UpdateSubjectStatus(subject_num, new_status) => {
-                assert!(subject_num < self.subjects.ordered_subject_list.len());
-                let subject_id = self.subjects.ordered_subject_list[subject_num].0;
+                assert!(subject_num < self.filtered_subjects.len());
+                let subject_id = self.filtered_subjects[subject_num].0;
 
                 if new_status {
                     self.teacher_data.subjects.insert(subject_id);
