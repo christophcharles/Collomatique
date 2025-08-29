@@ -46,7 +46,7 @@ fn simple_validated_data() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
@@ -140,7 +140,7 @@ fn invalid_students_per_interrogation() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(1).unwrap(),
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
@@ -168,7 +168,7 @@ fn invalid_students_per_interrogation() {
         ),
         Err(Error::SubjectWithInvalidStudentsPerInterrogationRange(
             0,
-            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(1).unwrap()
+            NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap()
         ))
     );
 }
@@ -182,7 +182,7 @@ fn subject_slot_overlaps_next_day() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
@@ -255,7 +255,7 @@ fn invalid_teacher_number() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
@@ -294,7 +294,7 @@ fn invalid_subject_number() {
     };
 
     let subjects = vec![Subject {
-        students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
@@ -376,7 +376,8 @@ fn slot_ref_has_invalid_subject() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -389,7 +390,8 @@ fn slot_ref_has_invalid_subject() {
             }],
         },
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -450,7 +452,8 @@ fn slot_ref_has_invalid_interrogation() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -463,7 +466,8 @@ fn slot_ref_has_invalid_interrogation() {
             }],
         },
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -524,7 +528,8 @@ fn slot_ref_has_invalid_slot() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -537,7 +542,8 @@ fn slot_ref_has_invalid_slot() {
             }],
         },
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -598,7 +604,8 @@ fn grouping_incompact_invalid_ref() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -611,7 +618,8 @@ fn grouping_incompact_invalid_ref() {
             }],
         },
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -669,7 +677,8 @@ fn count_student_specializations() {
 
     let subjects = vec![
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -682,7 +691,8 @@ fn count_student_specializations() {
             }],
         },
         Subject {
-            students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_interrogation: NonZeroUsize::new(2).unwrap()
+                ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
@@ -754,21 +764,21 @@ fn count_student_specializations() {
                 subjects: BTreeSet::from([0]),
                 incompatibilities: BTreeSet::from([1]),
             },
-            NonZeroU32::new(2).unwrap(),
+            NonZeroUsize::new(2).unwrap(),
         ),
         (
             Student {
                 subjects: BTreeSet::from([0, 1]),
                 incompatibilities: BTreeSet::from([1]),
             },
-            NonZeroU32::new(1).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
         ),
         (
             Student {
                 subjects: BTreeSet::from([0, 1]),
                 incompatibilities: BTreeSet::from([0]),
             },
-            NonZeroU32::new(1).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
         ),
     ]);
 
