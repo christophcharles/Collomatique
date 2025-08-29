@@ -19,6 +19,16 @@ pub struct GeneralData {
 
 #[pymethods]
 impl GeneralData {
+    #[new]
+    fn new(week_count: NonZeroU32) -> Self {
+        GeneralData {
+            interrogations_per_week_range: None,
+            max_interrogations_per_day: None,
+            week_count,
+            periodicity_cuts: BTreeSet::new(),
+        }
+    }
+
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
             "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {} }}",

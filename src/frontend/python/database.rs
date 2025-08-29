@@ -12,6 +12,7 @@ mod utils;
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     use utils::*;
 
+    m.add_class::<GeneralData>()?;
     m.add_class::<WeekPattern>()?;
     m.add_class::<Teacher>()?;
     m.add_class::<Student>()?;
