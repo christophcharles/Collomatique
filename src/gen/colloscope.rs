@@ -22,8 +22,6 @@ pub enum Error {
     StudentWithInvalidIncompatibility(usize, usize),
     #[error("Incompatibility {0} has interrogation slot {1} overlapping next day")]
     IncompatibilityWithSlotOverlappingNextDay(usize, usize),
-    #[error("Slot groupings {0} and {1} are duplicates of each other")]
-    SlotGroupingsDuplicated(usize, usize),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
     SlotGroupingWithInvalidSubject(usize, SlotRef),
     #[error(
@@ -32,8 +30,8 @@ pub enum Error {
     SlotGroupingWithInvalidInterrogation(usize, SlotRef),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
     SlotGroupingWithInvalidSlot(usize, SlotRef),
-    #[error("The grouping incompatibility {0:?} has an invalid slot grouping reference {1}")]
-    GroupingIncompatWithInvalidSlotGrouping(GroupingIncompat, usize),
+    #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
+    GroupingIncompatWithInvalidSlotGrouping(usize, usize),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -86,7 +84,7 @@ pub struct GroupingIncompat {
     pub groupings: BTreeSet<usize>,
 }
 
-pub type GroupingIncompatSet = BTreeSet<GroupingIncompat>;
+pub type GroupingIncompatList = Vec<GroupingIncompat>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
@@ -118,7 +116,7 @@ pub struct ValidatedData {
     incompatibilities: IncompatibilityList,
     students: StudentList,
     slot_groupings: SlotGroupingList,
-    grouping_incompats: GroupingIncompatSet,
+    grouping_incompats: GroupingIncompatList,
 }
 
 impl ValidatedData {
@@ -137,7 +135,7 @@ impl ValidatedData {
         incompatibilities: IncompatibilityList,
         students: StudentList,
         slot_groupings: SlotGroupingList,
-        grouping_incompats: GroupingIncompatSet,
+        grouping_incompats: GroupingIncompatList,
     ) -> Result<ValidatedData> {
         for (i, subject) in subjects.iter().enumerate() {
             if subject.students_per_interrogation.is_empty() {
