@@ -27,7 +27,7 @@ enum GuiMessage {
     EditorMessage(editor::Message),
     DialogMessage(dialogs::Message),
     FileSelected(Option<FileSelection>),
-    FileLoaded(editor::ConnectDbResult<editor::State>),
+    FileLoaded(editor::OpenCollomatiqueFileResult<editor::State>),
     OpenExistingFile,
     OpenNewFile,
     GoToWelcomeScreen,
