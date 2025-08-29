@@ -35,6 +35,9 @@ pub enum CliCommand {
         /// Force using the given name if it already exists
         #[arg(short, long, default_value_t = false)]
         force: bool,
+        /// Verbose resolution output
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Create, remove or run python script
     Python {
@@ -334,11 +337,12 @@ use crate::ilp::{Config, Problem};
 fn solve_initial_guess<'a>(
     ilp_translator: &IlpTranslator<'a>,
     problem: &'a Problem<Variable>,
+    verbose: bool,
 ) -> Config<'a, Variable> {
     let general_initializer =
         crate::ilp::initializers::Random::with_p(crate::ilp::random::DefaultRndGen::new(), 0.01)
             .unwrap();
-    let solver = crate::ilp::solvers::coin_cbc::Solver::new();
+    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
     let max_steps = None;
     let retries = 1;
     let incremental_initializer =
@@ -352,12 +356,13 @@ use crate::ilp::FeasableConfig;
 use std::rc::Rc;
 fn solve_initial_colloscope<'a>(
     init_config: Config<'a, Variable>,
+    verbose: bool,
 ) -> (
     Option<(Rc<FeasableConfig<'a, Variable>>, f64)>,
     impl Iterator<Item = (Rc<FeasableConfig<'a, Variable>>, f64)>,
 ) {
     let sa_optimizer = crate::ilp::optimizers::sa::Optimizer::new(init_config);
-    let solver = crate::ilp::solvers::coin_cbc::Solver::new();
+    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
     let random_gen = crate::ilp::random::DefaultRndGen::new();
     let mutation_policy = crate::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
     let mut iterator = sa_optimizer.iterate(solver, random_gen, mutation_policy);
@@ -373,6 +378,7 @@ fn solve_thread<'a>(
     ilp_translator: &IlpTranslator<'a>,
     problem: &'a Problem<Variable>,
     step_count: usize,
+    verbose: bool,
 ) -> Option<(FeasableConfig<'a, Variable>, f64)> {
     use std::time::Duration;
 
@@ -380,10 +386,10 @@ fn solve_thread<'a>(
     pb.set_message("Building initial guess... (this can take a few minutes)");
     pb.enable_steady_tick(Duration::from_millis(100));
 
-    let init_config = solve_initial_guess(ilp_translator, problem);
+    let init_config = solve_initial_guess(ilp_translator, problem, verbose);
 
     pb.set_message("Building initial colloscope... (this can take a few minutes)");
-    let (first_config_opt, iterator) = solve_initial_colloscope(init_config);
+    let (first_config_opt, iterator) = solve_initial_colloscope(init_config, verbose);
 
     let (first_sol, first_cost) = match first_config_opt {
         Some(value) => value,
@@ -472,6 +478,7 @@ async fn solve_command(
     thread_count: Option<NonZeroUsize>,
     name: Option<String>,
     force: bool,
+    verbose: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
@@ -512,7 +519,6 @@ async fn solve_command(
     let pb = ProgressBar::new_spinner().with_style(style.clone());
     pb.set_message("Generating ILP problem...");
     pb.enable_steady_tick(Duration::from_millis(20));
-    //let problem = ilp_translator.problem();
     let problem = ilp_translator.problem();
     pb.finish();
 
@@ -530,7 +536,11 @@ async fn solve_command(
 
     // With multithreading, the gag for cbc might have a race condition
     // We just set it up here for the whole computation
-    let stdout_gag = gag::Gag::stdout().unwrap();
+    let stdout_gag = if verbose {
+        None
+    } else {
+        Some(gag::Gag::stdout().unwrap())
+    };
 
     let step_count = steps.unwrap_or(DEFAULT_OPTIMIZING_STEP_COUNT);
     let best_cost_opt = {
@@ -546,7 +556,7 @@ async fn solve_command(
                 .panic_fuse()
                 .map(|(pb, style, ilp_translator)| {
                     let (best_config, best_cost) =
-                        solve_thread(pb, style, &ilp_translator, &problem, step_count)?;
+                        solve_thread(pb, style, &ilp_translator, &problem, step_count, verbose)?;
 
                     use ordered_float::OrderedFloat;
                     Some((best_config, OrderedFloat(best_cost)))
@@ -1489,7 +1499,8 @@ pub async fn execute_cli_command(
             thread_count,
             name,
             force,
-        } => solve_command(steps, thread_count, name, force, app_state).await,
+            verbose,
+        } => solve_command(steps, thread_count, name, force, verbose, app_state).await,
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
