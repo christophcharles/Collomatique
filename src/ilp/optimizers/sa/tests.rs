@@ -79,7 +79,7 @@ fn test_sa() {
     // There are only two solutions so only two iterations should even be enough to find the optimal one
 
     assert_eq!(
-        Config::from(solution.expect("Solution found").0),
+        Config::from(solution.expect("Solution found").0.as_ref().clone()),
         Config::from_iter(["x12", "y11", "y22", "x21"])
     );
 
@@ -92,7 +92,7 @@ fn test_sa() {
         .best_in(2);
 
     assert_eq!(
-        Config::from(solution.expect("Solution found").0),
+        Config::from(solution.expect("Solution found").0.as_ref().clone()),
         Config::from_iter(["x12", "y11", "y22", "x21"])
     );
 }
