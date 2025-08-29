@@ -370,12 +370,55 @@ pub trait Storage: Send + Sync {
     async unsafe fn students_remove_unchecked(
         &mut self,
         index: Self::StudentId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async fn students_update(
         &mut self,
         index: Self::StudentId,
         student: &Student,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
+    async fn students_check_can_remove(
+        &mut self,
+        index: Self::StudentId,
+    ) -> std::result::Result<Vec<Self::GroupListId>, IdError<Self::InternalError, Self::StudentId>>
+    {
+        async move {
+            let students = self.students_get_all().await?;
+
+            if !students.contains_key(&index) {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let group_lists = self.group_lists_get_all().await?;
+            for (group_list_id, group_list) in group_lists {
+                if group_list.references_student(index) {
+                    dependancies.push(group_list_id)
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn students_remove(
+        &mut self,
+        index: Self::StudentId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<Self::InternalError, Self::StudentId, Vec<Self::GroupListId>>,
+    > {
+        async move {
+            let dependancies = self
+                .students_check_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.students_remove_unchecked(index) }.await?;
+            Ok(())
+        }
+    }
 
     async fn subject_groups_get_all(
         &self,
@@ -737,6 +780,12 @@ pub struct GroupList<StudentId: OrdId> {
     pub name: String,
     pub groups: Vec<Group>,
     pub students_mapping: BTreeMap<StudentId, usize>,
+}
+
+impl<StudentId: OrdId> GroupList<StudentId> {
+    pub fn references_student(&self, student_id: StudentId) -> bool {
+        self.students_mapping.contains_key(&student_id)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
