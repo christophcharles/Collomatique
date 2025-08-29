@@ -1925,7 +1925,7 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
     for IncrementalInitializer<T, S>
 {
     fn build_init_config<'a, 'b>(
-        &'a mut self,
+        &'a self,
         problem: &'b Problem<Variable, DefaultRepr<Variable>>,
     ) -> Option<Config<'b, Variable, DefaultRepr<Variable>>> {
         let problem_builder = problem.clone().into_builder();
@@ -1971,7 +1971,7 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
 
 impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
     fn construct_init_config<'a, 'b>(
-        &'a mut self,
+        &'a self,
         problem: &'b Problem<Variable>,
     ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
         for _i in 0..self.retries {
@@ -1983,7 +1983,7 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
     }
 
     fn construct_init_config_one_try<'a, 'b>(
-        &'a mut self,
+        &'a self,
         problem: &'b Problem<Variable>,
     ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
         let init_config = self.initializer.build_init_config(&problem)?;

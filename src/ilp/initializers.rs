@@ -1,10 +1,7 @@
 use super::{Config, Problem, ProblemRepr, VariableName};
 
 pub trait ConfigInitializer<V: VariableName, P: ProblemRepr<V>> {
-    fn build_init_config<'a, 'b>(
-        &'a mut self,
-        problem: &'b Problem<V, P>,
-    ) -> Option<Config<'b, V, P>>;
+    fn build_init_config<'a, 'b>(&'a self, problem: &'b Problem<V, P>) -> Option<Config<'b, V, P>>;
 }
 
 use crate::ilp::random::RandomGen;
@@ -35,10 +32,7 @@ impl<T: RandomGen> Random<T> {
 }
 
 impl<V: VariableName, P: ProblemRepr<V>, T: RandomGen> ConfigInitializer<V, P> for Random<T> {
-    fn build_init_config<'a, 'b>(
-        &'a mut self,
-        problem: &'b Problem<V, P>,
-    ) -> Option<Config<'b, V, P>> {
+    fn build_init_config<'a, 'b>(&'a self, problem: &'b Problem<V, P>) -> Option<Config<'b, V, P>> {
         use std::collections::BTreeSet;
         let mut vars = BTreeSet::new();
 
@@ -62,10 +56,7 @@ impl Null {
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> ConfigInitializer<V, P> for Null {
-    fn build_init_config<'a, 'b>(
-        &'a mut self,
-        problem: &'b Problem<V, P>,
-    ) -> Option<Config<'b, V, P>> {
+    fn build_init_config<'a, 'b>(&'a self, problem: &'b Problem<V, P>) -> Option<Config<'b, V, P>> {
         Some(problem.default_config())
     }
 }
