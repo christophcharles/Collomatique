@@ -55,18 +55,20 @@ fn title(state: &GuiState) -> String {
 }
 
 pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
-    iced::application(title, update, view).run_with(move || {
-        (
-            match &db {
-                Some(file) => GuiState::Editor(editor::State::new(file.clone())),
-                None => GuiState::Welcome,
-            },
-            if create && db.is_none() {
-                iced::Task::done(GuiMessage::DialogMessage(dialogs::Message::OpenNewFile))
-            } else {
-                iced::Task::none()
-            },
-        )
-    })?;
+    iced::application(title, update, view)
+        .font(include_bytes!("../fonts/collomatique-icons.ttf").as_slice())
+        .run_with(move || {
+            (
+                match &db {
+                    Some(file) => GuiState::Editor(editor::State::new(file.clone())),
+                    None => GuiState::Welcome,
+                },
+                if create && db.is_none() {
+                    iced::Task::done(GuiMessage::DialogMessage(dialogs::Message::OpenNewFile))
+                } else {
+                    iced::Task::none()
+                },
+            )
+        })?;
     Ok(())
 }

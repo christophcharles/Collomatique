@@ -1,7 +1,7 @@
-use iced::widget::{button, column, container, row, text};
-use iced::{Element, Length, Task};
+use iced::widget::{button, center, column, container, row, text, tooltip, Space};
+use iced::{Element, Length, Task, Theme};
 
-use super::{GuiMessage, GuiState};
+use super::{tools, GuiMessage, GuiState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Panel {
@@ -53,75 +53,109 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     }
 }
 
+fn icon_button<'a>(
+    ico: tools::Icon,
+    style: impl Fn(&Theme, button::Status) -> button::Style + 'a,
+    label: &'a str,
+) -> Element<'a, GuiMessage> {
+    tooltip(
+        button(container(tools::icon(ico)).center_x(20))
+            .style(style)
+            .padding(2),
+        text(label).size(10),
+        tooltip::Position::FollowCursor,
+    )
+    .style(container::bordered_box)
+    .into()
+}
+
 pub fn view(state: &State) -> Element<GuiMessage> {
-    container(
+    column![
         row![
-            column![
-                container(
-                    column![
-                        button("Groupements")
-                            .width(Length::Fill)
-                            .style(if state.panel == Panel::SubjectGroups {
-                                button::primary
-                            } else {
-                                button::text
-                            })
-                            .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                                Panel::SubjectGroups
-                            ))),
-                        button("Matières")
-                            .width(Length::Fill)
-                            .style(if state.panel == Panel::Subjects {
-                                button::primary
-                            } else {
-                                button::text
-                            })
-                            .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                                Panel::Subjects
-                            ))),
-                        button("Enseignants")
-                            .width(Length::Fill)
-                            .style(if state.panel == Panel::Teachers {
-                                button::primary
-                            } else {
-                                button::text
-                            })
-                            .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                                Panel::Teachers
-                            ))),
-                        button("Élèves")
-                            .width(Length::Fill)
-                            .style(if state.panel == Panel::Students {
-                                button::primary
-                            } else {
-                                button::text
-                            })
-                            .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                                Panel::Students
-                            ))),
-                    ]
-                    .width(Length::Fill)
-                    .spacing(2)
-                )
-                .padding(5)
-                .height(Length::Fill)
-                .center_x(Length::Shrink)
-                .style(iced::widget::container::rounded_box),
-                button(container(text("Menu")).center_x(Length::Fill)).width(Length::Fill),
-            ]
-            .width(200)
-            .spacing(2),
-            container(text(match state.panel {
+            icon_button(
+                tools::Icon::New,
+                button::primary,
+                "Créer un nouveau colloscope"
+            ),
+            icon_button(
+                tools::Icon::Open,
+                button::primary,
+                "Ouvrir un colloscope existant"
+            ),
+            Space::with_width(2),
+            icon_button(tools::Icon::SaveAs, button::primary, "Enregistrer sous"),
+            Space::with_width(20),
+            icon_button(tools::Icon::Undo, button::primary, "Annuler"),
+            icon_button(tools::Icon::Redo, button::primary, "Rétablir"),
+            Space::with_width(Length::Fill),
+            icon_button(tools::Icon::Close, button::danger, "Fermer le colloscope"),
+        ]
+        .spacing(2)
+        .padding(0),
+        row![
+            container(
+                column![
+                    button("Groupements")
+                        .width(Length::Fill)
+                        .style(if state.panel == Panel::SubjectGroups {
+                            button::primary
+                        } else {
+                            button::text
+                        })
+                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
+                            Panel::SubjectGroups
+                        ))),
+                    button("Matières")
+                        .width(Length::Fill)
+                        .style(if state.panel == Panel::Subjects {
+                            button::primary
+                        } else {
+                            button::text
+                        })
+                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
+                            Panel::Subjects
+                        ))),
+                    button("Enseignants")
+                        .width(Length::Fill)
+                        .style(if state.panel == Panel::Teachers {
+                            button::primary
+                        } else {
+                            button::text
+                        })
+                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
+                            Panel::Teachers
+                        ))),
+                    button("Élèves")
+                        .width(Length::Fill)
+                        .style(if state.panel == Panel::Students {
+                            button::primary
+                        } else {
+                            button::text
+                        })
+                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
+                            Panel::Students
+                        ))),
+                ]
+                .width(Length::Fill)
+                .spacing(2)
+            )
+            .padding(5)
+            .height(Length::Fill)
+            .center_x(200)
+            .style(iced::widget::container::bordered_box),
+            center(text(match state.panel {
                 Panel::SubjectGroups => "Panneau groupements",
                 Panel::Subjects => "Panneau matières",
                 Panel::Teachers => "Panneau enseignants",
                 Panel::Students => "Panneau élèves",
             }))
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
+            .padding(5)
+            .style(container::bordered_box)
         ]
-        .spacing(5),
-    )
+        .spacing(5)
+        .padding(0),
+    ]
+    .spacing(5)
     .padding(5)
     .into()
 }
