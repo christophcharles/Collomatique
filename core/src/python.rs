@@ -1,4 +1,4 @@
-//! Collomatique-python crate
+//! python module
 //!
 //! This crate contains the code to run python code
 

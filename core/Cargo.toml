@@ -1,9 +1,11 @@
 [package]
-name = "collomatique-python"
+name = "collomatique-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 pyo3 = "0.25"
 anyhow.workspace = true

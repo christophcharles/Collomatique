@@ -1,4 +1,4 @@
-use collomatique_rpc::{CmdMsg, OutMsg};
+use collomatique_core::rpc::{CmdMsg, OutMsg};
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
@@ -34,7 +34,7 @@ pub enum DialogInput {
 
     Cancel,
     ProcessFinished,
-    Cmd(Result<collomatique_rpc::CmdMsg, String>),
+    Cmd(Result<collomatique_core::rpc::CmdMsg, String>),
     Error(String),
 }
 
@@ -203,7 +203,7 @@ impl Component for Dialog {
                 self.rpc_logger
                     .sender()
                     .send(rpc_server::RpcLoggerInput::RunRcpEngine(
-                        collomatique_rpc::InitMsg::RunPythonScript(script),
+                        collomatique_core::rpc::InitMsg::RunPythonScript(script),
                     ))
                     .unwrap();
             }
