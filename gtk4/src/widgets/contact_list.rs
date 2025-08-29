@@ -103,6 +103,9 @@ pub struct Entry<Id: Identifier> {
 #[derive(Debug)]
 pub enum EntryInput<Id: Identifier> {
     UpdateData(ContactInfo<Id>),
+
+    EditClicked,
+    DeleteClicked,
 }
 
 #[derive(Debug)]
@@ -150,6 +153,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             gtk::Button {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
+                connect_clicked => EntryInput::EditClicked,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -214,6 +218,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             gtk::Button {
                 set_icon_name: "edit-delete",
                 add_css_class: "flat",
+                connect_clicked => EntryInput::DeleteClicked,
             },
         },
     }
@@ -229,17 +234,27 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
 
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             EntryInput::UpdateData(new_data) => {
                 self.data = new_data;
+            }
+            EntryInput::EditClicked => {
+                sender
+                    .output(EntryOutput::EditContact(self.data.id.clone()))
+                    .unwrap();
+            }
+            EntryInput::DeleteClicked => {
+                sender
+                    .output(EntryOutput::DeleteContact(self.data.id.clone()))
+                    .unwrap();
             }
         }
     }

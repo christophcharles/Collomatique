@@ -14,6 +14,8 @@ pub enum TeachersInput {
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::teachers::Teachers,
     ),
+    EditTeacherClicked(collomatique_state_colloscopes::TeacherId),
+    DeleteTeacherClicked(collomatique_state_colloscopes::TeacherId),
     AddTeacherClicked,
     FilterChanged(usize),
 }
@@ -124,7 +126,14 @@ impl Component for Teachers {
     ) -> ComponentParts<Self> {
         let contact_list = crate::widgets::contact_list::Widget::builder()
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                crate::widgets::contact_list::WidgetOutput::EditContact(id) => {
+                    TeachersInput::EditTeacherClicked(id)
+                }
+                crate::widgets::contact_list::WidgetOutput::DeleteContact(id) => {
+                    TeachersInput::DeleteTeacherClicked(id)
+                }
+            });
         let filter_dropdown = crate::widgets::droplist::Widget::builder()
             .launch(crate::widgets::droplist::WidgetParams {
                 initial_list: vec!["Toutes les matières".into(), "Aucune matière".into()],
@@ -152,7 +161,7 @@ impl Component for Teachers {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             TeachersInput::Update(new_subjects, new_teachers) => {
                 self.subjects = new_subjects;
@@ -160,6 +169,12 @@ impl Component for Teachers {
                 self.fix_current_filter_if_necessary();
                 self.update_filter_droplist();
                 self.update_current_list();
+            }
+            TeachersInput::DeleteTeacherClicked(id) => {
+                sender.output(TeachersUpdateOp::DeleteTeacher(id)).unwrap();
+            }
+            TeachersInput::EditTeacherClicked(id) => {
+                self.teacher_modification_reason = TeacherModificationReason::Edit(id);
             }
             TeachersInput::AddTeacherClicked => {
                 self.teacher_modification_reason = TeacherModificationReason::New;
