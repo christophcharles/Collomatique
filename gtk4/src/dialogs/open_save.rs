@@ -136,11 +136,11 @@ impl SimpleComponent for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             DialogInput::ShowWithDefault(default_file) => {
                 self.default_file = default_file.clone();
-                sender.input(DialogInput::Show);
+                self.hidden = false;
             }
             DialogInput::Show => self.hidden = false,
             DialogInput::Hide => self.hidden = true,
