@@ -4592,7 +4592,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
 }
 
 #[test]
-fn students_per_group() {
+fn students_per_group_count() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
@@ -4713,7 +4713,8 @@ fn students_per_group() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let students_per_group_constraints = ilp_translator.build_students_per_group_constraints();
+    let students_per_group_count_constraints =
+        ilp_translator.build_students_per_group_count_constraints();
 
     use crate::ilp::linexpr::Expr;
 
@@ -4767,5 +4768,5 @@ fn students_per_group() {
         (&sig_0_6_3 + &sig_0_7_3 + &sig_0_8_3 + &sig_0_9_3 + &sig_0_10_3 + &sig_0_11_3).geq(&Expr::constant(2)),
     ]);
 
-    assert_eq!(students_per_group_constraints, expected_result);
+    assert_eq!(students_per_group_count_constraints, expected_result);
 }
