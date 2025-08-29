@@ -6,6 +6,12 @@ use super::*;
 mod classes;
 use classes::*;
 
+#[pymodule]
+pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<WeekPattern>()?;
+    Ok(())
+}
+
 #[pyclass]
 pub struct Database {
     sender: Sender<Job>,
@@ -35,11 +41,26 @@ impl Database {
         val
     }
 
-    fn week_patterns_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<WeekPatternHandle, WeekPattern>> {
-        let Answer::WeekPatternsGetAll(val) = SessionConnection::send_command(
+    fn week_patterns_get_all(
+        self_: PyRef<'_, Self>,
+    ) -> PyResult<BTreeMap<WeekPatternHandle, WeekPattern>> {
+        let Answer::WeekPatternsGetAll(val) =
+            SessionConnection::send_command(self_.py(), &self_.sender, Command::WeekPatternsGetAll)
+        else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
+
+    fn week_patterns_get(
+        self_: PyRef<'_, Self>,
+        handle: WeekPatternHandle,
+    ) -> PyResult<WeekPattern> {
+        let Answer::WeekPatternsGet(val) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::WeekPatternsGetAll,
+            Command::WeekPatternsGet(handle),
         ) else {
             panic!("Bad answer type");
         };
@@ -47,11 +68,39 @@ impl Database {
         val
     }
 
-    fn week_patterns_get(self_: PyRef<'_, Self>, handle: WeekPatternHandle) -> PyResult<WeekPattern> {
-        let Answer::WeekPatternsGet(val) = SessionConnection::send_command(
+    fn week_patterns_create(self_: PyRef<'_, Self>, pattern: WeekPattern) -> PyResult<()> {
+        let Answer::WeekPatternsCreate(val) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::WeekPatternsGet(handle),
+            Command::WeekPatternsCreate(pattern),
+        ) else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
+
+    fn week_patterns_update(
+        self_: PyRef<'_, Self>,
+        handle: WeekPatternHandle,
+        pattern: WeekPattern,
+    ) -> PyResult<()> {
+        let Answer::WeekPatternsUpdate(val) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::WeekPatternsUpdate(handle, pattern),
+        ) else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
+
+    fn week_patterns_remove(self_: PyRef<'_, Self>, handle: WeekPatternHandle) -> PyResult<()> {
+        let Answer::WeekPatternsRemove(val) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::WeekPatternsRemove(handle),
         ) else {
             panic!("Bad answer type");
         };
@@ -71,6 +120,9 @@ pub enum Command {
     GeneralDataSet(GeneralData),
     WeekPatternsGetAll,
     WeekPatternsGet(WeekPatternHandle),
+    WeekPatternsCreate(WeekPattern),
+    WeekPatternsUpdate(WeekPatternHandle, WeekPattern),
+    WeekPatternsRemove(WeekPatternHandle),
     Exit,
 }
 
@@ -93,6 +145,9 @@ pub enum Answer {
     GeneralDataSet(PyResult<()>),
     WeekPatternsGetAll(PyResult<BTreeMap<WeekPatternHandle, WeekPattern>>),
     WeekPatternsGet(PyResult<WeekPattern>),
+    WeekPatternsCreate(PyResult<()>),
+    WeekPatternsUpdate(PyResult<()>),
+    WeekPatternsRemove(PyResult<()>),
 }
 
 #[derive(Debug)]
@@ -199,25 +254,82 @@ impl<'scope> SessionConnection<'scope> {
                     .await
                     .map_err(|e| PyException::new_err(e.to_string()))
                     .map(|map| {
-                        map.into_iter().map(|(handle, pattern)| (
-                            WeekPatternHandle { handle },
-                            WeekPattern::from(pattern)
-                        ))
-                        .collect::<BTreeMap<_,_>>()
+                        map.into_iter()
+                            .map(|(handle, pattern)| {
+                                (WeekPatternHandle { handle }, WeekPattern::from(pattern))
+                            })
+                            .collect::<BTreeMap<_, _>>()
                     });
 
                 Answer::WeekPatternsGetAll(result)
             }
             Command::WeekPatternsGet(handle) => {
-                let result = manager.week_patterns_get(handle.handle)
+                let result = manager
+                    .week_patterns_get(handle.handle)
                     .await
                     .map_err(|e| match e {
-                        IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
                         IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
                     })
                     .map(WeekPattern::from);
 
                 Answer::WeekPatternsGet(result)
+            }
+            Command::WeekPatternsCreate(pattern) => {
+                let result = manager
+                    .apply(Operation::WeekPatterns(
+                        state::WeekPatternsOperation::Create(pattern.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::WeekNumberTooBig(_) => {
+                            PyValueError::new_err("Week number larger than week_count")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    });
+
+                Answer::WeekPatternsCreate(result)
+            }
+            Command::WeekPatternsUpdate(handle, pattern) => {
+                let result = manager
+                    .apply(Operation::WeekPatterns(
+                        state::WeekPatternsOperation::Update(handle.handle, pattern.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::WeekNumberTooBig(_) => {
+                            PyValueError::new_err("Week number larger than week_count")
+                        }
+                        UpdateError::WeekPatternRemoved(_) => {
+                            PyValueError::new_err("Week pattern was previsouly removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    });
+
+                Answer::WeekPatternsUpdate(result)
+            }
+            Command::WeekPatternsRemove(handle) => {
+                let result = manager
+                    .apply(Operation::WeekPatterns(
+                        state::WeekPatternsOperation::Remove(handle.handle),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::WeekPatternRemoved(_) => {
+                            PyValueError::new_err("Week pattern was previsouly removed")
+                        }
+                        UpdateError::WeekPatternDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this week pattern",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    });
+
+                Answer::WeekPatternsRemove(result)
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }

@@ -15,6 +15,8 @@ pub enum UpdateError<IntError: std::error::Error> {
     WeekPatternDependanciesRemaining(
         Vec<backend::WeekPatternDependancy<IncompatHandle, TimeSlotHandle>>,
     ),
+    #[error("Week pattern corresponding to handle {0:?} was previously removed")]
+    WeekPatternRemoved(WeekPatternHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -346,7 +348,7 @@ pub(super) mod private {
                     .get_handle_managers()
                     .week_patterns
                     .get_id(*week_pattern_handle)
-                    .expect("week pattern to remove should exist");
+                    .ok_or(UpdateError::WeekPatternRemoved(*week_pattern_handle))?;
                 manager
                     .get_backend_logic_mut()
                     .week_patterns_remove(week_pattern_id)

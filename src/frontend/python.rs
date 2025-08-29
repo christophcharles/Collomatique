@@ -34,6 +34,12 @@ fn extract_function_arguments(py: Python, func: &Py<PyAny>) -> PyResult<Vec<Stri
     Ok(output)
 }
 
+pub fn initialize() {
+    use database::collomatique;
+    pyo3::append_to_inittab!(collomatique);
+    pyo3::prepare_freethreaded_python();
+}
+
 impl PythonCode {
     pub fn from_code(code: &str) -> Self {
         PythonCode {
