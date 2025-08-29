@@ -405,6 +405,38 @@ impl Session {
         }
     }
 
+    fn subjects_get_period_status(
+        self_: PyRef<'_, Self>,
+        subject_id: SubjectId,
+        period_id: PeriodId,
+    ) -> PyResult<bool> {
+        let data = self_.token.get_data();
+
+        let Some(validated_subject_id) =
+            data.validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid subject id {:?}",
+                subject_id
+            )));
+        };
+
+        let Some(subject) = data.get_subjects().find_subject(validated_subject_id) else {
+            panic!("subject id should be valid at this point");
+        };
+
+        let Some(validated_period_id) =
+            data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid period id {:?}",
+                period_id
+            )));
+        };
+
+        Ok(!subject.excluded_periods.contains(&validated_period_id))
+    }
+
     fn subjects_get_list(self_: PyRef<'_, Self>) -> Vec<subjects::Subject> {
         self_
             .token
