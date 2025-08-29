@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
@@ -479,17 +480,26 @@ impl std::fmt::Display for Variable {
 
 impl ValidatedData {
     pub fn ilp_translator<'a>(&'a self) -> IlpTranslator<'a> {
-        IlpTranslator { data: self }
+        IlpTranslator {
+            data: self,
+            problem_builder_cache: RefCell::new(None),
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct IlpTranslator<'a> {
     data: &'a ValidatedData,
+    problem_builder_cache: RefCell<Option<ProblemBuilder<Variable>>>,
 }
 
+use crate::ilp::initializers::ConfigInitializer;
 use crate::ilp::linexpr::{Constraint, Expr};
-use crate::ilp::{FeasableConfig, Problem, ProblemBuilder};
+use crate::ilp::{Config, DefaultRepr, FeasableConfig, Problem, ProblemBuilder};
+
+pub trait GenericInitializer: ConfigInitializer<Variable, DefaultRepr<Variable>> {}
+
+impl<T: ConfigInitializer<Variable, DefaultRepr<Variable>>> GenericInitializer for T {}
 
 enum StudentStatus {
     Assigned(usize),
@@ -1660,7 +1670,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
+    fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
             .expect("Should not have duplicates")
@@ -1706,10 +1716,90 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
     }
 
+    pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
+        let mut r = self.problem_builder_cache.borrow_mut();
+        match r.as_ref() {
+            Some(pb_builder) => pb_builder.clone(),
+            None => {
+                let pb_builder = self.problem_builder_internal();
+
+                *r = Some(pb_builder.clone());
+
+                pb_builder
+            }
+        }
+    }
+
     pub fn problem(&self) -> Problem<Variable> {
         self.problem_builder()
             .simplify_trivial_constraints()
             .build()
+    }
+
+    fn compute_period_length(&self) -> NonZeroU32 {
+        use crate::math::lcm;
+
+        let mut result = 1;
+        for subject in &self.data.subjects {
+            result = lcm(result, subject.period.get());
+        }
+
+        NonZeroU32::new(result).unwrap()
+    }
+
+    pub fn incremental_initializer<T: GenericInitializer>(
+        &self,
+        initializer: T,
+    ) -> IncrementalInitializer<T> {
+        let period_length = self.compute_period_length();
+
+        let week_count = self.data.general.week_count;
+
+        let last_period_full = (self.data.general.week_count.get() % period_length.get()) != 0;
+        let period_count = NonZeroU32::new(
+            (self.data.general.week_count.get() + period_length.get() - 1) / period_length.get(),
+        )
+        .unwrap();
+
+        let subject_week_map = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
+            .collect();
+        let subject_strictness = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| subject.period_is_strict)
+            .collect();
+        let grouping_week_map = self
+            .data
+            .slot_groupings
+            .iter()
+            .map(|grouping| {
+                grouping
+                    .slots
+                    .iter()
+                    .map(|slot_ref| {
+                        self.data.subjects[slot_ref.subject].slots[slot_ref.slot]
+                            .start
+                            .week
+                    })
+                    .collect()
+            })
+            .collect();
+
+        IncrementalInitializer {
+            period_length,
+            last_period_full,
+            period_count,
+            week_count,
+            subject_strictness,
+            subject_week_map,
+            grouping_week_map,
+            initializer,
+        }
     }
 
     fn read_subject(
@@ -1789,4 +1879,115 @@ pub struct Colloscope {
 pub struct ColloscopeSubject {
     pub groups: Vec<BTreeSet<usize>>,
     pub slots: Vec<Option<usize>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct IncrementalInitializer<T: GenericInitializer> {
+    period_length: NonZeroU32,
+    last_period_full: bool,
+    period_count: NonZeroU32,
+    week_count: NonZeroU32,
+    subject_strictness: Vec<bool>,
+    subject_week_map: Vec<Vec<u32>>,
+    grouping_week_map: Vec<BTreeSet<u32>>,
+    initializer: T,
+}
+
+impl<T: GenericInitializer> ConfigInitializer<Variable, DefaultRepr<Variable>>
+    for IncrementalInitializer<T>
+{
+    fn build_init_config<'a, 'b>(
+        &'a mut self,
+        problem: &'b Problem<Variable, DefaultRepr<Variable>>,
+    ) -> Option<Config<'b, Variable, DefaultRepr<Variable>>> {
+        let problem_builder = problem.clone().into_builder();
+
+        let first_period_problem_builder =
+            self.construct_first_period_problem_builder(problem_builder);
+
+        todo!("Should implement incremental building of init config");
+    }
+}
+
+impl<T: GenericInitializer> IncrementalInitializer<T> {
+    fn is_week_in_period(&self, week: u32, period: u32) -> bool {
+        let period_for_week = week / self.period_length.get();
+
+        period_for_week == period
+    }
+
+    fn is_subject_concerned_by_period(&self, subject: usize, period: u32) -> bool {
+        for week in self.subject_week_map[subject].iter().copied() {
+            if self.is_week_in_period(week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_grouping_concerned_by_period(&self, grouping: usize, period: u32) -> bool {
+        for week in self.grouping_week_map[grouping].iter().copied() {
+            if self.is_week_in_period(week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn should_build_periodicity(&self, subject: usize, period: u32) -> bool {
+        if self.subject_strictness[subject] {
+            period == 0
+        } else {
+            if self.last_period_full {
+                false
+            } else {
+                assert!(self.period_count.get() >= 2);
+                period == self.period_count.get() - 2
+            }
+        }
+    }
+
+    fn construct_first_period_problem_builder(
+        &self,
+        problem_builder: ProblemBuilder<Variable>,
+    ) -> ProblemBuilder<Variable> {
+        let first_period = 0;
+
+        problem_builder.filter_variables(|v| match v {
+            Variable::GroupInSlot {
+                subject,
+                slot,
+                group: _,
+            } => {
+                let week = self.subject_week_map[*subject][*slot];
+                self.is_week_in_period(week, first_period)
+            }
+            Variable::StudentNotInLastPeriod {
+                subject: _,
+                student: _,
+            } => false,
+            Variable::DynamicGroupAssignment {
+                subject,
+                slot,
+                group: _,
+                student: _,
+            } => {
+                let week = self.subject_week_map[*subject][*slot];
+                self.is_week_in_period(week, first_period)
+            }
+            Variable::StudentInGroup {
+                subject,
+                student: _,
+                group: _,
+            } => self.is_subject_concerned_by_period(*subject, first_period),
+            Variable::Periodicity {
+                subject,
+                student: _,
+                week_modulo: _,
+            } => self.should_build_periodicity(*subject, first_period),
+            Variable::UseGrouping(grouping) => {
+                self.is_grouping_concerned_by_period(*grouping, first_period)
+            }
+        })
+    }
 }
