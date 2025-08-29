@@ -243,13 +243,13 @@ impl Component for RpcLogger {
                     }
                 }
             }
-            LoggerCommandOutput::NewStdoutData(data, stdout_buf) => {
+            LoggerCommandOutput::NewStderrData(data, stderr_buf) => {
                 self.buffer_op = Some(BufferOp::Insert(data));
                 if self.child_process.is_some() {
-                    self.wait_stdout_data(sender, stdout_buf);
+                    self.wait_stderr_data(sender, stderr_buf);
                 }
             }
-            LoggerCommandOutput::NewStderrData(data, stderr_buf) => {
+            LoggerCommandOutput::NewStdoutData(data, stdout_buf) => {
                 let complete_cmd = CompleteCmdMsg::from_text_msg(&data);
                 let cmd = match complete_cmd {
                     Ok(c) => match c {
@@ -276,7 +276,7 @@ impl Component for RpcLogger {
                 sender.output(RpcLoggerOutput::Cmd(cmd)).unwrap();
                 // Process content and turn into command
                 if self.child_process.is_some() {
-                    self.wait_stderr_data(sender, stderr_buf);
+                    self.wait_stdout_data(sender, stdout_buf);
                 }
             }
         }

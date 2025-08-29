@@ -184,7 +184,7 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.adjust_scrolling = false;
         match msg {
-            DialogInput::Run(path, _script) => {
+            DialogInput::Run(path, script) => {
                 self.hidden = false;
                 self.path = path;
                 self.commands.guard().clear();
@@ -192,7 +192,7 @@ impl Component for Dialog {
                 self.rpc_logger
                     .sender()
                     .send(rpc_server::RpcLoggerInput::RunRcpEngine(
-                        collomatique_rpc::InitMsg::Greetings,
+                        collomatique_rpc::InitMsg::RunPythonScript(script),
                     ))
                     .unwrap();
             }
