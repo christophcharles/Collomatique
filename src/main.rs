@@ -367,7 +367,7 @@ async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Operation, UpdateError};
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
@@ -378,7 +378,9 @@ async fn week_count_command(
             }
 
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetWeekCount(week_count))
+                .apply(Operation::General(GeneralOperation::SetWeekCount(
+                    week_count,
+                )))
                 .await
             {
                 let err = match e {
@@ -421,16 +423,16 @@ async fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Operation, UpdateError};
 
     match command {
         MaxInterrogationsPerDayCommand::Set {
             max_interrogations_per_day: max_interrogation_per_day,
         } => {
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetMaxInterrogationsPerDay(Some(
-                    max_interrogation_per_day,
-                )))
+                .apply(Operation::General(
+                    GeneralOperation::SetMaxInterrogationsPerDay(Some(max_interrogation_per_day)),
+                ))
                 .await
             {
                 let err = match e {
@@ -443,7 +445,9 @@ async fn max_interrogations_per_day_command(
         }
         MaxInterrogationsPerDayCommand::Disable => {
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetMaxInterrogationsPerDay(None))
+                .apply(Operation::General(
+                    GeneralOperation::SetMaxInterrogationsPerDay(None),
+                ))
                 .await
             {
                 let err = match e {
@@ -470,7 +474,7 @@ async fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Operation, UpdateError};
 
     match command {
         InterrogationsPerWeekRangeCommand::SetMax {
@@ -485,9 +489,9 @@ async fn interrogations_per_week_range_command(
                 return Err(anyhow!("The maximum number of interrogations per week must be greater than the minimum number"));
             }
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetInterrogationsPerWeekRange(Some(
-                    interrogations_per_week,
-                )))
+                .apply(Operation::General(
+                    GeneralOperation::SetInterrogationsPerWeekRange(Some(interrogations_per_week)),
+                ))
                 .await
             {
                 let err = match e {
@@ -510,9 +514,9 @@ async fn interrogations_per_week_range_command(
                 return Err(anyhow!("The minimum number of interrogations per week must be less than the maximum number"));
             }
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetInterrogationsPerWeekRange(Some(
-                    interrogations_per_week,
-                )))
+                .apply(Operation::General(
+                    GeneralOperation::SetInterrogationsPerWeekRange(Some(interrogations_per_week)),
+                ))
                 .await
             {
                 let err = match e {
@@ -525,7 +529,9 @@ async fn interrogations_per_week_range_command(
         }
         InterrogationsPerWeekRangeCommand::Disable => {
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetInterrogationsPerWeekRange(None))
+                .apply(Operation::General(
+                    GeneralOperation::SetInterrogationsPerWeekRange(None),
+                ))
                 .await
             {
                 let err = match e {
@@ -568,7 +574,7 @@ async fn week_pattern_command(
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use collomatique::backend::{Week, WeekPattern};
-    use collomatique::frontend::state::{Operation, UpdateError};
+    use collomatique::frontend::state::{Operation, UpdateError, WeekPatternsOperation};
     use std::collections::BTreeSet;
 
     match command {
@@ -612,7 +618,10 @@ async fn week_pattern_command(
                 },
             };
 
-            if let Err(e) = app_state.apply(Operation::WeekPatternsAdd(pattern)).await {
+            if let Err(e) = app_state
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Add(pattern)))
+                .await
+            {
                 let err = match e {
                     UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),

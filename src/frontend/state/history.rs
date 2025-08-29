@@ -2,12 +2,52 @@ use super::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedOperation {
-    GeneralSetWeekCount(NonZeroU32),
-    GeneralSetMaxInterrogationsPerDay(Option<NonZeroU32>),
-    GeneralSetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
+    General(AnnotatedGeneralOperation),
+    WeekPatterns(AnnotatedWeekPatternsOperation),
+}
 
-    WeekPatternsAdd(handles::WeekPatternHandle, backend::WeekPattern),
-    WeekPatternsRemove(handles::WeekPatternHandle),
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedGeneralOperation {
+    SetWeekCount(NonZeroU32),
+    SetMaxInterrogationsPerDay(Option<NonZeroU32>),
+    SetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedWeekPatternsOperation {
+    Add(handles::WeekPatternHandle, backend::WeekPattern),
+    Remove(handles::WeekPatternHandle),
+}
+
+impl AnnotatedGeneralOperation {
+    fn annotate(op: GeneralOperation) -> Self {
+        match op {
+            GeneralOperation::SetWeekCount(week_count) => {
+                AnnotatedGeneralOperation::SetWeekCount(week_count)
+            }
+            GeneralOperation::SetMaxInterrogationsPerDay(max_int_per_day) => {
+                AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(max_int_per_day)
+            }
+            GeneralOperation::SetInterrogationsPerWeekRange(int_per_week) => {
+                AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(int_per_week)
+            }
+        }
+    }
+}
+
+impl AnnotatedWeekPatternsOperation {
+    fn annotate<T: backend::Storage>(
+        op: WeekPatternsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            WeekPatternsOperation::Add(pattern) => {
+                let handle = handle_managers.week_patterns.create_handle();
+                AnnotatedWeekPatternsOperation::Add(handle, pattern)
+            }
+            WeekPatternsOperation::Remove(handle) => AnnotatedWeekPatternsOperation::Remove(handle),
+        }
+    }
 }
 
 impl AnnotatedOperation {
@@ -16,21 +56,12 @@ impl AnnotatedOperation {
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
         match op {
-            Operation::GeneralSetWeekCount(week_count) => {
-                AnnotatedOperation::GeneralSetWeekCount(week_count)
+            Operation::General(op) => {
+                AnnotatedOperation::General(AnnotatedGeneralOperation::annotate(op))
             }
-            Operation::GeneralSetMaxInterrogationsPerDay(max_int_per_day) => {
-                AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(max_int_per_day)
-            }
-            Operation::GeneralSetInterrogationsPerWeekRange(int_per_week) => {
-                AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(int_per_week)
-            }
-
-            Operation::WeekPatternsAdd(pattern) => {
-                let handle = handle_managers.week_patterns.create_handle();
-                AnnotatedOperation::WeekPatternsAdd(handle, pattern)
-            }
-            Operation::WeekPatternsRemove(handle) => AnnotatedOperation::WeekPatternsRemove(handle),
+            Operation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
+                AnnotatedWeekPatternsOperation::annotate(op, handle_managers),
+            ),
         }
     }
 }
