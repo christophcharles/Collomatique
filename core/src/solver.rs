@@ -32,7 +32,7 @@ impl std::fmt::Display for InternalId {
 /// to uniquely represent type erased data.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 struct IdIssuer {
-    /// Newt available ID
+    /// New available ID
     available: u64,
 }
 
