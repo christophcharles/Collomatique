@@ -38,5 +38,5 @@ fn main() {
 
     let app = RelmApp::new("fr.collomatique.gtk4").with_args(gtk_args);
     app.allow_multiple_instances(true);
-    app.run_async::<AppModel>(payload);
+    app.run::<AppModel>(payload);
 }

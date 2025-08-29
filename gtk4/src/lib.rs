@@ -1,15 +1,12 @@
 use gtk::prelude::{GtkWindowExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
-use relm4::component::{
-    AsyncComponent, AsyncComponentParts, AsyncComponentSender, AsyncController,
-    SimpleAsyncComponent,
-};
-use relm4::prelude::AsyncComponentController;
+use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentController, Controller};
+use relm4::{Component, ComponentParts, ComponentSender, Controller, SimpleComponent};
 use std::path::PathBuf;
 
 mod editor;
+mod loading;
 mod welcome;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,11 +17,13 @@ pub struct AppInit {
 
 struct AppControllers {
     welcome: Controller<welcome::WelcomePanel>,
-    editor: AsyncController<editor::EditorPanel>,
+    loading: Controller<loading::LoadingPanel>,
+    editor: Controller<editor::EditorPanel>,
 }
 
 enum GlobalState {
     WelcomeScreen,
+    LoadingScreen,
     EditorScreen,
 }
 
@@ -32,6 +31,7 @@ impl GlobalState {
     fn get_screen_name(&self) -> &'static str {
         match self {
             GlobalState::WelcomeScreen => "welcome",
+            GlobalState::LoadingScreen => "loading",
             GlobalState::EditorScreen => "editor",
         }
     }
@@ -55,8 +55,8 @@ relm4::new_stateless_action!(NewAction, AppActionGroup, "new");
 relm4::new_stateless_action!(OpenAction, AppActionGroup, "open");
 relm4::new_stateless_action!(AboutAction, AppActionGroup, "about");
 
-#[relm4::component(async, pub)]
-impl SimpleAsyncComponent for AppModel {
+#[relm4::component(pub)]
+impl SimpleComponent for AppModel {
     type Input = AppInput;
     type Output = ();
     type Init = AppInit;
@@ -71,6 +71,7 @@ impl SimpleAsyncComponent for AppModel {
                 set_hexpand: true,
                 set_vexpand: true,
                 add_named: (model.controllers.welcome.widget(), Some("welcome")),
+                add_named: (model.controllers.loading.widget(), Some("loading")),
                 add_named: (model.controllers.editor.widget(), Some("editor")),
                 #[watch]
                 set_visible_child_name: model.state.get_screen_name(),
@@ -79,11 +80,11 @@ impl SimpleAsyncComponent for AppModel {
         }
     }
 
-    async fn init(
+    fn init(
         params: Self::Init,
         root: Self::Root,
-        sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let editor_payload = if params.new {
             editor::EditorInput::NewFile(params.file_name.clone())
         } else {
@@ -97,6 +98,10 @@ impl SimpleAsyncComponent for AppModel {
             .launch(editor_payload)
             .forward(sender.input_sender(), |_msg| AppInput::Ignore);
 
+        let loading = loading::LoadingPanel::builder()
+            .launch(())
+            .forward(sender.input_sender(), |_msg| AppInput::Ignore);
+
         let welcome =
             welcome::WelcomePanel::builder()
                 .launch(())
@@ -107,7 +112,11 @@ impl SimpleAsyncComponent for AppModel {
                     }
                 });
 
-        let controllers = AppControllers { welcome, editor };
+        let controllers = AppControllers {
+            welcome,
+            loading,
+            editor,
+        };
 
         let state = if params.new || params.file_name.is_some() {
             GlobalState::EditorScreen
@@ -144,10 +153,10 @@ impl SimpleAsyncComponent for AppModel {
         group.add_action(about_action);
         group.register_for_main_application();
 
-        AsyncComponentParts { model, widgets }
+        ComponentParts { model, widgets }
     }
 
-    async fn update(&mut self, message: Self::Input, _sender: AsyncComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
