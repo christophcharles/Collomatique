@@ -44,6 +44,8 @@ fn test_dijkstra() {
     let one = Expr::constant(1);
 
     let pb = ProblemBuilder::new()
+        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_variables(["y11", "y12", "y21", "y22"])
         // Both class should not attend a course at the same time
         .add((&x11 + &y11).leq(&one))
         .add((&x12 + &y12).leq(&one))
