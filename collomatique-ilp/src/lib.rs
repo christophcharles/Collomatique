@@ -335,8 +335,8 @@ pub enum ObjectiveSense {
 /// that you can use with a solver.
 ///
 /// Here is an example usage defining a very simple schedule problem :
-///
-/// We have two student groups x and y.
+/// ---
+/// We have two student groups X and Y.
 /// They must both attend exactly once two different courses (1 and 2)
 /// on the span of two weeks.
 /// But the courses happen simultaneously.
@@ -350,9 +350,9 @@ pub enum ObjectiveSense {
 /// by putting an x or a y in each cell.
 ///
 /// We have three broad conditions :
-/// - we should not put an x and a y in the same cell. But a cell can possibly be empty
-/// - we should not put two xs or two ys in the same column (but column could have zero)
-/// - we must put exactly one x and one y on each line
+/// - we should not put an X and a Y in the same cell. But a cell can possibly be empty
+/// - we should not put two Xs or two Ys in the same column (but column could have zero)
+/// - we must put exactly one X and one Y on each line
 ///
 /// We represent this with 8 boolean variables.
 /// The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
@@ -360,15 +360,15 @@ pub enum ObjectiveSense {
 ///
 /// ```
 /// # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
-/// let x11 = LinExpr::<String>::var("x11"); // Group x has course 1 on week 1
-/// let x12 = LinExpr::<String>::var("x12"); // Group x has course 1 on week 2
-/// let x21 = LinExpr::<String>::var("x21"); // Group x has course 2 on week 1
-/// let x22 = LinExpr::<String>::var("x22"); // Group x has course 2 on week 2
+/// let x11 = LinExpr::<String>::var("x11"); // Group X has course 1 on week 1
+/// let x12 = LinExpr::<String>::var("x12"); // Group X has course 1 on week 2
+/// let x21 = LinExpr::<String>::var("x21"); // Group X has course 2 on week 1
+/// let x22 = LinExpr::<String>::var("x22"); // Group X has course 2 on week 2
 ///
-/// let y11 = LinExpr::<String>::var("y11"); // Group y has course 1 on week 1
-/// let y12 = LinExpr::<String>::var("y12"); // Group y has course 1 on week 2
-/// let y21 = LinExpr::<String>::var("y21"); // Group y has course 2 on week 1
-/// let y22 = LinExpr::<String>::var("y22"); // Group y has course 2 on week 2
+/// let y11 = LinExpr::<String>::var("y11"); // Group Y has course 1 on week 1
+/// let y12 = LinExpr::<String>::var("y12"); // Group Y has course 1 on week 2
+/// let y21 = LinExpr::<String>::var("y21"); // Group Y has course 2 on week 1
+/// let y22 = LinExpr::<String>::var("y22"); // Group Y has course 2 on week 2
 ///
 /// let one = LinExpr::<String>::constant(1.0); // Constant for easier writing of constraints
 ///
@@ -394,19 +394,19 @@ pub enum ObjectiveSense {
 ///     ])
 ///     // Each class should not attend more than one course at a given time
 ///     .set_constraints([
-///         ((&x11 + &x21).leq(&one), "At most one course for group x on week 1"),
-///         ((&x12 + &x22).leq(&one), "At most one course for group x on week 2"),
-///         ((&y11 + &y21).leq(&one), "At most one course for group y on week 1"),
-///         ((&y12 + &y22).leq(&one), "At most one course for group y on week 2")
+///         ((&x11 + &x21).leq(&one), "At most one course for group X on week 1"),
+///         ((&x12 + &x22).leq(&one), "At most one course for group X on week 2"),
+///         ((&y11 + &y21).leq(&one), "At most one course for group Y on week 1"),
+///         ((&y12 + &y22).leq(&one), "At most one course for group Y on week 2")
 ///     ])
 ///     // Each class must complete each course exactly once
 ///     .set_constraints([
-///         ((&x11 + &x12).eq(&one), "Group x should have course 1 exactly once"),
-///         ((&x21 + &x22).eq(&one), "Group x should have course 2 exactly once"),
-///         ((&y11 + &y12).eq(&one), "Group y should have course 1 exactly once"),
-///         ((&y21 + &y22).eq(&one), "Group y should have course 2 exactly once")
+///         ((&x11 + &x12).eq(&one), "Group X should have course 1 exactly once"),
+///         ((&x21 + &x22).eq(&one), "Group X should have course 2 exactly once"),
+///         ((&y11 + &y12).eq(&one), "Group Y should have course 1 exactly once"),
+///         ((&y21 + &y22).eq(&one), "Group Y should have course 2 exactly once")
 ///     ])
-///     // Objective function : prefer group x in course 1 on week 1
+///     // Objective function : prefer group X in course 1 on week 1
 ///     .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
 ///     .build()
 ///     .unwrap();
