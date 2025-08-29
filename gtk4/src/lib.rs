@@ -1,3 +1,4 @@
+use adw::prelude::AdwDialogExt;
 use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
@@ -51,11 +52,42 @@ pub struct AppActions {
     redo_action: RelmAction<RedoAction>,
 }
 
+mod about {
+    use std::sync::atomic::AtomicBool;
+
+    pub struct AboutInfo {
+        need_present: AtomicBool,
+    }
+
+    impl AboutInfo {
+        pub fn new() -> Self {
+            AboutInfo {
+                need_present: AtomicBool::new(false),
+            }
+        }
+
+        pub fn present(&mut self) {
+            self.need_present
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+
+        pub fn updated(&self) {
+            self.need_present
+                .store(false, std::sync::atomic::Ordering::Release);
+        }
+
+        pub fn need_update(&self) -> bool {
+            self.need_present.load(std::sync::atomic::Ordering::Acquire)
+        }
+    }
+}
+
 pub struct AppModel {
     controllers: AppControllers,
     actions: AppActions,
     state: GlobalState,
     next_warn_msg: Option<AppInput>,
+    about_info: about::AboutInfo,
 }
 
 impl AppModel {
@@ -90,6 +122,7 @@ pub enum AppInput {
     RequestSaveAs,
     RequestUndo,
     RequestRedo,
+    RequestAbout,
     UpdateActions,
 }
 
@@ -131,6 +164,14 @@ impl SimpleComponent for AppModel {
                 sender.input(AppInput::RequestQuit);
                 gtk::glib::Propagation::Stop
             }
+        },
+        about_dialog = adw::AboutDialog {
+            set_application_name: "Collomatique",
+            set_developer_name: "Christoph Charles",
+            set_version: env!("CARGO_PKG_VERSION"),
+            set_website: "https://github.com/christophcharles/Collomatique",
+            set_license_type: gtk::License::Agpl30,
+            set_application_icon: "application-x-executable",
         }
     }
 
@@ -255,8 +296,9 @@ impl SimpleComponent for AppModel {
             })
         };
         let about_action: RelmAction<AboutAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestAbout);
             })
         };
 
@@ -281,11 +323,14 @@ impl SimpleComponent for AppModel {
             redo_action,
         };
 
+        let about_info = about::AboutInfo::new();
+
         let model = AppModel {
             controllers,
             state,
             next_warn_msg: None,
             actions,
+            about_info,
         };
         let widgets = view_output!();
 
@@ -479,6 +524,9 @@ impl SimpleComponent for AppModel {
                     .send(editor::EditorInput::RedoClicked)
                     .unwrap();
             }
+            AppInput::RequestAbout => {
+                self.about_info.present();
+            }
             AppInput::UpdateActions => {
                 self.actions
                     .save_action
@@ -490,6 +538,13 @@ impl SimpleComponent for AppModel {
                     .redo_action
                     .set_enabled(self.controllers.editor.model().can_redo());
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.about_info.need_update() {
+            widgets.about_dialog.present(Some(&widgets.root_window));
+            self.about_info.updated();
         }
     }
 }
