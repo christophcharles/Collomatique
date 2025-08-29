@@ -6,7 +6,7 @@ use super::{tools, GuiMessage, GuiState};
 #[derive(Debug, Clone)]
 pub struct FileDesc {
     pub path: std::path::PathBuf,
-    pub create: bool,
+    pub save: bool,
 }
 
 #[derive(Clone)]
@@ -30,11 +30,9 @@ pub enum Message {
 impl std::fmt::Debug for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Message::FileChooserDialog(title, create, _msg) => write!(
-                f,
-                "Message::FileChooserDialog({:?}, {:?}, Fn)",
-                title, create
-            ),
+            Message::FileChooserDialog(title, save, _msg) => {
+                write!(f, "Message::FileChooserDialog({:?}, {:?}, Fn)", title, save)
+            }
             Message::FileChooserDialogClosed(file_desc) => {
                 write!(f, "Message::FileChooserDialogClosed({:?}", file_desc)
             }
@@ -87,12 +85,12 @@ pub struct State {
 
 pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     match message {
-        Message::FileChooserDialog(title, create, msg) => {
+        Message::FileChooserDialog(title, save, msg) => {
             *state = GuiState::DialogShown(State {
                 previous_state: Box::new(state.clone()),
                 dialog_shown: DialogShown::FileChooser(msg),
             });
-            Task::perform(file_chooser_dialog(title, create), |x| {
+            Task::perform(file_chooser_dialog(title, save), |x| {
                 Message::FileChooserDialogClosed(x).into()
             })
         }
@@ -147,13 +145,13 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     }
 }
 
-async fn file_chooser_dialog(title: String, create: bool) -> Option<std::path::PathBuf> {
+async fn file_chooser_dialog(title: String, save: bool) -> Option<std::path::PathBuf> {
     let dialog = rfd::AsyncFileDialog::new()
         .set_title(title)
-        .add_filter("Bases de données Collomatique", &["collomatique"])
+        .add_filter("Fichier Collomatique", &["json"])
         .add_filter("Tous les fichiers", &["*"]);
 
-    let file = if create {
+    let file = if save {
         dialog.save_file().await
     } else {
         dialog.pick_file().await
