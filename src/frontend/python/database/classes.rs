@@ -78,6 +78,14 @@ pub struct WeekPatternHandle {
     pub handle: state::WeekPatternHandle,
 }
 
+#[pymethods]
+impl WeekPatternHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
 impl From<&state::WeekPatternHandle> for WeekPatternHandle {
     fn from(value: &state::WeekPatternHandle) -> Self {
         WeekPatternHandle {
@@ -169,6 +177,14 @@ impl From<WeekPattern> for backend::WeekPattern {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TeacherHandle {
     pub handle: state::TeacherHandle,
+}
+
+#[pymethods]
+impl TeacherHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
 }
 
 impl From<&state::TeacherHandle> for TeacherHandle {
@@ -265,6 +281,14 @@ impl From<Teacher> for backend::Teacher {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StudentHandle {
     pub handle: state::StudentHandle,
+}
+
+#[pymethods]
+impl StudentHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
 }
 
 impl From<&state::StudentHandle> for StudentHandle {
@@ -377,6 +401,14 @@ pub struct SubjectGroupHandle {
     pub handle: state::SubjectGroupHandle,
 }
 
+#[pymethods]
+impl SubjectGroupHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
 impl From<&state::SubjectGroupHandle> for SubjectGroupHandle {
     fn from(value: &state::SubjectGroupHandle) -> Self {
         SubjectGroupHandle {
@@ -463,6 +495,14 @@ impl From<SubjectGroup> for backend::SubjectGroup {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncompatHandle {
     pub handle: state::IncompatHandle,
+}
+
+#[pymethods]
+impl IncompatHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
 }
 
 impl From<&state::IncompatHandle> for IncompatHandle {
@@ -869,6 +909,14 @@ pub struct GroupListHandle {
     pub handle: state::GroupListHandle,
 }
 
+#[pymethods]
+impl GroupListHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
 impl From<&state::GroupListHandle> for GroupListHandle {
     fn from(value: &state::GroupListHandle) -> Self {
         GroupListHandle {
@@ -1052,6 +1100,16 @@ pub struct SubjectHandle {
     pub handle: state::SubjectHandle,
 }
 
+#[pymethods]
+impl SubjectHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!(
+            "{:?}", *self_
+        );
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
 impl From<&state::SubjectHandle> for SubjectHandle {
     fn from(value: &state::SubjectHandle) -> Self {
         SubjectHandle {
@@ -1138,6 +1196,16 @@ impl From<Subject> for backend::Subject {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TimeSlotHandle {
     pub handle: state::TimeSlotHandle,
+}
+
+#[pymethods]
+impl TimeSlotHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!(
+            "{:?}", *self_
+        );
+        PyString::new_bound(self_.py(), output.as_str())
+    }
 }
 
 impl From<&state::TimeSlotHandle> for TimeSlotHandle {
@@ -1228,6 +1296,16 @@ pub struct GroupingHandle {
     pub handle: state::GroupingHandle,
 }
 
+#[pymethods]
+impl GroupingHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!(
+            "{:?}", *self_
+        );
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
 impl From<&state::GroupingHandle> for GroupingHandle {
     fn from(value: &state::GroupingHandle) -> Self {
         GroupingHandle {
@@ -1314,6 +1392,16 @@ impl From<Grouping> for backend::Grouping {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupingIncompatHandle {
     pub handle: state::GroupingIncompatHandle,
+}
+
+#[pymethods]
+impl GroupingIncompatHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!(
+            "{:?}", *self_
+        );
+        PyString::new_bound(self_.py(), output.as_str())
+    }
 }
 
 impl From<&state::GroupingIncompatHandle> for GroupingIncompatHandle {
