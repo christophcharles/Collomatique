@@ -318,7 +318,7 @@ fn solve_thread<'a>(
     ilp_translator: &IlpTranslator<'a>,
     problem: &'a Problem<Variable>,
     step_count: usize,
-) -> Option<f64> {
+) -> Option<(FeasableConfig<'a, Variable>, f64)> {
     use std::time::Duration;
 
     pb.set_style(style.clone());
@@ -330,14 +330,14 @@ fn solve_thread<'a>(
     pb.set_message("Building initial colloscope... (this can take a few minutes)");
     let (first_config_opt, iterator) = solve_initial_colloscope(init_config);
 
-    let (_first_sol, first_cost) = match first_config_opt {
+    let (first_sol, first_cost) = match first_config_opt {
         Some(value) => value,
         None => return None,
     };
 
     if step_count == 0 {
         pb.finish_with_message(format!("Done. Found colloscope of cost {}", first_cost));
-        return Some(first_cost);
+        return Some((first_sol.as_ref().clone(), first_cost));
     }
 
     let width = step_count.to_string().len();
@@ -357,14 +357,18 @@ fn solve_thread<'a>(
         first_cost, first_cost
     ));
     let mut min_cost = first_cost;
-    for (_sol, cost) in iterator.take(step_count) {
-        min_cost = if min_cost > cost { cost } else { min_cost };
+    let mut min_config = first_sol;
+    for (sol, cost) in iterator.take(step_count) {
+        if min_cost > cost {
+            min_cost = cost;
+            min_config = sol;
+        }
         pb.set_message(format!("Cost (current/best): {}/{}", cost, min_cost));
         pb.inc(1);
     }
     pb.finish_with_message(format!("Done. Best colloscope cost is {}.", min_cost));
 
-    Some(min_cost)
+    Some((min_config.as_ref().clone(), min_cost))
 }
 
 async fn solve_command(
@@ -443,24 +447,32 @@ async fn solve_command(
                 .into_par_iter()
                 .panic_fuse()
                 .map(|(pb, style, ilp_translator)| {
-                    let best_cost = solve_thread(pb, style, &ilp_translator, &problem, step_count)?;
+                    let (best_config, best_cost) =
+                        solve_thread(pb, style, &ilp_translator, &problem, step_count)?;
 
                     use ordered_float::OrderedFloat;
-                    Some(OrderedFloat(best_cost))
+                    Some((best_config, OrderedFloat(best_cost)))
                 })
                 .while_some()
-                .min()
+                .min_by_key(|(_c, cost)| *cost)
         })
     };
 
     drop(stdout_gag);
 
-    let best_cost = match best_cost_opt {
+    let (best_config, best_cost) = match best_cost_opt {
         Some(value) => value,
         None => return Err(anyhow!("No solution found, colloscope is unfeasable!\nThis means the constraints are incompatible and no colloscope can be built that follows all of them. Relax some constraints and try again.")),
     };
 
-    Ok(Some(format!("Best cost found is: {}", best_cost.0)))
+    let best_ilp_config = ilp_translator
+        .read_solution(&best_config)
+        .expect("Solution should be translatable to gen::Colloscope data");
+
+    Ok(Some(format!(
+        "Best cost found {} is for config: {:?}",
+        best_cost.0, best_ilp_config
+    )))
 }
 
 async fn week_count_command(
