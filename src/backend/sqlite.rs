@@ -313,6 +313,7 @@ mod group_lists;
 mod incompats;
 mod students;
 mod subject_groups;
+mod subjects;
 mod teachers;
 mod week_patterns;
 
@@ -323,6 +324,7 @@ impl Storage for Store {
     type SubjectGroupId = subject_groups::Id;
     type IncompatId = incompats::Id;
     type GroupListId = group_lists::Id;
+    type SubjectId = subjects::Id;
 
     type InternalError = Error;
 
@@ -670,5 +672,72 @@ impl Storage for Store {
         >,
     > + Send {
         group_lists::update(&self.pool, index, group_list)
+    }
+
+    fn subjects_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::SubjectId,
+                Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        subjects::get_all(&self.pool)
+    }
+    fn subjects_get(
+        &self,
+        index: Self::SubjectId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+            IdError<Self::InternalError, Self::SubjectId>,
+        >,
+    > + Send {
+        subjects::get(&self.pool, index)
+    }
+    fn subjects_add(
+        &self,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Self::SubjectId,
+            Cross3Error<
+                Self::InternalError,
+                Self::SubjectGroupId,
+                Self::IncompatId,
+                Self::GroupListId,
+            >,
+        >,
+    > + Send {
+        subjects::add(&self.pool, subject)
+    }
+    fn subjects_remove(
+        &self,
+        index: Self::SubjectId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>,
+    > + Send {
+        subjects::remove(&self.pool, index)
+    }
+    fn subjects_update(
+        &self,
+        index: Self::SubjectId,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            Cross3IdError<
+                Self::InternalError,
+                Self::SubjectId,
+                Self::SubjectGroupId,
+                Self::IncompatId,
+                Self::GroupListId,
+            >,
+        >,
+    > + Send {
+        subjects::update(&self.pool, index, subject)
     }
 }
