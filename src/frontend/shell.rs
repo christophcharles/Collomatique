@@ -413,7 +413,7 @@ async fn solve_command(
         ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} {prefix}{msg}")
             .unwrap();
 
-    let gen_colloscope_translator = GenColloscopeTranslator::new(app_state).await?;
+    let gen_colloscope_translator = GenColloscopeTranslator::new(app_state)?;
     let data = gen_colloscope_translator.get_validated_data();
 
     let ilp_translator = data.ilp_translator();
