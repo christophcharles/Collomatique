@@ -101,7 +101,10 @@ impl Solver {
                         let col_factor = if minimize_distance_to_init_config {
                             1. - 2. * value
                         } else {
-                            0.
+                            match problem.get_objective_fn().get(var) {
+                                Some(coef) => coef.into(),
+                                None => 0.,
+                            }
                         };
 
                         let col = highs_problem.add_integer_column(col_factor, 0..=1);
@@ -109,8 +112,16 @@ impl Solver {
                     }
                     VariableType::Integer(range) => {
                         // Ignore dist mininization for integers variables
+                        let col_factor = if !minimize_distance_to_init_config {
+                            match problem.get_objective_fn().get(var) {
+                                Some(coef) => coef.into(),
+                                None => 0.,
+                            }
+                        } else {
+                            0.
+                        };
 
-                        let col = highs_problem.add_integer_column(0., range.clone());
+                        let col = highs_problem.add_integer_column(col_factor, range.clone());
                         (var.clone(), col)
                     }
                 }
