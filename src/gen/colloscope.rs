@@ -3192,6 +3192,72 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
     }
 
+    fn build_objective_fn(&self) -> Expr<Variable> {
+        const STUDENT_PER_DAY_COST: i32 = 1;
+        const STUDENT_PER_WEEK_COST: i32 = 1;
+        const GLOBAL_PER_DAY_COST: i32 = 1;
+        const GLOBAL_PER_WEEK_COST: i32 = 1;
+
+        let mut expr = Expr::constant(0);
+
+        // Costs for slots
+        let student_count_i32 =
+            i32::try_from(self.data.students.len()).expect("Student count should fit in i32");
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.cost == 0 {
+                    continue;
+                }
+
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    let cost_i32 =
+                        i32::try_from(slot.cost).expect("Cost for slot should fit in i32");
+
+                    expr = expr
+                        + student_count_i32
+                            * cost_i32
+                            * Expr::var(Variable::GroupInSlot {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                            });
+                }
+            }
+        }
+
+        // Number of interrogations per day
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            expr = expr
+                + STUDENT_PER_DAY_COST
+                    * Expr::var(Variable::UpperBoundInterrogationPerDay {
+                        student: student_num,
+                    });
+        }
+
+        // Global number of interrogations per day
+        expr = expr
+            + student_count_i32
+                * GLOBAL_PER_DAY_COST
+                * Expr::var(Variable::UpperBoundInterrogationPerDayGlobal);
+
+        // Stable number of interrogations per week
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            let range = Expr::var(Variable::UpperBoundInterrogationPerWeek {
+                student: student_num,
+            }) - Expr::var(Variable::LowerBoundInterrogationPerWeek {
+                student: student_num,
+            });
+            expr = expr + STUDENT_PER_WEEK_COST * range;
+        }
+
+        // Global stable number of interrogations per week
+        let range_global = Expr::var(Variable::UpperBoundInterrogationPerWeekGlobal)
+            - Expr::var(Variable::LowerBoundInterrogationPerWeekGlobal);
+        expr = expr + student_count_i32 * GLOBAL_PER_WEEK_COST * range_global;
+
+        expr
+    }
+
     fn problem_builder_hard(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_bool_variables(self.build_group_in_slot_variables())
@@ -3266,7 +3332,10 @@ impl<'a> IlpTranslator<'a> {
         //let soft_problem = self.problem_builder_soft().build();
         //let subjects = self.data.subjects.clone();
 
-        let hard_problem_builder = self.problem_builder_hard();
+        let hard_problem_builder = self
+            .problem_builder_hard()
+            .set_objective_fn(self.build_objective_fn())
+            .expect("Variables should be declared");
         // Comment out for now, we are going to need this code for the linear optimization
         /*      .eval_fn(crate::debuggable!(move |x| {
             let bool_vars = x.get_bool_vars();
