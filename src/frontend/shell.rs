@@ -560,6 +560,7 @@ async fn solve_command(
     };
 
     drop(stdout_gag);
+    drop(multi_pb);
 
     let (best_config, best_cost) = match best_cost_opt {
         Some(value) => value,
@@ -573,11 +574,17 @@ async fn solve_command(
     let best_backend_config =
         gen_colloscope_translator.translate_colloscope(&best_ilp_config, &colloscope_name)?;
 
+    let pb = ProgressBar::new_spinner().with_style(style.clone());
+    pb.set_message("Saving colloscope in database...");
+    pb.enable_steady_tick(Duration::from_millis(20));
+
     let _ = app_state
         .apply(crate::frontend::state::Operation::Colloscopes(
             crate::frontend::state::ColloscopesOperation::Create(best_backend_config),
         ))
         .await?;
+
+    pb.finish();
 
     Ok(Some(format!(
         "Best cost found is {}. Colloscope was stored as \"{}\".",
