@@ -7,10 +7,10 @@ use crate::rpc::{
     error_msg::{
         AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignError, AssignmentsError,
         CutPeriodError, DeletePeriodError, DeleteStudentError, DeleteSubjectError,
-        DeleteTeacherError, GeneralPlanningError, MergeWithPreviousPeriodError, MoveDownError,
-        MoveUpError, StudentsError, SubjectsError, TeachersError, UpdatePeriodStatusError,
-        UpdatePeriodWeekCountError, UpdateStudentError, UpdateSubjectError, UpdateTeacherError,
-        UpdateWeekStatusError,
+        DeleteTeacherError, DuplicatePreviousPeriodError, GeneralPlanningError,
+        MergeWithPreviousPeriodError, MoveDownError, MoveUpError, StudentsError, SubjectsError,
+        TeachersError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateStudentError,
+        UpdateSubjectError, UpdateTeacherError, UpdateWeekStatusError,
     },
     ErrorMsg, ResultMsg,
 };
@@ -730,6 +730,32 @@ impl Session {
         let value = assigned_students.contains(&student_id);
 
         Ok(value)
+    }
+
+    fn assignments_duplicate_previous_period(
+        self_: PyRef<'_, Self>,
+        period_id: PeriodId,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::Assignments(
+                crate::rpc::cmd_msg::AssignmentsCmdMsg::DuplicatePreviousPeriod(period_id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Assignments(AssignmentsError::DuplicatePreviousPeriod(
+                e,
+            ))) => match e {
+                DuplicatePreviousPeriodError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(id) => Err(
+                    PyValueError::new_err(format!("Period id {:?} is the first period", id)),
+                ),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
     }
 }
 

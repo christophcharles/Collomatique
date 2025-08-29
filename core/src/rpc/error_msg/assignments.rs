@@ -5,12 +5,14 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssignmentsError {
     Assign(AssignError),
+    DuplicatePreviousPeriod(DuplicatePreviousPeriodError),
 }
 
 impl std::fmt::Display for AssignmentsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AssignmentsError::Assign(e) => e.fmt(f),
+            AssignmentsError::DuplicatePreviousPeriod(e) => e.fmt(f),
         }
     }
 }
@@ -20,6 +22,9 @@ impl From<crate::ops::AssignmentsUpdateError> for AssignmentsError {
         use crate::ops::AssignmentsUpdateError;
         match value {
             AssignmentsUpdateError::Assign(e) => AssignmentsError::Assign(e.into()),
+            AssignmentsUpdateError::DuplicatePreviousPeriod(e) => {
+                AssignmentsError::DuplicatePreviousPeriod(e.into())
+            }
         }
     }
 }
@@ -27,6 +32,12 @@ impl From<crate::ops::AssignmentsUpdateError> for AssignmentsError {
 impl From<AssignError> for AssignmentsError {
     fn from(value: AssignError) -> Self {
         AssignmentsError::Assign(value)
+    }
+}
+
+impl From<DuplicatePreviousPeriodError> for AssignmentsError {
+    fn from(value: DuplicatePreviousPeriodError) -> Self {
+        AssignmentsError::DuplicatePreviousPeriod(value)
     }
 }
 
@@ -84,6 +95,38 @@ impl From<crate::ops::AssignError> for AssignError {
             }
             crate::ops::AssignError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
                 AssignError::SubjectDoesNotRunOnPeriod(subject_id.into(), period_id.into())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DuplicatePreviousPeriodError {
+    InvalidPeriodId(MsgPeriodId),
+    FirstPeriodHasNoPreviousPeriod(MsgPeriodId),
+}
+
+impl std::fmt::Display for DuplicatePreviousPeriodError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DuplicatePreviousPeriodError::InvalidPeriodId(id) => {
+                write!(f, "L'identifiant {} ne correspond à aucune période", id.0)
+            }
+            DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(_id) => {
+                write!(f, "Il n'y a pas de période précédent la première période")
+            }
+        }
+    }
+}
+
+impl From<crate::ops::DuplicatePreviousPeriodError> for DuplicatePreviousPeriodError {
+    fn from(value: crate::ops::DuplicatePreviousPeriodError) -> Self {
+        match value {
+            crate::ops::DuplicatePreviousPeriodError::InvalidPeriodId(id) => {
+                DuplicatePreviousPeriodError::InvalidPeriodId(id.into())
+            }
+            crate::ops::DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(id) => {
+                DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(id.into())
             }
         }
     }
