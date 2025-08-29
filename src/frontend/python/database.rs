@@ -1337,20 +1337,17 @@ impl<'scope> SessionConnection<'scope> {
     }
 
     fn thread_func<T: state::Manager>(queue_receiver: Receiver<Job>, manager: &'scope mut T) {
-        use tokio::runtime::Runtime;
-        let rt = Runtime::new().unwrap();
-
         while let Ok(job) = queue_receiver.recv() {
             if let Command::Exit = &job.command {
                 return;
             }
 
-            let answer_data = rt.block_on(Self::execute_job(&job.command, manager));
+            let answer_data = Self::execute_job(&job.command, manager);
             job.answer.send(answer_data).unwrap();
         }
     }
 
-    async fn execute_general_data_job<T: state::Manager>(
+    fn execute_general_data_job<T: state::Manager>(
         general_data_command: &GeneralDataCommand,
         manager: &mut T,
     ) -> PyResult<GeneralDataAnswer> {
@@ -1381,7 +1378,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_week_patterns_job<T: state::Manager>(
+    fn execute_week_patterns_job<T: state::Manager>(
         week_patterns_command: &WeekPatternsCommand,
         manager: &mut T,
     ) -> PyResult<WeekPatternsAnswer> {
@@ -1466,7 +1463,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_teachers_job<T: state::Manager>(
+    fn execute_teachers_job<T: state::Manager>(
         teachers_command: &TeachersCommand,
         manager: &mut T,
     ) -> PyResult<TeachersAnswer> {
@@ -1542,7 +1539,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_students_job<T: state::Manager>(
+    fn execute_students_job<T: state::Manager>(
         students_command: &StudentsCommand,
         manager: &mut T,
     ) -> PyResult<StudentsAnswer> {
@@ -1618,7 +1615,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_subject_groups_job<T: state::Manager>(
+    fn execute_subject_groups_job<T: state::Manager>(
         subject_groups_command: &SubjectGroupsCommand,
         manager: &mut T,
     ) -> PyResult<SubjectGroupsAnswer> {
@@ -1699,7 +1696,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_incompats_job<T: state::Manager>(
+    fn execute_incompats_job<T: state::Manager>(
         incompats_command: &IncompatsCommand,
         manager: &mut T,
     ) -> PyResult<IncompatsAnswer> {
@@ -1787,7 +1784,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_group_lists_job<T: state::Manager>(
+    fn execute_group_lists_job<T: state::Manager>(
         group_lists_command: &GroupListsCommand,
         manager: &mut T,
     ) -> PyResult<GroupListsAnswer> {
@@ -1885,7 +1882,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_subjects_job<T: state::Manager>(
+    fn execute_subjects_job<T: state::Manager>(
         subjects_command: &SubjectsCommand,
         manager: &mut T,
     ) -> PyResult<SubjectsAnswer> {
@@ -2003,7 +2000,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_time_slots_job<T: state::Manager>(
+    fn execute_time_slots_job<T: state::Manager>(
         time_slots_command: &TimeSlotsCommand,
         manager: &mut T,
     ) -> PyResult<TimeSlotsAnswer> {
@@ -2115,7 +2112,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_groupings_job<T: state::Manager>(
+    fn execute_groupings_job<T: state::Manager>(
         groupings_command: &GroupingsCommand,
         manager: &mut T,
     ) -> PyResult<GroupingsAnswer> {
@@ -2203,7 +2200,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_grouping_incompats_job<T: state::Manager>(
+    fn execute_grouping_incompats_job<T: state::Manager>(
         grouping_incompats_command: &GroupingIncompatsCommand,
         manager: &mut T,
     ) -> PyResult<GroupingIncompatsAnswer> {
@@ -2294,7 +2291,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_register_student_job<T: state::Manager>(
+    fn execute_register_student_job<T: state::Manager>(
         register_student_command: &RegisterStudentCommand,
         manager: &mut T,
     ) -> PyResult<RegisterStudentAnswer> {
@@ -2395,7 +2392,7 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_slot_selections_job<T: state::Manager>(
+    fn execute_slot_selections_job<T: state::Manager>(
         slot_selections_command: &SlotSelectionsCommand,
         manager: &mut T,
     ) -> PyResult<SlotSelectionsAnswer> {
@@ -2497,67 +2494,59 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_job<T: state::Manager>(
-        command: &Command,
-        manager: &mut T,
-    ) -> PyResult<Answer> {
+    fn execute_job<T: state::Manager>(command: &Command, manager: &mut T) -> PyResult<Answer> {
         match command {
             Command::GeneralData(general_data_command) => {
-                let answer = Self::execute_general_data_job(general_data_command, manager).await?;
+                let answer = Self::execute_general_data_job(general_data_command, manager)?;
                 Ok(Answer::GeneralData(answer))
             }
             Command::WeekPatterns(week_patterns_command) => {
-                let answer =
-                    Self::execute_week_patterns_job(week_patterns_command, manager).await?;
+                let answer = Self::execute_week_patterns_job(week_patterns_command, manager)?;
                 Ok(Answer::WeekPatterns(answer))
             }
             Command::Teachers(teachers_command) => {
-                let answer = Self::execute_teachers_job(teachers_command, manager).await?;
+                let answer = Self::execute_teachers_job(teachers_command, manager)?;
                 Ok(Answer::Teachers(answer))
             }
             Command::Students(students_command) => {
-                let answer = Self::execute_students_job(students_command, manager).await?;
+                let answer = Self::execute_students_job(students_command, manager)?;
                 Ok(Answer::Students(answer))
             }
             Command::SubjectGroups(subject_groups_command) => {
-                let answer =
-                    Self::execute_subject_groups_job(subject_groups_command, manager).await?;
+                let answer = Self::execute_subject_groups_job(subject_groups_command, manager)?;
                 Ok(Answer::SubjectGroups(answer))
             }
             Command::Incompats(incompats_command) => {
-                let answer = Self::execute_incompats_job(incompats_command, manager).await?;
+                let answer = Self::execute_incompats_job(incompats_command, manager)?;
                 Ok(Answer::Incompats(answer))
             }
             Command::GroupLists(group_lists_command) => {
-                let answer = Self::execute_group_lists_job(group_lists_command, manager).await?;
+                let answer = Self::execute_group_lists_job(group_lists_command, manager)?;
                 Ok(Answer::GroupLists(answer))
             }
             Command::Subjects(subjects_command) => {
-                let answer = Self::execute_subjects_job(subjects_command, manager).await?;
+                let answer = Self::execute_subjects_job(subjects_command, manager)?;
                 Ok(Answer::Subjects(answer))
             }
             Command::TimeSlots(time_slots_command) => {
-                let answer = Self::execute_time_slots_job(time_slots_command, manager).await?;
+                let answer = Self::execute_time_slots_job(time_slots_command, manager)?;
                 Ok(Answer::TimeSlots(answer))
             }
             Command::Groupings(groupings_command) => {
-                let answer = Self::execute_groupings_job(groupings_command, manager).await?;
+                let answer = Self::execute_groupings_job(groupings_command, manager)?;
                 Ok(Answer::Groupings(answer))
             }
             Command::GroupingIncompats(grouping_incompats_command) => {
                 let answer =
-                    Self::execute_grouping_incompats_job(grouping_incompats_command, manager)
-                        .await?;
+                    Self::execute_grouping_incompats_job(grouping_incompats_command, manager)?;
                 Ok(Answer::GroupingIncompats(answer))
             }
             Command::RegisterStudent(register_student_command) => {
-                let answer =
-                    Self::execute_register_student_job(register_student_command, manager).await?;
+                let answer = Self::execute_register_student_job(register_student_command, manager)?;
                 Ok(Answer::RegisterStudent(answer))
             }
             Command::SlotSelections(slot_selections_command) => {
-                let answer =
-                    Self::execute_slot_selections_job(slot_selections_command, manager).await?;
+                let answer = Self::execute_slot_selections_job(slot_selections_command, manager)?;
                 Ok(Answer::SlotSelections(answer))
             }
             Command::Undo => {
