@@ -208,9 +208,257 @@ impl SubjectsUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<PreCleaningOp<SubjectsUpdateWarning>> {
-        todo!()
+        match self {
+            Self::AddNewSubject(_) => None,
+            Self::MoveSubjectUp(_) => None,
+            Self::MoveSubjectDown(_) => None,
+            Self::UpdateSubject(subject_id, params) => {
+                let Some(current_subject) =
+                    data.get_data().get_subjects().find_subject(*subject_id)
+                else {
+                    return None;
+                };
+                let previously_had_interrogations = current_subject
+                    .parameters
+                    .interrogation_parameters
+                    .is_some();
+
+                let no_more_interrogations = params.interrogation_parameters.is_none();
+
+                if previously_had_interrogations && no_more_interrogations {
+                    for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
+                        if teacher.subjects.contains(subject_id) {
+                            let mut new_teacher = teacher.clone();
+                            new_teacher.subjects.remove(subject_id);
+                            return Some(PreCleaningOp {
+                                warning: SubjectsUpdateWarning::LooseInterrogationDataForTeacher(
+                                    *teacher_id,
+                                    *subject_id,
+                                ),
+                                ops: vec![UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(
+                                    *teacher_id,
+                                    new_teacher,
+                                ))],
+                            });
+                        }
+                    }
+
+                    for (period_id, subject_map) in
+                        &data.get_data().get_group_lists().subjects_associations
+                    {
+                        if let Some(group_list_id) = subject_map.get(subject_id) {
+                            return Some(PreCleaningOp {
+                                warning: SubjectsUpdateWarning::LooseGroupListAssociation(
+                                    *subject_id,
+                                    *group_list_id,
+                                    *period_id,
+                                ),
+                                ops: vec![UpdateOp::GroupLists(
+                                    GroupListsUpdateOp::AssignGroupListToSubject(
+                                        *period_id,
+                                        *subject_id,
+                                        None,
+                                    ),
+                                )],
+                            });
+                        }
+                    }
+
+                    let mut ops = vec![];
+                    let subject_slots = data
+                        .get_data()
+                        .get_slots()
+                        .subject_map
+                        .get(subject_id)
+                        .expect("Subject should have associated slots at this point");
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        ops.push(UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)));
+                    }
+                    if !ops.is_empty() {
+                        return Some(PreCleaningOp {
+                            warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
+                            ops,
+                        });
+                    }
+                }
+
+                None
+            }
+            Self::UpdatePeriodStatus(subject_id, period_id, new_status) => {
+                let Some(current_subject) =
+                    data.get_data().get_subjects().find_subject(*subject_id)
+                else {
+                    return None;
+                };
+
+                let old_status = !current_subject.excluded_periods.contains(period_id);
+
+                if !*new_status && old_status {
+                    if let Some(period_assignments) =
+                        data.get_data().get_assignments().period_map.get(period_id)
+                    {
+                        let assigned_students = period_assignments
+                            .subject_map
+                            .get(subject_id)
+                            .expect("subject_id should be available in subject map at this point");
+
+                        if !assigned_students.is_empty() {
+                            let ops = assigned_students
+                                .iter()
+                                .map(|student_id| {
+                                    UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                        *period_id,
+                                        *student_id,
+                                        *subject_id,
+                                        false,
+                                    ))
+                                })
+                                .collect();
+
+                            return Some(PreCleaningOp {
+                                warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
+                                    *period_id,
+                                    *subject_id,
+                                ),
+                                ops,
+                            });
+                        }
+                    }
+
+                    if let Some(subject_map) = data
+                        .get_data()
+                        .get_group_lists()
+                        .subjects_associations
+                        .get(period_id)
+                    {
+                        if let Some(group_list_id) = subject_map.get(subject_id) {
+                            return Some(PreCleaningOp {
+                                warning: SubjectsUpdateWarning::LooseGroupListAssociation(
+                                    *subject_id,
+                                    *group_list_id,
+                                    *period_id,
+                                ),
+                                ops: vec![UpdateOp::GroupLists(
+                                    GroupListsUpdateOp::AssignGroupListToSubject(
+                                        *period_id,
+                                        *subject_id,
+                                        None,
+                                    ),
+                                )],
+                            });
+                        }
+                    }
+                }
+
+                None
+            }
+            Self::DeleteSubject(subject_id) => {
+                for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
+                    if teacher.subjects.contains(subject_id) {
+                        let mut new_teacher = teacher.clone();
+                        new_teacher.subjects.remove(subject_id);
+                        return Some(PreCleaningOp {
+                            warning: SubjectsUpdateWarning::LooseInterrogationDataForTeacher(
+                                *teacher_id,
+                                *subject_id,
+                            ),
+                            ops: vec![UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(
+                                *teacher_id,
+                                new_teacher,
+                            ))],
+                        });
+                    }
+                }
+
+                for (period_id, subject_map) in
+                    &data.get_data().get_group_lists().subjects_associations
+                {
+                    if let Some(group_list_id) = subject_map.get(subject_id) {
+                        return Some(PreCleaningOp {
+                            warning: SubjectsUpdateWarning::LooseGroupListAssociation(
+                                *subject_id,
+                                *group_list_id,
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::GroupLists(
+                                GroupListsUpdateOp::AssignGroupListToSubject(
+                                    *period_id,
+                                    *subject_id,
+                                    None,
+                                ),
+                            )],
+                        });
+                    }
+                }
+
+                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                    if incompat.subject_id == *subject_id {
+                        return Some(PreCleaningOp {
+                            warning: SubjectsUpdateWarning::LooseScheduleIncompat(
+                                *subject_id,
+                                *incompat_id,
+                            ),
+                            ops: vec![UpdateOp::Incompatibilities(
+                                IncompatibilitiesUpdateOp::DeleteIncompat(*incompat_id),
+                            )],
+                        });
+                    }
+                }
+
+                if let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
+                {
+                    let mut ops = vec![];
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        ops.push(UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)));
+                    }
+                    if !subject_slots.ordered_slots.is_empty() {
+                        return Some(PreCleaningOp {
+                            warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
+                            ops,
+                        });
+                    }
+                }
+
+                let Some(subject) = &data.get_data().get_subjects().find_subject(*subject_id)
+                else {
+                    return None;
+                };
+
+                let excluded_periods = &subject.excluded_periods;
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    let assigned_students = period_assignments.subject_map.get(subject_id)
+                        .expect("Assignment data is inconsistent and does not have a required subject entry");
+
+                    let mut ops = vec![];
+                    for student_id in assigned_students {
+                        ops.push(UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                            *period_id,
+                            *student_id,
+                            *subject_id,
+                            false,
+                        )));
+                    }
+                    if !ops.is_empty() {
+                        return Some(PreCleaningOp {
+                            warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
+                                *period_id,
+                                *subject_id,
+                            ),
+                            ops,
+                        });
+                    }
+                }
+
+                None
+            }
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
@@ -219,7 +467,177 @@ impl SubjectsUpdateOp {
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::SubjectId>, SubjectsUpdateError> {
-        todo!()
+        match self {
+            Self::AddNewSubject(params) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Subject(
+                            collomatique_state_colloscopes::SubjectOp::AddAfter(
+                                data.get_data().get_subjects().ordered_subject_list.last().map(|x| x.0),
+                                collomatique_state_colloscopes::Subject {
+                                    parameters: params.clone(),
+                                    excluded_periods: BTreeSet::new(),
+                                }
+                            )
+                        ),
+                        self.get_desc()
+                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
+                        match se {
+                            collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => AddNewSubjectError::InterrogationCountRangeIsEmpty,
+                            _ => panic!("Unexpected subject error during AddNewSubject: {:?}", se),
+                        }
+                    } else {
+                        panic!("Unexpected error during AddNewSubject: {:?}", e);
+                    })?;
+                let Some(collomatique_state_colloscopes::NewId::SubjectId(new_id)) = result else {
+                    panic!("Unexpected result from SubjectOp::AddAfter");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateSubject(subject_id, params) => {
+                let current_subject = data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject(*subject_id)
+                    .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?;
+
+                let excluded_periods = current_subject.excluded_periods.clone();
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Subject(
+                            collomatique_state_colloscopes::SubjectOp::Update(
+                                *subject_id,
+                                collomatique_state_colloscopes::Subject {
+                                    parameters: params.clone(),
+                                    excluded_periods,
+                                }
+                            )
+                        ),
+                        self.get_desc(),
+                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
+                        match se {
+                            collomatique_state_colloscopes::SubjectError::InvalidSubjectId(_id) => panic!("Subject ID should be valid at this point"),
+                            collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => UpdateSubjectError::StudentsPerGroupRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => UpdateSubjectError::InterrogationCountRangeIsEmpty,
+                            _ => panic!("Unexpected subject error during UpdateSubject: {:?}", se),
+                        }
+                    } else {
+                        panic!("Unexpected error during UpdateSubject: {:?}", e);
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteSubject(subject_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Subject(
+                            collomatique_state_colloscopes::SubjectOp::Remove(*subject_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::MoveSubjectUp(subject_id) => {
+                let current_position = data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject_position(*subject_id)
+                    .ok_or(MoveSubjectUpError::InvalidSubjectId(*subject_id))?;
+
+                if current_position == 0 {
+                    Err(MoveSubjectUpError::NoUpperPosition)?;
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Subject(
+                            collomatique_state_colloscopes::SubjectOp::ChangePosition(
+                                *subject_id,
+                                current_position - 1,
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("No error should be possible at this point");
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::MoveSubjectDown(subject_id) => {
+                let current_position = data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject_position(*subject_id)
+                    .ok_or(MoveSubjectDownError::InvalidSubjectId(*subject_id))?;
+
+                if current_position == data.get_data().get_subjects().ordered_subject_list.len() - 1
+                {
+                    Err(MoveSubjectDownError::NoLowerPosition)?;
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Subject(
+                            collomatique_state_colloscopes::SubjectOp::ChangePosition(
+                                *subject_id,
+                                current_position + 1,
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("No error should be possible at this point");
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::UpdatePeriodStatus(subject_id, period_id, new_status) => {
+                if data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .is_none()
+                {
+                    Err(UpdatePeriodStatusError::InvalidPeriodId(*period_id))?;
+                }
+
+                let mut subject = data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject(*subject_id)
+                    .ok_or(UpdatePeriodStatusError::InvalidSubjectId(*subject_id))?
+                    .clone();
+
+                if *new_status {
+                    subject.excluded_periods.remove(period_id);
+                } else {
+                    subject.excluded_periods.insert(*period_id);
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Subject(
+                            collomatique_state_colloscopes::SubjectOp::Update(*subject_id, subject),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("No error should be possible at this point");
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
