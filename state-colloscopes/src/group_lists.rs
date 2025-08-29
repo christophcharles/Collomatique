@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
-use crate::ids::{GroupListId, StudentId, SubjectId};
+use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
 
 /// Description of the group lists
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -19,7 +19,7 @@ pub struct GroupLists {
     /// Associations between subjects and group lists
     ///
     /// If a subject does not appear no group list has been associated to it
-    pub subjects_associations: BTreeMap<SubjectId, GroupListId>,
+    pub subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>>,
 }
 
 /// Description of a single group list
@@ -142,10 +142,18 @@ impl GroupLists {
             subjects_associations: external_data
                 .subjects_associations
                 .into_iter()
-                .map(|(subject_id, group_list_id)| {
-                    (unsafe { SubjectId::new(subject_id) }, unsafe {
-                        GroupListId::new(group_list_id)
-                    })
+                .map(|(period_id, subject_map)| {
+                    (
+                        unsafe { PeriodId::new(period_id) },
+                        subject_map
+                            .into_iter()
+                            .map(|(subject_id, group_list_id)| {
+                                (unsafe { SubjectId::new(subject_id) }, unsafe {
+                                    GroupListId::new(group_list_id)
+                                })
+                            })
+                            .collect(),
+                    )
                 })
                 .collect(),
         }
@@ -169,7 +177,7 @@ pub struct GroupListsExternalData {
     /// Associations between subjects and group lists
     ///
     /// If a subject does not appear no group list has been associated to it
-    pub subjects_associations: BTreeMap<u64, u64>,
+    pub subjects_associations: BTreeMap<u64, BTreeMap<u64, u64>>,
 }
 
 impl GroupListsExternalData {
@@ -178,11 +186,16 @@ impl GroupListsExternalData {
         &self,
         subjects: &super::SubjectsExternalData,
         student_ids: &BTreeSet<u64>,
+        period_ids: &BTreeSet<u64>,
     ) -> bool {
-        if !self
-            .subjects_associations
-            .iter()
-            .all(|(subject_id, group_list_id)| {
+        if period_ids.len() != self.subjects_associations.len() {
+            return false;
+        }
+        for (period_id, subject_map) in &self.subjects_associations {
+            if !period_ids.contains(period_id) {
+                return false;
+            }
+            for (subject_id, group_list_id) in subject_map {
                 let Some(subject) = subjects.find_subject(*subject_id) else {
                     return false;
                 };
@@ -191,10 +204,14 @@ impl GroupListsExternalData {
                     return false;
                 }
 
-                self.group_list_map.contains_key(group_list_id)
-            })
-        {
-            return false;
+                if subject.excluded_periods.contains(period_id) {
+                    return false;
+                }
+
+                if !self.group_list_map.contains_key(group_list_id) {
+                    return false;
+                }
+            }
         }
         self.group_list_map
             .iter()

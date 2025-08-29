@@ -20,6 +20,7 @@ pub enum SubjectsUpdateWarning {
     LooseGroupListAssociation(
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::GroupListId,
+        collomatique_state_colloscopes::PeriodId,
     ),
 }
 
@@ -87,7 +88,7 @@ impl SubjectsUpdateWarning {
                     subject.parameters.name,
                 ))
             }
-            Self::LooseGroupListAssociation(subject_id, group_list_id) => {
+            Self::LooseGroupListAssociation(subject_id, group_list_id, period_id) => {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
                     return None;
                 };
@@ -99,9 +100,16 @@ impl SubjectsUpdateWarning {
                 else {
                     return None;
                 };
+                let Some(period_num) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
                 Some(format!(
-                    "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\"",
-                    subject.parameters.name, group_list.params.name,
+                    "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\" pour la période {}",
+                    subject.parameters.name, group_list.params.name, period_num+1
                 ))
             }
         }
@@ -245,16 +253,16 @@ impl SubjectsUpdateOp {
                         }
                     }
 
-                    if let Some(group_list_id) = data
-                        .get_data()
-                        .get_group_lists()
-                        .subjects_associations
-                        .get(subject_id)
+                    for (period_id, subject_map) in
+                        &data.get_data().get_group_lists().subjects_associations
                     {
-                        output.push(SubjectsUpdateWarning::LooseGroupListAssociation(
-                            *subject_id,
-                            *group_list_id,
-                        ));
+                        if let Some(group_list_id) = subject_map.get(subject_id) {
+                            output.push(SubjectsUpdateWarning::LooseGroupListAssociation(
+                                *subject_id,
+                                *group_list_id,
+                                *period_id,
+                            ));
+                        }
                     }
 
                     if !data
@@ -317,16 +325,16 @@ impl SubjectsUpdateOp {
                     }
                 }
 
-                if let Some(group_list_id) = data
-                    .get_data()
-                    .get_group_lists()
-                    .subjects_associations
-                    .get(subject_id)
+                for (period_id, subject_map) in
+                    &data.get_data().get_group_lists().subjects_associations
                 {
-                    output.push(SubjectsUpdateWarning::LooseGroupListAssociation(
-                        *subject_id,
-                        *group_list_id,
-                    ));
+                    if let Some(group_list_id) = subject_map.get(subject_id) {
+                        output.push(SubjectsUpdateWarning::LooseGroupListAssociation(
+                            *subject_id,
+                            *group_list_id,
+                            *period_id,
+                        ));
+                    }
                 }
 
                 for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
@@ -446,25 +454,25 @@ impl SubjectsUpdateOp {
                         }
                     }
 
-                    if data
-                        .get_data()
-                        .get_group_lists()
-                        .subjects_associations
-                        .contains_key(subject_id)
+                    for (period_id, subject_map) in
+                        &data.get_data().get_group_lists().subjects_associations
                     {
-                        let result = session
-                            .apply(
-                                collomatique_state_colloscopes::Op::GroupList(
-                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
-                                        *subject_id,
-                                        None
+                        if subject_map.contains_key(subject_id) {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::GroupList(
+                                        collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                            *period_id,
+                                            *subject_id,
+                                            None
+                                        ),
                                     ),
-                                ),
-                                "Enlever l'association à une liste de groupe pour la matière à mettre à jour".into(),
-                            )
-                            .expect("All data should be valid at this point");
-                        if result.is_some() {
-                            panic!("Unexpected result! {:?}", result);
+                                    "Enlever l'association à une liste de groupe pour la matière à mettre à jour".into(),
+                                )
+                                .expect("All data should be valid at this point");
+                            if result.is_some() {
+                                panic!("Unexpected result! {:?}", result);
+                            }
                         }
                     }
 
@@ -543,16 +551,15 @@ impl SubjectsUpdateOp {
                     }
                 }
 
-                if data
-                    .get_data()
-                    .get_group_lists()
-                    .subjects_associations
-                    .contains_key(subject_id)
+                for (period_id, subject_map) in
+                    &data.get_data().get_group_lists().subjects_associations
                 {
-                    let result = session
+                    if subject_map.contains_key(subject_id) {
+                        let result = session
                         .apply(
                             collomatique_state_colloscopes::Op::GroupList(
                                 collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                    *period_id,
                                     *subject_id,
                                     None,
                                 ),
@@ -561,8 +568,9 @@ impl SubjectsUpdateOp {
                                 .into(),
                         )
                         .expect("All data should be valid at this point");
-                    if result.is_some() {
-                        panic!("Unexpected result! {:?}", result);
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
                     }
                 }
 

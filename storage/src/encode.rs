@@ -136,7 +136,17 @@ fn generate_group_list_list(data: &Data) -> group_list_list::List {
         subjects_associations: orig_group_lists
             .subjects_associations
             .iter()
-            .map(|(subject_id, group_list_id)| (subject_id.inner(), group_list_id.inner()))
+            .map(|(period_id, subject_map)| {
+                (
+                    period_id.inner(),
+                    subject_map
+                        .iter()
+                        .map(|(subject_id, group_list_id)| {
+                            (subject_id.inner(), group_list_id.inner())
+                        })
+                        .collect(),
+                )
+            })
             .collect(),
     }
 }

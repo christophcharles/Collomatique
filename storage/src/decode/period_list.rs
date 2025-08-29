@@ -32,6 +32,9 @@ pub fn decode_entry(
     if !pre_data.assignments.period_map.is_empty() {
         return Err(DecodeError::AssignmentsDecodedBeforePeriods);
     }
+    if !pre_data.group_lists.subjects_associations.is_empty() {
+        return Err(DecodeError::GroupListsDecodedBeforePeriods);
+    }
     let mut ids = BTreeSet::new();
     for (id, desc) in period_list.ordered_period_list {
         if !ids.insert(id) {
@@ -44,6 +47,10 @@ pub fn decode_entry(
                 subject_map: BTreeMap::new(),
             },
         );
+        pre_data
+            .group_lists
+            .subjects_associations
+            .insert(id, BTreeMap::new());
     }
 
     Ok(())

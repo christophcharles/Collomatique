@@ -57,6 +57,8 @@ pub enum DecodeError {
     IllformedGroupList,
     #[error("Group lists were already decoded from a previous block")]
     GroupListsAlreadyDecoded,
+    #[error("GroupLists were decoded before periods")]
+    GroupListsDecodedBeforePeriods,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
