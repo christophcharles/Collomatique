@@ -2929,6 +2929,7 @@ pub(super) mod private {
             AnnotatedOperation::GroupingIncompats(op) => {
                 update_grouping_incompats_state(manager, op).await
             }
+            AnnotatedOperation::RegisterStudent(_op) => todo!(),
         }
     }
 
@@ -3527,6 +3528,93 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_register_student_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedRegisterStudentOperation,
+    ) -> Result<
+        AnnotatedRegisterStudentOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedRegisterStudentOperation::InSubjectGroup(
+                student_handle,
+                subject_group_handle,
+                _subject_handle,
+            ) => {
+                let student_id = manager
+                    .get_handle_managers()
+                    .students
+                    .get_id(*student_handle)
+                    .ok_or(RevError::StudentRemoved(*student_handle))?;
+                let subject_group_id = manager
+                    .get_handle_managers()
+                    .subject_groups
+                    .get_id(*subject_group_handle)
+                    .ok_or(RevError::SubjectGroupRemoved(*subject_group_handle))?;
+
+                let current_subject_id = manager
+                    .get_backend_logic()
+                    .subject_group_for_student_get(student_id, subject_group_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Id2Error::InternalError(int_err) => RevError::Internal(int_err),
+                        backend::Id2Error::InvalidId1(_) => {
+                            panic!("Student id was given by handle manager. It should be valid")
+                        }
+                        backend::Id2Error::InvalidId2(_) => panic!(
+                            "Subject group id was given by handle manager. It should be valid"
+                        ),
+                    })?;
+
+                let current_subject_handle = current_subject_id
+                    .map(|x| manager.get_handle_managers_mut().subjects.get_handle(x));
+
+                AnnotatedRegisterStudentOperation::InSubjectGroup(
+                    *student_handle,
+                    *subject_group_handle,
+                    current_subject_handle,
+                )
+            }
+            AnnotatedRegisterStudentOperation::InIncompat(
+                student_handle,
+                incompat_handle,
+                _enabled,
+            ) => {
+                let student_id = manager
+                    .get_handle_managers()
+                    .students
+                    .get_id(*student_handle)
+                    .ok_or(RevError::StudentRemoved(*student_handle))?;
+                let incompat_id = manager
+                    .get_handle_managers()
+                    .incompats
+                    .get_id(*incompat_handle)
+                    .ok_or(RevError::IncompatRemoved(*incompat_handle))?;
+
+                let current_enabled = manager
+                    .get_backend_logic()
+                    .incompat_for_student_get(student_id, incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Id2Error::InternalError(int_err) => RevError::Internal(int_err),
+                        backend::Id2Error::InvalidId1(_) => {
+                            panic!("Student id was given by handle manager. It should be valid")
+                        }
+                        backend::Id2Error::InvalidId2(_) => {
+                            panic!("Incompat id was given by handle manager. It should be valid")
+                        }
+                    })?;
+
+                AnnotatedRegisterStudentOperation::InIncompat(
+                    *student_handle,
+                    *incompat_handle,
+                    current_enabled,
+                )
+            }
+        };
+        Ok(backward)
+    }
+
     pub async fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
@@ -3566,6 +3654,9 @@ pub(super) mod private {
             }
             AnnotatedOperation::GroupingIncompats(op) => AnnotatedOperation::GroupingIncompats(
                 build_backward_grouping_incompats_op(manager, op).await?,
+            ),
+            AnnotatedOperation::RegisterStudent(op) => AnnotatedOperation::RegisterStudent(
+                build_backward_register_student_op(manager, op).await?,
             ),
         };
         let rev_op = ReversibleOperation { forward, backward };
