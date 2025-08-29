@@ -1,26 +1,81 @@
+use pyo3::exceptions::PyException;
+
 use super::*;
+
+use std::num::NonZeroU32;
 
 #[pyclass]
 pub struct Database {
     sender: Sender<Job>,
 }
 
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneralData {
+    #[pyo3(get, set)]
+    interrogations_per_week_range: Option<(u32, u32)>,
+    #[pyo3(get, set)]
+    max_interrogations_per_day: Option<NonZeroU32>,
+    #[pyo3(get, set)]
+    week_count: NonZeroU32,
+}
+
+impl From<backend::GeneralData> for GeneralData {
+    fn from(value: backend::GeneralData) -> Self {
+        GeneralData {
+            interrogations_per_week_range: value
+                .interrogations_per_week
+                .map(|range| (range.start, range.end)),
+            max_interrogations_per_day: value.max_interrogations_per_day,
+            week_count: value.week_count,
+        }
+    }
+}
+
+impl From<GeneralData> for backend::GeneralData {
+    fn from(value: GeneralData) -> Self {
+        backend::GeneralData {
+            interrogations_per_week: value
+                .interrogations_per_week_range
+                .map(|tuple| tuple.0..tuple.1),
+            max_interrogations_per_day: value.max_interrogations_per_day,
+            week_count: value.week_count,
+        }
+    }
+}
+
 #[pymethods]
 impl Database {
     fn test(self_: PyRef<'_, Self>, num: u32) -> u32 {
-        match SessionConnection::send_command(self_.py(), &self_.sender, Command::Test(num)) {
-            Answer::Test(val) => val,
-        }
+        let Answer::Test(val) =
+            SessionConnection::send_command(self_.py(), &self_.sender, Command::Test(num))
+        else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
+
+    fn general_data_get(self_: PyRef<'_, Self>) -> PyResult<GeneralData> {
+        let Answer::GeneralDataGet(val) =
+            SessionConnection::send_command(self_.py(), &self_.sender, Command::GeneralDataGet)
+        else {
+            panic!("Bad answer type");
+        };
+
+        val
     }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use crate::backend;
 use crate::frontend::state;
 
 #[derive(Debug, Clone)]
 pub enum Command {
     Test(u32),
+    GeneralDataGet,
     Exit,
 }
 
@@ -40,6 +95,7 @@ impl std::error::Error for PythonError {}
 #[derive(Debug)]
 pub enum Answer {
     Test(u32),
+    GeneralDataGet(PyResult<GeneralData>),
 }
 
 #[derive(Debug)]
@@ -99,19 +155,31 @@ impl<'scope> SessionConnection<'scope> {
     }
 
     fn thread_func<T: state::Manager>(queue_receiver: Receiver<Job>, manager: &'scope mut T) {
+        use tokio::runtime::Runtime;
+        let rt = Runtime::new().unwrap();
+
         while let Ok(job) = queue_receiver.recv() {
             if let Command::Exit = &job.command {
                 return;
             }
 
-            let answer_data = Self::execute_job(&job.command, manager);
+            let answer_data = rt.block_on(Self::execute_job(&job.command, manager));
             job.answer.send(answer_data).unwrap();
         }
     }
 
-    fn execute_job<T: state::Manager>(command: &Command, _manager: &mut T) -> Answer {
+    async fn execute_job<T: state::Manager>(command: &Command, manager: &mut T) -> Answer {
         match command {
             Command::Test(val) => Answer::Test(val + 1),
+            Command::GeneralDataGet => {
+                let general_data = manager
+                    .general_data_get()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))
+                    .map(GeneralData::from);
+
+                Answer::GeneralDataGet(general_data)
+            }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
     }
