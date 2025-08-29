@@ -168,6 +168,10 @@ pub enum SubjectError {
     /// Invalid parameters : week block has empty range for interrogation count
     #[error("Interrogation count range should allow at least one value")]
     InterrogationCountRangeIsEmpty,
+
+    /// The subject is referenced by a teacher
+    #[error("subject id ({0:?}) is referenced by teacher {1:?}")]
+    SubjectIsReferencedByTeacher(SubjectId, TeacherId),
 }
 
 /// Errors for teacher operations
@@ -745,6 +749,12 @@ impl Data {
                 let Some(position) = self.inner_data.subjects.find_subject_position(*id) else {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
+
+                for (teacher_id, teacher) in &self.inner_data.teachers.teacher_map {
+                    if teacher.subjects.contains(id) {
+                        return Err(SubjectError::SubjectIsReferencedByTeacher(*id, *teacher_id));
+                    }
+                }
 
                 self.inner_data
                     .subjects
