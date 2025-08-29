@@ -122,7 +122,7 @@ pub struct ProblemBuilder<
             dyn Fn(
                     &T,
                     &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-                ) -> ConfigData<IdVariable>
+                ) -> Option<ConfigData<IdVariable>>
                 + Send
                 + Sync,
         >,
@@ -433,13 +433,8 @@ where
             .collect();
 
         let reconstruct_func = move |base: &T, config: &ConfigData<BaseVariable<M, S>>| {
-            let pre_output = extra.reconstruct_extra_structure_variables(base, config);
-            pre_output.transmute(|x| {
-                lean_rev_v_map
-                    .get(x)
-                    .cloned()
-                    .expect("Variable should be defined")
-            })
+            let pre_output = extra.reconstruct_extra_structure_variables(base, config)?;
+            pre_output.try_transmute(|x| lean_rev_v_map.get(x).cloned())
         };
 
         self.reconstruction_funcs.push(Box::new(reconstruct_func));
@@ -494,7 +489,7 @@ where
             dyn Fn(
                     &T,
                     &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-                ) -> ConfigData<IdVariable>
+                ) -> Option<ConfigData<IdVariable>>
                 + Send
                 + Sync,
         >,
@@ -586,13 +581,13 @@ where
     pub fn decorate_solution<'a>(
         &'a self,
         solution: T::PartialSolution,
-    ) -> DecoratedSolution<'a, M, S, T, P> {
-        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution);
+    ) -> Option<DecoratedSolution<'a, M, S, T, P>> {
+        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution)?;
         let mut base_config_data =
             starting_configuration_data.transmute(|x| BaseVariable::Main(x.clone()));
         base_config_data = base_config_data.set_iter(
             self.base
-                .reconstruct_structure_variables(&starting_configuration_data)
+                .reconstruct_structure_variables(&starting_configuration_data)?
                 .get_values()
                 .into_iter()
                 .map(|(var, value)| (BaseVariable::Structure(var), value)),
@@ -604,23 +599,20 @@ where
         });
         for func in &self.reconstruction_funcs {
             config_data = config_data.set_iter(
-                func(&self.base, &base_config_data)
+                func(&self.base, &base_config_data)?
                     .get_values()
                     .into_iter()
                     .map(|(var, value)| (ExtraVariable::Extra(var), value)),
             );
         }
 
-        let ilp_config = self
-            .ilp_problem
-            .build_config(config_data)
-            .expect("Variables should be defined");
+        let ilp_config = self.ilp_problem.build_config(config_data).ok()?;
 
-        DecoratedSolution {
+        Some(DecoratedSolution {
             problem: self,
             internal_solution: solution,
             ilp_config,
-        }
+        })
     }
 
     fn feasable_config_into_config_data(
@@ -653,7 +645,7 @@ where
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self.base.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&feasable_config),
-        );
+        )?;
 
         Some(DecoratedSolution {
             problem: self,
@@ -678,7 +670,7 @@ where
             solver.solve_with_time_limit(&self.ilp_problem, time_limit_in_seconds)?;
         let internal_solution = self.base.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&time_limit_sol.config),
-        );
+        )?;
 
         Some(TimeLimitSolution {
             solution: DecoratedSolution {

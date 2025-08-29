@@ -179,30 +179,36 @@ pub trait BaseConstraints: Send + Sync {
     ///   should be reciprocal to each other.
     /// - second, if the solution is partial, this should be correctly reflected by not setting the value of some
     ///   main variables.
+    ///
+    /// This function can fail (and in that case returns None) if the PartialSolution is not adapted to the problem
     fn partial_solution_to_configuration(
         &self,
         sol: &Self::PartialSolution,
-    ) -> ConfigData<Self::MainVariable>;
+    ) -> Option<ConfigData<Self::MainVariable>>;
     /// Converts a set of values for the main variables into a [BaseConstraints::PartialSolution].
     ///
     /// The description should be exactly one to one. This means two things:
     /// - first, [BaseConstraints::partial_solution_to_configuration] and [BaseConstraints::configuration_to_partial_solution]
     ///   should be reciprocal to each other.
     /// - second, if the set of values is partial, this should be correctly reflected in a partial solution output.
+    ///
+    /// This function can fail (and in that case returns None) if the configuration data is not adapted to the problem
     fn configuration_to_partial_solution(
         &self,
         config: &ConfigData<Self::MainVariable>,
-    ) -> Self::PartialSolution;
+    ) -> Option<Self::PartialSolution>;
 
     /// Reconstructs as many structure variables as possible from the main variables.
     ///
     /// A value should only be given if it can indeed be fixed. If the solution is complete (meaning
     /// all main variables have a fixed value) then all structure variables should have a value too
     /// and it should uniquely be fixed by the main variables.
+    ///
+    /// This function can fail (and in that case returns None) if the configuration data is not adapted to the problem
     fn reconstruct_structure_variables(
         &self,
         config: &ConfigData<Self::MainVariable>,
-    ) -> ConfigData<Self::StructureVariable>;
+    ) -> Option<ConfigData<Self::StructureVariable>>;
 }
 
 /// Variable type used in [ExtraConstraints] trait definition.
@@ -350,13 +356,14 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
     ///
     /// As a convenience, it is possible to use the structure variables from the generic problem ([BaseConstraints::StructureVariable])
     /// to rebuild the extra structure variables.
-    ///
     /// See [ExtraConstraints] for the full discussion.
+    ///
+    /// This function can fail (and in that case returns None) if the configuration data is not adapted to the problem
     fn reconstruct_extra_structure_variables(
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> ConfigData<Self::StructureVariable>;
+    ) -> Option<ConfigData<Self::StructureVariable>>;
 }
 
 /// Soft enforcement of extra constraints.
@@ -552,10 +559,10 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> ConfigData<Self::StructureVariable> {
+    ) -> Option<ConfigData<Self::StructureVariable>> {
         let orig_structure_variables = self
             .internal_extra
-            .reconstruct_extra_structure_variables(base, config);
+            .reconstruct_extra_structure_variables(base, config)?;
 
         let values = config
             .transmute(|x| match x {
@@ -577,10 +584,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
             .into_iter()
             .enumerate()
         {
-            let value = c
-                .get_lhs()
-                .eval(&values)
-                .expect("All variables pertinent to the problem should be fixed");
+            let value = c.get_lhs().eval(&values).ok()?;
             let var = SoftVariable::Soft(i, desc);
 
             match c.get_symbol() {
@@ -593,7 +597,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
             }
         }
 
-        output
+        Some(output)
     }
 }
 
