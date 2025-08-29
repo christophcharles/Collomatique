@@ -43,6 +43,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<incompatibilities::Incompat>()?;
     m.add_class::<group_lists::GroupListParameters>()?;
     m.add_class::<group_lists::PrefilledGroup>()?;
+    m.add_class::<rules::LogicRule>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
