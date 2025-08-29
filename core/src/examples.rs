@@ -4,4 +4,6 @@
 //! This is used mostly for documentation on their usage together with [crate::ProblemBuilder] and [crate::Problem]
 //! but also in order to be able to write tests.
 
+use super::*;
+
 pub mod simple_schedule;

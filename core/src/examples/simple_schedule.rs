@@ -13,6 +13,11 @@
 //!
 //! The problem itself is described by [SimpleScheduleBase].
 
+use collomatique_ilp::{ConfigData, Constraint, Variable};
+use std::collections::BTreeMap;
+
+use super::*;
+
 /// Basic description of the simple scheduling problem
 ///
 /// As described in the module documentation (see [self]),
@@ -20,6 +25,13 @@
 /// the numbers of groups, and the number of weeks.
 /// These are given by [Self::course_count], [Self::group_count] and
 /// [Self::week_count] respectively.
+/// 
+/// This struct will implement [BaseConstraints]. Because the problem
+/// is so simple, there is no structure constraints, no structure variables
+/// and thus no reconstruction.
+/// 
+/// We just have to implement a few general constraints. See [SimpleScheduleConstraint]
+/// to see the description of such constraints.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SimpleScheduleBase {
     /// Number of courses in our simple scheduling problem
@@ -117,5 +129,138 @@ impl std::fmt::Display for SimpleScheduleConstraint {
                 write!(f, "Group {} attends course {} exactly once", group, course)
             }
         }
+    }
+}
+
+#[derive(Clone,Debug,PartialEq,Eq)]
+pub struct SimpleScheduleSolution {
+
+}
+
+impl SimpleScheduleBase {
+    fn generate_at_most_one_course_per_week_for_a_given_group_constraints(&self) -> Vec<(
+        Constraint<SimpleScheduleVariable>,
+        SimpleScheduleConstraint,
+    )> {
+        todo![]
+    }
+
+    fn generate_at_most_one_group_per_course_on_a_given_week_constraints(&self) -> Vec<(
+        Constraint<SimpleScheduleVariable>,
+        SimpleScheduleConstraint,
+    )> {
+        todo![]
+    }
+
+    fn generate_each_group_should_attend_each_course_exactly_once_constraints(&self) -> Vec<(
+        Constraint<SimpleScheduleVariable>,
+        SimpleScheduleConstraint,
+    )> {
+        todo![]
+    }
+}
+
+impl BaseConstraints for SimpleScheduleBase {
+    type MainVariable = SimpleScheduleVariable;
+    type StructureVariable = ();
+    type GeneralConstraintDesc = SimpleScheduleConstraint;
+    type StructureConstraintDesc = ();
+    type PartialSolution = SimpleScheduleSolution;
+
+    fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable> {
+        let mut output = BTreeMap::new();
+
+        for group_index in 0..self.group_count {
+            for course_index in 0..self.course_count {
+                for week_index in 0..self.week_count {
+                    output.insert(
+                        SimpleScheduleVariable {
+                            group_index,
+                            course_index,
+                            week_index,
+                        },
+                        Variable::binary()
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
+    fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable> {
+        BTreeMap::new()
+    }
+
+    fn structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )> {
+        vec![]
+    }
+
+    fn general_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
+        Self::GeneralConstraintDesc,
+    )> {
+        let mut output = vec![];
+
+        output.extend(
+            self.generate_at_most_one_course_per_week_for_a_given_group_constraints()
+                .into_iter()
+                .map(
+                    |(c,d)| (
+                        c.into_transmuted(|x| BaseVariable::Main(x)),
+                        d
+                    )
+                )
+        );
+        output.extend(
+            self.generate_at_most_one_group_per_course_on_a_given_week_constraints()
+                .into_iter()
+                .map(
+                    |(c,d)| (
+                        c.into_transmuted(|x| BaseVariable::Main(x)),
+                        d
+                    )
+                )
+        );
+        output.extend(
+            self.generate_each_group_should_attend_each_course_exactly_once_constraints()
+                .into_iter()
+                .map(
+                    |(c,d)| (
+                        c.into_transmuted(|x| BaseVariable::Main(x)),
+                        d
+                    )
+                )
+        );
+
+        output
+    }
+
+    fn partial_solution_to_configuration(
+        &self,
+        sol: &Self::PartialSolution,
+    ) -> ConfigData<Self::MainVariable> {
+        todo!()
+    }
+
+    fn configuration_to_partial_solution(
+        &self,
+        config: &ConfigData<Self::MainVariable>,
+    ) -> Self::PartialSolution {
+        todo!()
+    }
+
+    fn reconstruct_structure_variables(
+        &self,
+        _config: &ConfigData<Self::MainVariable>,
+    ) -> ConfigData<Self::StructureVariable> {
+        ConfigData::new()
     }
 }
