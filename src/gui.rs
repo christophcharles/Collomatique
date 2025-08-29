@@ -32,8 +32,15 @@ fn view(state: &GuiState) -> Element<GuiMessage> {
     }
 }
 
+fn title(state: &GuiState) -> String {
+    match state {
+        GuiState::Welcome => welcome::title(),
+        GuiState::Editor(editor_state) => editor::title(editor_state),
+    }
+}
+
 pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
-    iced::application("Collomatique", update, view).run_with(move || {
+    iced::application(title, update, view).run_with(move || {
         (
             match db {
                 Some(file) => GuiState::Editor(editor::State::new(file)),

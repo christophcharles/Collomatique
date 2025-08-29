@@ -33,3 +33,7 @@ pub fn view<'a>() -> Element<'a, GuiMessage> {
     )
     .into()
 }
+
+pub fn title() -> String {
+    "Collomatique".into()
+}
