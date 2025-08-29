@@ -153,7 +153,7 @@ CREATE TABLE "grouping_items" (
 CREATE TABLE "student_incompats" (
 	"student_id"	INTEGER NOT NULL,
 	"course_incompat_id"	INTEGER NOT NULL,
-	PRIMARY KEY("student_id","incompat_id"),
+	PRIMARY KEY("student_id","course_incompat_id"),
     FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
 	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id")
 );
