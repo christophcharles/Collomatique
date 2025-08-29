@@ -47,10 +47,22 @@ pub enum CliCommand {
         #[arg(long, default_value_t = false)]
         highs: bool,
     },
-    /// Create, remove or run python script
+    /// Run a python script
     Python {
-        #[command(subcommand)]
-        command: PythonCommand,
+        /// Python file to run
+        script: PathBuf,
+        /// Optional function to run in the file
+        #[arg(long)]
+        func: Option<String>,
+        /// Optional csv file to give as input to the python script
+        #[arg(long)]
+        csv: Option<PathBuf>,
+        /// The csv file does not have headers
+        #[arg(long)]
+        no_headers: bool,
+        /// Delimiter for the csv file (default is adjusted for pronote files)
+        #[arg(short, long, default_value_t = ';')]
+        delimiter: char,
     },
 }
 
@@ -269,69 +281,6 @@ pub enum ColloscopeCommand {
         /// Name of the output xlsx file.
         /// If the file already exists, it will be overwritten.
         output: std::path::PathBuf,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum PythonCommand {
-    /// Add new python script into the database
-    Create {
-        /// Name for the python script
-        name: String,
-        /// File to load the python script from
-        file: PathBuf,
-        /// Optional function to run in the file
-        #[arg(long)]
-        func: Option<String>,
-        /// Force creating a new python scipt with an existing name
-        #[arg(short, long, default_value_t = false)]
-        force: bool,
-    },
-    /// Delete python script from the database
-    Remove {
-        /// Name of the python script to remove
-        name: String,
-        /// If multiple python scripts have the same name, select which one to use.
-        /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
-        /// Be careful the order might change between databases update (even when using undo/redo)
-        #[arg(short = 'n')]
-        python_script_number: Option<NonZeroUsize>,
-    },
-    /// Run a python script
-    Run {
-        /// Name of the python script to run
-        name: String,
-        /// Optional csv file to give as input to the python script
-        #[arg(long)]
-        csv: Option<PathBuf>,
-        /// The csv file does not have headers
-        #[arg(long)]
-        no_headers: bool,
-        /// Delimiter for the csv file (default is adjusted for pronote files)
-        #[arg(short, long, default_value_t = ';')]
-        delimiter: char,
-        /// If multiple python scripts have the same name, select which one to use.
-        /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
-        /// Be careful the order might change between databases update (even when using undo/redo)
-        #[arg(short = 'n')]
-        python_script_number: Option<NonZeroUsize>,
-    },
-    /// Run a python script directly from a file
-    RunFromFile {
-        /// Python file to run
-        script: PathBuf,
-        /// Optional function to run in the file
-        #[arg(long)]
-        func: Option<String>,
-        /// Optional csv file to give as input to the python script
-        #[arg(long)]
-        csv: Option<PathBuf>,
-        /// The csv file does not have headers
-        #[arg(long)]
-        no_headers: bool,
-        /// Delimiter for the csv file (default is adjusted for pronote files)
-        #[arg(short, long, default_value_t = ';')]
-        delimiter: char,
     },
 }
 
@@ -1242,103 +1191,76 @@ fn colloscope_command(
 }
 
 fn python_command(
-    command: PythonCommand,
+    script: PathBuf,
+    func: Option<String>,
+    csv: Option<PathBuf>,
+    no_headers: bool,
+    delimiter: char,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    match command {
-        PythonCommand::Create {
-            name: _name,
-            file: _file,
-            func: _func,
-            force: _force,
-        } => Err(anyhow!("python create command not yet implemented")),
-        PythonCommand::Remove {
-            name: _name,
-            python_script_number: _python_script_number,
-        } => Err(anyhow!("python remove command not yet implemented")),
-        PythonCommand::Run {
-            name: _name,
-            csv: _csv,
-            no_headers: _no_headers,
-            delimiter: _delimiter,
-            python_script_number: _python_script_number,
-        } => Err(anyhow!("python run command not yet implemented")),
-        PythonCommand::RunFromFile {
-            script,
-            func,
-            csv,
-            no_headers,
-            delimiter,
-        } => {
-            if let Some(path) = csv {
-                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
-                let csv_content = collomatique::frontend::csv::Content::from_csv_file(&path)?;
+    if let Some(path) = csv {
+        let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+        let csv_content = collomatique::frontend::csv::Content::from_csv_file(&path)?;
 
-                if !delimiter.is_ascii() {
-                    return Err(anyhow!(
-                        "Csv delimiter must be encoded as a single byte  ASCII character"
-                    ));
-                }
-                let delimiter_str = delimiter.to_string();
-
-                let params = collomatique::frontend::csv::Params {
-                    has_headers: !no_headers,
-                    delimiter: delimiter_str.as_bytes()[0],
-                };
-
-                let csv_extract = csv_content.extract(&params)?;
-
-                {
-                    let mut app_session = AppSession::new(app_state);
-                    match func {
-                        Some(f) => {
-                            if let Err(e) = python_code.run_func_with_csv_file(
-                                &mut app_session,
-                                &f,
-                                csv_extract,
-                            ) {
-                                app_session.cancel();
-                                return Err(e.into());
-                            }
-                        }
-                        None => {
-                            if let Err(e) =
-                                python_code.run_with_csv_file(&mut app_session, csv_extract)
-                            {
-                                app_session.cancel();
-                                return Err(e.into());
-                            }
-                        }
-                    }
-                    app_session.commit();
-                }
-
-                Ok(None)
-            } else {
-                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
-
-                {
-                    let mut app_session = AppSession::new(app_state);
-                    match func {
-                        Some(f) => {
-                            if let Err(e) = python_code.run_func(&mut app_session, &f) {
-                                app_session.cancel();
-                                return Err(e.into());
-                            }
-                        }
-                        None => {
-                            if let Err(e) = python_code.run(&mut app_session) {
-                                app_session.cancel();
-                                return Err(e.into());
-                            }
-                        }
-                    }
-                    app_session.commit();
-                }
-
-                Ok(None)
-            }
+        if !delimiter.is_ascii() {
+            return Err(anyhow!(
+                "Csv delimiter must be encoded as a single byte  ASCII character"
+            ));
         }
+        let delimiter_str = delimiter.to_string();
+
+        let params = collomatique::frontend::csv::Params {
+            has_headers: !no_headers,
+            delimiter: delimiter_str.as_bytes()[0],
+        };
+
+        let csv_extract = csv_content.extract(&params)?;
+
+        {
+            let mut app_session = AppSession::new(app_state);
+            match func {
+                Some(f) => {
+                    if let Err(e) =
+                        python_code.run_func_with_csv_file(&mut app_session, &f, csv_extract)
+                    {
+                        app_session.cancel();
+                        return Err(e.into());
+                    }
+                }
+                None => {
+                    if let Err(e) = python_code.run_with_csv_file(&mut app_session, csv_extract) {
+                        app_session.cancel();
+                        return Err(e.into());
+                    }
+                }
+            }
+            app_session.commit();
+        }
+
+        Ok(None)
+    } else {
+        let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+
+        {
+            let mut app_session = AppSession::new(app_state);
+            match func {
+                Some(f) => {
+                    if let Err(e) = python_code.run_func(&mut app_session, &f) {
+                        app_session.cancel();
+                        return Err(e.into());
+                    }
+                }
+                None => {
+                    if let Err(e) = python_code.run(&mut app_session) {
+                        app_session.cancel();
+                        return Err(e.into());
+                    }
+                }
+            }
+            app_session.commit();
+        }
+
+        Ok(None)
     }
 }
 
@@ -1368,6 +1290,12 @@ pub fn execute_cli_command(
             highs,
             app_state,
         ),
-        CliCommand::Python { command } => python_command(command, app_state),
+        CliCommand::Python {
+            script,
+            func,
+            csv,
+            no_headers,
+            delimiter,
+        } => python_command(script, func, csv, no_headers, delimiter, app_state),
     }
 }
