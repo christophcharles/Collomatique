@@ -23,6 +23,11 @@ pub enum EditorInput {
     SaveClicked,
 }
 
+#[derive(Debug)]
+pub enum EditorOutput {
+    UpdateDirty,
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data>,
@@ -33,6 +38,11 @@ pub struct EditorPanel {
 impl EditorPanel {
     pub fn is_dirty(&self) -> bool {
         self.dirty
+    }
+
+    fn set_dirty(&mut self, value: bool, sender: &ComponentSender<Self>) {
+        self.dirty = value;
+        sender.output(EditorOutput::UpdateDirty).unwrap();
     }
 }
 
@@ -57,7 +67,7 @@ impl EditorPanel {
 #[relm4::component(pub)]
 impl SimpleComponent for EditorPanel {
     type Input = EditorInput;
-    type Output = ();
+    type Output = EditorOutput;
     type Init = ();
 
     view! {
@@ -193,7 +203,7 @@ impl SimpleComponent for EditorPanel {
             } => {
                 self.file_name = file_name;
                 self.data = AppState::new(data);
-                self.dirty = dirty;
+                self.set_dirty(dirty, &sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
                 Some(path) => {
