@@ -19,10 +19,12 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::SqlitePool;
 
 use serde::{Deserialize, Serialize};
+use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct GeneralDataDb {
     interrogations_per_week: Option<std::ops::Range<u32>>,
+    max_interrogations_per_day: Option<NonZeroU32>,
 }
 
 async fn create_db(db_url: &str) -> Result<SqlitePool> {
@@ -221,6 +223,7 @@ CREATE TABLE "group_items" (
     )
     .bind(serde_json::to_string(&GeneralDataDb {
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     })?)
     .execute(&db)
     .await?;
@@ -256,8 +259,6 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqlitePool> 
 async fn generate_general_data(
     db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::GeneralData> {
-    use std::num::NonZeroU32;
-
     let teacher_count_req =
         sqlx::query!("SELECT COUNT(*) AS teacher_count FROM teachers").fetch_all(db_conn);
     let week_count_req = sqlx::query!("SELECT MAX(week) AS week_max FROM weeks").fetch_one(db_conn);
@@ -272,12 +273,13 @@ async fn generate_general_data(
     let general_data_db: GeneralDataDb =
         serde_json::from_str(&interrogations_per_week_req.await?.value)?;
     let interrogations_per_week = general_data_db.interrogations_per_week;
+    let max_interrogations_per_day = general_data_db.max_interrogations_per_day;
 
     Ok(collomatique::gen::colloscope::GeneralData {
         teacher_count,
         week_count,
         interrogations_per_week,
-        max_interrogations_per_day: None,
+        max_interrogations_per_day,
     })
 }
 
@@ -300,7 +302,6 @@ fn generate_incompatibility(
         .map(|x| {
             use collomatique::gen::colloscope::{SlotStart, SlotWithDuration};
             use collomatique::gen::time::{Time, Weekday};
-            use std::num::NonZeroU32;
 
             Result::<SlotWithDuration>::Ok(SlotWithDuration {
                 start: SlotStart {
@@ -456,7 +457,6 @@ fn generate_bare_subjects(
         .iter()
         .map(|x| {
             use collomatique::gen::colloscope::{GroupsDesc, Subject};
-            use std::num::{NonZeroU32, NonZeroUsize};
 
             let min = usize::try_from(x.min_students_per_group)
                 .expect("Valid usize for minimum students per group");
