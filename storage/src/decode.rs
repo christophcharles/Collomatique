@@ -47,6 +47,8 @@ pub enum DecodeError {
     AssignmentsDecodedBeforePeriods,
     #[error("Week patterns were already decoded from a previous block")]
     WeekPatternsAlreadyDecoded,
+    #[error("Interrogation slots data is inconsistent")]
+    InconsistentSlotsData,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
@@ -60,6 +62,7 @@ impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
                 IdError::InvalidId => DecodeError::InvalidId,
             },
             FromDataError::InconsistentAssignments => DecodeError::InconsistentAssignmentData,
+            FromDataError::InconsistentSlots => DecodeError::InconsistentSlotsData,
         }
     }
 }
@@ -157,6 +160,7 @@ struct PreData {
     students: collomatique_state_colloscopes::students::StudentsExternalData,
     assignments: collomatique_state_colloscopes::assignments::AssignmentsExternalData,
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatternsExternalData,
+    slots: collomatique_state_colloscopes::slots::SlotsExternalData,
 }
 
 mod assignment_map;
@@ -203,6 +207,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         pre_data.students,
         pre_data.assignments,
         pre_data.week_patterns,
+        pre_data.slots,
     )?;
     Ok(data)
 }
