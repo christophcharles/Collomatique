@@ -525,7 +525,7 @@ impl SubjectsUpdateOp {
                 if *new_status {
                     subject.excluded_periods.remove(period_id);
                 } else {
-                    if !old_status {
+                    if old_status {
                         let period_assignments = data
                             .get_data()
                             .get_assignments()
