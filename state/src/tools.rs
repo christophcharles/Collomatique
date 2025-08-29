@@ -6,7 +6,6 @@
 //! for your specific use case.
 
 use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use thiserror::Error;
 
@@ -28,9 +27,9 @@ pub enum IdError {
 ///
 /// This is a helper struct. It helps generate
 /// new, unique ids every time we need one.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IdIssuerHelper {
-    next_available_id: AtomicU64,
+    next_available_id: u64,
 }
 
 /// Id type
@@ -61,7 +60,7 @@ impl IdIssuerHelper {
             }
         }
 
-        let next_available_id = AtomicU64::new(match ids_found_so_far.last() {
+        let next_available_id = match ids_found_so_far.last() {
             None => 0,
             Some(&val) => {
                 if val > (u64::MAX >> 1) {
@@ -70,7 +69,7 @@ impl IdIssuerHelper {
                     val + 1
                 }
             }
-        });
+        };
 
         Ok(IdIssuerHelper { next_available_id })
     }
@@ -81,7 +80,9 @@ impl IdIssuerHelper {
     ///
     /// There are no types for this id and it can
     /// easily be misued
-    pub fn get_new_id(&self) -> RootId {
-        RootId(self.next_available_id.fetch_add(1, Ordering::Relaxed))
+    pub fn get_new_id(&mut self) -> RootId {
+        let current_id = self.next_available_id;
+        self.next_available_id += 1;
+        RootId(current_id)
     }
 }

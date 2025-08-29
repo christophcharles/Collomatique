@@ -24,7 +24,7 @@ impl StudentId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
 }
@@ -43,7 +43,7 @@ impl IdIssuer {
     }
 
     /// Get a new unused ID for a student
-    pub fn get_student_id(&self) -> StudentId {
+    pub fn get_student_id(&mut self) -> StudentId {
         StudentId(self.helper.get_new_id().inner())
     }
 }

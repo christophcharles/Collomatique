@@ -62,23 +62,10 @@ pub struct PersonWithContact {
 ///
 /// It does not necesserally correlate exactly to the data stored
 /// on disk. This is to allow versioning.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Data {
     id_issuer: IdIssuer,
     student_list: BTreeMap<StudentId, PersonWithContact>,
-}
-
-impl Clone for Data {
-    fn clone(&self) -> Self {
-        let student_list = self.student_list.clone();
-        let student_ids = student_list.keys().map(|k| k.inner());
-        let id_issuer = IdIssuer::new(student_ids).expect("Ids should be consistent when cloning");
-
-        Data {
-            id_issuer,
-            student_list,
-        }
-    }
 }
 
 impl PartialEq for Data {
@@ -110,8 +97,8 @@ impl InMemoryData for Data {
     type AnnotatedOperation = AnnotatedOp;
     type Error = Error;
 
-    fn annotate(&self, op: Op) -> AnnotatedOp {
-        AnnotatedOp::annotate(op, &self.id_issuer)
+    fn annotate(&mut self, op: Op) -> AnnotatedOp {
+        AnnotatedOp::annotate(op, &mut self.id_issuer)
     }
 
     fn build_rev_with_current_state(
