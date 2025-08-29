@@ -1,3 +1,4 @@
+use collomatique_core::rpc::gui_answer::OpenFileDialogAnswer;
 use collomatique_core::rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
@@ -43,6 +44,7 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogCmdOutput {
     AdjustScrolling,
+    DelayedRpcAnswer(ResultMsg),
 }
 
 #[derive(Debug)]
@@ -254,6 +256,10 @@ impl Component for Dialog {
                                 .unwrap();
                             return;
                         }
+                        CmdMsg::GuiRequest(gui_cmd) => {
+                            self.handle_gui_request(sender, gui_cmd);
+                            return;
+                        }
                         CmdMsg::Update(update_msg) => update_msg,
                     };
 
@@ -346,6 +352,12 @@ impl Component for Dialog {
             DialogCmdOutput::AdjustScrolling => {
                 self.adjust_scrolling = true;
             }
+            DialogCmdOutput::DelayedRpcAnswer(result_msg) => {
+                self.rpc_logger
+                    .sender()
+                    .send(rpc_server::RpcLoggerInput::SendMsg(result_msg))
+                    .unwrap();
+            }
         }
     }
 }
@@ -357,5 +369,32 @@ impl Dialog {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             DialogCmdOutput::AdjustScrolling
         });
+    }
+
+    fn handle_gui_request(
+        &mut self,
+        sender: ComponentSender<Self>,
+        gui_cmd: collomatique_core::rpc::cmd_msg::GuiMsg,
+    ) {
+        match gui_cmd {
+            collomatique_core::rpc::cmd_msg::GuiMsg::OpenFileDialog(extensions) => {
+                sender.oneshot_command(async move {
+                    let ext_vec: Vec<_> = extensions
+                        .list
+                        .iter()
+                        .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
+                        .collect();
+
+                    let file_name =
+                        crate::tools::open_save::generic_open_dialog(&ext_vec[..]).await;
+
+                    DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
+                        collomatique_core::rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
+                            file_path: file_name,
+                        }),
+                    ))
+                });
+            }
+        }
     }
 }

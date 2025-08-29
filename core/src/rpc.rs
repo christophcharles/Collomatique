@@ -14,6 +14,9 @@ pub use cmd_msg::{CmdMsg, UpdateMsg};
 pub mod error_msg;
 pub use error_msg::ErrorMsg;
 
+pub mod gui_answer;
+pub use gui_answer::GuiAnswer;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitMsg {
     RunPythonScript(String),
@@ -66,6 +69,7 @@ impl From<collomatique_state_colloscopes::NewId> for NewId {
 pub enum ResultMsg {
     InvalidMsg,
     Ack(Option<NewId>),
+    AckGui(GuiAnswer),
     Data(InternalDataStream),
     Error(ErrorMsg),
 }

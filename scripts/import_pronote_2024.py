@@ -3,23 +3,6 @@
 import collomatique
 import csv
 
-def open_dialog():
-    import tkinter as tk
-    from tkinter import filedialog
-
-    root = tk.Tk()
-    root.withdraw()
-
-    filetypes = (
-        ('Fichiers CSV', '*.csv'),
-        ('Tous les fichiers', '*.*')
-    )
-
-    file_path = filedialog.askopenfilename(filetypes = filetypes)
-    if not file_path:
-        return None
-    return file_path
-
 def open_csv(file_path):
     csvfile = open(file_path, newline='')
     reader = csv.reader(csvfile, delimiter=';')
@@ -82,7 +65,7 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
 def main():
     session = collomatique.current_session()
 
-    file_path = open_dialog()
+    file_path = collomatique.open_dialog([("Fichiers CSV", "csv"), ("Tous les fichiers", "*")])
     if file_path is None:
         return
     

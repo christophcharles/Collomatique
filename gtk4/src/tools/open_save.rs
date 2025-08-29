@@ -36,23 +36,25 @@ pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
 }
 
 pub async fn open_dialog() -> Option<PathBuf> {
-    let dialog = rfd::AsyncFileDialog::new()
-        .set_title("Ouvrir")
-        .set_can_create_directories(false)
-        .add_filter("Fichiers collomatique (*.collomatique)", &["collomatique"])
-        .add_filter("Tous les fichiers", &["*"]);
-
-    let file = dialog.pick_file().await;
-
-    file.map(|handle| handle.path().to_owned())
+    generic_open_dialog(&[
+        ("Fichiers collomatique (*.collomatique)", "collomatique"),
+        ("Tous les fichiers", "*"),
+    ])
+    .await
 }
 
 pub async fn open_python_dialog() -> Option<PathBuf> {
-    let dialog = rfd::AsyncFileDialog::new()
+    generic_open_dialog(&[("Scripts Python (*.py)", "py"), ("Tous les fichiers", "*")]).await
+}
+
+pub async fn generic_open_dialog(extensions: &[(&str, &str)]) -> Option<PathBuf> {
+    let mut dialog = rfd::AsyncFileDialog::new()
         .set_title("Ouvrir un script")
-        .set_can_create_directories(false)
-        .add_filter("Scripts Python (*.py)", &["py"])
-        .add_filter("Tous les fichiers", &["*"]);
+        .set_can_create_directories(false);
+
+    for (desc, ext) in extensions {
+        dialog = dialog.add_filter(*desc, &[ext]);
+    }
 
     let file = dialog.pick_file().await;
 
