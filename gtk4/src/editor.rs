@@ -13,6 +13,8 @@ use collomatique_state_colloscopes::Data;
 
 use crate::tools;
 
+mod error_dialog;
+
 mod check_script;
 mod general_planning;
 mod run_script;
@@ -83,6 +85,8 @@ pub struct EditorPanel {
     pages_titles_map: BTreeMap<&'static str, &'static str>,
 
     show_particular_panel: Option<PanelNumbers>,
+
+    error_dialog: Controller<error_dialog::Dialog>,
 
     general_planning: Controller<general_planning::GeneralPlanning>,
     subjects: Controller<subjects::Subjects>,
@@ -355,6 +359,11 @@ impl Component for EditorPanel {
                 }
             });
 
+        let error_dialog = error_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
         let pages_names = vec!["general_planning", "subjects", "test3"];
         let pages_titles_map = BTreeMap::from([
             ("general_planning", "Planning général"),
@@ -370,6 +379,7 @@ impl Component for EditorPanel {
             pages_names,
             pages_titles_map,
             show_particular_panel: None,
+            error_dialog,
             general_planning,
             subjects,
             check_script_dialog,
@@ -474,9 +484,19 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::UpdateOp(op) => {
-                op.apply(&mut self.data)
-                    .expect("GUI operations should always be valid");
-                self.dirty = true;
+                match op.apply(&mut self.data) {
+                    Ok(_) => {
+                        self.dirty = true;
+                    }
+                    Err(e) => {
+                        self.error_dialog
+                            .sender()
+                            .send(error_dialog::DialogInput::Show(e.to_string()))
+                            .unwrap();
+                    }
+                }
+                // Update interface anyway, this is useful if we need to restore
+                // some GUI element to the correct state in case of error
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::RunScriptClicked => {
