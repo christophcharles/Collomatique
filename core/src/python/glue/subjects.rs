@@ -1,7 +1,5 @@
-use crate::rpc::cmd_msg::MsgSubjectId;
-
 use super::*;
-use pyo3::{exceptions::PyValueError, types::PyString};
+use pyo3::types::PyString;
 
 use std::num::NonZeroU32;
 
@@ -44,34 +42,12 @@ impl From<SubjectId> for crate::rpc::cmd_msg::MsgSubjectId {
 }
 
 #[pyclass]
-pub struct SessionSubjects {
-    pub(super) token: super::Token,
-}
-
-#[pymethods]
-impl SessionSubjects {
-    fn get_subjects(self_: PyRef<'_, Self>) -> Vec<Subject> {
-        self_
-            .token
-            .get_data()
-            .get_subjects()
-            .ordered_subject_list
-            .iter()
-            .map(|(id, data)| Subject {
-                id: MsgSubjectId::from(*id).into(),
-                parameters: data.parameters.clone().into(),
-            })
-            .collect()
-    }
-}
-
-#[pyclass]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     #[pyo3(set, get)]
-    id: SubjectId,
+    pub id: SubjectId,
     #[pyo3(set, get)]
-    parameters: SubjectParameters,
+    pub parameters: SubjectParameters,
 }
 
 #[pymethods]

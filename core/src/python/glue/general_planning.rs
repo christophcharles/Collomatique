@@ -1,5 +1,4 @@
 use crate::rpc::{
-    cmd_msg::MsgPeriodId,
     error_msg::{
         CutPeriodError, DeletePeriodError, GeneralPlanningError, MergeWithPreviousPeriodError,
         UpdatePeriodWeekCountError, UpdateWeekStatusError,
@@ -55,30 +54,6 @@ pub struct SessionPeriods {
 
 #[pymethods]
 impl SessionPeriods {
-    fn get_first_week(self_: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
-        self_
-            .token
-            .get_data()
-            .get_periods()
-            .first_week
-            .as_ref()
-            .map(|x| x.clone().into())
-    }
-
-    fn get_periods(self_: PyRef<'_, Self>) -> Vec<Period> {
-        self_
-            .token
-            .get_data()
-            .get_periods()
-            .ordered_period_list
-            .iter()
-            .map(|(id, data)| Period {
-                id: MsgPeriodId::from(*id).into(),
-                weeks_status: data.clone(),
-            })
-            .collect()
-    }
-
     fn set_first_week(self_: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(match first_week {
@@ -233,9 +208,9 @@ impl SessionPeriods {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Period {
     #[pyo3(set, get)]
-    id: PeriodId,
+    pub id: PeriodId,
     #[pyo3(set, get)]
-    weeks_status: Vec<bool>,
+    pub weeks_status: Vec<bool>,
 }
 
 #[pymethods]
