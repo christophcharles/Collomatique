@@ -78,34 +78,46 @@ impl From<collomatique::backend::json::OpenError> for OpenCollomatiqueFileError 
     }
 }
 
-pub type OpenCollomatiqueFileResult<T> = std::result::Result<T, OpenCollomatiqueFileError>;
-
-#[derive(Debug, Clone)]
-pub enum CreatePolicy {
-    Create,
-    CreateAndOverride,
-    Open,
-}
-
-async fn open_collomatique_file(
-    create_policy: CreatePolicy,
-    path: &std::path::Path,
-) -> OpenCollomatiqueFileResult<collomatique::backend::json::JsonStore> {
-    match create_policy {
-        CreatePolicy::Create | CreatePolicy::CreateAndOverride => Ok(json::JsonStore::new()),
-        CreatePolicy::Open => Ok(json::JsonStore::from_json_file(path)?),
+impl From<collomatique::backend::json::FromJsonError> for OpenCollomatiqueFileError {
+    fn from(value: collomatique::backend::json::FromJsonError) -> Self {
+        OpenCollomatiqueFileError::JsonError(std::sync::Arc::new(value))
     }
 }
 
+impl From<std::io::Error> for OpenCollomatiqueFileError {
+    fn from(value: std::io::Error) -> Self {
+        OpenCollomatiqueFileError::IOError(std::sync::Arc::new(value))
+    }
+}
+
+pub type OpenCollomatiqueFileResult<T> = std::result::Result<T, OpenCollomatiqueFileError>;
+
 impl State {
-    pub async fn new(
-        create_policy: CreatePolicy,
+    pub fn new_with_empty_file(
+        path: Option<std::path::PathBuf>,
+    ) -> OpenCollomatiqueFileResult<Self> {
+        use collomatique::backend::Logic;
+        use collomatique::frontend::state::AppState;
+
+        let logic = Logic::new(json::JsonStore::new());
+        let app_state = AppState::new(logic);
+
+        Ok(Self {
+            panel: Panel::SubjectGroups,
+            path,
+            app_state: AppStateBox::new(app_state),
+        })
+    }
+
+    pub async fn new_with_existing_file(
         file: std::path::PathBuf,
     ) -> OpenCollomatiqueFileResult<Self> {
         use collomatique::backend::Logic;
         use collomatique::frontend::state::AppState;
 
-        let logic = Logic::new(open_collomatique_file(create_policy, file.as_path()).await?);
+        let content = tokio::fs::read_to_string(&file).await?;
+
+        let logic = Logic::new(json::JsonStore::from_json(&content)?);
         let app_state = AppState::new(logic);
 
         Ok(Self {
@@ -113,6 +125,12 @@ impl State {
             path: Some(file),
             app_state: AppStateBox::new(app_state),
         })
+    }
+}
+
+impl State {
+    fn is_modified(&self) -> bool {
+        true
     }
 }
 
@@ -137,6 +155,30 @@ pub enum Message {
     ExitValidated(window::Id),
 }
 
+fn close_warning_task(state: &GuiState, message_if_yes: GuiMessage) -> Task<GuiMessage> {
+    let GuiState::Editor(editor_state) = state else {
+        panic!("Received editor message while not in editor state");
+    };
+    if editor_state.is_modified() {
+        Task::done(
+            super::dialogs::Message::YesNoAlertDialog(
+                "Abandonner les modifications ?".into(),
+                "Les modifications du colloscope actuelles seront abandonnées.".into(),
+                std::sync::Arc::new(move |result| {
+                    if result {
+                        message_if_yes.clone()
+                    } else {
+                        GuiMessage::Ignore
+                    }
+                }),
+            )
+            .into(),
+        )
+    } else {
+        Task::done(message_if_yes)
+    }
+}
+
 pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     let GuiState::Editor(editor_state) = state else {
         panic!("Editor message received but GUI not in an editor state");
@@ -147,34 +189,8 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             editor_state.panel = new_panel;
             Task::none()
         }
-        Message::NewClicked => Task::done(
-            super::dialogs::Message::YesNoAlertDialog(
-                "Créer un nouveau colloscope ?".into(),
-                "Le colloscope actuel sera fermé.".into(),
-                std::sync::Arc::new(|result| {
-                    if result {
-                        GuiMessage::OpenNewFile
-                    } else {
-                        GuiMessage::Ignore
-                    }
-                }),
-            )
-            .into(),
-        ),
-        Message::OpenClicked => Task::done(
-            super::dialogs::Message::YesNoAlertDialog(
-                "Ouvrir un colloscope ?".into(),
-                "Le colloscope actuel sera fermé.".into(),
-                std::sync::Arc::new(|result| {
-                    if result {
-                        GuiMessage::OpenExistingFile
-                    } else {
-                        GuiMessage::Ignore
-                    }
-                }),
-            )
-            .into(),
-        ),
+        Message::NewClicked => close_warning_task(state, GuiMessage::OpenNewFile),
+        Message::OpenClicked => close_warning_task(state, GuiMessage::OpenExistingFile),
         Message::UndoClicked => {
             /*let GuiState::Editor(editor_state) = state else {
                 panic!("Received editor message while not in editor state");
@@ -233,34 +249,8 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
                 }
             }
         }
-        Message::CloseClicked => Task::done(
-            super::dialogs::Message::YesNoAlertDialog(
-                "Fermer le colloscope ?".into(),
-                "Les modifications sont enregistrées.".into(),
-                std::sync::Arc::new(|result| {
-                    if result {
-                        GuiMessage::GoToWelcomeScreen
-                    } else {
-                        GuiMessage::Ignore
-                    }
-                }),
-            )
-            .into(),
-        ),
-        Message::ExitRequest(id) => Task::done(
-            super::dialogs::Message::YesNoAlertDialog(
-                "Quitter Collomatique ?".into(),
-                "Les modifications sont enregistrées.".into(),
-                std::sync::Arc::new(move |result| {
-                    if result {
-                        Message::ExitValidated(id).into()
-                    } else {
-                        GuiMessage::Ignore
-                    }
-                }),
-            )
-            .into(),
-        ),
+        Message::CloseClicked => close_warning_task(state, GuiMessage::GoToWelcomeScreen),
+        Message::ExitRequest(id) => close_warning_task(state, Message::ExitValidated(id).into()),
         Message::ExitValidated(id) => window::close(id),
     }
 }
