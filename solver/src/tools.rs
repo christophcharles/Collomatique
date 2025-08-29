@@ -30,7 +30,7 @@ use std::collections::BTreeSet;
 /// the name of the variable we are defining through the constraint, a number identifying
 /// the constraint and a plain text description.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AgregateVariableConstraintDesc<ProblemVariable> {
+pub struct AggregatedVariableConstraintDesc<ProblemVariable> {
     /// Name of the variable being definied through the constraint
     pub variable_name: ProblemVariable,
     /// Internal number of the structure constraint
@@ -49,7 +49,7 @@ pub struct AgregateVariableConstraintDesc<ProblemVariable> {
 /// - provides the type and name of the ouput variable
 /// - returns a list of linear constraints for the ILP problem
 /// - provides a reconstruction function for programmatic reconstruction.
-pub trait AgregateVariable<ProblemVariable>
+pub trait AggregatedVariable<ProblemVariable>
 where
     ProblemVariable: UsableData + 'static,
 {
@@ -60,7 +60,7 @@ where
         &self,
     ) -> Vec<(
         Constraint<ProblemVariable>,
-        AgregateVariableConstraintDesc<ProblemVariable>,
+        AggregatedVariableConstraintDesc<ProblemVariable>,
     )>;
     /// Reconstructs the variable value from a [ConfigData].
     ///
@@ -87,7 +87,7 @@ where
     pub original_variables: BTreeSet<ProblemVariable>,
 }
 
-impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
+impl<ProblemVariable: UsableData + 'static> AggregatedVariable<ProblemVariable>
     for AndVariable<ProblemVariable>
 {
     fn get_variable_def(&self) -> (ProblemVariable, Variable) {
@@ -98,7 +98,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
         &self,
     ) -> Vec<(
         Constraint<ProblemVariable>,
-        AgregateVariableConstraintDesc<ProblemVariable>,
+        AggregatedVariableConstraintDesc<ProblemVariable>,
     )> {
         let var_expr = LinExpr::<ProblemVariable>::var(self.variable_name.clone());
         let mut add_expr = LinExpr::constant(1. - self.original_variables.len() as f64);
@@ -109,7 +109,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
 
         let mut constraints = vec![(
             var_expr.geq(&add_expr),
-            AgregateVariableConstraintDesc {
+            AggregatedVariableConstraintDesc {
                 variable_name: self.variable_name.clone(),
                 internal_number: 0,
                 desc: "Variable should be 1 if all are 1".into(),
@@ -120,7 +120,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
             let orig_var_expr = LinExpr::var(orig_var.clone());
             constraints.push((
                 var_expr.leq(&orig_var_expr),
-                AgregateVariableConstraintDesc {
+                AggregatedVariableConstraintDesc {
                     variable_name: self.variable_name.clone(),
                     internal_number: i,
                     desc: "Variable should be 0 if one is 0".into(),
@@ -170,7 +170,7 @@ where
     pub original_variables: BTreeSet<ProblemVariable>,
 }
 
-impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
+impl<ProblemVariable: UsableData + 'static> AggregatedVariable<ProblemVariable>
     for OrVariable<ProblemVariable>
 {
     fn get_variable_def(&self) -> (ProblemVariable, Variable) {
@@ -181,7 +181,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
         &self,
     ) -> Vec<(
         Constraint<ProblemVariable>,
-        AgregateVariableConstraintDesc<ProblemVariable>,
+        AggregatedVariableConstraintDesc<ProblemVariable>,
     )> {
         let var_expr = LinExpr::<ProblemVariable>::var(self.variable_name.clone());
         let mut add_expr = LinExpr::constant(0.);
@@ -192,7 +192,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
 
         let mut constraints = vec![(
             var_expr.leq(&add_expr),
-            AgregateVariableConstraintDesc {
+            AggregatedVariableConstraintDesc {
                 variable_name: self.variable_name.clone(),
                 internal_number: 0,
                 desc: "Variable should be 0 if all are 0".into(),
@@ -203,7 +203,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
             let orig_var_expr = LinExpr::var(orig_var.clone());
             constraints.push((
                 var_expr.geq(&orig_var_expr),
-                AgregateVariableConstraintDesc {
+                AggregatedVariableConstraintDesc {
                     variable_name: self.variable_name.clone(),
                     internal_number: i,
                     desc: "Variable should be 1 if one is 1".into(),
