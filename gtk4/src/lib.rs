@@ -60,6 +60,7 @@ pub struct AppModel {
     state: GlobalState,
     next_warn_msg: Option<AppInput>,
     update_about: Option<()>,
+    main_window_sensitive: bool,
 }
 
 impl AppModel {
@@ -143,6 +144,9 @@ impl Component for AppModel {
                 set_visible_child_name: model.state.get_screen_name(),
                 set_transition_type: gtk::StackTransitionType::Crossfade,
             },
+
+            #[watch]
+            set_sensitive: model.main_window_sensitive,
 
             connect_close_request[sender] => move |_| {
                 sender.input(AppInput::RequestQuit);
@@ -311,6 +315,7 @@ impl Component for AppModel {
             next_warn_msg: None,
             actions,
             update_about: None,
+            main_window_sensitive: true,
         };
         let widgets = view_output!();
 
@@ -377,6 +382,7 @@ impl Component for AppModel {
                 self.send_but_check_dirty(sender, AppInput::OpenExistingColloscopeWithDialog);
             }
             AppInput::OpenExistingColloscopeWithDialog => {
+                self.main_window_sensitive = false;
                 sender.oneshot_command(async move {
                     match tools::open_save::open_dialog().await {
                         Some(path) => AppCommandOutput::OpenFileSelected(path),
@@ -562,8 +568,11 @@ impl Component for AppModel {
         _root: &Self::Root,
     ) {
         match message {
-            AppCommandOutput::OpenFileNotSelected => {}
+            AppCommandOutput::OpenFileNotSelected => {
+                self.main_window_sensitive = true;
+            }
             AppCommandOutput::OpenFileSelected(path) => {
+                self.main_window_sensitive = true;
                 sender.input(AppInput::LoadColloscope(path));
             }
         }
