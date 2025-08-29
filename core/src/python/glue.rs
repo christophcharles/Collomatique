@@ -4,22 +4,22 @@ use pyo3::prelude::*;
 
 use crate::rpc::{
     cmd_msg::{
-        ExtensionDesc, MsgGroupListId, MsgIncompatId, MsgSlotId, MsgStudentId, MsgWeekPatternId,
-        OpenFileDialogMsg,
+        ExtensionDesc, MsgGroupListId, MsgIncompatId, MsgRuleId, MsgSlotId, MsgStudentId,
+        MsgWeekPatternId, OpenFileDialogMsg,
     },
     error_msg::{
-        AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
-        AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
+        AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
+        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
         AssignGroupListToSubjectError, AssignmentsError, CutPeriodError, DeleteGroupListError,
-        DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
-        DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
+        DeleteIncompatError, DeletePeriodError, DeleteRuleError, DeleteSlotError,
+        DeleteStudentError, DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
         DuplicatePreviousPeriodError, GeneralPlanningError, GroupListsError,
         IncompatibilitiesError, MergeWithPreviousPeriodError, MoveDownError, MoveSlotDownError,
-        MoveSlotUpError, MoveUpError, PrefillGroupListError, SlotsError, StudentsError,
+        MoveSlotUpError, MoveUpError, PrefillGroupListError, RulesError, SlotsError, StudentsError,
         SubjectsError, TeachersError, UpdateGroupListError, UpdateIncompatError,
-        UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError,
-        UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
-        WeekPatternsError,
+        UpdatePeriodStatusError, UpdatePeriodStatusForRuleError, UpdatePeriodWeekCountError,
+        UpdateRuleError, UpdateSlotError, UpdateStudentError, UpdateSubjectError,
+        UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError, WeekPatternsError,
     },
     ErrorMsg, GuiAnswer, ResultMsg,
 };
@@ -44,6 +44,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<group_lists::GroupListParameters>()?;
     m.add_class::<group_lists::PrefilledGroup>()?;
     m.add_class::<rules::LogicRule>()?;
+    m.add_class::<rules::Rule>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
@@ -108,6 +109,7 @@ use week_patterns::{WeekPattern, WeekPatternId};
 mod group_lists;
 mod incompatibilities;
 mod rules;
+use rules::RuleId;
 mod slots;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
@@ -1415,6 +1417,150 @@ impl Session {
         let group_list_id = subject_map.get(&subject_id);
 
         Ok(group_list_id.map(|x| MsgGroupListId::from(*x).into()))
+    }
+
+    fn rules_add(self_: PyRef<'_, Self>, rule: rules::Rule) -> PyResult<rules::RuleId> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
+                    crate::rpc::cmd_msg::RulesCmdMsg::AddNewRule(rule.name, rule.logic_rule.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::RuleId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::Rules(RulesError::AddNewRule(e))) => match e {
+                AddNewRuleError::InvalidSlotId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn rules_update(self_: PyRef<'_, Self>, id: rules::RuleId, rule: rules::Rule) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
+                    crate::rpc::cmd_msg::RulesCmdMsg::UpdateRule(
+                        id.into(),
+                        rule.name,
+                        rule.logic_rule.into(),
+                    ),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Rules(RulesError::UpdateRule(e))) => match e {
+                UpdateRuleError::InvalidRuleId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
+                }
+                UpdateRuleError::InvalidSlotId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn rules_delete(self_: PyRef<'_, Self>, id: rules::RuleId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
+                    crate::rpc::cmd_msg::RulesCmdMsg::DeleteRule(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Rules(RulesError::DeleteRule(e))) => match e {
+                DeleteRuleError::InvalidRuleId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn rules_get_list(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<rules::RuleId, rules::Rule>> {
+        let mut new_map = BTreeMap::new();
+
+        for (rule_id, rule) in &self_.token.get_data().get_rules().rule_map {
+            new_map.insert(
+                MsgRuleId::from(*rule_id).into(),
+                rules::Rule {
+                    name: rule.name.clone(),
+                    logic_rule: rule.desc.clone().try_into()?,
+                },
+            );
+        }
+
+        Ok(new_map)
+    }
+
+    fn rules_update_period_status(
+        self_: PyRef<'_, Self>,
+        rule_id: RuleId,
+        period_id: PeriodId,
+        new_status: bool,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
+                    crate::rpc::cmd_msg::RulesCmdMsg::UpdatePeriodStatusForRule(
+                        rule_id.into(),
+                        period_id.into(),
+                        new_status,
+                    ),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Rules(RulesError::UpdatePeriodStatusForRule(e))) => {
+                match e {
+                    UpdatePeriodStatusForRuleError::InvalidRuleId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
+                    }
+                    UpdatePeriodStatusForRuleError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn rules_get_period_status(
+        self_: PyRef<'_, Self>,
+        rule_id: RuleId,
+        period_id: PeriodId,
+    ) -> PyResult<bool> {
+        let data = self_.token.get_data();
+
+        let Some(validated_rule_id) = data.validate_rule_id(MsgRuleId::from(rule_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid rule id {:?}",
+                rule_id
+            )));
+        };
+
+        let Some(rule) = data.get_rules().rule_map.get(&validated_rule_id) else {
+            panic!("rule id should be valid at this point");
+        };
+
+        let Some(validated_period_id) =
+            data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid period id {:?}",
+                period_id
+            )));
+        };
+
+        Ok(!rule.excluded_periods.contains(&validated_period_id))
     }
 }
 
