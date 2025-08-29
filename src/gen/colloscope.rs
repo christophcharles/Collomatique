@@ -46,32 +46,44 @@ pub enum Error {
     SubjectWithPeriodicityTooBig(u32, u32),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
-    #[error("Incompatibility {0} has slot {1} after the week count ({2}) of the schedule")]
-    IncompatibilityWithSlotAfterLastWeek(usize, usize, u32),
-    #[error("Incompatibility {0} has interrogation slot {1} overlapping next day")]
-    IncompatibilityWithSlotOverlappingNextDay(usize, usize),
+    #[error("Incompatibility {0} references an invalid incompatibility group ({1})")]
+    IncompatibilityWithInvalidIncompatibilityGroup(usize, usize),
+    #[error("Incompatibility {0} has max_count larger ({1}) than the number of groups ({2})")]
+    IncompatibilityWithMaxCountTooBig(usize, usize, usize),
+    #[error(
+        "Incompatibility group {0} has slot ({1:?}) after the week count ({2}) of the schedule"
+    )]
+    IncompatibilityGroupWithSlotAfterLastWeek(usize, SlotWithDuration, u32),
+    #[error("Incompatibility group {0} has interrogation slot ({1:?}) overlapping next day")]
+    IncompatibilityGroupWithSlotOverlappingNextDay(usize, SlotWithDuration),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
     SlotGroupingWithInvalidSubject(usize, SlotRef),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
     SlotGroupingWithInvalidSlot(usize, SlotRef),
     #[error("The slot groupings {0} and {1} refer to the same slot {2:?}")]
     SlotGroupingOverlap(usize, usize, SlotRef),
+    #[error("The grouping incompatibility {0} does not have enough groupings (only {1})")]
+    SlotGroupingIncompatDoesNotHaveEnoughGroupings(usize, usize),
     #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
     SlotGroupingIncompatWithInvalidSlotGrouping(usize, usize),
+    #[error(
+        "The grouping incompatibility {0} limit ({1}) is larger than the number of groupings ({2})"
+    )]
+    SlotGroupingIncompatWithLimitTooBig(usize, usize, usize),
     #[error("The range {0:?} for the number of interrogations per week is empty")]
     SlotGeneralDataWithInvalidInterrogationsPerWeek(std::ops::Range<u32>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotStart {
     pub week: u32,
     pub weekday: time::Weekday,
     pub start_time: time::Time,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotWithDuration {
     pub start: SlotStart,
     pub duration: NonZeroU32,
@@ -110,7 +122,7 @@ pub struct GroupDesc {
     pub can_be_extended: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct GroupsDesc {
     pub prefilled_groups: Vec<GroupDesc>,
     pub not_assigned: BTreeSet<usize>,
@@ -126,15 +138,53 @@ impl GroupsDesc {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingRequirements {
+    pub teachers: bool,
+    pub timeslots: bool,
+}
+
+impl Default for BalancingRequirements {
+    fn default() -> Self {
+        BalancingRequirements {
+            teachers: false,
+            timeslots: false,
+        }
+    }
+}
+
+impl BalancingRequirements {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_group: RangeInclusive<NonZeroUsize>,
     pub max_groups_per_slot: NonZeroUsize,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
+    pub balancing_requirements: BalancingRequirements,
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
+}
+
+impl Default for Subject {
+    fn default() -> Self {
+        Subject {
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            is_tutorial: false,
+            balancing_requirements: BalancingRequirements::default(),
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![],
+            groups: GroupsDesc::default(),
+        }
+    }
 }
 
 pub type SubjectList = Vec<Subject>;
@@ -154,24 +204,23 @@ pub type SlotGroupingList = Vec<SlotGrouping>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotGroupingIncompat {
-    grouping1: usize,
-    grouping2: usize,
-}
-
-impl SlotGroupingIncompat {
-    pub fn new(g1: usize, g2: usize) -> Self {
-        SlotGroupingIncompat {
-            grouping1: usize::min(g1, g2),
-            grouping2: usize::max(g1, g2),
-        }
-    }
+    pub groupings: BTreeSet<usize>,
+    pub max_count: NonZeroUsize,
 }
 
 pub type SlotGroupingIncompatSet = BTreeSet<SlotGroupingIncompat>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IncompatibilityGroup {
+    pub slots: BTreeSet<SlotWithDuration>,
+}
+
+pub type IncompatibilityGroupList = Vec<IncompatibilityGroup>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
-    pub slots: Vec<SlotWithDuration>,
+    pub groups: BTreeSet<usize>,
+    pub max_count: usize,
 }
 
 pub type IncompatibilityList = Vec<Incompatibility>;
@@ -190,12 +239,14 @@ pub struct GeneralData {
     pub teacher_count: usize,
     pub week_count: NonZeroU32,
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
+    pub max_interrogations_per_day: Option<NonZeroU32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatedData {
     general: GeneralData,
     subjects: SubjectList,
+    incompatibility_groups: IncompatibilityGroupList,
     incompatibilities: IncompatibilityList,
     students: StudentList,
     slot_groupings: SlotGroupingList,
@@ -214,6 +265,7 @@ impl ValidatedData {
     pub fn new(
         general: GeneralData,
         subjects: SubjectList,
+        incompatibility_groups: IncompatibilityGroupList,
         incompatibilities: IncompatibilityList,
         students: StudentList,
         slot_groupings: SlotGroupingList,
@@ -338,16 +390,37 @@ impl ValidatedData {
         }
 
         for (i, incompatibility) in incompatibilities.iter().enumerate() {
-            for (j, slot) in incompatibility.slots.iter().enumerate() {
-                if !Self::validate_slot_start(&general, &slot.start) {
-                    return Err(Error::IncompatibilityWithSlotAfterLastWeek(
+            for incompat_group in &incompatibility.groups {
+                if *incompat_group >= incompatibility_groups.len() {
+                    return Err(Error::IncompatibilityWithInvalidIncompatibilityGroup(
                         i,
-                        j,
+                        *incompat_group,
+                    ));
+                }
+            }
+            if incompatibility.max_count >= incompatibility.groups.len() {
+                return Err(Error::IncompatibilityWithMaxCountTooBig(
+                    i,
+                    incompatibility.max_count,
+                    incompatibility.groups.len(),
+                ));
+            }
+        }
+
+        for (i, incompat_group) in incompatibility_groups.iter().enumerate() {
+            for slot in &incompat_group.slots {
+                if !Self::validate_slot_start(&general, &slot.start) {
+                    return Err(Error::IncompatibilityGroupWithSlotAfterLastWeek(
+                        i,
+                        slot.clone(),
                         general.week_count.get(),
                     ));
                 }
                 if !Self::validate_slot_overlap(&slot.start, slot.duration) {
-                    return Err(Error::IncompatibilityWithSlotOverlappingNextDay(i, j));
+                    return Err(Error::IncompatibilityGroupWithSlotOverlappingNextDay(
+                        i,
+                        slot.clone(),
+                    ));
                 }
             }
         }
@@ -379,16 +452,24 @@ impl ValidatedData {
         }
 
         for (i, grouping_incompat) in grouping_incompats.iter().enumerate() {
-            if grouping_incompat.grouping1 >= slot_groupings.len() {
-                return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+            for grouping in grouping_incompat.groupings.iter().copied() {
+                if grouping >= slot_groupings.len() {
+                    return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+                        i, grouping,
+                    ));
+                }
+            }
+            if grouping_incompat.groupings.len() < 2 {
+                return Err(Error::SlotGroupingIncompatDoesNotHaveEnoughGroupings(
                     i,
-                    grouping_incompat.grouping1,
+                    grouping_incompat.groupings.len(),
                 ));
             }
-            if grouping_incompat.grouping2 >= slot_groupings.len() {
-                return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+            if grouping_incompat.max_count.get() >= grouping_incompat.groupings.len() {
+                return Err(Error::SlotGroupingIncompatWithLimitTooBig(
                     i,
-                    grouping_incompat.grouping2,
+                    grouping_incompat.max_count.get(),
+                    grouping_incompat.groupings.len(),
                 ));
             }
         }
@@ -404,6 +485,7 @@ impl ValidatedData {
         Ok(ValidatedData {
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -440,6 +522,10 @@ pub enum Variable {
         week_modulo: u32,
     },
     UseGrouping(usize),
+    IncompatGroupForStudent {
+        incompat_group: usize,
+        student: usize,
+    },
 }
 
 impl<'a> From<&'a Variable> for Variable {
@@ -476,6 +562,10 @@ impl std::fmt::Display for Variable {
                 week_modulo,
             } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
             Variable::UseGrouping(num) => write!(f, "UG_{}", num),
+            Variable::IncompatGroupForStudent {
+                incompat_group,
+                student,
+            } => write!(f, "IGfS_{}_{}", *incompat_group, *student),
         }
     }
 }
@@ -514,6 +604,60 @@ enum StudentStatus {
     NotConcerned,
 }
 
+trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self;
+
+    fn is_slot_relevant(&self, slot: &SlotWithTeacher) -> bool {
+        let other = Self::from_subject_slot(slot);
+        *self == other
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TeacherBalancing {
+    teacher: usize,
+}
+
+impl BalancingData for TeacherBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherBalancing {
+            teacher: slot.teacher,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TimeslotBalancing {
+    weekday: time::Weekday,
+    time: time::Time,
+}
+
+impl BalancingData for TimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TimeslotBalancing {
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TeacherAndTimeslotBalancing {
+    teacher: usize,
+    weekday: time::Weekday,
+    time: time::Time,
+}
+
+impl BalancingData for TeacherAndTimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherAndTimeslotBalancing {
+            teacher: slot.teacher,
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
 impl<'a> IlpTranslator<'a> {
     fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
         !group.can_be_extended || (group.students.len() == subject.students_per_group.end().get())
@@ -531,8 +675,8 @@ impl<'a> IlpTranslator<'a> {
             }
         }
 
-        for incompatibility in &self.data.incompatibilities {
-            for slot in &incompatibility.slots {
+        for incompat_group in &self.data.incompatibility_groups {
+            for slot in &incompat_group.slots {
                 result = gcd(result, slot.duration.get());
                 result = gcd(result, slot.start.start_time.get());
             }
@@ -689,6 +833,26 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .map(|(i, _grouping)| Variable::UseGrouping(i))
+            .collect()
+    }
+
+    fn build_incompat_group_for_student_variables(&self) -> BTreeSet<Variable> {
+        self.data
+            .students
+            .iter()
+            .enumerate()
+            .flat_map(|(i, student)| {
+                student.incompatibilities.iter().flat_map(move |j| {
+                    let incompat = &self.data.incompatibilities[*j];
+                    incompat
+                        .groups
+                        .iter()
+                        .map(move |k| Variable::IncompatGroupForStudent {
+                            incompat_group: *k,
+                            student: i,
+                        })
+                })
+            })
             .collect()
     }
 
@@ -1528,6 +1692,87 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_max_interrogations_per_day_constraints_for_student(
+        &self,
+        max_count: NonZeroU32,
+        student: usize,
+        week: u32,
+        day: time::Weekday,
+    ) -> Option<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                // ignore tutorial sessions for interrogation count
+                continue;
+            }
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+                if slot.start.weekday != day {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+                        expr = expr
+                            + Expr::var(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                                student,
+                            });
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student) {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
+        if expr == Expr::constant(0) {
+            return None;
+        }
+
+        let max_i32 = i32::try_from(max_count.get()).unwrap();
+        Some(expr.leq(&Expr::constant(max_i32)))
+    }
+
+    fn build_max_interrogations_per_day_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        let max_count = match self.data.general.max_interrogations_per_day {
+            Some(r) => r,
+            None => return constraints,
+        };
+
+        for week in 0..self.data.general.week_count.get() {
+            for day in time::Weekday::iter() {
+                for (student, _) in self.data.students.iter().enumerate() {
+                    constraints.extend(
+                        self.build_max_interrogations_per_day_constraints_for_student(
+                            max_count, student, week, day,
+                        ),
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
     fn build_grouping_constraint_for_group_in_slot(
         &self,
         i: usize,
@@ -1564,10 +1809,15 @@ impl<'a> IlpTranslator<'a> {
         &self,
         grouping_incompat: &SlotGroupingIncompat,
     ) -> Constraint<Variable> {
-        let lhs = Expr::var(Variable::UseGrouping(grouping_incompat.grouping1))
-            + Expr::var(Variable::UseGrouping(grouping_incompat.grouping2));
+        let mut lhs = Expr::constant(0);
 
-        lhs.leq(&Expr::constant(1))
+        for grouping in grouping_incompat.groupings.iter().copied() {
+            lhs = lhs + Expr::var(Variable::UseGrouping(grouping));
+        }
+
+        let max_count_i32 = i32::try_from(grouping_incompat.max_count.get()).unwrap();
+
+        lhs.leq(&Expr::constant(max_count_i32))
     }
 
     fn build_grouping_incompats_constraints(&self) -> BTreeSet<Constraint<Variable>> {
@@ -1581,105 +1831,331 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn is_slot_compatible_with_student(
+    fn build_max_min_balancing_from_expr(
         &self,
-        slot_start: &SlotStart,
-        duration: NonZeroU32,
-        student: usize,
-    ) -> bool {
-        for incompat in self.data.students[student]
-            .incompatibilities
-            .iter()
-            .copied()
-        {
-            for slot in self.data.incompatibilities[incompat].slots.iter() {
-                if slot.overlap_with(&SlotWithDuration {
-                    start: slot_start.clone(),
-                    duration,
-                }) {
-                    return false;
+        subject: &Subject,
+        count: usize,
+        expr: Expr<Variable>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let group_count = subject.groups.prefilled_groups.len();
+        let week_count = usize::try_from(self.data.general.week_count.get()).unwrap();
+        let period = usize::try_from(subject.period.get()).unwrap();
+        let needed_slots = (group_count * week_count) as f64 / (period as f64);
+
+        let updated_count = (count as f64) * needed_slots / (subject.slots.len() as f64);
+
+        let expected_use_per_group = updated_count / (group_count as f64);
+
+        let max_use = expected_use_per_group.ceil() as i32;
+        let min_use = expected_use_per_group.floor() as i32;
+
+        if max_use == min_use {
+            BTreeSet::from([expr.eq(&Expr::constant(max_use))])
+        } else {
+            BTreeSet::from([
+                expr.leq(&Expr::constant(max_use)),
+                expr.geq(&Expr::constant(min_use)),
+            ])
+        }
+    }
+
+    fn build_balancing_constraints_for_subject_and_group<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+        slot_type: &T,
+        count: usize,
+        k: usize,
+        _group: &GroupDesc,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (j, slot) in subject.slots.iter().enumerate() {
+            if !slot_type.is_slot_relevant(slot) {
+                continue;
+            }
+
+            expr = expr
+                + Expr::var(Variable::GroupInSlot {
+                    subject: i,
+                    slot: j,
+                    group: k,
+                });
+        }
+
+        self.build_max_min_balancing_from_expr(subject, count, expr)
+    }
+
+    fn build_balancing_constraints_for_subject<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut counts = BTreeMap::<T, usize>::new();
+
+        for slot in &subject.slots {
+            let data = T::from_subject_slot(slot);
+            match counts.get_mut(&data) {
+                Some(c) => {
+                    *c += 1;
+                }
+                None => {
+                    counts.insert(data, 1);
                 }
             }
         }
-        true
-    }
 
-    fn build_students_incompats_constraint_for_group(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        group: &GroupDesc,
-    ) -> Option<Constraint<Variable>> {
-        let mut ok = true;
-        for student in group.students.iter().copied() {
-            if !self.is_slot_compatible_with_student(&slot.start, subject.duration, student) {
-                ok = false;
+        let mut constraints = BTreeSet::new();
+
+        for (slot_type, count) in counts {
+            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                constraints.extend(self.build_balancing_constraints_for_subject_and_group(
+                    i, subject, &slot_type, count, k, group,
+                ));
             }
         }
-        if ok {
-            return None;
-        }
 
-        let lhs = Expr::var(Variable::GroupInSlot {
-            subject: i,
-            slot: j,
-            group: k,
-        });
-        Some(lhs.eq(&Expr::constant(0)))
+        constraints
     }
 
-    fn build_students_incompats_constraint_for_dynamic_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        student: usize,
-    ) -> Option<Constraint<Variable>> {
-        if self.is_slot_compatible_with_student(&slot.start, subject.duration, student) {
-            return None;
-        }
-
-        let lhs = Expr::var(Variable::DynamicGroupAssignment {
-            subject: i,
-            slot: j,
-            group: k,
-            student,
-        });
-        Some(lhs.eq(&Expr::constant(0)))
-    }
-
-    fn build_students_incompats_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    constraints.extend(self.build_students_incompats_constraint_for_group(
-                        i, subject, j, slot, k, group,
-                    ));
+            match (
+                subject.balancing_requirements.teachers,
+                subject.balancing_requirements.timeslots,
+            ) {
+                (true, true) => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(
+                            i,
+                            subject,
+                        )
+                    );
+                }
+                (true, false) => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TeacherBalancing>(
+                            i, subject,
+                        ),
+                    );
+                }
+                (false, true) => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TimeslotBalancing>(
+                            i, subject,
+                        ),
+                    );
+                }
+                (false, false) => {
+                    // ignore, no balancing needed
                 }
             }
         }
 
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    if Self::is_group_fixed(group, subject) {
-                        continue;
-                    }
-                    for student in subject.groups.not_assigned.iter().copied() {
+        constraints
+    }
+
+    fn build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_assigned_version(
+        &self,
+        student: usize,
+        subject: usize,
+        incompat_group: usize,
+        slot: usize,
+        group: usize,
+    ) -> Constraint<Variable> {
+        let expr = Expr::var(Variable::GroupInSlot {
+            subject,
+            slot,
+            group,
+        });
+
+        expr.leq(&Expr::var(Variable::IncompatGroupForStudent {
+            incompat_group,
+            student,
+        }))
+    }
+
+    fn build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_dynamic_version(
+        &self,
+        student: usize,
+        subject: usize,
+        incompat_group: usize,
+        slot: usize,
+        group: usize,
+    ) -> Constraint<Variable> {
+        let expr = Expr::var(Variable::DynamicGroupAssignment {
+            subject,
+            slot,
+            group,
+            student,
+        });
+
+        expr.leq(&Expr::var(Variable::IncompatGroupForStudent {
+            incompat_group,
+            student,
+        }))
+    }
+
+    fn need_building_for_slot_and_incompat_group(
+        &self,
+        slot_start: &SlotStart,
+        duration: NonZeroU32,
+        incompat_group: &IncompatibilityGroup,
+    ) -> bool {
+        for slot in &incompat_group.slots {
+            if slot.overlap_with(&SlotWithDuration {
+                start: slot_start.clone(),
+                duration,
+            }) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn build_incompat_group_for_student_constraints_for_subject_slot_student_and_incompat_group(
+        &self,
+        i: usize,
+        j: usize,
+        subject: &Subject,
+        k: usize,
+        l: usize,
+        slot: &SlotWithTeacher,
+        q: usize,
+        incompat_group: &IncompatibilityGroup,
+        assigned: bool,
+    ) -> Option<Constraint<Variable>> {
+        if !self.need_building_for_slot_and_incompat_group(
+            &slot.start,
+            subject.duration,
+            incompat_group,
+        ) {
+            return None;
+        }
+
+        if assigned {
+            Some(self.build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_assigned_version(
+                i,
+                j,
+                q,
+                l,
+                k,
+            ))
+        } else {
+            Some(self.build_incompat_group_for_student_constraint_for_student_and_incompat_group_and_slot_dynamic_version(
+                i,
+                j,
+                q,
+                l,
+                k,
+            ))
+        }
+    }
+
+    fn build_incompat_group_for_student_constraints_for_subject_and_student(
+        &self,
+        i: usize,
+        student: &Student,
+        j: usize,
+        subject: &Subject,
+        k: usize,
+        assigned: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (l, slot) in subject.slots.iter().enumerate() {
+            for p in student.incompatibilities.iter().copied() {
+                let incompat = &self.data.incompatibilities[p];
+                for q in incompat.groups.iter().copied() {
+                    let incompat_group = &self.data.incompatibility_groups[q];
+                    constraints.extend(
+                        self.build_incompat_group_for_student_constraints_for_subject_slot_student_and_incompat_group(
+                            i,
+                            j,
+                            subject,
+                            k,
+                            l,
+                            slot,
+                            q,
+                            incompat_group,
+                            assigned
+                        )
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
+    fn build_incompat_group_for_student_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (j, subject) in self.data.subjects.iter().enumerate() {
+            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                for i in group.students.iter().copied() {
+                    let student = &self.data.students[i];
+                    constraints.extend(
+                        self.build_incompat_group_for_student_constraints_for_subject_and_student(
+                            i, student, j, subject, k, true,
+                        ),
+                    );
+                }
+
+                if !Self::is_group_fixed(group, subject) {
+                    for i in subject.groups.not_assigned.iter().copied() {
+                        let student = &self.data.students[i];
                         constraints.extend(
-                            self.build_students_incompats_constraint_for_dynamic_student(
-                                i, subject, j, slot, k, student,
-                            ),
+                            self.build_incompat_group_for_student_constraints_for_subject_and_student(
+                                i,
+                                student,
+                                j,
+                                subject,
+                                k,
+                                false,
+                            )
                         );
                     }
                 }
+            }
+        }
+
+        constraints
+    }
+
+    fn build_student_incompat_max_count_constraint_for_student_and_incompat(
+        &self,
+        student: usize,
+        incompat: &Incompatibility,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::<Variable>::constant(0);
+
+        for incompat_group in incompat.groups.iter().copied() {
+            expr = expr
+                + Expr::var(Variable::IncompatGroupForStudent {
+                    incompat_group,
+                    student,
+                })
+        }
+
+        let max_count_i32 = incompat.max_count.try_into().expect("Less than 2^31");
+        expr.leq(&Expr::constant(max_count_i32))
+    }
+
+    fn build_student_incompat_max_count_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, student) in self.data.students.iter().enumerate() {
+            for j in student.incompatibilities.iter().copied() {
+                let incompat = &self.data.incompatibilities[j];
+                constraints.insert(
+                    self.build_student_incompat_max_count_constraint_for_student_and_incompat(
+                        i, incompat,
+                    ),
+                );
             }
         }
 
@@ -1699,6 +2175,8 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_student_not_in_last_period_variables())
             .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_incompat_group_for_student_variables())
             .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
@@ -1724,11 +2202,17 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
             .add_constraints(self.build_interrogations_per_week_constraints())
             .expect("Variables should be declared")
+            .add_constraints(self.build_max_interrogations_per_day_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_grouping_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_grouping_incompats_constraints())
             .expect("Variables should be declared")
-            .add_constraints(self.build_students_incompats_constraints())
+            .add_constraints(self.build_incompat_group_for_student_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_student_incompat_max_count_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_balancing_constraints())
             .expect("Variables should be declared")
     }
 
@@ -1810,6 +2294,18 @@ impl<'a> IlpTranslator<'a> {
                     .collect()
             })
             .collect();
+        let incompat_groups_week_map = self
+            .data
+            .incompatibility_groups
+            .iter()
+            .map(|incompat_group| {
+                incompat_group
+                    .slots
+                    .iter()
+                    .map(|slot| slot.start.week)
+                    .collect()
+            })
+            .collect();
 
         IncrementalInitializer {
             period_length,
@@ -1819,6 +2315,7 @@ impl<'a> IlpTranslator<'a> {
             subject_week_map,
             subject_period,
             grouping_week_map,
+            incompat_groups_week_map,
             max_steps,
             retries,
             initializer,
@@ -1913,6 +2410,7 @@ pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     subject_week_map: Vec<Vec<u32>>,
     subject_period: Vec<NonZeroU32>,
     grouping_week_map: Vec<BTreeSet<u32>>,
+    incompat_groups_week_map: Vec<BTreeSet<u32>>,
     max_steps: Option<usize>,
     retries: usize,
     initializer: T,
@@ -1925,10 +2423,29 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
     fn build_init_config<'a, 'b>(
         &'a self,
         problem: &'b Problem<Variable, DefaultRepr<Variable>>,
-    ) -> Option<Config<'b, Variable, DefaultRepr<Variable>>> {
-        let problem_builder = problem.clone().into_builder();
-
+    ) -> Config<'b, Variable, DefaultRepr<Variable>> {
         let mut set_variables = BTreeMap::new();
+
+        let _ = self.build_init_config_internal(problem, &mut set_variables);
+
+        let vars: BTreeSet<_> = set_variables
+            .iter()
+            .filter_map(|(v, val)| if *val { Some(v.clone()) } else { None })
+            .collect();
+
+        problem
+            .config_from(&vars)
+            .expect("Should be valid variables")
+    }
+}
+
+impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
+    fn build_init_config_internal<'a, 'b>(
+        &'a self,
+        problem: &'b Problem<Variable, DefaultRepr<Variable>>,
+        set_variables: &mut BTreeMap<Variable, bool>,
+    ) -> Option<()> {
+        let problem_builder = problem.clone().into_builder();
 
         let first_period_problem_no_periodicity = self.construct_period_problem(
             problem_builder.clone().filter_variables(|v| {
@@ -1948,26 +2465,19 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
         );
         let first_period_config_no_periodicity =
             self.construct_init_config(&first_period_problem_no_periodicity)?;
-        Self::update_set_variables(&mut set_variables, &first_period_config_no_periodicity);
+        Self::update_set_variables(set_variables, &first_period_config_no_periodicity);
 
         for period in 0..self.period_count.get() {
             let period_problem =
                 self.construct_period_problem(problem_builder.clone(), &set_variables, period);
 
             let partial_config = self.construct_init_config(&period_problem)?;
-            Self::update_set_variables(&mut set_variables, &partial_config);
+            Self::update_set_variables(set_variables, &partial_config);
         }
 
-        let vars: BTreeSet<_> = set_variables
-            .iter()
-            .filter_map(|(v, val)| if *val { Some(v.clone()) } else { None })
-            .collect();
-
-        problem.config_from(&vars).ok()
+        Some(())
     }
-}
 
-impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
     fn construct_init_config<'a, 'b>(
         &'a self,
         problem: &'b Problem<Variable>,
@@ -1984,7 +2494,7 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         &'a self,
         problem: &'b Problem<Variable>,
     ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
-        let init_config = self.initializer.build_init_config(&problem)?;
+        let init_config = self.initializer.build_init_config(&problem);
         self.solver
             .restore_feasability_with_max_steps(&init_config, self.max_steps.clone())
     }
@@ -2025,6 +2535,18 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
 
     fn is_grouping_concerned_by_period(&self, grouping: usize, period: u32) -> bool {
         for week in self.grouping_week_map[grouping].iter().copied() {
+            if self.is_week_in_period(week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_incompat_group_concerned_by_period(&self, incompat_group: usize, period: u32) -> bool {
+        for week in self.incompat_groups_week_map[incompat_group]
+            .iter()
+            .copied()
+        {
             if self.is_week_in_period(week, period) {
                 return true;
             }
@@ -2096,6 +2618,10 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
             Variable::UseGrouping(grouping) => {
                 self.is_grouping_concerned_by_period(*grouping, period)
             }
+            Variable::IncompatGroupForStudent {
+                incompat_group,
+                student: _,
+            } => self.is_incompat_group_concerned_by_period(*incompat_group, period),
         })
     }
 

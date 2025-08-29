@@ -19,10 +19,12 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::SqlitePool;
 
 use serde::{Deserialize, Serialize};
+use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct GeneralDataDb {
     interrogations_per_week: Option<std::ops::Range<u32>>,
+    max_interrogations_per_day: Option<NonZeroU32>,
 }
 
 async fn create_db(db_url: &str) -> Result<SqlitePool> {
@@ -46,10 +48,18 @@ CREATE TABLE "colloscopes" (
 );
 INSERT INTO "colloscopes" ( "name" ) VALUES ( "Colloscope_1" );
 
-CREATE TABLE "course_incompats" (
-	"course_incompat_id"	INTEGER NOT NULL,
+CREATE TABLE "incompats" (
+	"incompat_id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
-	PRIMARY KEY("course_incompat_id")
+	"max_count"	INTEGER NOT NULL,
+	PRIMARY KEY("incompat_id")
+);
+
+CREATE TABLE "incompat_groups" (
+	"incompat_group_id"	INTEGER NOT NULL,
+	"incompat_id"	INTEGER NOT NULL,
+	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
+	PRIMARY KEY("incompat_group_id")
 );
 
 CREATE TABLE "week_patterns" (
@@ -65,15 +75,15 @@ CREATE TABLE "weeks" (
 	PRIMARY KEY("week_pattern_id","week")
 );
 
-CREATE TABLE "course_incompat_items" (
-	"course_incompat_id"	INTEGER NOT NULL,
+CREATE TABLE "incompat_group_items" (
+	"incompat_group_id"	INTEGER NOT NULL,
 	"week_pattern_id"	INTEGER NOT NULL,
 	"start_day"	INTEGER NOT NULL,
 	"start_time"	INTEGER NOT NULL,
 	"duration"	INTEGER NOT NULL,
-    FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
-	PRIMARY KEY("course_incompat_id","week_pattern_id","start_day","start_time","duration"),
-    FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id")
+	FOREIGN KEY("incompat_group_id") REFERENCES "incompat_groups"("incompat_group_id"),
+	PRIMARY KEY("incompat_group_id","week_pattern_id","start_day","start_time","duration"),
+	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id")
 );
 
 CREATE TABLE "general_data" (
@@ -113,14 +123,16 @@ CREATE TABLE "subjects" (
 	"name"	TEXT NOT NULL,
 	"subject_group_id"	INTEGER NOT NULL,
 	"duration"	INTEGER NOT NULL,
-	"course_incompat_id"	INTEGER,
+	"incompat_id"	INTEGER,
 	"min_students_per_group"	INTEGER NOT NULL,
 	"max_students_per_group"	INTEGER NOT NULL,
 	"period"	INTEGER NOT NULL,
 	"period_is_strict"	INTEGER NOT NULL,
 	"is_tutorial"	INTEGER NOT NULL,
 	"max_groups_per_slot"	INTEGER NOT NULL,
-	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
+    "balance_teachers"	INTEGER NOT NULL,
+	"balance_timeslots"	INTEGER NOT NULL,
+	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
 	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
 	PRIMARY KEY("subject_id" AUTOINCREMENT)
 );
@@ -132,11 +144,17 @@ CREATE TABLE "groupings" (
 );
 
 CREATE TABLE "grouping_incompats" (
-	"id1"	INTEGER NOT NULL,
-	"id2"	INTEGER NOT NULL,
-	FOREIGN KEY("id1") REFERENCES "groupings"("grouping_id"),
-	PRIMARY KEY("id1","id2"),
-	FOREIGN KEY("id2") REFERENCES "groupings"("grouping_id")
+	"grouping_incompat_id"	INTEGER NOT NULL UNIQUE,
+	"max_count"	INTEGER NOT NULL,
+	PRIMARY KEY("grouping_incompat_id")
+);
+
+CREATE TABLE "grouping_incompat_items" (
+	"grouping_incompat_id"	INTEGER NOT NULL,
+	"grouping_id"	INTEGER NOT NULL,
+	FOREIGN KEY("grouping_id") REFERENCES "groupings"("grouping_id"),
+	FOREIGN KEY("grouping_incompat_id") REFERENCES "grouping_incompats"("grouping_incompat_id"),
+	PRIMARY KEY("grouping_incompat_id","grouping_id")
 );
 
 CREATE TABLE "time_slots" (
@@ -163,10 +181,10 @@ CREATE TABLE "grouping_items" (
 
 CREATE TABLE "student_incompats" (
 	"student_id"	INTEGER NOT NULL,
-	"course_incompat_id"	INTEGER NOT NULL,
-	PRIMARY KEY("student_id","course_incompat_id"),
+	"incompat_id"	INTEGER NOT NULL,
+	PRIMARY KEY("student_id","incompat_id"),
     FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
-	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id")
+	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id")
 );
 
 CREATE TABLE "student_subjects" (
@@ -221,6 +239,7 @@ CREATE TABLE "group_items" (
     )
     .bind(serde_json::to_string(&GeneralDataDb {
         interrogations_per_week: None,
+        max_interrogations_per_day: None,
     })?)
     .execute(&db)
     .await?;
@@ -256,8 +275,6 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqlitePool> 
 async fn generate_general_data(
     db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::GeneralData> {
-    use std::num::NonZeroU32;
-
     let teacher_count_req =
         sqlx::query!("SELECT COUNT(*) AS teacher_count FROM teachers").fetch_all(db_conn);
     let week_count_req = sqlx::query!("SELECT MAX(week) AS week_max FROM weeks").fetch_one(db_conn);
@@ -272,16 +289,18 @@ async fn generate_general_data(
     let general_data_db: GeneralDataDb =
         serde_json::from_str(&interrogations_per_week_req.await?.value)?;
     let interrogations_per_week = general_data_db.interrogations_per_week;
+    let max_interrogations_per_day = general_data_db.max_interrogations_per_day;
 
     Ok(collomatique::gen::colloscope::GeneralData {
         teacher_count,
         week_count,
         interrogations_per_week,
+        max_interrogations_per_day,
     })
 }
 
 #[derive(Clone, Debug)]
-struct CourseIncompatRecord {
+struct IncompatGroupRecord {
     id: i64,
     week: i64,
     start_day: i64,
@@ -289,81 +308,193 @@ struct CourseIncompatRecord {
     duration: i64,
 }
 
-fn generate_incompatibility(
-    id: i64,
-    course_incompats_data: &Vec<CourseIncompatRecord>,
-) -> Result<collomatique::gen::colloscope::Incompatibility> {
-    let records_iter = course_incompats_data
-        .iter()
-        .filter(|x| x.id == id)
-        .map(|x| {
-            use collomatique::gen::colloscope::{SlotStart, SlotWithDuration};
-            use collomatique::gen::time::{Time, Weekday};
-            use std::num::NonZeroU32;
-
-            Result::<SlotWithDuration>::Ok(SlotWithDuration {
-                start: SlotStart {
-                    week: u32::try_from(x.week)?,
-                    weekday: Weekday::try_from(usize::try_from(x.start_day)?)?,
-                    start_time: Time::new(u32::try_from(x.start_time)?)
-                        .ok_or(anyhow!("Invalid time"))?,
-                },
-                duration: NonZeroU32::new(u32::try_from(x.duration)?)
-                    .ok_or(anyhow!("Invalid duration"))?,
-            })
-        });
-
-    let mut slots = Vec::new();
-    for record in records_iter {
-        slots.push(record?);
-    }
-
-    Ok(collomatique::gen::colloscope::Incompatibility { slots })
-}
-
 #[derive(Clone, Debug)]
-struct IncompatibilitiesData {
-    list: collomatique::gen::colloscope::IncompatibilityList,
-    id_map: std::collections::BTreeMap<i64, usize>,
+struct IncompatGroupListData {
+    incompat_group_list: collomatique::gen::colloscope::IncompatibilityGroupList,
+    id_map: std::collections::BTreeMap<i64, std::collections::BTreeMap<u32, usize>>,
 }
 
-async fn generate_incompatibilies(db_conn: &SqlitePool) -> Result<IncompatibilitiesData> {
-    let ids = sqlx::query!("SELECT course_incompat_id AS id FROM course_incompats")
-        .fetch_all(db_conn)
-        .await?;
-
-    let id_map = ids.iter().enumerate().map(|(i, x)| (x.id, i)).collect();
-
-    let course_incompats_data = sqlx::query_as!(
-        CourseIncompatRecord,
+async fn generate_incompat_group_list(db_conn: &SqlitePool) -> Result<IncompatGroupListData> {
+    let incompat_group_items_data = sqlx::query_as!(
+        IncompatGroupRecord,
         "
-SELECT course_incompat_id AS id, week, start_day, start_time, duration
-FROM course_incompat_items NATURAL JOIN weeks
+SELECT incompat_group_id AS id, week, start_day, start_time, duration
+FROM incompat_group_items NATURAL JOIN weeks
         "
     )
     .fetch_all(db_conn)
     .await?;
 
-    use collomatique::gen::colloscope::IncompatibilityList;
+    use collomatique::gen::colloscope::IncompatibilityGroupList;
+    use std::collections::{BTreeMap, BTreeSet};
 
-    let mut list = IncompatibilityList::with_capacity(ids.len());
-    for x in &ids {
-        list.push(generate_incompatibility(x.id, &course_incompats_data)?);
+    let mut incompat_group_list = IncompatibilityGroupList::new();
+    let mut id_map = BTreeMap::<_, BTreeMap<_, _>>::new();
+
+    for x in &incompat_group_items_data {
+        use collomatique::gen::colloscope::{IncompatibilityGroup, SlotStart, SlotWithDuration};
+        use collomatique::gen::time::{Time, Weekday};
+
+        let slot = SlotWithDuration {
+            start: SlotStart {
+                week: u32::try_from(x.week)?,
+                weekday: Weekday::try_from(usize::try_from(x.start_day)?)?,
+                start_time: Time::new(u32::try_from(x.start_time)?)
+                    .ok_or(anyhow!("Invalid time"))?,
+            },
+            duration: NonZeroU32::new(u32::try_from(x.duration)?)
+                .ok_or(anyhow!("Invalid duration"))?,
+        };
+
+        match id_map.get_mut(&x.id) {
+            Some(week_map) => match week_map.get(&slot.start.week) {
+                Some(&i) => {
+                    let group: &mut IncompatibilityGroup = &mut incompat_group_list[i];
+                    group.slots.insert(slot);
+                }
+                None => {
+                    week_map.insert(slot.start.week, incompat_group_list.len());
+                    incompat_group_list.push(IncompatibilityGroup {
+                        slots: BTreeSet::from([slot]),
+                    })
+                }
+            },
+            None => {
+                id_map.insert(
+                    x.id,
+                    BTreeMap::from([(slot.start.week, incompat_group_list.len())]),
+                );
+                incompat_group_list.push(IncompatibilityGroup {
+                    slots: BTreeSet::from([slot]),
+                })
+            }
+        }
     }
 
-    Ok(IncompatibilitiesData { list, id_map })
+    Ok(IncompatGroupListData {
+        incompat_group_list,
+        id_map,
+    })
+}
+
+#[derive(Clone, Debug)]
+struct IncompatibilitiesData {
+    incompat_list: collomatique::gen::colloscope::IncompatibilityList,
+    incompat_group_list: collomatique::gen::colloscope::IncompatibilityGroupList,
+    id_map: std::collections::BTreeMap<i64, std::collections::BTreeSet<usize>>,
+}
+
+async fn generate_incompatibilies(db_conn: &SqlitePool) -> Result<IncompatibilitiesData> {
+    let incompat_group_list_data = generate_incompat_group_list(db_conn).await?;
+
+    let incompat_group_list = incompat_group_list_data.incompat_group_list;
+    let incompat_group_id_map = incompat_group_list_data.id_map;
+
+    let incompats_data = sqlx::query!("SELECT incompat_id, max_count FROM incompats")
+        .fetch_all(db_conn)
+        .await?;
+
+    use std::collections::{BTreeMap, BTreeSet};
+    let max_count_map: BTreeMap<_, _> = incompats_data
+        .into_iter()
+        .map(|x| (x.incompat_id, x.max_count))
+        .collect();
+
+    let incompat_groups_data =
+        sqlx::query!("SELECT incompat_id, incompat_group_id FROM incompat_groups")
+            .fetch_all(db_conn)
+            .await?;
+
+    use collomatique::gen::colloscope::{Incompatibility, IncompatibilityList};
+
+    let mut incompat_list = IncompatibilityList::new();
+    let mut incompat_id_map = BTreeMap::<_, BTreeMap<_, _>>::new();
+
+    for x in &incompat_groups_data {
+        match incompat_id_map.get_mut(&x.incompat_id) {
+            Some(week_map) => {
+                let empty_map = BTreeMap::new();
+                let group_week_map = incompat_group_id_map
+                    .get(&x.incompat_group_id)
+                    .unwrap_or(&empty_map);
+                for (&week, &incompat_group_index) in group_week_map {
+                    match week_map.get(&week) {
+                        Some(&i) => {
+                            let incompat: &mut Incompatibility = &mut incompat_list[i];
+                            incompat.groups.insert(incompat_group_index);
+                        }
+                        None => {
+                            week_map.insert(week, incompat_list.len());
+                            let max_count_i64 = max_count_map
+                                .get(&x.incompat_group_id)
+                                .copied()
+                                .ok_or(anyhow!(
+                                "Inconsistent database: non existant incompat_group_id referenced"
+                            ))?;
+                            let max_count = usize::try_from(max_count_i64)
+                                .map_err(|_| anyhow!("max_count should fit in usize"))?;
+                            incompat_list.push(Incompatibility {
+                                groups: BTreeSet::from([incompat_group_index]),
+                                max_count,
+                            });
+                        }
+                    }
+                }
+            }
+            None => {
+                let mut week_map = BTreeMap::new();
+                let empty_map = BTreeMap::new();
+                let group_week_map = incompat_group_id_map
+                    .get(&x.incompat_group_id)
+                    .unwrap_or(&empty_map);
+                for (&week, &incompat_group_index) in group_week_map {
+                    week_map.insert(week, incompat_list.len());
+                    let max_count_i64 =
+                        max_count_map
+                            .get(&x.incompat_group_id)
+                            .copied()
+                            .ok_or(anyhow!(
+                                "Inconsistent database: non existant incompat_group_id referenced"
+                            ))?;
+                    let max_count = usize::try_from(max_count_i64)
+                        .map_err(|_| anyhow!("max_count should fit in usize"))?;
+                    incompat_list.push(Incompatibility {
+                        groups: BTreeSet::from([incompat_group_index]),
+                        max_count,
+                    });
+                }
+                incompat_id_map.insert(x.incompat_id, week_map);
+            }
+        }
+    }
+
+    let id_map = incompat_id_map
+        .into_iter()
+        .map(|(id, week_map)| {
+            (
+                id,
+                week_map.into_iter().map(|(_week, index)| index).collect(),
+            )
+        })
+        .collect();
+
+    Ok(IncompatibilitiesData {
+        incompat_list,
+        incompat_group_list,
+        id_map,
+    })
 }
 
 #[derive(Clone, Debug)]
 struct StudentRecord {
     student_id: i64,
-    course_incompat_id: Option<i64>,
+    incompat_id: Option<i64>,
 }
 
 fn generate_student(
     student_id: i64,
     student_data: &Vec<StudentRecord>,
-    course_incompat_id_map: &std::collections::BTreeMap<i64, usize>,
+    incompat_id_map: &std::collections::BTreeMap<i64, std::collections::BTreeSet<usize>>,
 ) -> Result<collomatique::gen::colloscope::Student> {
     use std::collections::BTreeSet;
 
@@ -371,13 +502,15 @@ fn generate_student(
         .iter()
         .filter(|x| x.student_id == student_id)
         .filter_map(|x| {
-            let course_incompat_id = x.course_incompat_id?;
+            let incompat_id = x.incompat_id?;
             Some(
-                *course_incompat_id_map
-                    .get(&course_incompat_id)
-                    .expect("Valid course_incompat_id"),
+                incompat_id_map
+                    .get(&incompat_id)
+                    .cloned()
+                    .expect("Valid incompat_id"),
             )
         })
+        .flatten()
         .collect();
 
     Ok(collomatique::gen::colloscope::Student { incompatibilities })
@@ -391,7 +524,7 @@ struct StudentsData {
 
 async fn generate_students(
     db_conn: &SqlitePool,
-    course_incompat_id_map: &std::collections::BTreeMap<i64, usize>,
+    incompat_id_map: &std::collections::BTreeMap<i64, std::collections::BTreeSet<usize>>,
 ) -> Result<StudentsData> {
     let ids = sqlx::query!("SELECT student_id AS id FROM students")
         .fetch_all(db_conn)
@@ -402,10 +535,10 @@ async fn generate_students(
     let students_data = sqlx::query_as!(
         StudentRecord,
         "
-SELECT student_id, course_incompat_id FROM student_incompats
+SELECT student_id, incompat_id FROM student_incompats
 UNION
-SELECT student_id, course_incompat_id FROM student_subjects NATURAL JOIN subjects
-WHERE course_incompat_id IS NOT NULL
+SELECT student_id, incompat_id FROM student_subjects NATURAL JOIN subjects
+WHERE incompat_id IS NOT NULL
         "
     )
     .fetch_all(db_conn)
@@ -415,11 +548,7 @@ WHERE course_incompat_id IS NOT NULL
 
     let mut list = StudentList::with_capacity(ids.len());
     for x in &ids {
-        list.push(generate_student(
-            x.id,
-            &students_data,
-            course_incompat_id_map,
-        )?);
+        list.push(generate_student(x.id, &students_data, incompat_id_map)?);
     }
 
     Ok(StudentsData { list, id_map })
@@ -435,6 +564,8 @@ struct SubjectRecord {
     period_is_strict: i64,
     is_tutorial: i64,
     max_groups_per_slot: i64,
+    balance_teachers: i64,
+    balance_timeslots: i64,
 }
 
 fn generate_bare_subjects(
@@ -455,7 +586,6 @@ fn generate_bare_subjects(
         .iter()
         .map(|x| {
             use collomatique::gen::colloscope::{GroupsDesc, Subject};
-            use std::num::{NonZeroU32, NonZeroUsize};
 
             let min = usize::try_from(x.min_students_per_group)
                 .expect("Valid usize for minimum students per group");
@@ -481,6 +611,10 @@ fn generate_bare_subjects(
                 .expect("Valid non-zero period for subject"),
                 period_is_strict: x.period_is_strict != 0,
                 is_tutorial: x.is_tutorial != 0,
+                balancing_requirements: collomatique::gen::colloscope::BalancingRequirements {
+                    teachers: x.balance_teachers != 0,
+                    timeslots: x.balance_timeslots != 0,
+                },
                 duration: NonZeroU32::new(
                     u32::try_from(x.duration).expect("Valid u32 for subject duration"),
                 )
@@ -773,7 +907,7 @@ async fn generate_subjects(
     collo_id: i64,
 ) -> Result<SubjectsData> {
     let subject_data = sqlx::query_as!(SubjectRecord, "
-SELECT subject_id AS id, duration, min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot
+SELECT subject_id AS id, duration, min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots
 FROM subjects
         ")
         .fetch_all(db_conn)
@@ -931,31 +1065,51 @@ async fn generate_grouping_incompats(
 ) -> Result<collomatique::gen::colloscope::SlotGroupingIncompatSet> {
     use collomatique::gen::colloscope::{SlotGroupingIncompat, SlotGroupingIncompatSet};
 
-    let grouping_incompats_data = sqlx::query!("SELECT id1, id2 FROM grouping_incompats")
-        .fetch_all(db_conn)
-        .await?;
+    let grouping_incompats_data =
+        sqlx::query!("SELECT grouping_incompat_id, max_count FROM grouping_incompats")
+            .fetch_all(db_conn)
+            .await?;
+    let grouping_incompat_items_data =
+        sqlx::query!("SELECT grouping_incompat_id, grouping_id FROM grouping_incompat_items")
+            .fetch_all(db_conn)
+            .await?;
 
     let mut set = SlotGroupingIncompatSet::new();
 
     for record in &grouping_incompats_data {
-        let week_map1 = id_map
-            .get(&record.id1)
-            .ok_or(anyhow!("Invalid grouping ID"))?;
-        let week_map2 = id_map
-            .get(&record.id2)
-            .ok_or(anyhow!("Invalid grouping ID"))?;
-
+        let mut week_maps = Vec::new();
         use std::collections::BTreeSet;
-        let weeks1: BTreeSet<_> = week_map1.keys().copied().collect();
-        let weeks2: BTreeSet<_> = week_map2.keys().copied().collect();
+        let mut weeks = BTreeSet::new();
+        for x in &grouping_incompat_items_data {
+            if x.grouping_incompat_id != record.grouping_incompat_id {
+                continue;
+            }
+            let week_map = id_map
+                .get(&x.grouping_id)
+                .ok_or(anyhow!("Invalid grouping ID"))?;
+            weeks.extend(week_map.keys().copied());
+            week_maps.push(week_map);
+        }
 
-        let common_weeks = weeks1.intersection(&weeks2);
+        let max_count_maybe_zero = usize::try_from(record.max_count)
+            .map_err(|_| anyhow!("Invalid (non usize) max count"))?;
+        let max_count =
+            NonZeroUsize::new(max_count_maybe_zero).ok_or(anyhow!("Invalid (zero) max count"))?;
 
-        for week in common_weeks {
-            let id1 = week_map1[week];
-            let id2 = week_map2[week];
+        for week in weeks {
+            let groupings: BTreeSet<_> = week_maps
+                .iter()
+                .filter_map(|&week_map| week_map.get(&week).copied())
+                .collect();
 
-            let incompat = SlotGroupingIncompat::new(id1, id2);
+            if groupings.len() <= max_count.get() {
+                continue;
+            }
+
+            let incompat = SlotGroupingIncompat {
+                groupings,
+                max_count,
+            };
             set.insert(incompat);
         }
     }
@@ -1000,7 +1154,8 @@ async fn generate_colloscope_data(
     Ok(ValidatedData::new(
         general.await?,
         subjects.list,
-        incompatibilities.list,
+        incompatibilities.incompat_group_list,
+        incompatibilities.incompat_list,
         students.list,
         slot_groupings.list,
         grouping_incompats.await?,
@@ -1041,9 +1196,9 @@ async fn main() -> Result<()> {
 
     /*let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
 
-    let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
+    let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
-        100,
+        0.01,
     )
     .unwrap();
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
@@ -1071,9 +1226,9 @@ async fn main() -> Result<()> {
         );
     }*/
 
-    let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
+    let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
-        100,
+        0.01,
     )
     .unwrap();
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
@@ -1086,29 +1241,22 @@ async fn main() -> Result<()> {
     let variable_count = problem.get_variables().len();
     let p = 2. / (variable_count as f64);
 
-    for i in 1.. {
-        println!("Attempt n°{}...", i);
+    use collomatique::ilp::initializers::ConfigInitializer;
+    let init_config = incremental_initializer.build_init_config(&problem);
+    let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
 
-        use collomatique::ilp::initializers::ConfigInitializer;
-        let init_config = match incremental_initializer.build_init_config(&problem) {
-            Some(config) => config,
-            None => continue,
-        };
-        let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let mutation_policy =
+        collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), p);
+    let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
 
-        let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-        let mutation_policy =
-            collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), p);
-        let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
-
-        for (i, (sol, cost)) in iterator.enumerate() {
-            eprintln!(
-                "{}: {} - {:?}",
-                i,
-                cost,
-                ilp_translator.read_solution(sol.as_ref())
-            );
-        }
+    for (i, (sol, cost)) in iterator.enumerate() {
+        eprintln!(
+            "{}: {} - {:?}",
+            i,
+            cost,
+            ilp_translator.read_solution(sol.as_ref())
+        );
     }
 
     Ok(())
