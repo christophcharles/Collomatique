@@ -7,15 +7,17 @@
 use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
 use std::collections::BTreeMap;
+use subjects::{Subjects, SubjectsExternalData};
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::{PeriodId, StudentId};
+pub use ids::{PeriodId, StudentId, SubjectId};
 pub mod ops;
 pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp};
 use ops::{AnnotatedPeriodOp, AnnotatedStudentOp};
 
 pub mod periods;
+pub mod subjects;
 
 /// Description of a person with contacts
 ///
@@ -66,6 +68,7 @@ pub struct PersonWithContact {
 struct InnerData {
     student_list: BTreeMap<StudentId, PersonWithContact>,
     periods: periods::Periods,
+    subjects: subjects::Subjects,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -201,8 +204,12 @@ impl Data {
     /// state of a new file
     pub fn new() -> Data {
         let student_list = BTreeMap::new();
-        Self::from_data(student_list, PeriodsExternalData::default())
-            .expect("Default data should be valid")
+        Self::from_data(
+            student_list,
+            PeriodsExternalData::default(),
+            SubjectsExternalData::default(),
+        )
+        .expect("Default data should be valid")
     }
 
     /// Create a new [Data] from existing data
@@ -212,10 +219,21 @@ impl Data {
     pub fn from_data(
         student_list: BTreeMap<u64, PersonWithContact>,
         periods: periods::PeriodsExternalData,
+        subjects: subjects::SubjectsExternalData,
     ) -> Result<Data, tools::IdError> {
         let student_ids = student_list.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
-        let id_issuer = IdIssuer::new(student_ids, period_ids)?;
+        let subject_ids = subjects.ordered_period_list.iter().map(|(id, _d)| *id);
+        let id_issuer = IdIssuer::new(student_ids, period_ids, subject_ids)?;
+
+        let period_ids: std::collections::BTreeSet<_> = periods
+            .ordered_period_list
+            .iter()
+            .map(|(id, _d)| *id)
+            .collect();
+        if !subjects.validate_all(&period_ids) {
+            return Err(tools::IdError::InvalidId);
+        }
 
         // Ids have been validated
         let student_list = unsafe {
@@ -225,12 +243,14 @@ impl Data {
                 .collect()
         };
         let periods = unsafe { Periods::from_external_data(periods) };
+        let subjects = unsafe { Subjects::from_external_data(subjects) };
 
         Ok(Data {
             id_issuer,
             inner_data: InnerData {
                 student_list,
                 periods,
+                subjects,
             },
         })
     }

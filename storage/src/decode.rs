@@ -30,6 +30,8 @@ pub enum DecodeError {
     EndOfTheUniverse,
     #[error("start date for periods is invalid (should be a monday)")]
     InvalidStartDate,
+    #[error("Invalid ID found in file")]
+    InvalidId,
 }
 
 impl From<collomatique_state::tools::IdError> for DecodeError {
@@ -37,6 +39,7 @@ impl From<collomatique_state::tools::IdError> for DecodeError {
         match value {
             collomatique_state::tools::IdError::DuplicatedId => DecodeError::DuplicatedID,
             collomatique_state::tools::IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
+            collomatique_state::tools::IdError::InvalidId => DecodeError::InvalidId,
         }
     }
 }
@@ -130,6 +133,7 @@ pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeErr
 struct PreData {
     student_list: BTreeMap<u64, collomatique_state_colloscopes::PersonWithContact>,
     periods: collomatique_state_colloscopes::periods::PeriodsExternalData,
+    subjects: collomatique_state_colloscopes::subjects::SubjectsExternalData,
 }
 
 mod period_list;
@@ -153,7 +157,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         }
     }
 
-    let data = Data::from_data(pre_data.student_list, pre_data.periods)?;
+    let data = Data::from_data(pre_data.student_list, pre_data.periods, pre_data.subjects)?;
     Ok(data)
 }
 

@@ -113,6 +113,7 @@ impl FileLoader {
             DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
             DecodeError::DuplicatedEntry(_) => "Le fichier est mal formé et est probablement corrompu.\n(Entrée en double)".into(),
             DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
+            DecodeError::InvalidId => "Le fichier est mal formé et est probablement corrompu.\n(ID invalide)".into(),
             DecodeError::MismatchedSpecRequirementInEntry => "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans une entrée)".into(),
             DecodeError::ProbablyIllformedEntry => "Le fichier est mal formé et est probablement corrompu.\n(Entrée dans les spécifications mais non reconnue)".into(),
             DecodeError::InvalidStartDate => "Le fichier est mal formé et est probablement corrompu.\n(Début de semaine pas sur un lundi)".into(),
