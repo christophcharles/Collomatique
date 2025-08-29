@@ -3,6 +3,7 @@ use super::*;
 #[derive(Debug)]
 pub enum WeekPatternsUpdateWarning {
     LooseInterrogationSlot(collomatique_state_colloscopes::SlotId),
+    LooseScheduleIncompat(collomatique_state_colloscopes::IncompatId),
 }
 
 impl WeekPatternsUpdateWarning {
@@ -41,6 +42,29 @@ impl WeekPatternsUpdateWarning {
                 format!(
                     "Pertes du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {}",
                     teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time,
+                )
+            }
+            Self::LooseScheduleIncompat(incompat_id) => {
+                let Some(incompat) = data
+                    .get_data()
+                    .get_incompats()
+                    .incompat_map
+                    .get(incompat_id)
+                else {
+                    return String::new();
+                };
+                let Some(subject) = data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject(incompat.subject_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte d'une incompatibilité horaire le {} à {} pour la matière \"{}\"",
+                    incompat.slot.start().weekday,
+                    incompat.slot.start().start_time,
+                    subject.parameters.name,
                 )
             }
         }
@@ -108,6 +132,14 @@ impl WeekPatternsUpdateOp {
                             output
                                 .push(WeekPatternsUpdateWarning::LooseInterrogationSlot(*slot_id));
                         }
+                    }
+                }
+
+                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                    if incompat.week_pattern_id == Some(*week_pattern_id) {
+                        output.push(WeekPatternsUpdateWarning::LooseScheduleIncompat(
+                            *incompat_id,
+                        ));
                     }
                 }
 
@@ -185,6 +217,25 @@ impl WeekPatternsUpdateOp {
                                 .expect("All data should be valid at this point");
 
                             assert!(result.is_none());
+                        }
+                    }
+                }
+
+                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                    if incompat.week_pattern_id == Some(*week_pattern_id) {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Incompat(
+                                    collomatique_state_colloscopes::IncompatOp::Remove(
+                                        *incompat_id,
+                                    ),
+                                ),
+                                "Suppression d'une incompatibilité horaire utilisant le modèle"
+                                    .into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
                         }
                     }
                 }
