@@ -17,6 +17,8 @@ where
 pub trait OrdId: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord {}
 impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord> OrdId for T {}
 
+use std::collections::BTreeMap;
+
 #[trait_variant::make(Send)]
 pub trait Storage {
     type WeekPatternId: OrdId;
@@ -26,7 +28,7 @@ pub trait Storage {
 
     async fn week_pattern_get_all(
         &self,
-    ) -> std::result::Result<Vec<WeekPattern>, Self::InternalError>;
+    ) -> std::result::Result<BTreeMap<Self::WeekPatternId, WeekPattern>, Self::InternalError>;
     async fn week_pattern_get(
         &self,
         index: Self::WeekPatternId,
@@ -40,7 +42,9 @@ pub trait Storage {
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
 
-    async fn teachers_get_all(&self) -> std::result::Result<Vec<Teacher>, Self::InternalError>;
+    async fn teachers_get_all(
+        &self,
+    ) -> std::result::Result<BTreeMap<Self::TeacherId, Teacher>, Self::InternalError>;
     async fn teachers_get(
         &self,
         index: Self::TeacherId,

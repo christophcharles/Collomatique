@@ -20,12 +20,24 @@ pub async fn get(pool: &SqlitePool, index: Id) -> std::result::Result<Teacher, I
     Ok(record)
 }
 
-pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Teacher>> {
-    let records = sqlx::query_as!(Teacher, "SELECT surname, firstname, contact FROM teachers",)
+pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, Teacher>> {
+    let records = sqlx::query!("SELECT teacher_id, surname, firstname, contact FROM teachers",)
         .fetch_all(pool)
         .await?;
 
-    Ok(records)
+    Ok(records
+        .into_iter()
+        .map(|record| {
+            (
+                Id(record.teacher_id),
+                Teacher {
+                    surname: record.surname,
+                    firstname: record.firstname,
+                    contact: record.contact,
+                },
+            )
+        })
+        .collect())
 }
 
 pub async fn add(pool: &SqlitePool, teacher: Teacher) -> Result<Id> {
