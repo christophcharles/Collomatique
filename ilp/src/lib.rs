@@ -1469,7 +1469,7 @@ impl<V: UsableData> ConfigData<V> {
     /// Transmutes variables
     ///
     /// Works like [Self::transmute] but consumes the ConfigData
-    /// 
+    ///
     /// For instance:
     /// ```
     /// # use collomatique_ilp::ConfigData;
