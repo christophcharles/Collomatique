@@ -4199,7 +4199,7 @@ fn at_most_one_group_per_slot_constraints() {
 
     let ilp_translator = data.ilp_translator();
     let at_most_one_group_per_slot_constraints =
-        ilp_translator.build_at_most_one_group_per_slot_constraints();
+        ilp_translator.build_at_most_max_groups_per_slot_constraints();
 
     use crate::ilp::linexpr::Expr;
 
