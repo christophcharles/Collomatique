@@ -263,6 +263,7 @@ version = "0.1.0"
 dependencies = [
  "collomatique-solver",
  "collomatique-solver-colloscopes",
+ "thiserror",
 ]
 
 [[package]]
@@ -307,6 +308,13 @@ dependencies = [
  "collomatique-time",
  "ordered-float",
  "thiserror",
+]
+
+[[package]]
+name = "collomatique-storage"
+version = "0.1.0"
+dependencies = [
+ "collomatique-core",
 ]
 
 [[package]]
