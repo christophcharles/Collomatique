@@ -43,7 +43,7 @@ async fn general_data_get_2(pool: SqlitePool) {
     let _ = sqlx::query!(
         r#"
 UPDATE general_data
-SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2,"week_count":25,"periodicity_cuts":[10]}'
+SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2,"week_count":25,"periodicity_cuts":[10],"costs_adjustements":{"max_interrogations_per_day_for_single_student":1,"max_interrogations_per_day_for_all_students":1,"interrogations_per_week_range_for_single_student":1,"interrogations_per_week_range_for_all_students":1,"balancing":1}}'
 WHERE id = 1
         "#
     )
