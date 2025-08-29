@@ -814,6 +814,9 @@ dependencies = [
 [[package]]
 name = "collomatique-ilp"
 version = "0.1.0"
+dependencies = [
+ "ordered-float",
+]
 
 [[package]]
 name = "colorchoice"
