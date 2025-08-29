@@ -107,7 +107,10 @@ fn test_is_feasable() {
 
 #[test]
 fn test_is_feasable_no_constraint() {
-    let pb = crate::ilp::ProblemBuilder::new().build().unwrap();
+    let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["a", "b"])
+        .build()
+        .unwrap();
 
     let mat_repr = MatRepr::new(&pb);
 
