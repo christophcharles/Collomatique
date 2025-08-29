@@ -1,81 +1,14 @@
 use pyo3::exceptions::{PyException, PyValueError};
-use pyo3::types::PyString;
+use std::collections::BTreeMap;
 
 use super::*;
 
-use std::num::NonZeroU32;
+mod classes;
+use classes::*;
 
 #[pyclass]
 pub struct Database {
     sender: Sender<Job>,
-}
-
-#[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GeneralData {
-    #[pyo3(get, set)]
-    interrogations_per_week_range: Option<(u32, u32)>,
-    #[pyo3(get, set)]
-    max_interrogations_per_day: Option<NonZeroU32>,
-    #[pyo3(get, set)]
-    week_count: NonZeroU32,
-}
-
-#[pymethods]
-impl GeneralData {
-    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!(
-            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {} }}",
-            match self_.interrogations_per_week_range {
-                Some(val) => format!("{}..{}", val.0, val.1),
-                None => String::from("none"),
-            },
-            match self_.max_interrogations_per_day {
-                Some(val) => val.to_string(),
-                None => String::from("none"),
-            },
-            self_.week_count,
-        );
-
-        PyString::new_bound(self_.py(), output.as_str())
-    }
-}
-
-impl From<&backend::GeneralData> for GeneralData {
-    fn from(value: &backend::GeneralData) -> Self {
-        GeneralData {
-            interrogations_per_week_range: value
-                .interrogations_per_week
-                .clone()
-                .map(|range| (range.start, range.end)),
-            max_interrogations_per_day: value.max_interrogations_per_day,
-            week_count: value.week_count,
-        }
-    }
-}
-
-impl From<backend::GeneralData> for GeneralData {
-    fn from(value: backend::GeneralData) -> Self {
-        GeneralData::from(&value)
-    }
-}
-
-impl From<&GeneralData> for backend::GeneralData {
-    fn from(value: &GeneralData) -> Self {
-        backend::GeneralData {
-            interrogations_per_week: value
-                .interrogations_per_week_range
-                .map(|tuple| tuple.0..tuple.1),
-            max_interrogations_per_day: value.max_interrogations_per_day,
-            week_count: value.week_count,
-        }
-    }
-}
-
-impl From<GeneralData> for backend::GeneralData {
-    fn from(value: GeneralData) -> Self {
-        backend::GeneralData::from(&value)
-    }
 }
 
 #[pymethods]
@@ -101,17 +34,43 @@ impl Database {
 
         val
     }
+
+    fn week_patterns_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<WeekPatternHandle, WeekPattern>> {
+        let Answer::WeekPatternsGetAll(val) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::WeekPatternsGetAll,
+        ) else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
+
+    fn week_patterns_get(self_: PyRef<'_, Self>, handle: WeekPatternHandle) -> PyResult<WeekPattern> {
+        let Answer::WeekPatternsGet(val) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::WeekPatternsGet(handle),
+        ) else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use crate::backend;
+use crate::backend::{self, IdError};
 use crate::frontend::state::{self, Operation, UpdateError};
 
 #[derive(Debug, Clone)]
 pub enum Command {
     GeneralDataGet,
     GeneralDataSet(GeneralData),
+    WeekPatternsGetAll,
+    WeekPatternsGet(WeekPatternHandle),
     Exit,
 }
 
@@ -132,6 +91,8 @@ impl std::error::Error for PythonError {}
 pub enum Answer {
     GeneralDataGet(PyResult<GeneralData>),
     GeneralDataSet(PyResult<()>),
+    WeekPatternsGetAll(PyResult<BTreeMap<WeekPatternHandle, WeekPattern>>),
+    WeekPatternsGet(PyResult<WeekPattern>),
 }
 
 #[derive(Debug)]
@@ -231,6 +192,32 @@ impl<'scope> SessionConnection<'scope> {
                     });
 
                 Answer::GeneralDataSet(result)
+            }
+            Command::WeekPatternsGetAll => {
+                let result = manager
+                    .week_patterns_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))
+                    .map(|map| {
+                        map.into_iter().map(|(handle, pattern)| (
+                            WeekPatternHandle { handle },
+                            WeekPattern::from(pattern)
+                        ))
+                        .collect::<BTreeMap<_,_>>()
+                    });
+
+                Answer::WeekPatternsGetAll(result)
+            }
+            Command::WeekPatternsGet(handle) => {
+                let result = manager.week_patterns_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })
+                    .map(WeekPattern::from);
+
+                Answer::WeekPatternsGet(result)
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
