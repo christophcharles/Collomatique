@@ -22,7 +22,5 @@
 //! 
 //! The colloscope logic itself is found in the module [base].
 
-pub mod colloscopes_draft;
-
 pub mod base;
 pub mod constraints;
