@@ -30,14 +30,31 @@ enum TeacherFilter {
     Subject(collomatique_state_colloscopes::SubjectId),
 }
 
+#[derive(Debug)]
+pub struct ContactInfo {
+    pub id: collomatique_state_colloscopes::TeacherId,
+    pub contact: collomatique_state_colloscopes::PersonWithContact,
+    pub extra: String,
+}
 pub struct Teachers {
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     teachers: collomatique_state_colloscopes::teachers::Teachers,
 
     teacher_modification_reason: TeacherModificationReason,
     current_filter: TeacherFilter,
+    current_list: Vec<ContactInfo>,
 
     filter_dropdown: Controller<crate::widgets::droplist::Widget>,
+}
+
+impl Teachers {
+    fn generate_teachers_count_text(&self) -> String {
+        format!(
+            "<i>{} colleurs sur {} affichés</i>",
+            self.current_list.len(),
+            self.teachers.teacher_map.len(),
+        )
+    }
 }
 
 #[relm4::component(pub)]
@@ -70,7 +87,8 @@ impl Component for Teachers {
                         set_hexpand: true,
                     },
                     append = &gtk::Label {
-                        set_label: "<i>3 colleurs sur 5 affichés</i>",
+                        #[watch]
+                        set_label: &model.generate_teachers_count_text(),
                         set_use_markup: true,
                     },
                 },
@@ -309,6 +327,7 @@ impl Component for Teachers {
             teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
             teacher_modification_reason: TeacherModificationReason::New,
             current_filter: TeacherFilter::NoFilter,
+            current_list: vec![],
             filter_dropdown,
         };
         let widgets = view_output!();
@@ -323,6 +342,7 @@ impl Component for Teachers {
                 self.teachers = new_teachers;
                 self.fix_current_filter_if_necessary();
                 self.update_filter_droplist();
+                self.update_current_list();
             }
             TeachersInput::AddTeacherClicked => {
                 self.teacher_modification_reason = TeacherModificationReason::New;
@@ -338,6 +358,7 @@ impl Component for Teachers {
                         TeacherFilter::Subject(self.subjects.ordered_subject_list[index].0.clone())
                     }
                 };
+                self.update_current_list();
             }
         }
     }
@@ -382,5 +403,40 @@ impl Teachers {
                 Some(num),
             ))
             .unwrap();
+    }
+
+    fn update_current_list(&mut self) {
+        self.current_list = vec![];
+
+        for (teacher_id, teacher) in &self.teachers.teacher_map {
+            let keep_teacher = match self.current_filter {
+                TeacherFilter::NoFilter => true,
+                TeacherFilter::NoSubjectLinked => teacher.subjects.is_empty(),
+                TeacherFilter::Subject(subject_id) => teacher.subjects.contains(&subject_id),
+            };
+
+            if keep_teacher {
+                self.current_list.push(ContactInfo {
+                    id: teacher_id.clone(),
+                    contact: teacher.desc.clone(),
+                    extra: {
+                        let subject_list: Vec<_> = teacher
+                            .subjects
+                            .iter()
+                            .map(|subject_id| {
+                                self.subjects
+                                    .find_subject(*subject_id)
+                                    .expect("Subject referenced by teachers should be valid")
+                                    .parameters
+                                    .name
+                                    .clone()
+                            })
+                            .collect();
+
+                        subject_list.join(", ")
+                    },
+                });
+            }
+        }
     }
 }
