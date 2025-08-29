@@ -1529,6 +1529,87 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_max_interrogations_per_day_constraints_for_student(
+        &self,
+        max_count: NonZeroU32,
+        student: usize,
+        week: u32,
+        day: time::Weekday,
+    ) -> Option<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                // ignore tutorial sessions for interrogation count
+                continue;
+            }
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+                if slot.start.weekday != day {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+                        expr = expr
+                            + Expr::var(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                                student,
+                            });
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student) {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
+        if expr == Expr::constant(0) {
+            return None;
+        }
+
+        let max_i32 = i32::try_from(max_count.get()).unwrap();
+        Some(expr.leq(&Expr::constant(max_i32)))
+    }
+
+    fn build_max_interrogations_per_day_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        let max_count = match self.data.general.max_interrogations_per_day {
+            Some(r) => r,
+            None => return constraints,
+        };
+
+        for week in 0..self.data.general.week_count.get() {
+            for day in time::Weekday::iter() {
+                for (student, _) in self.data.students.iter().enumerate() {
+                    constraints.extend(
+                        self.build_max_interrogations_per_day_constraints_for_student(
+                            max_count, student, week, day,
+                        ),
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
     fn build_grouping_constraint_for_group_in_slot(
         &self,
         i: usize,
@@ -1724,6 +1805,8 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_periodicity_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_interrogations_per_week_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_max_interrogations_per_day_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_grouping_constraints())
             .expect("Variables should be declared")
