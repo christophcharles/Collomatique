@@ -183,6 +183,27 @@ impl ValidatedData {
             }
         }
 
+        for (i, slot_grouping) in slot_groupings.iter().enumerate() {
+            for slot_ref in &slot_grouping.slots {
+                if slot_ref.subject >= subjects.len() {
+                    return Err(Error::SlotGroupingWithInvalidSubject(i, slot_ref.clone()));
+                }
+                if slot_ref.interrogation >= subjects[slot_ref.subject].interrogations.len() {
+                    return Err(Error::SlotGroupingWithInvalidInterrogation(
+                        i,
+                        slot_ref.clone(),
+                    ));
+                }
+                if slot_ref.slot
+                    >= subjects[slot_ref.subject].interrogations[slot_ref.interrogation]
+                        .slots
+                        .len()
+                {
+                    return Err(Error::SlotGroupingWithInvalidSlot(i, slot_ref.clone()));
+                }
+            }
+        }
+
         Ok(ValidatedData {
             general,
             subjects,
