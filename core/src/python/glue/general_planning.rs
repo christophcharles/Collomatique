@@ -1,7 +1,14 @@
-use crate::rpc::{cmd_msg::MsgPeriodId, ResultMsg};
+use crate::rpc::{
+    cmd_msg::MsgPeriodId,
+    error_msg::{
+        CutPeriodError, DeletePeriodError, GeneralPlanningError, MergeWithPreviousPeriodError,
+        UpdatePeriodWeekCountError, UpdateWeekStatusError,
+    },
+    ErrorMsg, ResultMsg,
+};
 
 use super::*;
-use pyo3::types::PyString;
+use pyo3::{exceptions::PyValueError, types::PyString};
 
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -62,9 +69,137 @@ impl SessionPeriods {
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::AddNewPeriod(week_count),
             ),
         ))
-        .expect("No error for adding period");
+        .expect("Valid result message");
 
-        assert!(result == ResultMsg::Ack);
+        if result != ResultMsg::Ack {
+            panic!("Unexpected result: {:?}", result)
+        }
+    }
+
+    fn update(_self: PyRef<'_, Self>, id: PeriodId, new_week_count: usize) -> PyResult<()> {
+        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdatePeriodWeekCount(
+                    id.into(),
+                    new_week_count,
+                ),
+            ),
+        ))
+        .expect("Valid result message");
+
+        match result {
+            ResultMsg::Ack => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(
+                GeneralPlanningError::UpdatePeriodWeekCount(e),
+            )) => match e {
+                UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn delete(_self: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
+        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeletePeriod(id.into()),
+            ),
+        ))
+        .expect("Valid result message");
+
+        match result {
+            ResultMsg::Ack => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::DeletePeriod(e))) => {
+                match e {
+                    DeletePeriodError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn cut(_self: PyRef<'_, Self>, id: PeriodId, remaining_weeks: usize) -> PyResult<()> {
+        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::CutPeriod(id.into(), remaining_weeks),
+            ),
+        ))
+        .expect("Valid result message");
+
+        match result {
+            ResultMsg::Ack => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::CutPeriod(e))) => {
+                match e {
+                    CutPeriodError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                    CutPeriodError::RemainingWeekCountTooBig(w, t) => Err(PyValueError::new_err(
+                        format!("Remaining weeks too big ({} > {})", w, t),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn merge_with_previous(_self: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
+        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::MergeWithPreviousPeriod(id.into()),
+            ),
+        ))
+        .expect("Valid result message");
+
+        match result {
+            ResultMsg::Ack => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(
+                GeneralPlanningError::MergeWithPreviousPeriod(e),
+            )) => match e {
+                MergeWithPreviousPeriodError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith => {
+                    Err(PyValueError::new_err(format!("Cannot merge first period")))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn update_week_status(
+        _self: PyRef<'_, Self>,
+        id: PeriodId,
+        week: usize,
+        new_status: bool,
+    ) -> PyResult<()> {
+        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateWeekStatus(
+                    id.into(),
+                    week,
+                    new_status,
+                ),
+            ),
+        ))
+        .expect("Valid result message");
+
+        match result {
+            ResultMsg::Ack => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(
+                GeneralPlanningError::UpdateWeekStatus(e),
+            )) => match e {
+                UpdateWeekStatusError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                UpdateWeekStatusError::InvalidWeekNumber(w, t) => Err(PyValueError::new_err(
+                    format!("Week number too big ({} >= {}", w, t),
+                )),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
     }
 }
 
