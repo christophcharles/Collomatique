@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct List {
     /// map between subject ids and corresponding slots
+    #[serde(with = "serde_with::rust::maps_duplicate_key_is_error")]
     pub subject_map: BTreeMap<u64, SubjectSlots>,
 }
 
