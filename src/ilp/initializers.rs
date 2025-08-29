@@ -1,6 +1,6 @@
 use super::{Config, Problem, ProblemRepr, VariableName};
 
-pub trait ConfigInitializer<V: VariableName, P: ProblemRepr<V>> {
+pub trait ConfigInitializer<V: VariableName, P: ProblemRepr<V>>: Send + Sync {
     fn build_init_config<'a, 'b>(&'a self, problem: &'b Problem<V, P>) -> Option<Config<'b, V, P>>;
 }
 

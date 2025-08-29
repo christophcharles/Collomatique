@@ -1,4 +1,4 @@
-pub trait RandomGen: Clone {
+pub trait RandomGen: Clone + Send + Sync {
     fn randbool(&self) -> bool;
     fn random(&self) -> f64;
     fn rand_in_range(&self, range: std::ops::Range<usize>) -> usize;

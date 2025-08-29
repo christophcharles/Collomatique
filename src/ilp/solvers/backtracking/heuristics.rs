@@ -7,7 +7,7 @@ use ordered_float::NotNan;
 
 use crate::ilp::mat_repr::ProblemRepr;
 
-pub trait Heuristic: std::fmt::Debug + Clone {
+pub trait Heuristic: std::fmt::Debug + Clone + Send + Sync {
     fn compute_guess_list<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
         config: &Config<'a, V, P>,
@@ -15,7 +15,7 @@ pub trait Heuristic: std::fmt::Debug + Clone {
     ) -> Vec<V>;
 }
 
-pub trait HeuristicWithScores: std::fmt::Debug + Clone {
+pub trait HeuristicWithScores: std::fmt::Debug + Clone + Send + Sync {
     type Score: Ord + Clone;
 
     fn compute_scores<'a, V: VariableName, P: ProblemRepr<V>>(

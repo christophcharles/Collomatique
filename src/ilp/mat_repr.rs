@@ -4,7 +4,7 @@ pub mod sparse;
 use super::linexpr::{self, VariableName};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug {
+pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug + Send + Sync {
     type Config: ConfigRepr<V, Problem = Self>;
 
     fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> Self;
@@ -13,10 +13,10 @@ pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug {
 }
 
 pub trait ConfigRepr<V: VariableName>:
-    PartialEq + Eq + Ord + PartialOrd + Sized + Clone + std::fmt::Debug
+    PartialEq + Eq + Ord + PartialOrd + Sized + Clone + std::fmt::Debug + Send + Sync
 {
     type Problem: ProblemRepr<V, Config = Self>;
-    type Precomputation: std::fmt::Debug + Clone;
+    type Precomputation: std::fmt::Debug + Clone + Send + Sync;
 
     fn max_distance_to_constraint(&self, problem: &Self::Problem) -> f32;
 
