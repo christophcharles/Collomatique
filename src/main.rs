@@ -515,13 +515,68 @@ async fn week_pattern_command(
     return Err(anyhow!("Week pattern commands not yet implemented"));
 }
 
+struct ReedCompleter {}
+
+impl reedline::Completer for ReedCompleter {
+    fn complete(&mut self, line: &str, pos: usize) -> Vec<reedline::Suggestion> {
+        use clap::CommandFactory;
+        use reedline::Span;
+        use std::ffi::OsString;
+
+        let mut cmd = ShellLine::command();
+        let args = shlex::Shlex::new(line);
+        let mut args = std::iter::once("".to_owned())
+            .chain(args)
+            .map(OsString::from)
+            .collect::<Vec<_>>();
+        if line.ends_with(' ') || line.is_empty() {
+            args.push(OsString::new());
+        }
+        let arg_index = args.len() - 1;
+        let span = Span::new(pos - args[arg_index].len(), pos);
+
+        let Ok(candidates) = clap_complete::dynamic::complete(&mut cmd, args, arg_index, None)
+        else {
+            return vec![];
+        };
+
+        candidates
+            .into_iter()
+            .map(|c| reedline::Suggestion {
+                value: c.0.to_string_lossy().into_owned(),
+                description: c.1.map(|x| x.to_string()),
+                style: None,
+                extra: None,
+                span,
+                append_whitespace: true,
+            })
+            .collect()
+    }
+}
+
 async fn interactive_shell(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
     use nu_ansi_term::{Color, Style};
-    use reedline::{DefaultHinter, Emacs, FileBackedHistory, Reedline};
+    use reedline::{
+        DefaultHinter, Emacs, FileBackedHistory, IdeMenu, KeyCode, KeyModifiers, MenuBuilder,
+        Reedline, ReedlineEvent, ReedlineMenu,
+    };
 
-    let keybindings = reedline::default_emacs_keybindings();
+    let completer = Box::new(ReedCompleter {});
+    let completion_menu = Box::new(IdeMenu::default().with_name("completion_menu"));
+
+    let mut keybindings = reedline::default_emacs_keybindings();
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Tab,
+        ReedlineEvent::UntilFound(vec![
+            ReedlineEvent::Menu("completion_menu".to_string()),
+            ReedlineEvent::MenuNext,
+        ]),
+    );
 
     let mut rl = Reedline::create()
+        .with_completer(completer)
+        .with_menu(ReedlineMenu::EngineCompleter(completion_menu))
         .with_hinter(Box::new(
             DefaultHinter::default().with_style(Style::new().fg(Color::DarkGray).italic()),
         ))
