@@ -5,6 +5,7 @@
 //! The main tool is [IdIssuerHelper] which helps building an Id issuer
 //! for your specific use case.
 
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use thiserror::Error;
@@ -18,6 +19,9 @@ pub enum IdError {
     /// file was opened.
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
+    /// Duplicated ID found
+    #[error("duplicated ID found")]
+    DuplicatedId,
 }
 
 /// Id issuer
@@ -46,12 +50,20 @@ impl RootId {
 impl IdIssuerHelper {
     /// Create a new IdIssuerHelper
     ///
-    /// It takes an optional biggest_id_so_far to resume generation
-    /// from an existing id.
-    pub fn new(biggest_id_so_far: Option<u64>) -> std::result::Result<IdIssuerHelper, IdError> {
-        let next_available_id = AtomicU64::new(match biggest_id_so_far {
+    /// It takes an iterator on existing ID values
+    pub fn new<'a>(
+        existing_ids: impl Iterator<Item = &'a u64>,
+    ) -> std::result::Result<IdIssuerHelper, IdError> {
+        let mut ids_found_so_far = BTreeSet::new();
+        for id in existing_ids {
+            if !ids_found_so_far.insert(*id) {
+                return Err(IdError::DuplicatedId);
+            }
+        }
+
+        let next_available_id = AtomicU64::new(match ids_found_so_far.last() {
             None => 0,
-            Some(val) => {
+            Some(&val) => {
                 if val > (u64::MAX >> 1) {
                     return Err(IdError::EndOfTheUniverse);
                 } else {

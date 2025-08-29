@@ -18,6 +18,10 @@ impl StudentId {
     pub fn inner(&self) -> u64 {
         self.0
     }
+
+    pub(crate) unsafe fn new(value: u64) -> StudentId {
+        StudentId(value)
+    }
 }
 
 #[derive(Debug)]
@@ -30,24 +34,10 @@ impl IdIssuer {
     ///
     /// It takes a list of all used ids so far
     pub fn new<'a>(
-        student_ids: impl Iterator<Item = &'a StudentId>,
+        existing_ids: impl Iterator<Item = &'a u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
-        let mut max_so_far = None;
-        for student_id in student_ids {
-            match max_so_far {
-                Some(v) => {
-                    if student_id.0 > v {
-                        max_so_far = Some(student_id.0);
-                    }
-                }
-                None => {
-                    max_so_far = Some(student_id.0);
-                }
-            }
-        }
-
         Ok(IdIssuer {
-            helper: tools::IdIssuerHelper::new(max_so_far)?,
+            helper: tools::IdIssuerHelper::new(existing_ids)?,
         })
     }
 
