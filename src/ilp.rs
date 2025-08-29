@@ -57,3 +57,28 @@ impl std::fmt::Display for Problem {
         Ok(())
     }
 }
+
+#[derive(Debug,PartialEq,Eq,Default,Clone)]
+pub struct Config {
+    variables: BTreeSet<String>,
+}
+
+impl Config {
+    pub fn new() -> Config {
+        Config {
+            variables: BTreeSet::new(),
+        }
+    }
+
+    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) {
+        if val {
+            self.variables.insert(var.into());
+        } else {
+            self.variables.remove(&var.into());
+        }
+    }
+
+    pub fn get<T: Into<String>>(&self, var: T) -> bool {
+        self.variables.contains(&var.into())
+    }
+}
