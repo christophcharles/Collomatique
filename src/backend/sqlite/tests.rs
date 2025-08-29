@@ -8,8 +8,10 @@ async fn prepare_empty_db(pool: sqlx::SqlitePool) -> Store {
 mod group_lists;
 mod grouping_incompats;
 mod groupings;
+mod incompat_for_student;
 mod incompats;
 mod students;
+mod subject_group_for_student;
 mod subject_groups;
 mod subjects;
 mod teachers;

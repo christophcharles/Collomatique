@@ -30,19 +30,19 @@ where
 }
 
 #[derive(Error, Debug)]
-pub enum Id3Error<T, Id1, Id2, Id3>
+pub enum CrossId2Error<T, Id1, Id2, CrossId>
 where
     T: std::fmt::Debug + std::error::Error,
     Id1: std::fmt::Debug,
     Id2: std::fmt::Debug,
-    Id3: std::fmt::Debug,
+    CrossId: std::fmt::Debug,
 {
     #[error("Id {0:?} is invalid")]
     InvalidId1(Id1),
     #[error("Id {0:?} is invalid")]
     InvalidId2(Id2),
     #[error("Id {0:?} is invalid")]
-    InvalidId3(Id3),
+    InvalidCrossId(CrossId),
     #[error("Backend internal error: {0:?}")]
     InternalError(#[from] T),
 }
@@ -477,7 +477,7 @@ pub trait Storage {
         subject_id: Option<Self::SubjectId>,
     ) -> std::result::Result<
         (),
-        Id3Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId, Self::SubjectId>,
+        CrossId2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId, Self::SubjectId>,
     >;
     async fn subject_group_for_student_get(
         &self,
