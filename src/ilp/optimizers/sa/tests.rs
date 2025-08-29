@@ -63,7 +63,11 @@ fn test_sa() {
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
         // eval func
-        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1000.0 } else { 0.0 }))
+        .eval_fn(crate::debuggable!(|x| if x.get("y12") {
+            1000.0
+        } else {
+            0.0
+        }))
         .build();
 
     let mut sa_optimizer = super::Optimizer::new(&pb);
