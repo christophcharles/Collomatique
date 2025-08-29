@@ -147,6 +147,19 @@ enum WeekPatternCommand {
         #[arg(short, long, default_value_t = false)]
         force: bool,
     },
+    /// Remove an existing week pattern
+    Remove {
+        /// Name for the week pattern to show
+        name: String,
+        /// If multiple week patterns have the same name, select which one to use.
+        /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        week_pattern_number: Option<NonZeroUsize>,
+        /// Force removing week pattern even if some data depends on it (the corresponding data will be lost)
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
     /// Show all week patterns
     PrintAll,
     /// Show a particular week pattern
@@ -586,6 +599,49 @@ fn week_pattern_to_string(week_pattern: &collomatique::backend::WeekPattern) -> 
         .join(",")
 }
 
+async fn get_week_pattern(
+    app_state: &mut AppState<sqlite::Store>,
+    name: &str,
+    week_pattern_number: Option<NonZeroUsize>,
+) -> Result<(
+    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::WeekPatternId,
+    collomatique::backend::WeekPattern,
+)> {
+    let week_patterns = app_state
+        .get_backend_logic()
+        .week_patterns_get_all()
+        .await?;
+
+    let relevant_week_patterns: Vec<_> = week_patterns
+        .into_iter()
+        .filter(|(_id, week_pattern)| week_pattern.name == name)
+        .collect();
+
+    if relevant_week_patterns.is_empty() {
+        return Err(anyhow!(format!(
+            "No week pattern has the name \"{}\".",
+            name
+        )));
+    }
+    if week_pattern_number.is_none() && relevant_week_patterns.len() > 1 {
+        return Err(anyhow!(
+            format!("Several week patterns have the name \"{}\".\nDisambiguate the call by using the '-n' flag.", name)
+        ));
+    }
+
+    let num = match week_pattern_number {
+        Some(n) => n.get() - 1,
+        None => 0,
+    };
+    let output = relevant_week_patterns.get(num).ok_or(anyhow!(
+        "There is less than {} different week patterns with the name \"{}\"",
+        num + 1,
+        name
+    ))?;
+
+    Ok(output.clone())
+}
+
 async fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<sqlite::Store>,
@@ -648,6 +704,55 @@ async fn week_pattern_command(
 
             Ok(None)
         }
+        WeekPatternCommand::Remove {
+            name,
+            week_pattern_number,
+            force,
+        } => {
+            use collomatique::backend::IdError;
+
+            let (id, _week_pattern) =
+                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let dependancies = app_state
+                .get_backend_logic()
+                .week_patterns_check_can_remove(id)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    IdError::InvalidId(id) => panic!(
+                        "Id {:?} should be valid as it was obtained from the backend",
+                        id
+                    ),
+                })?;
+            if !dependancies.is_empty() {
+                if !force {
+                    return Err(anyhow!(
+                        "Cannot remove week pattern as some data depends on it."
+                    ));
+                }
+                return Err(anyhow!(
+                    "force flag not yet implemented for week-patterns remove."
+                ));
+            }
+
+            let handle = app_state.get_week_pattern_handle(id);
+            if let Err(e) = app_state
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Remove(
+                    handle,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::WeekPatternDependanciesRemaining(_dep) => {
+                        panic!("Dependanciesfor week-pattern should have been checked already")
+                    }
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
+        }
         WeekPatternCommand::PrintAll => {
             let week_patterns = app_state
                 .get_backend_logic()
@@ -672,45 +777,9 @@ async fn week_pattern_command(
             name,
             week_pattern_number,
         } => {
-            let week_patterns = app_state
-                .get_backend_logic()
-                .week_patterns_get_all()
-                .await?;
-
-            let relevant_week_patterns: Vec<_> = week_patterns
-                .into_iter()
-                .filter_map(|(_, week_pattern)| {
-                    if week_pattern.name == name {
-                        Some(week_pattern)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            if relevant_week_patterns.is_empty() {
-                return Err(anyhow!(format!(
-                    "No week pattern has the name \"{}\".",
-                    name
-                )));
-            }
-            if week_pattern_number.is_none() && relevant_week_patterns.len() > 1 {
-                return Err(anyhow!(
-                    format!("Several week patterns have the name \"{}\".\nDisambiguate the call by using the '-n' flag.", name)
-                ));
-            }
-
-            let num = match week_pattern_number {
-                Some(n) => n.get() - 1,
-                None => 0,
-            };
-            let week_pattern = relevant_week_patterns.get(num).ok_or(anyhow!(
-                "There is less than {} different week patterns with the name \"{}\"",
-                num + 1,
-                name
-            ))?;
-
-            Ok(Some(week_pattern_to_string(week_pattern)))
+            let (_id, week_pattern) =
+                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            Ok(Some(week_pattern_to_string(&week_pattern)))
         }
     }
 }
