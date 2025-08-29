@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -32,6 +32,9 @@ enum Command {
         /// Numbers of optimizing steps - default is 1000
         #[arg(short, long)]
         steps: Option<usize>,
+        /// Number of concurrent threads to solve the colloscope - default is the number of CPU core
+        #[arg(short = 'n')]
+        thread_count: Option<NonZeroUsize>,
     },
 }
 
@@ -110,15 +113,117 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Stor
     }
 }
 
+use collomatique::gen::colloscope::{IlpTranslator, Variable};
+use collomatique::ilp::{Config, Problem};
+fn solve_initial_guess<'a>(
+    ilp_translator: &IlpTranslator<'a>,
+    problem: &'a Problem<Variable>,
+) -> Config<'a, Variable> {
+    let general_initializer = collomatique::ilp::initializers::Random::with_p(
+        collomatique::ilp::random::DefaultRndGen::new(),
+        0.01,
+    )
+    .unwrap();
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let max_steps = None;
+    let retries = 1;
+    let incremental_initializer =
+        ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
+
+    use collomatique::ilp::initializers::ConfigInitializer;
+    incremental_initializer.build_init_config(&problem)
+}
+
+use collomatique::ilp::FeasableConfig;
+use std::rc::Rc;
+fn solve_initial_colloscope<'a>(
+    init_config: Config<'a, Variable>,
+) -> (
+    Option<(Rc<FeasableConfig<'a, Variable>>, f64)>,
+    impl Iterator<Item = (Rc<FeasableConfig<'a, Variable>>, f64)>,
+) {
+    let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let mutation_policy =
+        collomatique::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
+    let mut iterator = sa_optimizer.iterate(solver, random_gen, mutation_policy);
+    let first_opt = iterator.next();
+
+    (first_opt, iterator)
+}
+
+use indicatif::{ProgressBar, ProgressStyle};
+fn solve_thread<'a>(
+    pb: ProgressBar,
+    style: ProgressStyle,
+    ilp_translator: &IlpTranslator<'a>,
+    problem: &'a Problem<Variable>,
+    step_count: usize,
+) -> Option<f64> {
+    use std::time::Duration;
+
+    pb.set_style(style.clone());
+    pb.set_message("Building initial guess... (this can take a few minutes)");
+    pb.enable_steady_tick(Duration::from_millis(100));
+
+    let init_config = solve_initial_guess(ilp_translator, problem);
+
+    pb.set_message("Building initial colloscope... (this can take a few minutes)");
+    let (first_config_opt, iterator) = solve_initial_colloscope(init_config);
+
+    let (_first_sol, first_cost) = match first_config_opt {
+        Some(value) => value,
+        None => return None,
+    };
+
+    if step_count == 0 {
+        pb.finish_with_message(format!("Done. Found colloscope of cost {}", first_cost));
+        return Some(first_cost);
+    }
+
+    let width = step_count.to_string().len();
+    let template = format!(
+        "[{{elapsed_precise:.dim}}] {{spinner:.blue}} {{prefix}}Optimizing colloscope... [{{bar:25.green}}] {{pos:>{width}}}/{{len}} - {{wide_msg:!}}"
+    );
+    let style = ProgressStyle::with_template(&template)
+        .unwrap()
+        .progress_chars("=> ");
+
+    pb.set_position(0);
+    pb.set_length(step_count.try_into().unwrap());
+    pb.set_style(style);
+    pb.set_message(format!(
+        "Cost (current/best): {}/{}",
+        first_cost, first_cost
+    ));
+    let mut min_cost = first_cost;
+    for (_sol, cost) in iterator.take(step_count) {
+        min_cost = if min_cost > cost { cost } else { min_cost };
+        pb.set_message(format!("Cost (current/best): {}/{}", cost, min_cost));
+        pb.inc(1);
+    }
+    pb.finish_with_message(format!("Done. Best colloscope cost is {}.", min_cost));
+
+    Some(min_cost)
+}
+
 async fn solve_command(
     steps: Option<usize>,
+    thread_count: Option<NonZeroUsize>,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<()> {
-    use indicatif::{ProgressBar, ProgressStyle};
+    use indicatif::MultiProgress;
     use std::time::Duration;
 
     let style =
-        ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} {msg}").unwrap();
+        ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} {prefix}{msg}")
+            .unwrap();
+
+    let thread_count = match thread_count {
+        Some(value) => value.get(),
+        None => num_cpus::get(),
+    };
 
     let logic = app_state.get_backend_logic();
     let gen_colloscope_translator = logic.gen_colloscope_translator();
@@ -149,58 +254,52 @@ async fn solve_command(
         .build();
     pb.finish();
 
-    let pb = ProgressBar::new_spinner().with_style(style.clone());
-    pb.set_message("Building initial guess... (this can take a few minutes)");
-    pb.enable_steady_tick(Duration::from_millis(20));
-    let general_initializer = collomatique::ilp::initializers::Random::with_p(
-        collomatique::ilp::random::DefaultRndGen::new(),
-        0.01,
-    )
-    .unwrap();
-    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-    let max_steps = None;
-    let retries = 1;
-    let incremental_initializer =
-        ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
-    let random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let multi_pb = MultiProgress::new();
+    let mut threads_data = vec![];
+    for i in 0..thread_count {
+        let pb = multi_pb.add(ProgressBar::new_spinner());
+        let width = thread_count.to_string().len();
+        if thread_count > 1 {
+            pb.set_prefix(format!("[{:>width$}/{}] ", i + 1, thread_count));
+        }
 
-    use collomatique::ilp::initializers::ConfigInitializer;
-    let init_config = incremental_initializer.build_init_config(&problem);
-    pb.finish();
+        threads_data.push((pb, style.clone(), ilp_translator.clone()));
+    }
 
-    let pb = ProgressBar::new_spinner().with_style(style.clone());
-    pb.set_message("Building initial colloscope... (this can take a few minutes)");
-    pb.enable_steady_tick(Duration::from_millis(20));
-    let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
-    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-    let mutation_policy =
-        collomatique::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
-    let mut iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
-    let first_opt = iterator.next();
-    pb.finish();
-    let (_first_sol, first_cost) = match first_opt {
+    // With multithreading, the gag for cbc might have a race condition
+    // We just set it up here for the whole computation
+    let stdout_gag = gag::Gag::stdout().unwrap();
+
+    let step_count = steps.unwrap_or(DEFAULT_OPTIMIZING_STEP_COUNT);
+    let best_cost_opt = {
+        use rayon::prelude::*;
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(thread_count)
+            .build()?;
+
+        thread_pool.install(|| {
+            threads_data
+                .into_par_iter()
+                .panic_fuse()
+                .map(|(pb, style, ilp_translator)| {
+                    let best_cost = solve_thread(pb, style, &ilp_translator, &problem, step_count)?;
+
+                    use ordered_float::OrderedFloat;
+                    Some(OrderedFloat(best_cost))
+                })
+                .while_some()
+                .min()
+        })
+    };
+
+    drop(stdout_gag);
+
+    let best_cost = match best_cost_opt {
         Some(value) => value,
         None => return Err(anyhow!("No solution found, colloscope is unfeasable!\nThis means the constraints are incompatible and no colloscope can be built that follows all of them. Relax some constraints and try again.")),
     };
 
-    let step_count = steps.unwrap_or(DEFAULT_OPTIMIZING_STEP_COUNT);
-    if step_count != 0 {
-        let style = ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} Optimizing colloscope... [{bar:25.green}] {pos}/{len} - {wide_msg:!}").unwrap()
-            .progress_chars("=> ");
-        let pb = ProgressBar::new(step_count.try_into().unwrap()).with_style(style);
-        pb.enable_steady_tick(Duration::from_millis(20));
-        pb.set_message(format!(
-            "Cost (current/best): {}/{}",
-            first_cost, first_cost
-        ));
-        let mut min_cost = first_cost;
-        for (_sol, cost) in iterator.take(step_count) {
-            min_cost = if min_cost > cost { cost } else { min_cost };
-            pb.set_message(format!("Cost (current/best): {}/{}", cost, min_cost));
-            pb.inc(1);
-        }
-        pb.finish();
-    }
+    print!("Best cost found is: {}", best_cost.0);
 
     Ok(())
 }
@@ -379,7 +478,10 @@ async fn main() -> Result<()> {
     match args.command {
         Command::General { command } => general_command(command, &mut app_state).await?,
         Command::WeekPatterns { command } => week_pattern_command(command, &mut app_state).await?,
-        Command::Solve { steps } => solve_command(steps, &mut app_state).await?,
+        Command::Solve {
+            steps,
+            thread_count,
+        } => solve_command(steps, thread_count, &mut app_state).await?,
     }
     Ok(())
 }
