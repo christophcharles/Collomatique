@@ -14,7 +14,7 @@
 //! The problem itself is described by [SimpleScheduleBase].
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Variable};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::*;
 
@@ -128,8 +128,80 @@ impl std::fmt::Display for SimpleScheduleConstraint {
     }
 }
 
+/// Description of a solution for the simple scheduling problem
+///
+/// Here, we must be attentive. A solution is in fact a *partial*
+/// solution. This means that all variable values may not be set.
+///
+/// Also, a partial solution is not necessaraly a *feasable* solution.
+/// This means that some constraints may not be satisfied. For instance,
+/// we can't assume that each group has a single course a given week.
+///
+/// Mathematically, have a representation that is one to one with functions from
+/// the variable set and taking their values in Option<bool>.
+///
+/// But we still want a representation that is closer to what is needed
+/// in the rest of the program. Here, that might mean that we want for each
+/// group and for each week the number of the course they should be attending.
+///
+/// If all the constraints were satisfied, we could represent this with a double-indexed
+/// array where each row represents a group and each column a week. Each cell
+/// would either be empty (no course this week for the group) or contain the
+/// number of the course. This is a typical representation but assumes that all constraints
+/// are satisfied.
+///
+/// We will do a slight variation: we will represent the data as an array. However each cell
+/// will rather contain two  BTreeSet. The first one is assigned courses. These are the courses
+/// the group should follow this week (eventhough more than one is impossible in practice,
+/// this is a possible if the constraints are not all satisfied). The second one is
+/// non-assigned courses. These are courses the group might or might not attend, the *partial*
+/// solution does not specify it.
+///
+/// A solution is *complete* if and only if all the second BTreeSet are empty.
+///
+/// Internally, this is represented by two Vec<BTreeSet<u32>>.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SimpleScheduleSolution {}
+pub struct SimpleSchedulePartialSolution {
+    week_count: usize,
+    assigned_courses: Vec<BTreeSet<u32>>,
+    unassigned_courses: Vec<BTreeSet<u32>>,
+}
+
+impl SimpleSchedulePartialSolution {
+    fn compute_index(&self, group: u32, week: u32) -> Option<usize> {
+        if week >= self.week_count {
+            return None;
+        }
+
+        let group_usize = group as usize;
+        let week_usize = week as usize;
+
+        let index = group_usize * self.week_count + week_usize;
+
+        if index >= self.assigned_courses.len() {
+            return None;
+        }
+
+        Some(index)
+    }
+
+    /// Returns the list of assigned courses for a given group on a given week
+    pub fn get_assigned(&self, group: u32, week: u32) -> Option<&BTreeSet<u32>> {
+        let index = self.compute_index(group, week)?;
+        Some(&self.assigned_courses[index])
+    }
+
+    /// Returns the list of unassigned courses for a given group on a given week
+    pub fn get_unassigned(&self, group: u32, week: u32) -> Option<&BTreeSet<u32>> {
+        let index = self.compute_index(group, week)?;
+        Some(&self.unassigned_courses[index])
+    }
+
+    /// Is the solution complete?
+    pub fn is_complete(&self) -> bool {
+        self.unassigned_courses.iter().all(|x| x.is_empty())
+    }
+}
 
 impl SimpleScheduleBase {
     fn generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(
@@ -252,7 +324,7 @@ impl BaseConstraints for SimpleScheduleBase {
     type StructureVariable = ();
     type GeneralConstraintDesc = SimpleScheduleConstraint;
     type StructureConstraintDesc = ();
-    type PartialSolution = SimpleScheduleSolution;
+    type PartialSolution = SimpleSchedulePartialSolution;
 
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable> {
         let mut output = BTreeMap::new();
