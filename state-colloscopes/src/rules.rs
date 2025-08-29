@@ -37,6 +37,17 @@ pub enum LogicRule {
     Variable(SlotId),
 }
 
+impl LogicRule {
+    pub fn references_slot(&self, slot_id: SlotId) -> bool {
+        match self {
+            LogicRule::And(l1, l2) => l1.references_slot(slot_id) || l2.references_slot(slot_id),
+            LogicRule::Or(l1, l2) => l1.references_slot(slot_id) || l2.references_slot(slot_id),
+            LogicRule::Not(l) => l.references_slot(slot_id),
+            LogicRule::Variable(id) => *id == slot_id,
+        }
+    }
+}
+
 impl Rule {
     /// Builds a single rule from external data
     ///
