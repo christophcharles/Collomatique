@@ -141,6 +141,7 @@ pub struct GroupsDesc {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BalancingConstraints {
+    OptimizeOnly,
     OverallOnly,
     StrictWithCuts,
     StrictWithCutsAndOverall,
@@ -282,12 +283,12 @@ impl BalancingRequirements {
     ) -> Vec<BalancingSlotSelection> {
         Self::build_data::<TeacherAndTimeslotBalancing>(slots)
     }
-}
 
-fn slot_selection_from_subject(subject: &Subject) -> Vec<BalancingSlotSelection> {
-    match &subject.balancing_requirements {
-        Some(br) => br.slot_selections.clone(),
-        None => BalancingRequirements::balance_teachers_and_timeslots_from_slots(&subject.slots),
+    pub fn default_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
+        BalancingRequirements {
+            constraints: BalancingConstraints::OptimizeOnly,
+            slot_selections: Self::balance_teachers_and_timeslots_from_slots(slots),
+        }
     }
 }
 
@@ -352,7 +353,7 @@ pub struct Subject {
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
-    pub balancing_requirements: Option<BalancingRequirements>,
+    pub balancing_requirements: BalancingRequirements,
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
@@ -360,15 +361,21 @@ pub struct Subject {
 
 impl Default for Subject {
     fn default() -> Self {
+        let slots = vec![];
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
-            balancing_requirements: None,
+            balancing_requirements: BalancingRequirements {
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                    &slots,
+                ),
+            },
             duration: NonZeroU32::new(60).unwrap(),
-            slots: vec![],
+            slots,
             groups: GroupsDesc::default(),
         }
     }
@@ -469,33 +476,33 @@ impl ValidatedData {
         }
 
         for (i, subject) in subjects.iter().enumerate() {
-            if let Some(balancing_requirements) = &subject.balancing_requirements {
-                for (j, slot_selection) in balancing_requirements.slot_selections.iter().enumerate()
-                {
-                    if slot_selection.slot_groups.is_empty() {
-                        return Err(Error::SubjectWithEmptySlotSelectionInBalancing(i, j));
+            for (j, slot_selection) in subject
+                .balancing_requirements
+                .slot_selections
+                .iter()
+                .enumerate()
+            {
+                if slot_selection.slot_groups.is_empty() {
+                    return Err(Error::SubjectWithEmptySlotSelectionInBalancing(i, j));
+                }
+
+                let mut used_slots = BTreeSet::new();
+
+                for (k, slot_group) in slot_selection.slot_groups.iter().enumerate() {
+                    if slot_group.slots.is_empty() {
+                        return Err(Error::SubjectWithEmptySlotGroupInBalancing(i, j, k));
                     }
 
-                    let mut used_slots = BTreeSet::new();
-
-                    for (k, slot_group) in slot_selection.slot_groups.iter().enumerate() {
-                        if slot_group.slots.is_empty() {
-                            return Err(Error::SubjectWithEmptySlotGroupInBalancing(i, j, k));
+                    for &slot in &slot_group.slots {
+                        if used_slots.contains(&slot) {
+                            return Err(
+                                Error::SubjectWithOverlappingSlotsInBalancingSlotSelection(i, j),
+                            );
                         }
-
-                        for &slot in &slot_group.slots {
-                            if used_slots.contains(&slot) {
-                                return Err(
-                                    Error::SubjectWithOverlappingSlotsInBalancingSlotSelection(
-                                        i, j,
-                                    ),
-                                );
-                            }
-                            if slot >= subject.slots.len() {
-                                return Err(Error::SubjectWithInvalidSlotInBalancing(i, slot));
-                            }
-                            used_slots.insert(slot);
+                        if slot >= subject.slots.len() {
+                            return Err(Error::SubjectWithInvalidSlotInBalancing(i, slot));
                         }
+                        used_slots.insert(slot);
                     }
                 }
             }
@@ -882,9 +889,9 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .flat_map(|(i, subject)| {
-                let slot_selections = slot_selection_from_subject(subject);
-
-                slot_selections
+                subject
+                    .balancing_requirements
+                    .slot_selections
                     .iter()
                     .enumerate()
                     .flat_map(move |(j, _ws)| {
@@ -2325,45 +2332,44 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            if let Some(br) = &subject.balancing_requirements {
-                let slot_selections = &br.slot_selections;
-                match &br.constraints {
-                    BalancingConstraints::OverallOnly => {
-                        constraints.extend(self.build_balancing_constraints_for_subject_overall(
-                            i,
-                            subject,
-                            slot_selections,
-                        ))
-                    }
-                    BalancingConstraints::Strict => {
-                        constraints.extend(self.build_balancing_constraints_for_subject_strict(
-                            i,
-                            subject,
-                            slot_selections,
-                            false,
-                        ))
-                    }
-                    BalancingConstraints::StrictWithCuts => {
-                        constraints.extend(self.build_balancing_constraints_for_subject_strict(
-                            i,
-                            subject,
-                            slot_selections,
-                            true,
-                        ))
-                    }
-                    BalancingConstraints::StrictWithCutsAndOverall => {
-                        constraints.extend(self.build_balancing_constraints_for_subject_strict(
-                            i,
-                            subject,
-                            slot_selections,
-                            true,
-                        ));
-                        constraints.extend(self.build_balancing_constraints_for_subject_overall(
-                            i,
-                            subject,
-                            slot_selections,
-                        ));
-                    }
+            let slot_selections = &subject.balancing_requirements.slot_selections;
+            match &subject.balancing_requirements.constraints {
+                BalancingConstraints::OptimizeOnly => {} // Ignore, no strict constraint in this case
+                BalancingConstraints::OverallOnly => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ))
+                }
+                BalancingConstraints::Strict => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        false,
+                    ))
+                }
+                BalancingConstraints::StrictWithCuts => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                    ))
+                }
+                BalancingConstraints::StrictWithCutsAndOverall => {
+                    constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                        i,
+                        subject,
+                        slot_selections,
+                        true,
+                    ));
+                    constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                        i,
+                        subject,
+                        slot_selections,
+                    ));
                 }
             }
         }
@@ -2375,12 +2381,10 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let slot_selections = slot_selection_from_subject(subject);
-
             constraints.extend(self.build_balancing_constraints_for_subject_strict(
                 i,
                 subject,
-                &slot_selections,
+                &subject.balancing_requirements.slot_selections,
                 false,
             ));
         }
@@ -2673,7 +2677,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let slot_selections = slot_selection_from_subject(subject);
+            let slot_selections = &subject.balancing_requirements.slot_selections;
 
             for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                 let choice_constraint = self
@@ -2872,7 +2876,7 @@ impl<'a> IlpTranslator<'a> {
             .subjects
             .iter()
             .map(|subject| {
-                let slot_selections = slot_selection_from_subject(subject);
+                let slot_selections = &subject.balancing_requirements.slot_selections;
 
                 slot_selections
                     .iter()
