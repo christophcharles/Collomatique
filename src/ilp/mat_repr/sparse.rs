@@ -126,17 +126,15 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
         }
     }
 
-    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config {
+    fn config_from(&self, vars: &BTreeMap<usize, i32>) -> Self::Config {
         let mut indices = vec![];
         let mut data = vec![];
 
         let p = self.leq_mat.shape().1;
 
-        for i in 0..p {
-            if vars.contains(&i) {
-                indices.push(i);
-                data.push(1);
-            }
+        for (&i, &val) in vars {
+            indices.push(i);
+            data.push(val);
         }
 
         let values = CsVec::new(p, indices, data);

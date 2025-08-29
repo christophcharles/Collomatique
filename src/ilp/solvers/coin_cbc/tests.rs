@@ -44,9 +44,9 @@ fn coin_cbc() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
+        .add_bool_variables(["y11", "y12", "y21", "y22"])
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
@@ -139,9 +139,9 @@ fn coin_cbc_2() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
+        .add_bool_variables(["y11", "y12", "y21", "y22"])
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
@@ -201,7 +201,7 @@ fn coin_cbc_impossible() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_constraints([
             (&x11 + &x12).eq(&one),

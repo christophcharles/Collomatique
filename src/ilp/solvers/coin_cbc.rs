@@ -85,11 +85,16 @@ impl Solver {
         let cols: BTreeMap<_, _> = problem
             .get_variables()
             .iter()
-            .map(|v| (v.clone(), model.add_binary()))
+            .map(|(v, t)| {
+                use crate::ilp::VariableType;
+                match t {
+                    VariableType::Bool => (v.clone(), model.add_binary()),
+                }
+            })
             .collect();
 
         for (var, col) in &cols {
-            let value = if init_config.get(var).expect("Variable should be valid") {
+            let value = if init_config.get_bool(var).expect("Variable should be valid") {
                 1.
             } else {
                 0.
@@ -130,7 +135,7 @@ impl Solver {
         use coin_cbc::Sense;
         cbc_model.model.set_obj_sense(Sense::Minimize);
         for (var, col) in &cbc_model.cols {
-            let value = if init_config.get(var).expect("Variable should be valid") {
+            let value = if init_config.get_bool(var).expect("Variable should be valid") {
                 1.
             } else {
                 0.
@@ -148,8 +153,9 @@ impl Solver {
         sol: &'b coin_cbc::Solution,
         cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
     ) -> Option<FeasableConfig<'a, V, P>> {
+        use crate::ilp::VariableType;
         use coin_cbc::raw::{SecondaryStatus, Status};
-        use std::collections::BTreeSet;
+        use std::collections::BTreeMap;
 
         if sol.raw().status() != Status::Finished {
             return None;
@@ -158,19 +164,21 @@ impl Solver {
             return None;
         }
 
-        let vars: BTreeSet<_> = cols
+        let var_types = problem.get_variables();
+        let bool_vars: BTreeMap<_, _> = cols
             .iter()
             .filter_map(|(v, col)| {
-                if sol.col(*col) == 1. {
-                    Some(v.clone())
-                } else {
-                    None
+                let var_type = var_types.get(v).expect("Variable should be declared");
+                if *var_type != VariableType::Bool {
+                    return None;
                 }
+
+                Some((v.clone(), sol.col(*col) == 1.))
             })
             .collect();
 
         let config = problem
-            .config_from(&vars)
+            .config_from(bool_vars)
             .expect("Variables should be valid");
         Some(
             config

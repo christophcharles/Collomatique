@@ -99,15 +99,13 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
         }
     }
 
-    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config {
+    fn config_from(&self, vars: &BTreeMap<usize, i32>) -> Self::Config {
         let p = self.leq_mat.shape()[1];
 
         let mut values = Array1::zeros(p);
 
-        for i in 0..p {
-            if vars.contains(&i) {
-                values[i] = 1;
-            }
+        for (&i, &val) in vars {
+            values[i] = val;
         }
 
         NdConfig {

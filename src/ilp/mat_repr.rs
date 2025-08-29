@@ -9,7 +9,7 @@ pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug + Send + Sync {
 
     fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> Self;
 
-    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config;
+    fn config_from(&self, vars: &BTreeMap<usize, i32>) -> Self::Config;
 }
 
 pub trait ConfigRepr<V: VariableName>:

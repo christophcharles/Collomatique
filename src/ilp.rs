@@ -19,6 +19,8 @@ use mat_repr::{ConfigRepr, ProblemRepr};
 pub enum Error<V: VariableName> {
     #[error("Variable {0} is not valid for this problem")]
     InvalidVariable(V),
+    #[error("Variable {0} does not have the right type")]
+    InvalidVariableType(V),
 }
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
@@ -31,13 +33,18 @@ impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum VariableType {
+    Bool,
+}
+
 pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     eval_fn: EvalFn<V, P>,
-    variables: BTreeSet<V>,
+    variables: BTreeMap<V, VariableType>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -61,7 +68,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Default for ProblemBuilder<V, P> {
         ProblemBuilder {
             constraints: BTreeSet::new(),
             eval_fn: EvalFn::default(),
-            variables: BTreeSet::new(),
+            variables: BTreeMap::new(),
         }
     }
 }
@@ -76,11 +83,9 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         constraint: linexpr::Constraint<V>,
     ) -> ConstraintResult<Self, V> {
         let constraint_vars = constraint.variables();
-        if !self.variables.is_superset(&constraint_vars) {
-            for var in constraint_vars {
-                if !self.variables.contains(&var) {
-                    return Err(ConstraintError::UndeclaredVariable(var));
-                }
+        for var in constraint_vars {
+            if !self.variables.contains_key(&var) {
+                return Err(ConstraintError::UndeclaredVariable(var));
             }
         }
 
@@ -109,41 +114,60 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         T: Ord + ?Sized,
         &'a T: Into<V>,
     {
-        if self.variables.contains(var) {
+        if self.variables.contains_key(var) {
             return Err(VarError::VariableAlreadyDeclared(var.into()));
         }
         Ok(())
     }
 
-    pub fn add_variable<T: Into<V>>(mut self, var: T) -> VarResult<Self, V> {
-        let var = var.into();
-        self.check_var(&var)?;
-        self.variables.insert(var);
-        Ok(self)
+    pub fn add_bool_variable<T: Into<V>>(self, var: T) -> VarResult<Self, V> {
+        self.add_variable(var, VariableType::Bool)
     }
 
-    pub fn add_variables<U: Into<V>, T: IntoIterator<Item = U>>(
+    pub fn add_bool_variables<U: Into<V>, T: IntoIterator<Item = U>>(
         mut self,
         vars: T,
     ) -> VarResult<Self, V> {
         for var in vars {
-            self = self.add_variable(var)?;
+            self = self.add_bool_variable(var)?;
         }
         Ok(self)
     }
 
-    pub fn get_variables(&self) -> &BTreeSet<V> {
+    pub fn add_variable<T: Into<V>>(
+        mut self,
+        var: T,
+        var_type: VariableType,
+    ) -> VarResult<Self, V> {
+        let var = var.into();
+        self.check_var(&var)?;
+        self.variables.insert(var, var_type);
+        Ok(self)
+    }
+
+    pub fn add_variables<U: Into<(V, VariableType)>, T: IntoIterator<Item = U>>(
+        mut self,
+        vars: T,
+    ) -> VarResult<Self, V> {
+        for var in vars {
+            let (var_name, var_type) = var.into();
+            self = self.add_variable(var_name, var_type)?;
+        }
+        Ok(self)
+    }
+
+    pub fn get_variables(&self) -> &BTreeMap<V, VariableType> {
         &self.variables
     }
 
     pub fn build(self) -> Problem<V, P> {
-        let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
+        let variables_vec: Vec<_> = self.variables.iter().map(|(v, _t)| v.clone()).collect();
         let mut variables_lookup = BTreeMap::new();
         for (i, var) in variables_vec.iter().enumerate() {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let nd_problem = P::new(&variables_vec, &self.constraints);
+        let pb_repr = P::new(&variables_vec, &self.constraints);
 
         Problem {
             variables: self.variables,
@@ -151,7 +175,7 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             variables_lookup,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
-            pb_repr: nd_problem,
+            pb_repr,
         }
     }
 
@@ -165,7 +189,11 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             .into_iter()
             .filter(|c: &Constraint<V>| c.variables().iter().all(&mut predicate))
             .collect();
-        let variables = self.variables.into_iter().filter(&mut predicate).collect();
+        let variables = self
+            .variables
+            .into_iter()
+            .filter(|(v, _t)| predicate(v))
+            .collect();
 
         ProblemBuilder {
             constraints,
@@ -179,7 +207,7 @@ use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
-    variables: BTreeSet<V>,
+    variables: BTreeMap<V, VariableType>,
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
@@ -190,8 +218,8 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
 impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "variables : [")?;
-        for v in &self.variables {
-            write!(f, " {}", v)?;
+        for (v, t) in &self.variables {
+            write!(f, " {}: {:?}, ", v, t)?;
         }
         write!(f, " ]\n")?;
 
@@ -216,28 +244,38 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     }
 
     pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
-        self.config_from(&[])
+        let bool_vars = self.variables.iter().filter_map(|(var, var_type)| {
+            if *var_type != VariableType::Bool {
+                return None;
+            }
+
+            Some((var.clone(), false))
+        });
+        self.config_from(bool_vars)
             .expect("Valid variables as no variables are used")
     }
 
-    pub fn config_from<'a, 'b, U, T: IntoIterator<Item = &'b U>>(
+    pub fn config_from<'a, T: IntoIterator<Item = (V, bool)>>(
         &'a self,
-        vars: T,
-    ) -> Result<Config<'a, V, P>, V>
-    where
-        V: std::borrow::Borrow<U>,
-        U: Ord + ?Sized + 'b,
-        &'b U: Into<V>,
-    {
-        let mut vars_repr = BTreeSet::new();
+        bool_vars: T,
+    ) -> Result<Config<'a, V, P>, V> {
+        let mut vars_repr = BTreeMap::new();
 
-        for v in vars {
-            match self.variables_lookup.get(v) {
-                Some(num) => {
-                    vars_repr.insert(*num);
-                }
-                None => return Err(Error::InvalidVariable(v.into())),
+        for (var, value) in bool_vars {
+            let var_type = match self.variables.get(&var) {
+                Some(t) => t.clone(),
+                None => return Err(Error::InvalidVariable(var.clone())),
+            };
+            if var_type != VariableType::Bool {
+                return Err(Error::InvalidVariableType(var.clone()));
             }
+
+            let num = self
+                .variables_lookup
+                .get(&var)
+                .copied()
+                .expect("Variable should exist as it is in variables map");
+            vars_repr.insert(num, if value { 1 } else { 0 });
         }
 
         Ok(Config {
@@ -251,7 +289,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         &self.constraints
     }
 
-    pub fn get_variables(&self) -> &BTreeSet<V> {
+    pub fn get_variables(&self) -> &BTreeMap<V, VariableType> {
         &self.variables
     }
 }
@@ -293,40 +331,68 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         self.problem
     }
 
-    pub fn get<'b, T>(&self, var: &'b T) -> Result<bool, V>
+    pub fn get_bool<'b, T>(&self, var: &'b T) -> Result<bool, V>
     where
         V: std::borrow::Borrow<T>,
         T: Ord + ?Sized,
         &'b T: Into<V>,
     {
-        let i = match self.problem.variables_lookup.get(var) {
-            Some(i) => i,
+        let var_type = match self.problem.variables.get(var) {
+            Some(t) => t.clone(),
             None => return Err(Error::InvalidVariable(var.into())),
         };
+
+        if var_type != VariableType::Bool {
+            return Err(Error::InvalidVariableType(var.into()));
+        }
+
+        let i = self
+            .problem
+            .variables_lookup
+            .get(var)
+            .expect("Variable should exist since it is in variables map");
         Ok(unsafe { self.cfg_repr.get_unchecked(*i) == 1 })
     }
 
-    pub fn get_vars(&self) -> BTreeSet<V> {
-        let mut output = BTreeSet::new();
+    pub fn get_bool_vars(&self) -> BTreeMap<V, bool> {
+        let mut output = BTreeMap::new();
         for (var, i) in &self.problem.variables_lookup {
-            let is_true = unsafe { self.cfg_repr.get_unchecked(*i) == 1 };
-            if is_true {
-                output.insert(var.clone());
+            let var_type = self
+                .problem
+                .variables
+                .get(var)
+                .expect("Variable should exist since it is in variables_lookup")
+                .clone();
+            if var_type != VariableType::Bool {
+                continue;
             }
+
+            let is_true = unsafe { self.cfg_repr.get_unchecked(*i) == 1 };
+            output.insert(var.clone(), is_true);
         }
         output
     }
 
-    pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
+    pub fn set_bool<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
     where
         V: std::borrow::Borrow<T>,
         T: Ord + ?Sized,
         &'b T: Into<V>,
     {
-        let i = match self.problem.variables_lookup.get(var) {
-            Some(i) => i,
+        let var_type = match self.problem.variables.get(var) {
+            Some(t) => t.clone(),
             None => return Err(Error::InvalidVariable(var.into())),
         };
+
+        if var_type != VariableType::Bool {
+            return Err(Error::InvalidVariableType(var.into()));
+        }
+
+        let i = self
+            .problem
+            .variables_lookup
+            .get(var)
+            .expect("Variable should exist since it is in variables map");
         unsafe {
             self.cfg_repr.set_unchecked(*i, if val { 1 } else { 0 });
         }
