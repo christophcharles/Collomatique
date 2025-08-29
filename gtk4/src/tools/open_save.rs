@@ -9,33 +9,31 @@ pub enum DefaultSaveFile {
 }
 
 pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
-    let mut files = SelectedFiles::save_file()
-        .title("Enregistrer sous...")
-        .accept_label("Enregistrer")
-        .filter(FileFilter::new("Fichiers collomatique (*.collomatique)").glob("*.collomatique"))
-        .filter(FileFilter::new("Tous les fichiers").glob("*"))
-        .modal(true);
+    let mut dialog = rfd::AsyncFileDialog::new()
+        .set_title("Enregistrer sous...")
+        .set_can_create_directories(true)
+        .add_filter("Fichiers collomatique", &["collomatique"])
+        .add_filter("Tous les fichiers", &["*"]);
 
     match default_name {
         DefaultSaveFile::None => {}
-        DefaultSaveFile::ExistingFile(path) => {
-            files = files.current_file(path).ok()?;
+        DefaultSaveFile::ExistingFile(mut path) => {
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            path.pop();
+            dialog = dialog.set_file_name(filename).set_directory(path);
         }
         DefaultSaveFile::SuggestedName(name) => {
-            files = files.current_name(name.as_str());
+            dialog = dialog.set_file_name(name);
         }
     }
 
-    files
-        .send()
-        .await
-        .ok()?
-        .response()
-        .ok()?
-        .uris()
-        .first()?
-        .to_file_path()
-        .ok()
+    let file = dialog.save_file().await;
+
+    file.map(|handle| handle.path().to_owned())
 }
 
 pub async fn open_dialog() -> Option<PathBuf> {
