@@ -152,6 +152,20 @@ impl EditorPanel {
             _ => None,
         }
     }
+
+    fn generate_undo_tooltip(&self) -> String {
+        match self.data.get_undo_name() {
+            Some(x) => format!("Annuler \"{}\"", x),
+            None => "Annuler".into(),
+        }
+    }
+
+    fn generate_redo_tooltip(&self) -> String {
+        match self.data.get_redo_name() {
+            Some(x) => format!("Rétablir \"{}\"", x),
+            None => "Rétablir".into(),
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -229,14 +243,16 @@ impl Component for EditorPanel {
                                 set_icon_name: "edit-undo",
                                 #[watch]
                                 set_sensitive: model.can_undo(),
-                                set_tooltip_text: Some("Annuler"),
+                                #[watch]
+                                set_tooltip_text: Some(&model.generate_undo_tooltip()),
                                 connect_clicked => EditorInput::UndoClicked,
                             },
                             gtk::Button {
                                 set_icon_name: "edit-redo",
                                 #[watch]
                                 set_sensitive: model.can_redo(),
-                                set_tooltip_text: Some("Rétablir"),
+                                #[watch]
+                                set_tooltip_text: Some(&model.generate_redo_tooltip()),
                                 connect_clicked => EditorInput::RedoClicked,
                             },
                         },

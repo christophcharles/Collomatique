@@ -115,6 +115,16 @@ pub trait Manager: private::ManagerInternal {
         Ok(())
     }
 
+    /// Returns the name of the last operation if it exists
+    fn get_undo_name(&self) -> Option<&str> {
+        self.get_modification_history().get_undo_name()
+    }
+
+    /// Returns the name of the next operation if it exists
+    fn get_redo_name(&self) -> Option<&str> {
+        self.get_modification_history().get_redo_name()
+    }
+
     /// Checks if it is possible to cancel an operation
     ///
     /// Returns `true` if there is a cancellable operation in history.
