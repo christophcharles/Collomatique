@@ -265,17 +265,11 @@ pub enum VariableType {
     /// It is still represented by an f64, but the possible
     /// values will be restricted to integers (positive or negative).
     Integer,
-    /// Binary variable.
-    ///
-    /// It is still represented by an f64, but the possible
-    /// values will be restricted to 0 and 1.
-    Binary,
 }
 
 impl std::fmt::Display for VariableType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VariableType::Binary => write!(f, "binary"),
             VariableType::Integer => write!(f, "int"),
             VariableType::Continuous => write!(f, "real"),
         }
@@ -350,20 +344,22 @@ impl Variable {
 
     /// Builds the description of a binary variable.
     ///
-    /// A binary variable is only allowed to be 0 or 1
-    /// so no further restrictions is usually needed (at this
-    /// would lead to a constant).
+    /// A binary variable is an integer variable which is only allowed to be 0 or 1.
+    /// In practice, this is just an integer variable with a minimum value of 0
+    /// and a maximum value of 0.
+    /// 
+    /// So this functions is just a helper function.
     ///
     /// ```
     /// # use collomatique_ilp::{Variable, VariableType};
     /// let var_desc = Variable::binary();
-    /// assert_eq!(var_desc.get_type(), VariableType::Binary);
+    /// assert_eq!(var_desc, Variable::integer().min(0.0).max(1.0));
     /// ```
     pub fn binary() -> Self {
         Variable {
-            var_type: VariableType::Binary,
-            min: None,
-            max: None,
+            var_type: VariableType::Integer,
+            min: Some(ordered_float::OrderedFloat(0.0)),
+            max: Some(ordered_float::OrderedFloat(1.0)),
         }
     }
 
@@ -441,11 +437,9 @@ impl Variable {
     /// # use collomatique_ilp::{Variable, VariableType};
     /// let continuous_var = Variable::continuous();
     /// let integer_var = Variable::integer();
-    /// let binary_var = Variable::binary();
     ///
     /// assert_eq!(continuous_var.get_type(), VariableType::Continuous);
     /// assert_eq!(integer_var.get_type(), VariableType::Integer);
-    /// assert_eq!(binary_var.get_type(), VariableType::Binary);
     /// ```
     pub fn get_type(&self) -> VariableType {
         self.var_type
@@ -690,7 +684,9 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// let variables = problem.get_variables();
     /// assert_eq!(variables.len(), 1);
-    /// assert_eq!(variables["A"].get_type(), VariableType::Binary);
+    /// assert_eq!(variables["A"].get_type(), VariableType::Integer);
+    /// assert_eq!(variables["A"].get_min(), Some(0.0));
+    /// assert_eq!(variables["A"].get_max(), Some(1.0));
     /// ```
     pub fn set_variable<T: Into<V>>(mut self, name: T, var: Variable) -> Self {
         self.variables.insert(name.into(), var);
@@ -716,9 +712,9 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// let variables = problem.get_variables();
     /// assert_eq!(variables.len(), 2);
-    /// assert_eq!(variables["A"].get_type(), VariableType::Binary);
-    /// assert_eq!(variables["A"].get_min(), None);
-    /// assert_eq!(variables["A"].get_max(), None);
+    /// assert_eq!(variables["A"].get_type(), VariableType::Integer);
+    /// assert_eq!(variables["A"].get_min(), Some(0.0));
+    /// assert_eq!(variables["A"].get_max(), Some(1.0));
     /// assert_eq!(variables["B"].get_type(), VariableType::Integer);
     /// assert_eq!(variables["B"].get_min(), Some(0.0));
     /// assert_eq!(variables["B"].get_max(), None);
@@ -1137,8 +1133,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 
         match var_constraint.get_type() {
             VariableType::Continuous => true,
-            VariableType::Integer => value == value.floor(),
-            VariableType::Binary => f64_equals(value, 0.) || f64_equals(value, 1.0),
+            VariableType::Integer => f64_equals(value, value.floor()),
         }
     }
 

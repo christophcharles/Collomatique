@@ -110,52 +110,19 @@ impl CbcSolver {
             .iter()
             .map(|(var, desc)| {
                 let col = match desc.get_type() {
-                    VariableType::Binary => {
-                        let col = model.add_integer();
-
-                        match desc.get_min() {
-                            Some(m) => model.set_col_lower(col, m.max(0.0)),
-                            None => model.set_col_lower(col, 0.0),
-                        }
-
-                        match desc.get_max() {
-                            Some(m) => model.set_col_upper(col, m.min(1.0)),
-                            None => model.set_col_upper(col, 1.0),
-                        }
-
-                        col
-                    }
-                    VariableType::Integer => {
-                        let col = model.add_integer();
-
-                        match desc.get_min() {
-                            Some(m) => model.set_col_lower(col, m),
-                            None => model.set_col_lower(col, -f64::INFINITY),
-                        }
-
-                        match desc.get_max() {
-                            Some(m) => model.set_col_upper(col, m),
-                            None => model.set_col_upper(col, f64::INFINITY),
-                        }
-
-                        col
-                    }
-                    VariableType::Continuous => {
-                        let col = model.add_col();
-
-                        match desc.get_min() {
-                            Some(m) => model.set_col_lower(col, m),
-                            None => model.set_col_lower(col, -f64::INFINITY),
-                        }
-
-                        match desc.get_max() {
-                            Some(m) => model.set_col_upper(col, m),
-                            None => model.set_col_upper(col, f64::INFINITY),
-                        }
-
-                        col
-                    }
+                    VariableType::Integer => model.add_integer(),
+                    VariableType::Continuous => model.add_col(),
                 };
+                
+                match desc.get_min() {
+                    Some(m) => model.set_col_lower(col, m),
+                    None => model.set_col_lower(col, -f64::INFINITY),
+                }
+
+                match desc.get_max() {
+                    Some(m) => model.set_col_upper(col, m),
+                    None => model.set_col_upper(col, f64::INFINITY),
+                }
 
                 (var.clone(), col)
             })
