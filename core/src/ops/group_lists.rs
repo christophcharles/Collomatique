@@ -164,7 +164,7 @@ impl GroupListsUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<GroupListsUpdateWarning>> {
+    ) -> Option<PreCleaningOp<GroupListsUpdateWarning>> {
         todo!()
     }
 

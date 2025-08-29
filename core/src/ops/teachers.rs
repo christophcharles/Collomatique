@@ -73,7 +73,7 @@ impl TeachersUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<TeachersUpdateWarning>> {
+    ) -> Option<PreCleaningOp<TeachersUpdateWarning>> {
         todo!()
     }
 

@@ -129,7 +129,7 @@ impl StudentsUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<StudentsUpdateWarning>> {
+    ) -> Option<PreCleaningOp<StudentsUpdateWarning>> {
         todo!()
     }
 
