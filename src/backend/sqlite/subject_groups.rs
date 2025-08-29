@@ -110,7 +110,12 @@ pub async fn update(
     .map_err(Error::from)?
     .rows_affected();
 
-    if rows_affected != 1 {
+    if rows_affected > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple subject_groups with id {:?}",
+            index
+        ))));
+    } else if rows_affected == 0 {
         return Err(IdError::InvalidId(index));
     }
 

@@ -156,7 +156,7 @@ pub async fn update(
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
-    let row_affected = sqlx::query!(
+    let rows_affected = sqlx::query!(
         "UPDATE week_patterns SET name = ?1 WHERE week_pattern_id = ?2",
         pattern.name,
         week_pattern_id,
@@ -166,7 +166,12 @@ pub async fn update(
     .map_err(Error::from)?
     .rows_affected();
 
-    if row_affected != 1 {
+    if rows_affected > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple week_patterns with id {:?}",
+            index
+        ))));
+    } else if rows_affected == 0 {
         return Err(IdError::InvalidId(index));
     }
 
