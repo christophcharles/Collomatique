@@ -180,33 +180,9 @@ impl<'a> Config<'a> {
         output
     }
 
-    fn into_linexpr_config(&self) -> Option<linexpr::Config> {
-        let mut cfg = linexpr::Config::new();
-
-        for v in &self.problem.variables {
-            cfg.set(v, self.get(v).expect("Variable declared for config"));
-        }
-
-        Some(cfg)
-    }
-
     pub fn is_feasable(&self) -> bool {
-        let cfg = match self.into_linexpr_config() {
-            Some(c) => c,
-            None => return false,
-        };
-
-        for c in &self.problem.constraints {
-            let res = match c.eval(&cfg) {
-                Some(r) => r,
-                None => return false,
-            };
-            if !res {
-                return false;
-            }
-        }
-
-        true
+        let config_repr = self.repr();
+        config_repr.is_feasable()
     }
 
     pub fn into_feasable(self) -> Option<FeasableConfig<'a>> {
@@ -219,6 +195,10 @@ impl<'a> Config<'a> {
 
     pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a> {
         FeasableConfig(self)
+    }
+
+    pub fn repr(&self) -> ndtools::ConfigRepr<'a> {
+        self.problem.mat_repr.config(self)
     }
 }
 
