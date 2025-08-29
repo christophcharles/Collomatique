@@ -1,6 +1,6 @@
 #[test]
 fn coin_cbc() {
-    use crate::{LinExpr, ProblemBuilder, ConfigData, Variable, ObjectiveSense};
+    use crate::{ConfigData, LinExpr, ObjectiveSense, ProblemBuilder, Variable};
 
     // We test on a simple scheduling problem.
     //
@@ -47,34 +47,70 @@ fn coin_cbc() {
             ("x11", Variable::binary()),
             ("x12", Variable::binary()),
             ("x21", Variable::binary()),
-            ("x22", Variable::binary())
+            ("x22", Variable::binary()),
         ])
         .set_variables([
             ("y11", Variable::binary()),
             ("y12", Variable::binary()),
             ("y21", Variable::binary()),
-            ("y22", Variable::binary())
+            ("y22", Variable::binary()),
         ])
         // Both class should not attend a course at the same time
         .add_constraints([
-            ((&x11 + &y11).leq(&one), "At most one group in course 1 on week 1"),
-            ((&x12 + &y12).leq(&one), "At most one group in course 1 on week 2"),
-            ((&x21 + &y21).leq(&one), "At most one group in course 2 on week 1"),
-            ((&x22 + &y22).leq(&one), "At most one group in course 2 on week 2")
+            (
+                (&x11 + &y11).leq(&one),
+                "At most one group in course 1 on week 1",
+            ),
+            (
+                (&x12 + &y12).leq(&one),
+                "At most one group in course 1 on week 2",
+            ),
+            (
+                (&x21 + &y21).leq(&one),
+                "At most one group in course 2 on week 1",
+            ),
+            (
+                (&x22 + &y22).leq(&one),
+                "At most one group in course 2 on week 2",
+            ),
         ])
         // Each class should not attend more than one course at a given time
         .add_constraints([
-            ((&x11 + &x21).leq(&one), "At most one course for group X on week 1"),
-            ((&x12 + &x22).leq(&one), "At most one course for group X on week 2"),
-            ((&y11 + &y21).leq(&one), "At most one course for group Y on week 1"),
-            ((&y12 + &y22).leq(&one), "At most one course for group Y on week 2")
+            (
+                (&x11 + &x21).leq(&one),
+                "At most one course for group X on week 1",
+            ),
+            (
+                (&x12 + &x22).leq(&one),
+                "At most one course for group X on week 2",
+            ),
+            (
+                (&y11 + &y21).leq(&one),
+                "At most one course for group Y on week 1",
+            ),
+            (
+                (&y12 + &y22).leq(&one),
+                "At most one course for group Y on week 2",
+            ),
         ])
         // Each class must complete each course exactly once
         .add_constraints([
-            ((&x11 + &x12).eq(&one), "Group X should have course 1 exactly once"),
-            ((&x21 + &x22).eq(&one), "Group X should have course 2 exactly once"),
-            ((&y11 + &y12).eq(&one), "Group Y should have course 1 exactly once"),
-            ((&y21 + &y22).eq(&one), "Group Y should have course 2 exactly once")
+            (
+                (&x11 + &x12).eq(&one),
+                "Group X should have course 1 exactly once",
+            ),
+            (
+                (&x21 + &x22).eq(&one),
+                "Group X should have course 2 exactly once",
+            ),
+            (
+                (&y11 + &y12).eq(&one),
+                "Group Y should have course 1 exactly once",
+            ),
+            (
+                (&y21 + &y22).eq(&one),
+                "Group Y should have course 2 exactly once",
+            ),
         ])
         // Objective function : prefer group X in course 1 on week 1
         .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
@@ -87,19 +123,20 @@ fn coin_cbc() {
 
     let solution = solver.solve(&problem).expect("Solution should be found");
 
-    let expected_solution_data = ConfigData::new()
-        .set_iter([
-            ("x11", 1.0),
-            ("x12", 0.0),
-            ("x21", 0.0),
-            ("x22", 1.0),
-            ("y11", 0.0),
-            ("y12", 1.0),
-            ("y21", 1.0),
-            ("y22", 0.0)
-        ]);
+    let expected_solution_data = ConfigData::new().set_iter([
+        ("x11", 1.0),
+        ("x12", 0.0),
+        ("x21", 0.0),
+        ("x22", 1.0),
+        ("y11", 0.0),
+        ("y12", 1.0),
+        ("y21", 1.0),
+        ("y22", 0.0),
+    ]);
 
-    let expected_solution = problem.build_config(expected_solution_data).expect("No variables should be missing");
+    let expected_solution = problem
+        .build_config(expected_solution_data)
+        .expect("No variables should be missing");
 
     assert!(solution.into_inner() == expected_solution);
 }
@@ -120,7 +157,7 @@ fn coin_cbc_impossible() {
             ("x11", Variable::binary()),
             ("x12", Variable::binary()),
             ("x21", Variable::binary()),
-            ("x22", Variable::binary())
+            ("x22", Variable::binary()),
         ])
         .add_constraints([
             ((&x11 + &x12).eq(&one), ""),
