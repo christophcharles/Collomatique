@@ -353,7 +353,7 @@ struct SubjectData {
 
 impl GenColloscopeTranslator {
     fn build_bare_subjects(data: &GenColloscopeData) -> BareSubjectData {
-        use crate::gen::colloscope::{GroupsDesc, Subject};
+        use crate::gen::colloscope::{GroupsDesc, SlotsInformation, Subject};
 
         let mut output = BareSubjectData {
             subject_list: vec![],
@@ -361,17 +361,14 @@ impl GenColloscopeTranslator {
         };
 
         for (&subject_id, subject) in &data.subjects {
-            let slots = vec![];
             let new_subject = Subject {
                 students_per_group: subject.students_per_group.clone(),
                 max_groups_per_slot: subject.max_groups_per_slot,
                 period: subject.period,
                 period_is_strict: subject.period_is_strict,
                 is_tutorial: subject.is_tutorial,
-                balancing_requirements:
-                    crate::gen::colloscope::BalancingRequirements::default_from_slots(&slots),
+                slots_information: SlotsInformation::default(),
                 duration: subject.duration,
-                slots,
                 groups: GroupsDesc::default(),
             };
 
@@ -435,10 +432,10 @@ impl GenColloscopeTranslator {
                     week,
                     SlotRef {
                         subject: subject_index,
-                        slot: subject.slots.len(),
+                        slot: subject.slots_information.slots.len(),
                     },
                 );
-                subject.slots.push(new_slot);
+                subject.slots_information.slots.push(new_slot);
             }
             let rev_time_slot = GenColloCacheTimeSlot {
                 teacher_id: time_slot.teacher_id,
@@ -481,13 +478,19 @@ impl GenColloscopeTranslator {
                     todo!("BalancingSlotSelections::Manual unsupported for now")
                 }
                 BalancingSlotSelections::Teachers => {
-                    BalancingRequirements::balance_teachers_from_slots(&subject.slots)
+                    BalancingRequirements::balance_teachers_from_slots(
+                        &subject.slots_information.slots,
+                    )
                 }
                 BalancingSlotSelections::Timeslots => {
-                    BalancingRequirements::balance_timeslots_from_slots(&subject.slots)
+                    BalancingRequirements::balance_timeslots_from_slots(
+                        &subject.slots_information.slots,
+                    )
                 }
                 BalancingSlotSelections::TeachersAndTimeSlots => {
-                    BalancingRequirements::balance_teachers_and_timeslots_from_slots(&subject.slots)
+                    BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                        &subject.slots_information.slots,
+                    )
                 }
             };
 
@@ -505,7 +508,7 @@ impl GenColloscopeTranslator {
                 slot_selections,
             };
 
-            subject.balancing_requirements = balancing_requirements;
+            subject.slots_information.balancing_requirements = balancing_requirements;
         }
     }
 
