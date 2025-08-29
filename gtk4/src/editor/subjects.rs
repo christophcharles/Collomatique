@@ -104,6 +104,15 @@ impl Component for Subjects {
                                 set_label: "<b>Périodicité :</b> 2 semaines (glissantes)",
                                 set_use_markup: true,
                             },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            gtk::Label {
+                                set_halign: gtk::Align::End,
+                                set_label: "<i>60 minutes</i>",
+                                set_use_markup: true,
+                                add_css_class: "dimmed",
+                            },
                         },
                         gtk::ListBox {
                             set_hexpand: true,
@@ -237,6 +246,15 @@ impl Component for Subjects {
                                 set_label: "<b>Colles dans l'année :</b> 2 (séparées de 2 semaines)",
                                 set_use_markup: true,
                             },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            gtk::Label {
+                                set_halign: gtk::Align::End,
+                                set_label: "<i>60 minutes</i>",
+                                set_use_markup: true,
+                                add_css_class: "dimmed",
+                            },
                         },
                         gtk::ListBox {
                             set_hexpand: true,
@@ -313,16 +331,6 @@ impl Component for Subjects {
                                 add_css_class: "flat",
                                 set_tooltip_text: Some("Modifier la période"),
                             },
-                            gtk::Separator {
-                                set_orientation: gtk::Orientation::Horizontal,
-                                add_css_class: "spacer",
-                            },
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "<i>heures non-comptées</i>",
-                                set_use_markup: true,
-                                add_css_class: "dimmed",
-                            },
                             gtk::Box {
                                 set_hexpand: true,
                             },
@@ -379,6 +387,15 @@ impl Component for Subjects {
                                 set_halign: gtk::Align::Start,
                                 set_label: "<b>Périodicité :</b> 2 semaines (par bloc)",
                                 set_use_markup: true,
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            gtk::Label {
+                                set_halign: gtk::Align::End,
+                                set_label: "<i>120 minutes (non-comptées)</i>",
+                                set_use_markup: true,
+                                add_css_class: "dimmed",
                             },
                         },
                         gtk::ListBox {
@@ -512,6 +529,15 @@ impl Component for Subjects {
                                 set_halign: gtk::Align::Start,
                                 set_label: "<b>Colles dans l'année :</b> 2",
                                 set_use_markup: true,
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            gtk::Label {
+                                set_halign: gtk::Align::Start,
+                                set_label: "<i>60 minutes</i>",
+                                set_use_markup: true,
+                                add_css_class: "dimmed",
                             },
                         },
                         gtk::ListBox {
