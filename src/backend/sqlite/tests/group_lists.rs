@@ -1,6 +1,6 @@
 use super::*;
 
-async fn build_example_group_list(pool: sqlx::SqlitePool) -> Store {
+async fn build_students(pool: sqlx::SqlitePool) -> Store {
     let store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
@@ -11,7 +11,20 @@ VALUES ("Roth", ""), ("Marin", ""), ("Bordes", ""), ("Bresson", ""), ("Gosset","
 ("Rondeau", ""), ("Vigneron", ""), ("Davy", ""), ("Gosselin", ""), ("Jeannin", ""),
 ("Sicard", ""), ("Mounier", ""), ("Lafon", ""), ("Brun", ""), ("Hardy", ""),
 ("Girault", ""), ("Delahaye", ""), ("Levasseur", ""), ("Gonthier", "");
+        "#
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap();
 
+    store
+}
+
+async fn build_example_group_list(pool: sqlx::SqlitePool) -> Store {
+    let store = build_students(pool).await;
+
+    let _ = sqlx::query!(
+        r#"
 INSERT INTO groups (name, extendable)
 VALUES ("1", 0), ("2", 0), ("3", 0), ("4", 0), ("5", 0), ("6", 0), ("7", 0), ("8", 0),
 ("5", 0), ("6", 0), ("3+7", 1), ("P", 1), ("I", 1);
@@ -359,4 +372,341 @@ async fn group_lists_get_all(pool: sqlx::SqlitePool) {
     ]);
 
     assert_eq!(group_lists, expected_result);
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GroupDb {
+    group_id: i64,
+    name: String,
+    extendable: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GroupListDb {
+    group_list_id: i64,
+    name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GroupListItemDb {
+    group_list_id: i64,
+    group_id: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GroupItemDb {
+    group_list_id: i64,
+    group_id: i64,
+    student_id: i64,
+}
+
+#[sqlx::test]
+fn students_add(pool: sqlx::SqlitePool) {
+    let store = build_students(pool).await;
+
+    let id = store
+        .group_lists_add(&GroupList {
+            name: String::from("Groupes"),
+            groups: vec![
+                Group {
+                    name: String::from("1"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("2"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("3"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("4"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("5"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("6"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("7"),
+                    extendable: false,
+                },
+                Group {
+                    name: String::from("8"),
+                    extendable: false,
+                },
+            ],
+            students_mapping: BTreeMap::from([
+                (super::super::students::Id(1), 0),
+                (super::super::students::Id(2), 0),
+                (super::super::students::Id(3), 0),
+                (super::super::students::Id(4), 1),
+                (super::super::students::Id(5), 1),
+                (super::super::students::Id(6), 1),
+                (super::super::students::Id(7), 2),
+                (super::super::students::Id(8), 2),
+                (super::super::students::Id(9), 2),
+                (super::super::students::Id(10), 3),
+                (super::super::students::Id(11), 3),
+                (super::super::students::Id(12), 3),
+                (super::super::students::Id(13), 4),
+                (super::super::students::Id(14), 4),
+                (super::super::students::Id(15), 4),
+                (super::super::students::Id(16), 5),
+                (super::super::students::Id(17), 5),
+                (super::super::students::Id(18), 5),
+                (super::super::students::Id(19), 6),
+                (super::super::students::Id(20), 6),
+                (super::super::students::Id(21), 6),
+                (super::super::students::Id(22), 7),
+                (super::super::students::Id(23), 7),
+                (super::super::students::Id(24), 7),
+            ]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, super::super::group_lists::Id(1));
+
+    let groups = sqlx::query_as!(GroupDb, "SELECT group_id, name, extendable FROM groups")
+        .fetch_all(&store.pool)
+        .await
+        .unwrap();
+
+    let group_lists = sqlx::query_as!(GroupListDb, "SELECT group_list_id, name FROM group_lists")
+        .fetch_all(&store.pool)
+        .await
+        .unwrap();
+
+    let group_list_items = sqlx::query_as!(
+        GroupListItemDb,
+        "SELECT group_list_id, group_id FROM group_list_items"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let group_items = sqlx::query_as!(
+        GroupItemDb,
+        "SELECT group_list_id, group_id, student_id FROM group_items"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let groups_expected = vec![
+        GroupDb {
+            group_id: 1,
+            name: String::from("1"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 2,
+            name: String::from("2"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 3,
+            name: String::from("3"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 4,
+            name: String::from("4"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 5,
+            name: String::from("5"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 6,
+            name: String::from("6"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 7,
+            name: String::from("7"),
+            extendable: 0,
+        },
+        GroupDb {
+            group_id: 8,
+            name: String::from("8"),
+            extendable: 0,
+        },
+    ];
+
+    let group_lists_expected = vec![GroupListDb {
+        group_list_id: 1,
+        name: String::from("Groupes"),
+    }];
+
+    let group_list_items_expected = vec![
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 1,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 2,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 3,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 4,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 5,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 6,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 7,
+        },
+        GroupListItemDb {
+            group_list_id: 1,
+            group_id: 8,
+        },
+    ];
+
+    let group_items_expected = vec![
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 1,
+            student_id: 1,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 1,
+            student_id: 2,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 1,
+            student_id: 3,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 2,
+            student_id: 4,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 2,
+            student_id: 5,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 2,
+            student_id: 6,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 3,
+            student_id: 7,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 3,
+            student_id: 8,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 3,
+            student_id: 9,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 4,
+            student_id: 10,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 4,
+            student_id: 11,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 4,
+            student_id: 12,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 5,
+            student_id: 13,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 5,
+            student_id: 14,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 5,
+            student_id: 15,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 6,
+            student_id: 16,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 6,
+            student_id: 17,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 6,
+            student_id: 18,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 7,
+            student_id: 19,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 7,
+            student_id: 20,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 7,
+            student_id: 21,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 8,
+            student_id: 22,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 8,
+            student_id: 23,
+        },
+        GroupItemDb {
+            group_list_id: 1,
+            group_id: 8,
+            student_id: 24,
+        },
+    ];
+
+    assert_eq!(groups, groups_expected);
+    assert_eq!(group_lists, group_lists_expected);
+    assert_eq!(group_list_items, group_list_items_expected);
+    assert_eq!(group_items, group_items_expected);
 }
