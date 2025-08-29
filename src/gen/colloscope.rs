@@ -20,14 +20,16 @@ pub enum Error {
     InvalidSubjectNumber,
     #[error("Incompatibility number is invalid")]
     InvalidIncompatibilityNumber,
+    #[error("Slot groupings {0} and {1} are duplicates of each other")]
+    SlotGroupingsDuplicated(usize, usize),
+    #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
+    SlotGroupingWithInvalidSubject(usize, SlotRef),
     #[error(
-        "The slot grouping {0:?} has an invalid slot ref {1:?} with invalid subject reference"
+        "The slot grouping {0} has an invalid slot ref {1:?} with invalid interrogation reference"
     )]
-    SlotGroupingWithInvalidSubject(SlotGrouping, SlotRef),
-    #[error("The slot grouping {0:?} has an invalid slot ref {1:?} with invalid interrogation reference")]
-    SlotGroupingWithInvalidInterrogation(SlotGrouping, SlotRef),
-    #[error("The slot grouping {0:?} has an invalid slot ref {1:?} with invalid slot reference")]
-    SlotGroupingWithInvalidSlot(SlotGrouping, SlotRef),
+    SlotGroupingWithInvalidInterrogation(usize, SlotRef),
+    #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
+    SlotGroupingWithInvalidSlot(usize, SlotRef),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -73,7 +75,7 @@ pub struct SlotGrouping {
     pub slots: BTreeSet<SlotRef>,
 }
 
-pub type SlotGroupingSet = BTreeSet<SlotGrouping>;
+pub type SlotGroupingList = Vec<SlotGrouping>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GroupingIncompat {
@@ -111,7 +113,7 @@ pub struct ValidatedData {
     subjects: SubjectList,
     incompatibilities: IncompatibilityList,
     students: StudentList,
-    slot_groupings: SlotGroupingSet,
+    slot_groupings: SlotGroupingList,
     grouping_incompats: GroupingIncompatSet,
 }
 
@@ -130,7 +132,7 @@ impl ValidatedData {
         subjects: SubjectList,
         incompatibilities: IncompatibilityList,
         students: StudentList,
-        slot_groupings: SlotGroupingSet,
+        slot_groupings: SlotGroupingList,
         grouping_incompats: GroupingIncompatSet,
     ) -> Result<ValidatedData> {
         for subject in &subjects {

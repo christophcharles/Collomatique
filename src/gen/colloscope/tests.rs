@@ -11,7 +11,7 @@ fn trivial_validated_data() {
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
 
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     let expected_result = ValidatedData {
@@ -70,7 +70,7 @@ fn simple_validated_data() {
         subjects: BTreeSet::from([0]),
         incompatibilities: BTreeSet::from([0]),
     }];
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     let expected_result = ValidatedData {
@@ -117,7 +117,7 @@ fn invalid_students_per_interrogation() {
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -155,7 +155,7 @@ fn slot_overlaps_next_day() {
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -186,7 +186,7 @@ fn slot_overlaps_next_day() {
         }],
     }];
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
     assert_eq!(
         ValidatedData::new(
@@ -223,7 +223,7 @@ fn invalid_teacher_number() {
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -264,7 +264,7 @@ fn invalid_subject_number() {
         subjects: BTreeSet::from([1]),
         incompatibilities: BTreeSet::new(),
     }];
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -302,7 +302,7 @@ fn invalid_incompatibility_number() {
         subjects: BTreeSet::new(),
         incompatibilities: BTreeSet::from([1]),
     }];
-    let slot_groupings = SlotGroupingSet::new();
+    let slot_groupings = SlotGroupingList::new();
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -355,7 +355,7 @@ fn slot_ref_has_invalid_subject() {
     ];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::from([SlotGrouping {
+    let slot_groupings = vec![SlotGrouping {
         slots: BTreeSet::from([
             SlotRef {
                 subject: 1,
@@ -368,7 +368,7 @@ fn slot_ref_has_invalid_subject() {
                 slot: 0,
             },
         ]),
-    }]);
+    }];
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -381,20 +381,7 @@ fn slot_ref_has_invalid_subject() {
             grouping_incompats
         ),
         Err(Error::SlotGroupingWithInvalidSubject(
-            SlotGrouping {
-                slots: BTreeSet::from([
-                    SlotRef {
-                        subject: 1,
-                        interrogation: 0,
-                        slot: 0,
-                    },
-                    SlotRef {
-                        subject: 2,
-                        interrogation: 0,
-                        slot: 0,
-                    },
-                ]),
-            },
+            0,
             SlotRef {
                 subject: 2,
                 interrogation: 0,
@@ -441,7 +428,7 @@ fn slot_ref_has_invalid_interrogation() {
     ];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::from([SlotGrouping {
+    let slot_groupings = vec![SlotGrouping {
         slots: BTreeSet::from([
             SlotRef {
                 subject: 1,
@@ -454,7 +441,7 @@ fn slot_ref_has_invalid_interrogation() {
                 slot: 0,
             },
         ]),
-    }]);
+    }];
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -467,20 +454,7 @@ fn slot_ref_has_invalid_interrogation() {
             grouping_incompats
         ),
         Err(Error::SlotGroupingWithInvalidInterrogation(
-            SlotGrouping {
-                slots: BTreeSet::from([
-                    SlotRef {
-                        subject: 1,
-                        interrogation: 1,
-                        slot: 0,
-                    },
-                    SlotRef {
-                        subject: 0,
-                        interrogation: 0,
-                        slot: 0,
-                    },
-                ]),
-            },
+            0,
             SlotRef {
                 subject: 1,
                 interrogation: 1,
@@ -527,7 +501,7 @@ fn slot_ref_has_invalid_slot() {
     ];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
-    let slot_groupings = SlotGroupingSet::from([SlotGrouping {
+    let slot_groupings = vec![SlotGrouping {
         slots: BTreeSet::from([
             SlotRef {
                 subject: 1,
@@ -540,7 +514,7 @@ fn slot_ref_has_invalid_slot() {
                 slot: 1,
             },
         ]),
-    }]);
+    }];
     let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
@@ -553,20 +527,7 @@ fn slot_ref_has_invalid_slot() {
             grouping_incompats
         ),
         Err(Error::SlotGroupingWithInvalidSlot(
-            SlotGrouping {
-                slots: BTreeSet::from([
-                    SlotRef {
-                        subject: 1,
-                        interrogation: 0,
-                        slot: 0,
-                    },
-                    SlotRef {
-                        subject: 0,
-                        interrogation: 0,
-                        slot: 1,
-                    },
-                ]),
-            },
+            0,
             SlotRef {
                 subject: 0,
                 interrogation: 0,
