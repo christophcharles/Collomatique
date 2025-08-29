@@ -150,7 +150,7 @@ enum WeekPatternCommand {
     },
     /// Remove an existing week pattern
     Remove {
-        /// Name for the week pattern to show
+        /// Name of the week pattern to remove
         name: String,
         /// If multiple week patterns have the same name, select which one to use.
         /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
@@ -163,7 +163,7 @@ enum WeekPatternCommand {
     },
     /// Rename an existing week pattern
     Rename {
-        /// Old name for the week pattern
+        /// Old name of the week pattern
         old_name: String,
         /// If multiple week patterns have the same (old) name, select which one to use.
         /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
@@ -180,7 +180,7 @@ enum WeekPatternCommand {
     PrintAll,
     /// Show a particular week pattern
     Print {
-        /// Name for the week pattern to show
+        /// Name of the week pattern to show
         name: String,
         /// If multiple week patterns have the same name, select which one to use.
         /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
@@ -190,7 +190,7 @@ enum WeekPatternCommand {
     },
     /// Fill existing week pattern with predefined pattern
     Fill {
-        /// Name for the new week pattern
+        /// Name of the week pattern
         name: String,
         /// If multiple week patterns have the same name, select which one to use.
         /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
