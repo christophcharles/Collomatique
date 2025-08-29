@@ -24,15 +24,10 @@ pub enum OpenError {
 
 pub type OpenResult<T> = std::result::Result<T, OpenError>;
 
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum Error {}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
 use sqlx::sqlite::SqlitePool;
 
 #[derive(Debug)]
-pub struct Storage {
+pub struct Store {
     pool: SqlitePool,
 }
 
@@ -46,7 +41,7 @@ struct GeneralDataDb {
     max_interrogations_per_day: Option<NonZeroU32>,
 }
 
-impl Storage {
+impl Store {
     fn build_url(path: &std::path::Path) -> Option<String> {
         let filename = path.to_str()?;
         Some(format!("sqlite://{}", filename))
@@ -275,7 +270,7 @@ CREATE TABLE "group_items" (
 
         Self::fill_empty_db(&pool).await?;
 
-        Ok(Storage { pool })
+        Ok(Store { pool })
     }
 
     pub async fn open_db(path: &std::path::Path) -> OpenResult<Self> {
@@ -289,14 +284,154 @@ CREATE TABLE "group_items" (
         use std::str::FromStr;
         let options =
             SqliteConnectOptions::from_str(&db_url)?.journal_mode(SqliteJournalMode::Delete);
-        Ok(Storage {
+        Ok(Store {
             pool: SqlitePool::connect_with(options).await?,
         })
     }
 }
 
-impl Storage {
+impl Store {
     pub fn get_pool(&self) -> &SqlitePool {
         &self.pool
+    }
+}
+
+use super::*;
+
+#[derive(Error, Debug)]
+pub enum WeekPatternError {
+    #[error("Week pattern id {0} is invalid")]
+    InvalidId(WeekPatternId),
+    #[error("sqlx error")]
+    SqlxError(#[from] sqlx::Error),
+    #[error("Corrupted database: {0}")]
+    CorruptedDatabase(String),
+}
+
+pub type WeekPatternResult<T> = std::result::Result<T, WeekPatternError>;
+
+impl Store {
+    async fn week_pattern_get_internal(
+        &self,
+        index: WeekPatternId,
+    ) -> WeekPatternResult<WeekPattern> {
+        let week_pattern_id =
+            i64::try_from(index.0).map_err(|_| WeekPatternError::InvalidId(index))?;
+
+        let name_opt = sqlx::query!(
+            "SELECT name FROM week_patterns WHERE week_pattern_id = ?",
+            week_pattern_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let name = name_opt.ok_or(WeekPatternError::InvalidId(index))?;
+
+        let data = sqlx::query!(
+            "SELECT week FROM weeks WHERE week_pattern_id = ?",
+            week_pattern_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let weeks = data
+            .iter()
+            .map(|x| {
+                let num = u32::try_from(x.week).map_err(|_| {
+                    WeekPatternError::CorruptedDatabase(format!(
+                        "Database references invalid u32 week ({}) for week_pattern_id {}",
+                        x.week, week_pattern_id
+                    ))
+                })?;
+                Ok(Week(num))
+            })
+            .collect::<WeekPatternResult<BTreeSet<_>>>()?;
+
+        Ok(WeekPattern {
+            name: name.name,
+            weeks,
+        })
+    }
+
+    async fn week_pattern_get_all_internal(&self) -> WeekPatternResult<Vec<WeekPattern>> {
+        let names = sqlx::query!("SELECT week_pattern_id, name FROM week_patterns")
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut output = Vec::with_capacity(names.len());
+
+        for record in names {
+            let data = sqlx::query!(
+                "SELECT week FROM weeks WHERE week_pattern_id = ?",
+                record.week_pattern_id
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            let weeks = data
+                .iter()
+                .map(|x| {
+                    let num = match u32::try_from(x.week) {
+                        Ok(val) => val,
+                        Err(_) => {
+                            return Err(WeekPatternError::CorruptedDatabase(format!(
+                                "Database references invalid u32 week ({}) for week_pattern_id {}",
+                                x.week, record.week_pattern_id
+                            )))
+                        }
+                    };
+
+                    Ok(Week(num))
+                })
+                .collect::<WeekPatternResult<BTreeSet<_>>>()?;
+
+            output.push(WeekPattern {
+                name: record.name,
+                weeks,
+            });
+        }
+
+        Ok(output)
+    }
+
+    async fn week_pattern_add_internal(
+        &self,
+        pattern: WeekPattern,
+    ) -> WeekPatternResult<WeekPatternId> {
+        todo!()
+    }
+
+    async fn week_pattern_remove_internal(&self, index: WeekPatternId) -> WeekPatternResult<()> {
+        todo!()
+    }
+}
+
+impl Storage for Store {
+    type WeekPatternError = WeekPatternError;
+    fn week_pattern_get(
+        &self,
+        index: WeekPatternId,
+    ) -> impl core::future::Future<Output = Result<WeekPattern, Self::WeekPatternError>> + Send
+    {
+        self.week_pattern_get_internal(index)
+    }
+    fn week_pattern_get_all(
+        &self,
+    ) -> impl core::future::Future<Output = Result<Vec<WeekPattern>, Self::WeekPatternError>> + Send
+    {
+        self.week_pattern_get_all_internal()
+    }
+    fn week_pattern_add(
+        &self,
+        pattern: WeekPattern,
+    ) -> impl core::future::Future<Output = Result<WeekPatternId, Self::WeekPatternError>> + Send
+    {
+        self.week_pattern_add_internal(pattern)
+    }
+    fn week_pattern_remove(
+        &self,
+        index: WeekPatternId,
+    ) -> impl core::future::Future<Output = Result<(), Self::WeekPatternError>> + Send {
+        self.week_pattern_remove_internal(index)
     }
 }
