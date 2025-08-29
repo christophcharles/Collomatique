@@ -177,7 +177,7 @@ pub enum SubjectPeriodicity {
     },
 }
 
-/// Description of a block of weeks for [SubjectPeriodicity::OnceForEveryArbitraryBlock]
+/// Description of a block of weeks for [SubjectPeriodicity::AmountForEveryArbitraryBlock]
 ///
 /// This describes a single block of weeks that should have one interrogation.
 /// There are two parameters: [WeekBlock::delay_in_weeks] is the number of weeks

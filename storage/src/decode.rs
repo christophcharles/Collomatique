@@ -8,7 +8,7 @@
 use super::*;
 use crate::json::*;
 
-/// Error type when decoding a [json::JsonData]
+/// Error type when decoding the JSON structure
 ///
 /// This error type describes error that happen when interpreting the file content.
 #[derive(Debug, Error, PartialEq, Eq)]
