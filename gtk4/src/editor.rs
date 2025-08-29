@@ -61,6 +61,12 @@ enum ToastInfo {
     Dismiss,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+enum PanelNumbers {
+    GeneralPlanning = 0,
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data>,
@@ -68,6 +74,8 @@ pub struct EditorPanel {
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
     pages_titles_map: BTreeMap<&'static str, &'static str>,
+
+    show_particular_panel: Option<PanelNumbers>,
 
     general_planning: Controller<general_planning::GeneralPlanning>,
 }
@@ -118,6 +126,26 @@ impl EditorPanel {
                 self.data.get_data().get_periods().clone(),
             ))
             .unwrap();
+    }
+
+    fn inner_op_to_panel_number(
+        op: &collomatique_state_colloscopes::AnnotatedOp,
+    ) -> Option<PanelNumbers> {
+        match op {
+            collomatique_state_colloscopes::AnnotatedOp::Period(_) => {
+                Some(PanelNumbers::GeneralPlanning)
+            }
+            _ => None,
+        }
+    }
+
+    fn aggregated_op_to_panel_number(
+        aggregated_op: &collomatique_state::history::AggregatedOp<
+            collomatique_state_colloscopes::AnnotatedOp,
+        >,
+    ) -> Option<PanelNumbers> {
+        let first_op = aggregated_op.inner().first()?;
+        Self::inner_op_to_panel_number(first_op.inner())
     }
 }
 
@@ -282,6 +310,7 @@ impl Component for EditorPanel {
             toast_info: None,
             pages_names,
             pages_titles_map,
+            show_particular_panel: None,
             general_planning,
         };
         let widgets = view_output!();
@@ -306,6 +335,7 @@ impl Component for EditorPanel {
     }
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.show_particular_panel = None;
         match message {
             EditorInput::Ignore => {}
             EditorInput::NewFile {
@@ -360,14 +390,18 @@ impl Component for EditorPanel {
             }
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
-                    self.data.undo().expect("Should be able to undo");
+                    let aggregated_op = self.data.undo().expect("Should be able to undo");
+                    self.show_particular_panel =
+                        Self::aggregated_op_to_panel_number(&aggregated_op);
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
             }
             EditorInput::RedoClicked => {
                 if self.data.can_redo() {
-                    self.data.redo().expect("Should be able to undo");
+                    let aggregated_op = self.data.redo().expect("Should be able to undo");
+                    self.show_particular_panel =
+                        Self::aggregated_op_to_panel_number(&aggregated_op);
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -437,6 +471,14 @@ impl Component for EditorPanel {
         self.update_cmd(message, sender.clone(), root);
         self.update_toast(widgets);
         self.update_view(widgets, sender);
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if let Some(panel_number) = &model.show_particular_panel {
+            widgets
+                .main_stack
+                .set_visible_child_name(self.pages_names[*panel_number as usize])
+        }
     }
 }
 
