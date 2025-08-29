@@ -38,6 +38,8 @@ impl State {
 #[derive(Debug, Clone)]
 pub enum Message {
     PanelChanged(Panel),
+    NewClicked,
+    OpenClicked,
     CloseClicked,
     ExitRequest(window::Id),
     ExitValidated(window::Id),
@@ -53,10 +55,38 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             editor_state.panel = new_panel;
             Task::none()
         }
+        Message::NewClicked => Task::done(
+            super::dialogs::Message::AlertDialog(
+                "Créer un nouveau colloscope ?".into(),
+                "Le colloscope actuel sera fermé.".into(),
+                std::sync::Arc::new(|result| {
+                    if result {
+                        GuiMessage::OpenNewFile
+                    } else {
+                        GuiMessage::Ignore
+                    }
+                }),
+            )
+            .into(),
+        ),
+        Message::OpenClicked => Task::done(
+            super::dialogs::Message::AlertDialog(
+                "Ouvrir un colloscope ?".into(),
+                "Le colloscope actuel sera fermé.".into(),
+                std::sync::Arc::new(|result| {
+                    if result {
+                        GuiMessage::OpenExistingFile
+                    } else {
+                        GuiMessage::Ignore
+                    }
+                }),
+            )
+            .into(),
+        ),
         Message::CloseClicked => Task::done(
             super::dialogs::Message::AlertDialog(
-                "Attention".into(),
                 "Fermer le colloscope ?".into(),
+                "Les modifications sont enregistrées.".into(),
                 std::sync::Arc::new(|result| {
                     if result {
                         GuiMessage::GoToWelcomeScreen
@@ -69,8 +99,8 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
         ),
         Message::ExitRequest(id) => Task::done(
             super::dialogs::Message::AlertDialog(
-                "Attention".into(),
                 "Quitter Collomatique ?".into(),
+                "Les modifications sont enregistrées.".into(),
                 std::sync::Arc::new(move |result| {
                     if result {
                         Message::ExitValidated(id).into()
@@ -111,13 +141,13 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 tools::Icon::New,
                 button::primary,
                 "Créer un nouveau colloscope",
-                None
+                Some(Message::NewClicked.into())
             ),
             icon_button(
                 tools::Icon::Open,
                 button::primary,
                 "Ouvrir un colloscope existant",
-                None
+                Some(Message::OpenClicked.into())
             ),
             Space::with_width(2),
             icon_button(
