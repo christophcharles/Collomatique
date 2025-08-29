@@ -30,11 +30,11 @@ impl Worker for FileLoader {
 
         let FileLoadingInput::Load(path) = msg;
         let data = collomatique_state_colloscopes::Data::new();
-        /*sender
-        .output(FileLoadingOutput::Loaded(path, data))
-        .unwrap();*/
         sender
-            .output(FileLoadingOutput::Failed(path, "Test error".into()))
+            .output(FileLoadingOutput::Loaded(path, data))
             .unwrap();
+        /*sender
+        .output(FileLoadingOutput::Failed(path, "Test error".into()))
+        .unwrap();*/
     }
 }

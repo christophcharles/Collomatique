@@ -5,7 +5,9 @@ use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller, SimpleComponent};
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 mod dialogs;
+
 mod editor;
 mod loading;
 mod welcome;
@@ -22,6 +24,7 @@ struct AppControllers {
     editor: Controller<editor::EditorPanel>,
 
     file_error: Controller<dialogs::file_error::Dialog>,
+    open_dialog: Controller<dialogs::open_save::Dialog>,
 }
 
 enum GlobalState {
@@ -122,11 +125,22 @@ impl SimpleComponent for AppModel {
             .launch(())
             .forward(sender.input_sender(), |_| AppInput::Ignore);
 
+        let open_dialog = dialogs::open_save::Dialog::builder()
+            .transient_for_native(&root)
+            .launch(dialogs::open_save::Type::Open)
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::open_save::DialogOutput::Cancel => AppInput::Ignore,
+                dialogs::open_save::DialogOutput::FileSelected(path) => {
+                    AppInput::LoadColloscope(path)
+                }
+            });
+
         let controllers = AppControllers {
             welcome,
             loading,
             editor,
             file_error,
+            open_dialog,
         };
 
         let state = GlobalState::WelcomeScreen;
@@ -198,7 +212,11 @@ impl SimpleComponent for AppModel {
                     .unwrap();
             }
             AppInput::OpenExistingColloscopeWithDialog => {
-                // Ignore for now
+                self.controllers
+                    .open_dialog
+                    .sender()
+                    .send(dialogs::open_save::DialogInput::Show)
+                    .unwrap();
             }
             AppInput::ColloscopeLoaded(path, data) => {
                 self.state = GlobalState::EditorScreen;
