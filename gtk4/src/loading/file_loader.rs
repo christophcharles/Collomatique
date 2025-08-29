@@ -134,6 +134,7 @@ impl FileLoader {
             DecodeError::AssignmentsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des affectations avant le bloc des périodes)".into(),
             DecodeError::WeekPatternsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de schéma de semaines)".into(),
             DecodeError::InconsistentSlotsData => "Le fichier est mal formé et est probablement corrompu.\n(Données sur les créneaux de colle incohérentes)".into(),
+            DecodeError::SlotsDecodedBeforeSubjects => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des créneaux avant le bloc des matières)".into(),
         }
     }
 }

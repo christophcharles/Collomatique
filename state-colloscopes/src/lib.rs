@@ -1282,7 +1282,6 @@ impl Data {
                     .ordered_subject_list
                     .insert(position, (*new_id, params.clone()));
                 if params.parameters.interrogation_parameters.is_some() {
-                    println!("Test");
                     self.inner_data.slots.subject_map.insert(
                         *new_id,
                         slots::SubjectSlots {
