@@ -1037,7 +1037,19 @@ async fn main() -> Result<()> {
         ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
 
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-    let iterator = genetic_optimizer.iterate(initializer, solver)?;
+    let mut iterator = genetic_optimizer.iterate(initializer, solver)?;
+
+    let first_pop = iterator.next().unwrap();
+
+    let m = first_pop
+        .iter()
+        .max_by_key(|sol| ordered_float::OrderedFloat(sol.score))
+        .unwrap();
+    println!(
+        "solution: {:?}\nscore: {}",
+        ilp_translator.read_solution(&m.config),
+        m.score
+    );
 
     /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 

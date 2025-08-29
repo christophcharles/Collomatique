@@ -79,8 +79,8 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
         }
 
         let feasable_configs: Vec<_> = non_feasable_configs
-            .into_par_iter()
-            .map(|c| solver.restore_feasability_with_max_steps(&c, self.max_steps))
+            .par_iter()
+            .map(|c| solver.restore_feasability_with_max_steps(c, self.max_steps))
             .while_some()
             .collect();
 
@@ -104,4 +104,31 @@ pub struct OptimizerIterator<
     optimizer: &'b Optimizer<'a, V, P>,
     solver: S,
     population: Vec<FeasableConfig<'a, V, P>>,
+}
+
+pub struct Solution<'a, V: VariableName, P: ProblemRepr<V>> {
+    pub config: FeasableConfig<'a, V, P>,
+    pub score: f64,
+}
+
+impl<'b, 'a: 'b, V: VariableName, P: ProblemRepr<V>, S: FeasabilitySolver<V, P>> Iterator
+    for OptimizerIterator<'b, 'a, V, P, S>
+{
+    type Item = Vec<Solution<'a, V, P>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use rayon::prelude::*;
+        let pop_scores = self
+            .population
+            .par_iter()
+            .map(|config| {
+                let score = (self.optimizer.problem.eval_fn)(&config);
+                Solution {
+                    config: config.clone(),
+                    score,
+                }
+            })
+            .collect();
+        Some(pop_scores)
+    }
 }
