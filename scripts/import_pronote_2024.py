@@ -30,11 +30,18 @@ def build_subject_set(csv_content):
                 S.add(opt)
     return S
 
+def find_subject_or_new_id(session, subject, current_subjects):
+    for sub in current_subjects:
+        if sub.parameters.name == subject:
+            return sub.id
+    return session.subjects_add(collomatique.SubjectParameters(subject))
+
 def add_subjects(session, subject_set):
     subject_ids = {}
+    current_subjects = session.subjects_get_list()
     for subject in subject_set:
-        new_id = session.subjects_add(collomatique.SubjectParameters(subject))
-        subject_ids[subject] = new_id
+        sub_id = find_subject_or_new_id(session, subject, current_subjects)
+        subject_ids[subject] = sub_id
     return subject_ids
 
 def add_student_from_csv_line(session, csv_line, subject_ids):
