@@ -89,6 +89,29 @@ fn generate_week_pattern_list(data: &Data) -> week_pattern_list::List {
     }
 }
 
+fn generate_slot_list(data: &Data) -> slot_list::List {
+    let orig_slots = data.get_slots();
+
+    slot_list::List {
+        subject_map: orig_slots
+            .subject_map
+            .iter()
+            .map(|(subject_id, subject_slots)| {
+                (
+                    subject_id.inner(),
+                    slot_list::SubjectSlots {
+                        ordered_slot_list: subject_slots
+                            .ordered_slots
+                            .iter()
+                            .map(|(slot_id, slot)| (slot_id.inner(), slot.into()))
+                            .collect(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
@@ -97,6 +120,7 @@ pub fn encode(data: &Data) -> JsonData {
     let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
     let assignment_map_entry = ValidEntry::AssignmentMap(generate_assignment_map(data));
     let week_pattern_list_entry = ValidEntry::WeekPatternList(generate_week_pattern_list(data));
+    let slot_list_entry = ValidEntry::SlotList(generate_slot_list(data));
 
     JsonData {
         header,
@@ -107,6 +131,7 @@ pub fn encode(data: &Data) -> JsonData {
             student_list_entry,
             assignment_map_entry,
             week_pattern_list_entry,
+            slot_list_entry,
         ]
         .into_iter()
         .map(|x| Entry {
