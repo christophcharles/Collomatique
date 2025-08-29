@@ -45,12 +45,24 @@ impl Component for Assignments {
             set_hexpand: true,
             set_margin_all: 5,
             set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-            #[local_ref]
-            periods_widget -> gtk::Box {
+            gtk::Box {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
-                set_margin_all: 5,
-                set_spacing: 10,
+                gtk::Label {
+                    set_margin_top: 10,
+                    #[watch]
+                    set_visible: model.periods.ordered_period_list.is_empty(),
+                    set_halign: gtk::Align::Start,
+                    set_label: "<big><b>Aucune période à afficher</b></big>",
+                    set_use_markup: true,
+                },
+                #[local_ref]
+                periods_widget -> gtk::Box {
+                    set_hexpand: true,
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
+                    set_spacing: 20,
+                },
             }
         }
     }

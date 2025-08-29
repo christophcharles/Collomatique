@@ -88,8 +88,18 @@ impl FactoryComponent for PeriodEntry {
                 set_label: &self.generate_title_text(),
                 set_use_markup: true,
             },
+            gtk::Label {
+                #[watch]
+                set_visible: self.data.filtered_students.is_empty(),
+                set_halign: gtk::Align::Start,
+                set_label: "<i>Pas d'élèves inscrits sur la période</i>",
+                set_use_markup: true,
+            },
             #[local_ref]
-            column_view_widget -> gtk::ColumnView {},
+            column_view_widget -> gtk::ColumnView {
+                #[watch]
+                set_visible: !self.data.filtered_students.is_empty(),
+            },
         },
     }
 
