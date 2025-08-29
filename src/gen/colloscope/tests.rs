@@ -64,6 +64,7 @@ fn simple_validated_data() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -72,6 +73,7 @@ fn simple_validated_data() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -80,6 +82,7 @@ fn simple_validated_data() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -88,6 +91,7 @@ fn simple_validated_data() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -217,6 +221,7 @@ fn invalid_students_per_interrogation() {
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(0, 0).unwrap(),
             },
+            cost: 0,
         }],
         groups: GroupsDesc {
             prefilled_groups: vec![],
@@ -269,6 +274,7 @@ fn subject_slot_overlaps_next_day() {
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(23, 1).unwrap(),
             },
+            cost: 0,
         }],
         groups: GroupsDesc {
             prefilled_groups: vec![],
@@ -368,6 +374,7 @@ fn invalid_teacher_number() {
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(23, 0).unwrap(),
             },
+            cost: 0,
         }],
         groups: GroupsDesc {
             prefilled_groups: vec![],
@@ -462,6 +469,7 @@ fn slot_ref_has_invalid_subject() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -481,6 +489,7 @@ fn slot_ref_has_invalid_subject() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -549,6 +558,7 @@ fn slot_ref_has_invalid_slot() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -568,6 +578,7 @@ fn slot_ref_has_invalid_slot() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -637,6 +648,7 @@ fn slot_grouping_overlap() {
                         weekday: time::Weekday::Monday,
                         start_time: time::Time::from_hm(17, 0).unwrap(),
                     },
+                    cost: 0,
                 },
                 SlotWithTeacher {
                     teacher: 0,
@@ -645,6 +657,7 @@ fn slot_grouping_overlap() {
                         weekday: time::Weekday::Tuesday,
                         start_time: time::Time::from_hm(8, 0).unwrap(),
                     },
+                    cost: 0,
                 },
             ],
             groups: GroupsDesc {
@@ -665,6 +678,7 @@ fn slot_grouping_overlap() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -748,6 +762,7 @@ fn grouping_incompact_invalid_ref() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -766,6 +781,7 @@ fn grouping_incompact_invalid_ref() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             }],
             groups: GroupsDesc {
                 prefilled_groups: vec![],
@@ -867,6 +883,7 @@ fn duplicated_groups() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -875,6 +892,7 @@ fn duplicated_groups() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -883,6 +901,7 @@ fn duplicated_groups() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -891,6 +910,7 @@ fn duplicated_groups() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -975,6 +995,7 @@ fn duplicated_student() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -983,6 +1004,7 @@ fn duplicated_student() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -991,6 +1013,7 @@ fn duplicated_student() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -999,6 +1022,7 @@ fn duplicated_student() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1092,6 +1116,7 @@ fn duplicated_student_not_assigned() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1100,6 +1125,7 @@ fn duplicated_student_not_assigned() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1108,6 +1134,7 @@ fn duplicated_student_not_assigned() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1116,6 +1143,7 @@ fn duplicated_student_not_assigned() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1207,6 +1235,7 @@ fn invalid_student_in_group() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1215,6 +1244,7 @@ fn invalid_student_in_group() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1223,6 +1253,7 @@ fn invalid_student_in_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1231,6 +1262,7 @@ fn invalid_student_in_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1311,6 +1343,7 @@ fn invalid_student_not_assigned() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1319,6 +1352,7 @@ fn invalid_student_not_assigned() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1327,6 +1361,7 @@ fn invalid_student_not_assigned() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1335,6 +1370,7 @@ fn invalid_student_not_assigned() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1409,6 +1445,7 @@ fn empty_group() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1417,6 +1454,7 @@ fn empty_group() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1425,6 +1463,7 @@ fn empty_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1433,6 +1472,7 @@ fn empty_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1530,6 +1570,7 @@ fn extensible_empty_group() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1538,6 +1579,7 @@ fn extensible_empty_group() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1546,6 +1588,7 @@ fn extensible_empty_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1554,6 +1597,7 @@ fn extensible_empty_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1647,6 +1691,7 @@ fn group_too_large() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1655,6 +1700,7 @@ fn group_too_large() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1663,6 +1709,7 @@ fn group_too_large() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1671,6 +1718,7 @@ fn group_too_large() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1764,6 +1812,7 @@ fn non_extensible_too_small_group() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1772,6 +1821,7 @@ fn non_extensible_too_small_group() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1780,6 +1830,7 @@ fn non_extensible_too_small_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1788,6 +1839,7 @@ fn non_extensible_too_small_group() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -1885,6 +1937,7 @@ fn too_few_groups() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1893,6 +1946,7 @@ fn too_few_groups() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1901,6 +1955,7 @@ fn too_few_groups() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -1909,6 +1964,7 @@ fn too_few_groups() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -2001,6 +2057,7 @@ fn too_many_groups() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -2009,6 +2066,7 @@ fn too_many_groups() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -2017,6 +2075,7 @@ fn too_many_groups() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -2025,6 +2084,7 @@ fn too_many_groups() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -2123,6 +2183,7 @@ fn no_full_period() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2131,6 +2192,7 @@ fn no_full_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2211,6 +2273,7 @@ fn group_in_slot_variables() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2219,6 +2282,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2227,6 +2291,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -2235,6 +2300,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -2243,6 +2309,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2251,6 +2318,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2259,6 +2327,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -2267,6 +2336,7 @@ fn group_in_slot_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -2411,6 +2481,7 @@ fn dynamic_group_assignment_variables() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2419,6 +2490,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2427,6 +2499,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -2435,6 +2508,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -2443,6 +2517,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2451,6 +2526,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2459,6 +2535,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -2467,6 +2544,7 @@ fn dynamic_group_assignment_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -2691,6 +2769,7 @@ fn student_in_group_variables() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2699,6 +2778,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -2707,6 +2787,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -2715,6 +2796,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -2723,6 +2805,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2731,6 +2814,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -2739,6 +2823,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -2747,6 +2832,7 @@ fn student_in_group_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -2873,6 +2959,7 @@ fn with_student_not_in_last_period_variables() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -2881,6 +2968,7 @@ fn with_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -2889,6 +2977,7 @@ fn with_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -2897,6 +2986,7 @@ fn with_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -2936,6 +3026,7 @@ fn with_student_not_in_last_period_variables() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -2944,6 +3035,7 @@ fn with_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -2952,6 +3044,7 @@ fn with_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -2960,6 +3053,7 @@ fn with_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -3099,6 +3193,7 @@ fn without_student_not_in_last_period_variables() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -3107,6 +3202,7 @@ fn without_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -3115,6 +3211,7 @@ fn without_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -3123,6 +3220,7 @@ fn without_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -3162,6 +3260,7 @@ fn without_student_not_in_last_period_variables() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -3170,6 +3269,7 @@ fn without_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -3178,6 +3278,7 @@ fn without_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -3186,6 +3287,7 @@ fn without_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -3299,6 +3401,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -3307,6 +3410,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -3315,6 +3419,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -3323,6 +3428,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -3361,6 +3467,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             period_is_strict: true,
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -3369,6 +3476,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -3377,6 +3485,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -3385,6 +3494,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -3511,6 +3621,7 @@ fn periodicity_variables_for_strict_period() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -3519,6 +3630,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -3527,6 +3639,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -3535,6 +3648,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -3543,6 +3657,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -3551,6 +3666,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -3559,6 +3675,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -3567,6 +3684,7 @@ fn periodicity_variables_for_strict_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -3702,6 +3820,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -3710,6 +3829,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -3718,6 +3838,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -3726,6 +3847,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -3734,6 +3856,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -3742,6 +3865,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -3750,6 +3874,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -3758,6 +3883,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -3893,6 +4019,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -3901,6 +4028,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -3909,6 +4037,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -3917,6 +4046,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -3925,6 +4055,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -3933,6 +4064,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -3941,6 +4073,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -3949,6 +4082,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -4059,6 +4193,7 @@ fn use_grouping() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4067,6 +4202,7 @@ fn use_grouping() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4075,6 +4211,7 @@ fn use_grouping() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4083,6 +4220,7 @@ fn use_grouping() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4183,6 +4321,7 @@ fn incomapt_group_for_student_variables() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4191,6 +4330,7 @@ fn incomapt_group_for_student_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4199,6 +4339,7 @@ fn incomapt_group_for_student_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4207,6 +4348,7 @@ fn incomapt_group_for_student_variables() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -4564,6 +4706,7 @@ fn at_most_max_groups_per_slot_constraints() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -4572,6 +4715,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -4580,6 +4724,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -4588,6 +4733,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -4596,6 +4742,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -4604,6 +4751,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -4612,6 +4760,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -4620,6 +4769,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -4658,6 +4808,7 @@ fn at_most_max_groups_per_slot_constraints() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -4666,6 +4817,7 @@ fn at_most_max_groups_per_slot_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -4866,6 +5018,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -4874,6 +5027,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -4905,6 +5059,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -4913,6 +5068,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -5057,6 +5213,7 @@ fn one_interrogation_per_period() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -5065,6 +5222,7 @@ fn one_interrogation_per_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -5073,6 +5231,7 @@ fn one_interrogation_per_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -5081,6 +5240,7 @@ fn one_interrogation_per_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 3,
@@ -5112,6 +5272,7 @@ fn one_interrogation_per_period() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -5120,6 +5281,7 @@ fn one_interrogation_per_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -5128,6 +5290,7 @@ fn one_interrogation_per_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 2,
@@ -5136,6 +5299,7 @@ fn one_interrogation_per_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 3,
@@ -5313,6 +5477,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -5321,6 +5486,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -5329,6 +5495,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -5359,6 +5526,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -5367,6 +5535,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -5375,6 +5544,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 2,
@@ -5565,6 +5735,7 @@ fn students_per_group_count() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -5573,6 +5744,7 @@ fn students_per_group_count() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -5581,6 +5753,7 @@ fn students_per_group_count() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -5589,6 +5762,7 @@ fn students_per_group_count() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -5750,6 +5924,7 @@ fn student_in_single_group() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -5758,6 +5933,7 @@ fn student_in_single_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -5766,6 +5942,7 @@ fn student_in_single_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -5774,6 +5951,7 @@ fn student_in_single_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -5934,6 +6112,7 @@ fn dynamic_groups_student_in_group_inequalities() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -5942,6 +6121,7 @@ fn dynamic_groups_student_in_group_inequalities() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -6059,6 +6239,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -6067,6 +6248,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -6182,6 +6364,7 @@ fn one_periodicity_choice_per_student() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6190,6 +6373,7 @@ fn one_periodicity_choice_per_student() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6198,6 +6382,7 @@ fn one_periodicity_choice_per_student() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -6228,6 +6413,7 @@ fn one_periodicity_choice_per_student() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6236,6 +6422,7 @@ fn one_periodicity_choice_per_student() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6244,6 +6431,7 @@ fn one_periodicity_choice_per_student() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -6274,6 +6462,7 @@ fn one_periodicity_choice_per_student() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6282,6 +6471,7 @@ fn one_periodicity_choice_per_student() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6290,6 +6480,7 @@ fn one_periodicity_choice_per_student() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -6462,6 +6653,7 @@ fn periodicity_inequalities() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6470,6 +6662,7 @@ fn periodicity_inequalities() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6478,6 +6671,7 @@ fn periodicity_inequalities() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -6508,6 +6702,7 @@ fn periodicity_inequalities() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6516,6 +6711,7 @@ fn periodicity_inequalities() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6524,6 +6720,7 @@ fn periodicity_inequalities() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -6554,6 +6751,7 @@ fn periodicity_inequalities() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6562,6 +6760,7 @@ fn periodicity_inequalities() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6570,6 +6769,7 @@ fn periodicity_inequalities() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 2,
@@ -6842,6 +7042,7 @@ fn interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -6850,6 +7051,7 @@ fn interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -6881,6 +7083,7 @@ fn interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -6889,6 +7092,7 @@ fn interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -6921,6 +7125,7 @@ fn interrogations_per_week() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -6929,6 +7134,7 @@ fn interrogations_per_week() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -7081,6 +7287,7 @@ fn grouping_inequalities() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7089,6 +7296,7 @@ fn grouping_inequalities() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7097,6 +7305,7 @@ fn grouping_inequalities() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7105,6 +7314,7 @@ fn grouping_inequalities() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7239,6 +7449,7 @@ fn grouping_incompats() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7247,6 +7458,7 @@ fn grouping_incompats() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7255,6 +7467,7 @@ fn grouping_incompats() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7263,6 +7476,7 @@ fn grouping_incompats() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7450,6 +7664,7 @@ fn simple_colloscope() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -7458,6 +7673,7 @@ fn simple_colloscope() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -7488,6 +7704,7 @@ fn simple_colloscope() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -7496,6 +7713,7 @@ fn simple_colloscope() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -7616,6 +7834,7 @@ fn colloscope_with_dynamic_groups() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -7624,6 +7843,7 @@ fn colloscope_with_dynamic_groups() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 1,
@@ -7654,6 +7874,7 @@ fn colloscope_with_dynamic_groups() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -7662,6 +7883,7 @@ fn colloscope_with_dynamic_groups() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -7922,6 +8144,7 @@ fn at_most_one_interrogation_per_empty_group() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -7930,6 +8153,7 @@ fn at_most_one_interrogation_per_empty_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -8029,6 +8253,7 @@ fn max_interrogations_per_day() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -8037,6 +8262,7 @@ fn max_interrogations_per_day() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 0,
                     start: SlotStart {
                         week: 0,
@@ -8068,6 +8294,7 @@ fn max_interrogations_per_day() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -8076,6 +8303,7 @@ fn max_interrogations_per_day() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -8108,6 +8336,7 @@ fn max_interrogations_per_day() {
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 0,
@@ -8116,6 +8345,7 @@ fn max_interrogations_per_day() {
                     },
                 },
                 SlotWithTeacher {
+                    cost: 0,
                     teacher: 1,
                     start: SlotStart {
                         week: 1,
@@ -8260,6 +8490,7 @@ fn balancing_teachers() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8268,6 +8499,7 @@ fn balancing_teachers() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8276,6 +8508,7 @@ fn balancing_teachers() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8284,6 +8517,7 @@ fn balancing_teachers() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8292,6 +8526,7 @@ fn balancing_teachers() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -8300,6 +8535,7 @@ fn balancing_teachers() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -8459,6 +8695,7 @@ fn balancing_timeslots() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8467,6 +8704,7 @@ fn balancing_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8475,6 +8713,7 @@ fn balancing_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8483,6 +8722,7 @@ fn balancing_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8491,6 +8731,7 @@ fn balancing_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -8499,6 +8740,7 @@ fn balancing_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -8667,6 +8909,7 @@ fn balancing_timeslots_2() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8675,6 +8918,7 @@ fn balancing_timeslots_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8683,6 +8927,7 @@ fn balancing_timeslots_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8691,6 +8936,7 @@ fn balancing_timeslots_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8699,6 +8945,7 @@ fn balancing_timeslots_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -8707,6 +8954,7 @@ fn balancing_timeslots_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -8866,6 +9114,7 @@ fn balancing_teachers_and_timeslots() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8874,6 +9123,7 @@ fn balancing_teachers_and_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -8882,6 +9132,7 @@ fn balancing_teachers_and_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8890,6 +9141,7 @@ fn balancing_teachers_and_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -8898,6 +9150,7 @@ fn balancing_teachers_and_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -8906,6 +9159,7 @@ fn balancing_teachers_and_timeslots() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -9074,6 +9328,7 @@ fn no_balancing() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -9082,6 +9337,7 @@ fn no_balancing() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -9090,6 +9346,7 @@ fn no_balancing() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -9098,6 +9355,7 @@ fn no_balancing() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -9106,6 +9364,7 @@ fn no_balancing() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -9114,6 +9373,7 @@ fn no_balancing() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -9215,6 +9475,7 @@ fn balancing_timeslots_with_ghost_group() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -9223,6 +9484,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -9231,6 +9493,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 2,
@@ -9239,6 +9502,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 3,
@@ -9247,6 +9511,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -9255,6 +9520,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -9263,6 +9529,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 2,
@@ -9271,6 +9538,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 3,
@@ -9279,6 +9547,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -9287,6 +9556,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -9295,6 +9565,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 2,
@@ -9303,6 +9574,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 3,
@@ -9311,6 +9583,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -9319,6 +9592,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -9327,6 +9601,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 2,
@@ -9335,6 +9610,7 @@ fn balancing_timeslots_with_ghost_group() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 3,
@@ -9542,6 +9818,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -9550,6 +9827,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -9558,6 +9836,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 2,
@@ -9566,6 +9845,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -9574,6 +9854,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -9582,6 +9863,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 2,
@@ -9590,6 +9872,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -9598,6 +9881,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -9606,6 +9890,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 2,
@@ -9614,6 +9899,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 0,
@@ -9622,6 +9908,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 1,
@@ -9630,6 +9917,7 @@ fn balancing_timeslots_with_ghost_group_2() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 1,
                 start: SlotStart {
                     week: 2,
@@ -9829,6 +10117,7 @@ fn balancing_timeslots_with_partial_last_period() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -9837,6 +10126,7 @@ fn balancing_timeslots_with_partial_last_period() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -9845,6 +10135,7 @@ fn balancing_timeslots_with_partial_last_period() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 1,
@@ -9853,6 +10144,7 @@ fn balancing_timeslots_with_partial_last_period() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 1,
@@ -9861,6 +10153,7 @@ fn balancing_timeslots_with_partial_last_period() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 1,
@@ -9869,6 +10162,7 @@ fn balancing_timeslots_with_partial_last_period() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -10022,6 +10316,7 @@ fn student_incompat_max_count_constraints() {
                     weekday: time::Weekday::Monday,
                     start_time: time::Time::from_hm(8, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -10030,6 +10325,7 @@ fn student_incompat_max_count_constraints() {
                     weekday: time::Weekday::Tuesday,
                     start_time: time::Time::from_hm(17, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -10038,6 +10334,7 @@ fn student_incompat_max_count_constraints() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(12, 0).unwrap(),
                 },
+                cost: 0,
             },
             SlotWithTeacher {
                 teacher: 0,
@@ -10046,6 +10343,7 @@ fn student_incompat_max_count_constraints() {
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(13, 0).unwrap(),
                 },
+                cost: 0,
             },
         ],
         groups: GroupsDesc {
@@ -10384,6 +10682,7 @@ fn incompat_group_for_student_constraints() {
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -10392,6 +10691,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -10400,6 +10700,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -10408,6 +10709,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 0,
@@ -10416,6 +10718,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -10424,6 +10727,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -10432,6 +10736,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
@@ -10440,6 +10745,7 @@ fn incompat_group_for_student_constraints() {
                 },
             },
             SlotWithTeacher {
+                cost: 0,
                 teacher: 0,
                 start: SlotStart {
                     week: 1,
