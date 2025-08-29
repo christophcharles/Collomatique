@@ -1,10 +1,13 @@
+use collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups;
+
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GroupListsUpdateWarning {
-    LoosePrefilledGroupList(
+    LooseWholePrefilledGroupList(collomatique_state_colloscopes::GroupListId),
+    LooseStudentsInPrefilledGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::StudentId,
+        Vec<collomatique_state_colloscopes::StudentId>,
     ),
     LooseSubjectAssociation(
         collomatique_state_colloscopes::GroupListId,
@@ -21,7 +24,7 @@ impl GroupListsUpdateWarning {
         data: &T,
     ) -> Option<String> {
         match self {
-            Self::LoosePrefilledGroupList(group_list_id, student_id) => {
+            Self::LooseWholePrefilledGroupList(group_list_id) => {
                 let Some(group_list) = data
                     .get_data()
                     .get_group_lists()
@@ -30,13 +33,37 @@ impl GroupListsUpdateWarning {
                 else {
                     return None;
                 };
-                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+
+                Some(format!(
+                    "Perte complète du préremplissage de la liste de groupe \"{}\"",
+                    group_list.params.name
+                ))
+            }
+            Self::LooseStudentsInPrefilledGroupList(group_list_id, student_ids) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
                 else {
                     return None;
                 };
+                let mut student_names = vec![];
+                for student_id in student_ids {
+                    let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                    else {
+                        return None;
+                    };
+                    student_names.push(format!(
+                        "{} {}",
+                        student.desc.firstname, student.desc.surname,
+                    ));
+                }
+
                 Some(format!(
-                    "Perte du préremplissage de la liste de groupe \"{}\" avec l'élève {} {}",
-                    group_list.params.name, student.desc.firstname, student.desc.surname,
+                    "Perte du préremplissage de la liste de groupe \"{}\" avec les élèves: {}",
+                    group_list.params.name,
+                    student_names.join(", ")
                 ))
             }
             Self::LooseSubjectAssociation(group_list_id, subject_id, period_id) => {
@@ -163,9 +190,97 @@ impl GroupListsUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<PreCleaningOp<GroupListsUpdateWarning>> {
-        todo!()
+        match self {
+            GroupListsUpdateOp::AddNewGroupList(_params) => None,
+            GroupListsUpdateOp::UpdateGroupList(group_list_id, params) => {
+                let Some(old_group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+
+                let mut students_to_exclude = vec![];
+                let mut new_prefilled_groups = old_group_list.prefilled_groups.clone();
+                for student_id in old_group_list.prefilled_groups.iter_students() {
+                    if params.excluded_students.contains(&student_id) {
+                        new_prefilled_groups.remove_student(student_id);
+                        students_to_exclude.push(student_id);
+                    }
+                }
+                if !students_to_exclude.is_empty() {
+                    return Some(PreCleaningOp {
+                        warning: GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList(
+                            *group_list_id,
+                            students_to_exclude,
+                        ),
+                        ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                            *group_list_id,
+                            new_prefilled_groups,
+                        ))],
+                    });
+                }
+
+                None
+            }
+            GroupListsUpdateOp::DeleteGroupList(group_list_id) => {
+                let Some(old_group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+
+                if !old_group_list.prefilled_groups.is_empty() {
+                    Some(PreCleaningOp {
+                        warning: GroupListsUpdateWarning::LooseWholePrefilledGroupList(
+                            *group_list_id,
+                        ),
+                        ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                            *group_list_id,
+                            GroupListPrefilledGroups { groups: vec![] },
+                        ))],
+                    });
+                }
+
+                for (period_id, subject_map) in
+                    &data.get_data().get_group_lists().subjects_associations
+                {
+                    for (subject_id, associated_id) in subject_map {
+                        if *group_list_id == *associated_id {
+                            return Some(PreCleaningOp {
+                                warning: GroupListsUpdateWarning::LooseSubjectAssociation(
+                                    *group_list_id,
+                                    *subject_id,
+                                    *period_id,
+                                ),
+                                ops: vec![UpdateOp::GroupLists(
+                                    GroupListsUpdateOp::AssignGroupListToSubject(
+                                        *period_id,
+                                        *subject_id,
+                                        None,
+                                    ),
+                                )],
+                            });
+                        }
+                    }
+                }
+
+                None
+            }
+            GroupListsUpdateOp::PrefillGroupList(_id, _prefilled_groups) => None,
+            GroupListsUpdateOp::AssignGroupListToSubject(
+                _period_id,
+                _subject_id,
+                _group_list_id,
+            ) => None,
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
@@ -438,13 +553,19 @@ impl GroupListsUpdateOp {
 
                 let mut output = vec![];
 
+                let mut students_to_exclude = vec![];
+                let mut new_prefilled_groups = old_group_list.prefilled_groups.clone();
                 for student_id in old_group_list.prefilled_groups.iter_students() {
                     if params.excluded_students.contains(&student_id) {
-                        output.push(GroupListsUpdateWarning::LoosePrefilledGroupList(
-                            *group_list_id,
-                            student_id,
-                        ));
+                        new_prefilled_groups.remove_student(student_id);
+                        students_to_exclude.push(student_id);
                     }
+                }
+                if !students_to_exclude.is_empty() {
+                    output.push(GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList(
+                        *group_list_id,
+                        students_to_exclude,
+                    ));
                 }
 
                 output
