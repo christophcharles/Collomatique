@@ -1465,6 +1465,22 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
         self.values.get(&name.into()).map(|x| x.into_inner())
     }
 
+    /// Returns the value of objective function for this configuration.
+    ///
+    /// Though it has less of a purpose in this case, this is also
+    /// defined for non-feasable configuration.
+    pub fn eval(&self) -> f64 {
+        let value_map = self
+            .values
+            .iter()
+            .map(|(x, y)| (x.clone(), y.into_inner()))
+            .collect();
+        self.problem
+            .objective_func
+            .eval(&value_map)
+            .expect("There should be no variable missing")
+    }
+
     /// Returns true if the configuration is feasable
     pub fn is_feasable(&self) -> bool {
         for (var, value) in &self.values {
