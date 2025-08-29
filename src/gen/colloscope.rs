@@ -985,6 +985,63 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_at_most_one_interrogation_per_period_for_empty_groups_contraint_for_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        period: std::ops::Range<u32>,
+        k: usize,
+        _group: &GroupDesc,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for (j, slot) in subject.slots.iter().enumerate() {
+            if period.contains(&slot.start.week) {
+                expr = expr
+                    + Expr::var(Variable::GroupInSlot {
+                        subject: i,
+                        slot: j,
+                        group: k,
+                    });
+            }
+        }
+
+        expr.leq(&Expr::constant(1))
+    }
+
+    fn build_at_most_one_interrogation_per_period_for_empty_groups_contraints(
+        &self,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            let period_count = (self.data.general.week_count.get() + subject.period.get() - 1)
+                / subject.period.get();
+            for p in 0..period_count {
+                let start = p * subject.period.get();
+                let end = (start + subject.period.get()).min(self.data.general.week_count.get());
+                let period = start..end;
+
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    if !group.students.is_empty() {
+                        continue;
+                    }
+                    constraints.insert(
+                        self.build_at_most_one_interrogation_per_period_for_empty_groups_contraint_for_group(
+                            i,
+                            subject,
+                            period.clone(),
+                            k,
+                            group,
+                        ),
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
     fn build_students_per_group_lhs_for_group(
         &self,
         i: usize,
@@ -1178,54 +1235,6 @@ impl<'a> IlpTranslator<'a> {
                                 ),
                             );
                         }
-                    }
-                }
-            }
-        }
-
-        constraints
-    }
-
-    fn build_group_in_slot_needs_student_constraint_for_case(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        k: usize,
-    ) -> Constraint<Variable> {
-        let lhs = Expr::var(Variable::GroupInSlot {
-            subject: i,
-            slot: j,
-            group: k,
-        });
-
-        let mut rhs = Expr::constant(0);
-
-        for student in subject.groups.not_assigned.iter().copied() {
-            rhs = rhs
-                + Expr::var(Variable::DynamicGroupAssignment {
-                    subject: i,
-                    slot: j,
-                    group: k,
-                    student,
-                });
-        }
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_group_in_slot_needs_student_constraints(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, _slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    if !Self::is_group_fixed(group, subject) {
-                        constraints.insert(
-                            self.build_group_in_slot_needs_student_constraint_for_case(
-                                i, subject, j, k,
-                            ),
-                        );
                     }
                 }
             }
@@ -1652,11 +1661,13 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .add_constraints(self.build_one_interrogation_per_period_contraints())
+            .add_constraints(
+                self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints(),
+            )
             .add_constraints(self.build_students_per_group_count_constraints())
             .add_constraints(self.build_student_in_single_group_constraints())
             .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
             .add_constraints(self.build_dynamic_groups_group_in_slot_constraints())
-            .add_constraints(self.build_group_in_slot_needs_student_constraints())
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
             .add_constraints(self.build_periodicity_constraints())
             .add_constraints(self.build_interrogations_per_week_constraints())
