@@ -105,51 +105,6 @@ impl Component for Dialog {
                             add_css_class: "boxed-list",
                             set_selection_mode: gtk::SelectionMode::None,
                         }
-                        /*gtk::ListBox {
-
-                            gtk::ListBoxRow {
-                                gtk::Box {
-                                    set_margin_all: 5,
-                                    add_css_class: "success",
-                                    set_orientation: gtk::Orientation::Horizontal,
-                                    gtk::Image::from_icon_name("emblem-success") {
-                                        set_margin_end: 5,
-                                    },
-                                    gtk::Label {
-                                        set_halign: gtk::Align::Start,
-                                        set_label: "Test1",
-                                    },
-                                },
-                            },
-                            gtk::ListBoxRow {
-                                gtk::Box {
-                                    set_margin_all: 5,
-                                    add_css_class: "warning",
-                                    set_orientation: gtk::Orientation::Horizontal,
-                                    gtk::Image::from_icon_name("emblem-warning") {
-                                        set_margin_end: 5,
-                                    },
-                                    gtk::Label {
-                                        set_halign: gtk::Align::Start,
-                                        set_label: "Test2",
-                                    },
-                                },
-                            },
-                            gtk::ListBoxRow {
-                                gtk::Box {
-                                    set_margin_all: 5,
-                                    add_css_class: "error",
-                                    set_orientation: gtk::Orientation::Horizontal,
-                                    gtk::Image::from_icon_name("emblem-error") {
-                                        set_margin_end: 5,
-                                    },
-                                    gtk::Label {
-                                        set_halign: gtk::Align::Start,
-                                        set_label: "Test3",
-                                    },
-                                },
-                            },
-                        }*/
                     },
                     gtk::Expander {
                         set_margin_all: 5,
