@@ -6310,6 +6310,24 @@ fn simple_colloscope() {
     let gis_1_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 1 });
 
     #[rustfmt::skip]
+    let gowsa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gowsa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 0 });
+    #[rustfmt::skip]
+    let gowsa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gowsa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 0 });
+
+    #[rustfmt::skip]
+    let gowsa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gowsa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 1 });
+    #[rustfmt::skip]
+    let gowsa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gowsa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 1 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
         (&gis_0_0_0 + &gis_0_1_0).eq(&Expr::constant(1)),
         (&gis_0_0_1 + &gis_0_1_1).eq(&Expr::constant(1)),
@@ -6325,6 +6343,31 @@ fn simple_colloscope() {
         (&gis_0_1_0 + &gis_0_1_1).leq(&Expr::constant(1)),
         (&gis_1_0_0 + &gis_1_0_1).leq(&Expr::constant(1)),
         (&gis_1_1_0 + &gis_1_1_1).leq(&Expr::constant(1)),
+
+        // Auto Group On Week Selection
+        gis_0_0_0.leq(&gowsa_0_0_0),
+        gis_0_0_0.geq(&gowsa_0_0_0),
+
+        gis_0_1_0.leq(&gowsa_0_1_0),
+        gis_0_1_0.geq(&gowsa_0_1_0),
+
+        gis_1_0_0.leq(&gowsa_1_0_0),
+        gis_1_0_0.geq(&gowsa_1_0_0),
+
+        gis_1_1_0.leq(&gowsa_1_1_0),
+        gis_1_1_0.geq(&gowsa_1_1_0),
+
+        gis_0_0_1.leq(&gowsa_0_0_1),
+        gis_0_0_1.geq(&gowsa_0_0_1),
+
+        gis_0_1_1.leq(&gowsa_0_1_1),
+        gis_0_1_1.geq(&gowsa_0_1_1),
+
+        gis_1_0_1.leq(&gowsa_1_0_1),
+        gis_1_0_1.geq(&gowsa_1_0_1),
+
+        gis_1_1_1.leq(&gowsa_1_1_1),
+        gis_1_1_1.geq(&gowsa_1_1_1),
     ]);
 
     assert_eq!(constraints, expected_result);
@@ -6540,6 +6583,24 @@ fn colloscope_with_dynamic_groups() {
     let dga_1_1_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 5 });
 
     #[rustfmt::skip]
+    let gowsa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gowsa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 0 });
+    #[rustfmt::skip]
+    let gowsa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gowsa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 0 });
+
+    #[rustfmt::skip]
+    let gowsa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gowsa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 1 });
+    #[rustfmt::skip]
+    let gowsa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gowsa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 1 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
         // One interrogation per period for groups with fixed students
         (&gis_0_0_0 + &gis_0_1_0).eq(&Expr::constant(1)),
@@ -6636,6 +6697,31 @@ fn colloscope_with_dynamic_groups() {
         dga_1_1_1_3.leq(&sig_1_3_1),
         dga_1_1_1_4.leq(&sig_1_4_1),
         dga_1_1_1_5.leq(&sig_1_5_1),
+
+        // Auto Group On Week Selection
+        gis_0_0_0.leq(&gowsa_0_0_0),
+        gis_0_0_0.geq(&gowsa_0_0_0),
+
+        gis_0_1_0.leq(&gowsa_0_1_0),
+        gis_0_1_0.geq(&gowsa_0_1_0),
+
+        gis_1_0_0.leq(&gowsa_1_0_0),
+        gis_1_0_0.geq(&gowsa_1_0_0),
+
+        gis_1_1_0.leq(&gowsa_1_1_0),
+        gis_1_1_0.geq(&gowsa_1_1_0),
+
+        gis_0_0_1.leq(&gowsa_0_0_1),
+        gis_0_0_1.geq(&gowsa_0_0_1),
+
+        gis_0_1_1.leq(&gowsa_0_1_1),
+        gis_0_1_1.geq(&gowsa_0_1_1),
+
+        gis_1_0_1.leq(&gowsa_1_0_1),
+        gis_1_0_1.geq(&gowsa_1_0_1),
+
+        gis_1_1_1.leq(&gowsa_1_1_1),
+        gis_1_1_1.geq(&gowsa_1_1_1),
     ]);
 
     assert_eq!(constraints, expected_result);
