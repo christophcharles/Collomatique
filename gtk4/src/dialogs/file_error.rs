@@ -5,7 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum Type {
+    #[allow(dead_code)]
     Open,
+    #[allow(dead_code)]
     Save,
 }
 
