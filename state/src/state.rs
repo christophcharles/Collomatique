@@ -92,7 +92,7 @@ impl<T: InMemoryData> traits::private::ManagerInternal for AppState<T> {
 /// You should always finish by calling [AppSession::commit] or [AppSession::cancel]
 /// as this will return the ownership of the [traits::Manager].
 /// Simply droping [AppSession] means also loosing the corresponding [traits::Manager].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 
 pub struct AppSession<T: traits::Manager> {
     op_manager: T,

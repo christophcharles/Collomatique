@@ -11,7 +11,7 @@
 //! to a simple command in a cli or a click of a button in a gui.
 //!
 
-use collomatique_state::{traits::Manager, AppState};
+use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 
 use thiserror::Error;
@@ -31,7 +31,16 @@ pub enum UpdateError {
 }
 
 impl UpdateOp {
-    pub fn apply(&self, data: &mut AppState<Data>) -> Result<(), UpdateError> {
+    pub fn get_desc(&self) -> String {
+        match self {
+            UpdateOp::GeneralPlanning(period_op) => period_op.get_desc(),
+        }
+    }
+
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        data: &mut T,
+    ) -> Result<(), UpdateError> {
         match self {
             UpdateOp::GeneralPlanning(period_op) => {
                 period_op.apply(data)?;

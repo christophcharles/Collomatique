@@ -256,7 +256,7 @@ pub(crate) mod private {
     /// The trait is sealed so that the functions defined here are *private*.
     /// Thus, we can protect from mutable access to the underlying data and
     /// history.
-    pub trait ManagerInternal: Send + Sync {
+    pub trait ManagerInternal: Send + Sync + Clone {
         /// Type of the underlying data
         type Data: InMemoryData;
 
