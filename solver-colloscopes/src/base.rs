@@ -5,6 +5,7 @@
 //! a (partially completed or not) colloscope.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroUsize;
 
 pub trait Identifier : Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync {}
 
@@ -33,16 +34,29 @@ pub struct TeacherInterrogations<InterrogationId: Identifier> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubjectInterrogations<TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier> {
-    duration: collomatique_time::NonZeroDurationInMinutes,
+pub struct GroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
     group_list_id: GroupListId,
+    enrolled_students: BTreeSet<StudentId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatedGroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
+    start_week: NonZeroUsize,
+    group_assignment: GroupAssignment<GroupListId, StudentId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectInterrogations<TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
+    duration: collomatique_time::NonZeroDurationInMinutes,
+    starting_group_assignment: GroupAssignment<GroupListId, StudentId>,
+    other_group_assignments: Vec<DatedGroupAssignment<GroupListId, StudentId>>,
     teacher_map: BTreeMap<TeacherId, TeacherInterrogations<InterrogationId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Colloscope<SubjectId: Identifier, TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
     week_count: usize,
-    subject_map: BTreeMap<SubjectId, SubjectInterrogations<TeacherId, InterrogationId, GroupListId>>,
+    subject_map: BTreeMap<SubjectId, SubjectInterrogations<TeacherId, InterrogationId, GroupListId, StudentId>>,
     group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
 }
 
