@@ -51,6 +51,10 @@ pub enum DecodeError {
     InconsistentSlotsData,
     #[error("Slots were decoded before subjects")]
     SlotsDecodedBeforeSubjects,
+    #[error("A slot is ill-formed in subject incompatibilities")]
+    IllformedSlotInSubjectIncompatibilities,
+    #[error("Duplicated slot in subject incompatibilities")]
+    DuplicatedSlotInSubjectIncompatibilities,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
