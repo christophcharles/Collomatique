@@ -318,7 +318,8 @@ fn main() {
 
     sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
 
-    let solver = collomatique::ilp::solvers::backtracking::Solver::new();
+    use collomatique::ilp::solvers::backtracking::heuristics::Connolly1992;
+    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Connolly1992::default());
     let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
