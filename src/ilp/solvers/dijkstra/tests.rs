@@ -65,14 +65,14 @@ fn test_dijkstra() {
         .unwrap();
     let config = pb.config_from(["x11", "y12", "y21"]);
 
-    let dijkstra_solver = super::Solver::new(&pb);
+    let dijkstra_solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = dijkstra_solver.restore_feasability(&config);
+    let solution = dijkstra_solver.restore_feasability(&config.repr());
 
     assert_eq!(
         solution.expect("Solution should be found").into_inner(),
-        pb.config_from(["x11", "y12", "y21", "x22"])
+        pb.config_from(["x11", "y12", "y21", "x22"]).repr()
     );
 }

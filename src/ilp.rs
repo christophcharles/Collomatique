@@ -1,6 +1,6 @@
 pub mod dbg;
 pub mod linexpr;
-mod ndtools;
+pub mod ndtools;
 pub mod optimizers;
 pub mod random;
 pub mod solvers;
