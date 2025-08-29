@@ -39,10 +39,10 @@
 //! <https://doi.org/10.1016/j.ejor.2012.11.029>). Though it is not the only way to solve our colloscope problem, it is the one we chose
 //! and this crate contains only the mathematical tools for it.
 //! 
-//! There are already a few crates to represent ILP problems in Rust, most notably good_lp (<https://docs.rs/good_lp/1.13.0/good_lp/>).
+//! There are already a few crates to represent ILP problems in Rust, most notably good_lp (<https://docs.rs/good_lp/latest/good_lp/>).
 //! There are also crates for solving ILP problems either with their own implementation of an algorithm, for instance microlp
 //! <https://docs.rs/microlp/latest/microlp/>, or as interfaces to code in other languages (usually in C or C++), for instance
-//! highs <https://docs.rs/highs/1.8.0/highs/> and coinc_cbc <https://docs.rs/coin_cbc/0.1.8/coin_cbc/>.
+//! highs <https://docs.rs/highs/latest/highs/> and coinc_cbc <https://docs.rs/coin_cbc/latest/coin_cbc/>.
 //! 
 //! We don't try to reinvent the wheel here. In fact, we do use such crates as backend. However, this crate was developed to serve two other goals:
 //! - to have an internal representation with more generic variable names that is easier to handler in the main collomatique code.
