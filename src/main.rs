@@ -49,19 +49,31 @@ fn main() {
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
+        .unwrap()
         .add_constraint((&x12 + &y12).leq(&one))
+        .unwrap()
         .add_constraint((&x21 + &y21).leq(&one))
+        .unwrap()
         .add_constraint((&x22 + &y22).leq(&one))
+        .unwrap()
         // Each class should not attend more than one course at a given time
         .add_constraint((&x11 + &x21).leq(&one))
+        .unwrap()
         .add_constraint((&x12 + &x22).leq(&one))
+        .unwrap()
         .add_constraint((&y11 + &y21).leq(&one))
+        .unwrap()
         .add_constraint((&y12 + &y22).leq(&one))
+        .unwrap()
         // Each class must complete each course exactly once
         .add_constraint((&x11 + &x12).eq(&one))
+        .unwrap()
         .add_constraint((&x21 + &x22).eq(&one))
+        .unwrap()
         .add_constraint((&y11 + &y12).eq(&one))
+        .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
+        .unwrap()
         // eval func
         .eval_fn(collomatique::debuggable!(|x| if x.get("y12").unwrap() {
             1000.0
@@ -69,8 +81,7 @@ fn main() {
             0.0
         }))
         .simplify_trivial_constraints()
-        .build()
-        .unwrap();
+        .build();
 
     println!("{}", pb);
 
