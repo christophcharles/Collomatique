@@ -79,6 +79,7 @@ pub enum AppInput {
     LoadColloscope(PathBuf),
     ColloscopeLoaded(PathBuf, collomatique_state_colloscopes::Data),
     ColloscopeLoadingFailed(PathBuf, String),
+    ColloscopeSavingFailed(PathBuf, String),
     RequestOpenExistingColloscopeWithDialog,
     OpenExistingColloscopeWithDialog,
     RequestQuit,
@@ -142,6 +143,9 @@ impl SimpleComponent for AppModel {
             sender.input_sender(),
             |msg| match msg {
                 editor::EditorOutput::UpdateActions => AppInput::UpdateActions,
+                editor::EditorOutput::SaveError(path, error) => {
+                    AppInput::ColloscopeSavingFailed(path, error)
+                }
             },
         );
 
@@ -380,6 +384,17 @@ impl SimpleComponent for AppModel {
                     ))
                     .unwrap();
                 self.state = GlobalState::WelcomeScreen;
+            }
+            AppInput::ColloscopeSavingFailed(path, error) => {
+                self.controllers
+                    .file_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Save,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
             }
             AppInput::WarnDirty => {
                 self.controllers
