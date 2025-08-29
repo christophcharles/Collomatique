@@ -1,3 +1,4 @@
+pub mod dbg;
 pub mod linexpr;
 pub mod optimizers;
 pub mod random;
@@ -7,49 +8,11 @@ mod tools;
 #[cfg(test)]
 mod tests;
 
-use std::sync::Arc;
-
-#[derive(Clone)]
-pub struct EvalFn {
-    func: Arc<dyn Fn(&FeasableConfig) -> f64>,
-    debug_payload: &'static str,
-}
-
-impl EvalFn {
-    pub fn new(func: Arc<dyn Fn(&FeasableConfig) -> f64>, debug_payload: &'static str) -> EvalFn {
-        EvalFn {
-            func,
-            debug_payload,
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! eval_fn {
-    ($($body:tt)+) => {
-        $crate::ilp::EvalFn::new(
-            std::sync::Arc::new($($body)+),
-            stringify!($($body)+)
-        )
-    };
-}
+pub type EvalFn = dbg::Debuggable<dyn Fn(&FeasableConfig) -> f64>;
 
 impl Default for EvalFn {
     fn default() -> Self {
-        eval_fn!(|_x| 0.)
-    }
-}
-
-impl std::fmt::Debug for EvalFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.debug_payload)
-    }
-}
-
-impl std::ops::Deref for EvalFn {
-    type Target = Arc<dyn Fn(&FeasableConfig) -> f64>;
-    fn deref(&self) -> &Arc<dyn Fn(&FeasableConfig) -> f64> {
-        &self.func
+        crate::debuggable!(|_x| 0.)
     }
 }
 
