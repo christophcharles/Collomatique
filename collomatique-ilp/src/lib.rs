@@ -812,14 +812,30 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
     }
 }
 
+/// Report on confirmity between configuration data and an ILP problem
+///
+/// The structure [ConfigData] can represent the data for a configuration.
+/// But it might not correspond to a given [Problem] for 3 major reasons:
+/// - some variables (for the problem) might not have an associated value in the configuration
+/// - some variables in the configuration are not part of the problem
+/// - some variables, though part of the problem, do not conform to their type.
+/// This report stores these problematic variables either as a result from a call
+/// to [Problem::check_config_data_variables] or as an error when calling
+/// [Problem::build_config].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConfigDataVarCheck<V: UsableData> {
+    /// Set of missing variables in the configuration data (with respect to the given problem)
     pub missing_variables: BTreeSet<V>,
+    /// Set of excess variables in the configuration data (variables not present in the given problem)
     pub excess_variables: BTreeSet<V>,
+    /// Set of non-conforming variables in the configuration data
+    /// (variables with values not conforming to their type with respect to the given problem)
     pub non_conforming_variables: BTreeSet<V>,
 }
 
 impl<V: UsableData> ConfigDataVarCheck<V> {
+    /// Returns true if the report is empty, that is if there is no issue between
+    /// the configuration data and the given problem.
     pub fn is_empty(&self) -> bool {
         self.missing_variables.is_empty()
             && self.excess_variables.is_empty()
@@ -828,6 +844,15 @@ impl<V: UsableData> ConfigDataVarCheck<V> {
 }
 
 impl<V: UsableData, C: UsableData> Problem<V, C> {
+    /// Checks if there are mismatches between the variables in a configuration data
+    /// (represented by a [ConfigData]) and the variables in the problem.
+    ///
+    /// The structure [ConfigData] can represent the data for a configuration.
+    /// But it might not correspond to a given [Problem] for 2 major reasons:
+    /// - some variables (for the problem) might not have an associated value in the configuration
+    /// - some variables in the configuration are not part of the problem
+    /// This functions checks for this and returns a report (possibly empty - see [ConfigDataVarCheck::is_empty])
+    /// in a structure of type [ConfigDataVarCheck].
     pub fn check_config_data_variables(
         &self,
         config_data: &ConfigData<V>,
@@ -847,6 +872,11 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         }
     }
 
+    /// Internal helper function: checks that a variable of a [ConfigData] is conforming
+    /// with respect to the current [Problem].
+    ///
+    /// A variable is conforming if it is indeed part of the problem
+    /// and if its value conforms to its type (as given by the problem).
     fn check_variable_conformity(&self, config_data: &ConfigData<V>, name: &V) -> bool {
         let Some(value) = config_data.values.get(name).map(|x| x.into_inner()) else {
             return false;
@@ -855,21 +885,15 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         self.check_value_conformity(name, value)
     }
 
+    /// Internal helper function: checks that a value for a variable is conforming
+    /// with respect to the current [Problem].
+    ///
+    /// A variable is conforming if it is indeed part of the problem
+    /// and if its value conforms to its type (as given by the problem).
     fn check_value_conformity(&self, name: &V, value: f64) -> bool {
         let Some(var_constraint) = self.variables.get(name) else {
             return false;
         };
-
-        if let Some(m) = var_constraint.get_min() {
-            if value < m {
-                return false;
-            }
-        }
-        if let Some(m) = var_constraint.get_max() {
-            if value > m {
-                return false;
-            }
-        }
 
         match var_constraint.get_type() {
             VariableType::Continuous => true,
@@ -878,6 +902,12 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         }
     }
 
+    /// Builds a [Config] for the problem from a [ConfigData] without checking first
+    /// if the variables match.
+    ///
+    /// This is obviously unsafe. Unless you are sure that the [ConfigData] does indeed
+    /// have the right variables, you should first check with [Problem::check_config_data_variables]
+    /// or rather call [Problem::build_config] which will have a sanity check first.
     pub unsafe fn build_config_unchecked(&self, config_data: ConfigData<V>) -> Config<'_, V, C> {
         Config {
             problem: self,
@@ -885,6 +915,13 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         }
     }
 
+    /// Builds a [Config] for the problem from a [ConfigData].
+    ///
+    /// This functions does the necessary sanity checks first. If some variables are
+    /// missing (or in excess) in the configuration data, the function will fail and
+    /// return a report in a [ConfigDataVarCheck].
+    ///
+    /// Otherwise, this will return a [Config] suited for the current problem.
     pub fn build_config(
         &self,
         config_data: ConfigData<V>,
@@ -904,6 +941,21 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
 /// This data structure is an intermediary structure
 /// representing an association bewteen variables
 /// and their values.
+///
+/// The main difference with [Config] is that [ConfigData]
+/// exists on its own and does not need a corresponding [Problem].
+///
+/// This means two things:
+/// - first, it can be built easily incrementaly. You can
+///   modify the values of the variables with its various methods.
+/// - second, it is not, in a absolute sense, feasable or not feasable.
+///   A configuration is feasable if it satisfies all the hard
+///   constraints of a problem. This of course depends on the problem
+///   and assumes *some* compatibility between the problem and the configuration.
+/// These two points imply that [ConfigData] can act as a builder type for [Config].
+/// You build a configuration from scratch and once all the variables are correctly set,
+/// you can convert it to a [Config] for a specific [Problem] using [Problem::build_config].
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConfigData<V: UsableData> {
     values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
@@ -924,12 +976,33 @@ impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>> Fr
 }
 
 impl<V: UsableData> ConfigData<V> {
+    /// Sets a variable in the configuration to a specific value.
+    ///
+    /// If the variable does not exist in the configuration yet, it is
+    /// simply added.
+    /// If the variable already exists, it is overwritten.
+    ///
+    /// A variable can be removed using [ConfigData::remove].
     pub fn set<U: Into<V>, W: Into<f64>>(mut self, name: U, value: W) -> Self {
         self.values
             .insert(name.into(), ordered_float::OrderedFloat(value.into()));
         self
     }
 
+    /// Sets multiple variables in the configuration to specific values.
+    ///
+    /// This works like [ConfigData::set] but allows the setting of multiple
+    /// variables at a time.
+    ///
+    /// It takes as a parameter an iterator over tuples, containing variable names
+    /// and their associated values.
+    ///
+    /// If a variable does not exist in the configuration yet, it is
+    /// simply added.
+    /// If a variable already exists, it is overwritten.
+    ///
+    /// If a variable appears multiple time in the iterator, each new value overwrites
+    /// the previous one.
     pub fn set_iter<U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>>(
         mut self,
         values: T,
@@ -941,11 +1014,26 @@ impl<V: UsableData> ConfigData<V> {
         self
     }
 
+    /// Removes a variable from the configuration.
+    ///
+    /// If the variable is not in the configuration yet, this is
+    /// simply a no-op.
+    ///
+    /// You can add back a variable with [ConfigData::set].
     pub fn remove<U: Into<V>>(mut self, name: U) -> Self {
         self.values.remove(&name.into());
         self
     }
 
+    /// Removes multiple variables from the configuration.
+    ///
+    /// This works like [ConfigData::remove] but is designed to remove
+    /// multiple variables at a time.
+    ///
+    /// If a variable is not in the configuration yet, it is simply ignored.
+    ///
+    /// If a variable appears multiple times in the iterator, this removes it
+    /// only once.
     pub fn remove_iter<U: Into<V>, T: IntoIterator<Item = U>>(mut self, names: T) -> Self {
         for name in names {
             self.values.remove(&name.into());
@@ -953,6 +1041,17 @@ impl<V: UsableData> ConfigData<V> {
         self
     }
 
+    /// Keeps variables based on a predicate.
+    ///
+    /// This function works similarly to [ConfigData::remove] and
+    /// [ConfigData::remove_iter]. Its net effect is to remove variables
+    /// from the configuration.
+    ///
+    /// It takes a closure as a parameter. It is called on each variable
+    /// with its name and its value. If it returns `true`, the variable is kept.
+    /// If is returns `false`, the variable is removed.
+    ///
+    /// This allows to remove variables based on their values rather than just their name.
     pub fn retain<F>(mut self, mut f: F) -> Self
     where
         F: FnMut(&V, f64) -> bool,
@@ -961,11 +1060,61 @@ impl<V: UsableData> ConfigData<V> {
         self
     }
 
+    /// Returns the variables in the configuration
+    ///
+    /// This returns an iterator on the variables in the configuration.
+    /// Only the names are given.
+    ///
+    /// If you also want the values, you should use [ConfigData::get_values].
+    pub fn get_variables(&self) -> impl Iterator<Item = &V> {
+        self.values.keys()
+    }
+
+    /// Returns the variables and their values in the configuration
+    ///
+    /// This returns a map associating each name to a value.
+    ///
+    /// If you only want the variable names, you should use [ConfigData::get_variables].
+    pub fn get_values(&self) -> BTreeMap<V, f64> {
+        self.values
+            .iter()
+            .map(|(x, y)| (x.clone(), y.into_inner()))
+            .collect()
+    }
+
+    /// Returns the value of a single variable in the configuration
+    ///
+    /// This function returns the value of the variable `name`. If there
+    /// is no such variable in the configuration, this returns `None`.
+    ///
+    /// If you want all the values of all the variables, you should use [ConfigData::get_values].
+    /// If you want the list of possible variable names, you should use [ConfigData::get_variables].
     pub fn get<U: Into<V>>(&self, name: U) -> Option<f64> {
         self.values.get(&name.into()).map(|x| x.into_inner())
     }
 }
 
+/// A configuration for a [Problem].
+///
+/// A configuration is the affectation of a value to every variable of a
+/// problem. As such, a [Config] is specific to a [Problem].
+///
+/// Such a configuration does not need to be *feasable* (meaning that
+/// it does not have to satisfy the various inequalities and so it does
+/// not have to be a solution of the problem). But it does need
+/// to be a valid configuration, which means that all the variables
+/// and only the variables of the problem have a value attributed to them
+/// and these values conform to their prescribed type.
+///
+/// We do not require though that the variable ranges are satisfied. This
+/// is considered to be a inequality on the variable and as such a constraint
+/// that does not need to be satisfied.
+///
+/// [Config] represents such a valid configuration. It is usually built
+/// from a [ConfigData] that has been checked and transformed using [Problem::build_config].
+///
+/// A [Config], because it is linked to a problem, keeps a reference to its
+/// problem which explains the needed lifetime `'a`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Config<'a, V: UsableData, C: UsableData> {
     problem: &'a Problem<V, C>,
@@ -973,14 +1122,16 @@ pub struct Config<'a, V: UsableData, C: UsableData> {
 }
 
 impl<'a, V: UsableData, C: UsableData> Config<'a, V, C> {
+    /// Returns the [Problem] this [Config] is associated to.
     pub fn get_problem(&self) -> &Problem<V, C> {
         self.problem
     }
 
-    pub fn get<T: Into<V>>(&self, name: T) -> Result<f64, ()> {
-        match self.values.get(&name.into()) {
-            Some(v) => Ok(v.into_inner()),
-            None => Err(()),
-        }
+    /// Returns the value of the variable `name`.
+    ///
+    /// If the variable is not part of the [Problem] (and thus
+    /// not part of [Config]), this function returns `None`.
+    pub fn get<T: Into<V>>(&self, name: T) -> Option<f64> {
+        self.values.get(&name.into()).map(|x| x.into_inner())
     }
 }
