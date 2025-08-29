@@ -129,15 +129,6 @@ pub struct GroupsDesc {
     pub not_assigned: BTreeSet<usize>,
 }
 
-impl GroupsDesc {
-    fn students_iterator(&self) -> impl Iterator<Item = &usize> {
-        self.prefilled_groups
-            .iter()
-            .flat_map(|group| group.students.iter())
-            .chain(self.not_assigned.iter())
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BalancingRequirements {
     pub teachers: bool,
@@ -516,10 +507,6 @@ pub enum Variable {
         slot: usize,
         group: usize,
     },
-    StudentNotInLastPeriod {
-        subject: usize,
-        student: usize,
-    },
     DynamicGroupAssignment {
         subject: usize,
         slot: usize,
@@ -530,11 +517,6 @@ pub enum Variable {
         subject: usize,
         student: usize,
         group: usize,
-    },
-    Periodicity {
-        subject: usize,
-        student: usize,
-        week_modulo: u32,
     },
     UseGrouping(usize),
     IncompatGroupForStudent {
@@ -557,9 +539,6 @@ impl std::fmt::Display for Variable {
                 slot,
                 group,
             } => write!(f, "GiS_{}_{}_{}", *subject, *slot, *group),
-            Variable::StudentNotInLastPeriod { subject, student } => {
-                write!(f, "SniLP_{}_{}", *subject, *student)
-            }
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -571,11 +550,6 @@ impl std::fmt::Display for Variable {
                 student,
                 group,
             } => write!(f, "SiG_{}_{}_{}", *subject, *student, *group),
-            Variable::Periodicity {
-                subject,
-                student,
-                week_modulo,
-            } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
             Variable::UseGrouping(num) => write!(f, "UG_{}", num),
             Variable::IncompatGroupForStudent {
                 incompat_group,
@@ -700,14 +674,6 @@ impl<'a> IlpTranslator<'a> {
         result
     }
 
-    fn is_last_period_incomplete(&self, subject: &Subject) -> bool {
-        self.data.general.week_count.get() % subject.period.get() != 0
-    }
-
-    fn subject_needs_periodicity_variables(&self, subject: &Subject) -> bool {
-        subject.period_is_strict || self.is_last_period_incomplete(subject)
-    }
-
     fn build_group_in_slot_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
@@ -791,54 +757,6 @@ impl<'a> IlpTranslator<'a> {
                         })
                 })
             })
-            .collect()
-    }
-
-    fn build_periodicity_variables(&self) -> BTreeSet<Variable> {
-        self.data
-            .subjects
-            .iter()
-            .enumerate()
-            .filter_map(|(i, subject)| {
-                if !self.subject_needs_periodicity_variables(subject) {
-                    return None;
-                }
-
-                let student_iterator = subject.groups.students_iterator();
-
-                Some(student_iterator.flat_map(move |j| {
-                    (0..subject.period.get())
-                        .into_iter()
-                        .map(move |k| Variable::Periodicity {
-                            subject: i,
-                            student: *j,
-                            week_modulo: k,
-                        })
-                }))
-            })
-            .flatten()
-            .collect()
-    }
-
-    fn build_student_not_in_last_period_variables(&self) -> BTreeSet<Variable> {
-        self.data
-            .subjects
-            .iter()
-            .enumerate()
-            .filter_map(|(i, subject)| {
-                if !self.is_last_period_incomplete(subject) {
-                    return None;
-                }
-
-                let student_iterator = subject.groups.students_iterator();
-                Some(
-                    student_iterator.map(move |k| Variable::StudentNotInLastPeriod {
-                        subject: i,
-                        student: *k,
-                    }),
-                )
-            })
-            .flatten()
             .collect()
     }
 
@@ -1072,14 +990,10 @@ impl<'a> IlpTranslator<'a> {
 
         assert!(current_period_length <= subject.period.get());
         if current_period_length < subject.period.get() {
-            expr = expr
-                + Expr::var(Variable::StudentNotInLastPeriod {
-                    subject: i,
-                    student,
-                });
+            expr.leq(&Expr::constant(1))
+        } else {
+            expr.eq(&Expr::constant(1))
         }
-
-        expr.eq(&Expr::constant(1))
     }
 
     fn build_one_interrogation_per_period_contraint_for_assigned_student(
@@ -1088,8 +1002,6 @@ impl<'a> IlpTranslator<'a> {
         subject: &Subject,
         period: std::ops::Range<u32>,
         k: usize,
-        _group: &GroupDesc,
-        student: usize,
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
@@ -1108,85 +1020,111 @@ impl<'a> IlpTranslator<'a> {
 
         assert!(current_period_length <= subject.period.get());
         if current_period_length < subject.period.get() {
-            expr = expr
-                + Expr::var(Variable::StudentNotInLastPeriod {
-                    subject: i,
-                    student,
-                });
+            expr.leq(&Expr::constant(1))
+        } else {
+            expr.eq(&Expr::constant(1))
         }
-
-        expr.eq(&Expr::constant(1))
     }
 
-    fn build_one_interrogation_per_period_contraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_one_interrogation_per_period_contraints_for_one_subject_period(
+        &self,
+        i: usize,
+        subject: &Subject,
+        period: std::ops::Range<u32>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for student in subject.groups.not_assigned.iter().copied() {
+            constraints.insert(
+                self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
+                    i,
+                    subject,
+                    period.clone(),
+                    student,
+                ),
+            );
+        }
+
+        for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+            if !group.students.is_empty() {
+                constraints.insert(
+                    self.build_one_interrogation_per_period_contraint_for_assigned_student(
+                        i,
+                        subject,
+                        period.clone(),
+                        k,
+                    ),
+                );
+            }
+        }
+
+        constraints
+    }
+
+    fn generate_period_list(&self, subject: &Subject, strict: bool) -> Vec<std::ops::Range<u32>> {
+        let week_count = self.data.general.week_count.get();
+        if strict {
+            (0..(week_count - subject.period.get() + 1))
+                .into_iter()
+                .map(|start| start..(start + subject.period.get()))
+                .collect()
+        } else {
+            let whole_period_count = self.data.general.week_count.get() / subject.period.get();
+            let mut period_list: Vec<_> = (0..whole_period_count)
+                .into_iter()
+                .map(|p| {
+                    let start = p * subject.period.get();
+                    let period = start..(start + subject.period.get());
+                    period
+                })
+                .collect();
+
+            let week_remainder = week_count % subject.period.get();
+            let there_is_an_incomplete_period = week_remainder != 0;
+            if there_is_an_incomplete_period {
+                let first_week_to_add = week_count - week_remainder - subject.period.get() + 1;
+                for i in 0..week_remainder {
+                    let start = first_week_to_add + i;
+                    period_list.push(start..(start + subject.period.get()));
+                }
+            }
+
+            period_list
+        }
+    }
+
+    fn build_one_interrogation_per_period_constraints_for_subject(
+        &self,
+        i: usize,
+        subject: &Subject,
+        strict: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        let period_list = self.generate_period_list(subject, strict);
+
+        for period in period_list {
+            constraints.extend(
+                self.build_one_interrogation_per_period_contraints_for_one_subject_period(
+                    i, subject, period,
+                ),
+            );
+        }
+
+        constraints
+    }
+
+    fn build_one_interrogation_per_period_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let whole_period_count = self.data.general.week_count.get() / subject.period.get();
-            for p in 0..whole_period_count {
-                let start = p * subject.period.get();
-                let period = start..(start + subject.period.get());
-
-                for student in subject.groups.not_assigned.iter().copied() {
-                    constraints.insert(
-                        self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
-                            i,
-                            subject,
-                            period.clone(),
-                            student,
-                        ),
-                    );
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    for student in group.students.iter().copied() {
-                        constraints.insert(
-                            self.build_one_interrogation_per_period_contraint_for_assigned_student(
-                                i,
-                                subject,
-                                period.clone(),
-                                k,
-                                group,
-                                student,
-                            ),
-                        );
-                    }
-                }
-            }
-
-            let there_is_an_incomplete_period =
-                self.data.general.week_count.get() % subject.period.get() != 0;
-            if there_is_an_incomplete_period {
-                let p = self.data.general.week_count.get() / subject.period.get();
-                let start = p * subject.period.get();
-                let period = start..self.data.general.week_count.get();
-
-                for student in subject.groups.not_assigned.iter().copied() {
-                    constraints.insert(
-                        self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
-                            i,
-                            subject,
-                            period.clone(),
-                            student,
-                        ),
-                    );
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    for student in group.students.iter().copied() {
-                        constraints.insert(
-                            self.build_one_interrogation_per_period_contraint_for_assigned_student(
-                                i,
-                                subject,
-                                period.clone(),
-                                k,
-                                group,
-                                student,
-                            ),
-                        );
-                    }
-                }
-            }
+            constraints.extend(
+                self.build_one_interrogation_per_period_constraints_for_subject(
+                    i,
+                    subject,
+                    subject.period_is_strict,
+                ),
+            );
         }
 
         constraints
@@ -1443,183 +1381,6 @@ impl<'a> IlpTranslator<'a> {
                             );
                         }
                     }
-                }
-            }
-        }
-
-        constraints
-    }
-
-    fn build_one_periodicity_choice_per_student_constraint_for_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let mut expr = Expr::constant(0);
-
-        for week_modulo in 0..subject.period.get() {
-            expr = expr
-                + Expr::var(Variable::Periodicity {
-                    subject: i,
-                    student,
-                    week_modulo,
-                });
-        }
-
-        expr.eq(&Expr::constant(1))
-    }
-
-    fn build_one_periodicity_choice_per_student_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            if !self.subject_needs_periodicity_variables(subject) {
-                continue;
-            }
-            for student in subject.groups.students_iterator().copied() {
-                constraints.insert(
-                    self.build_one_periodicity_choice_per_student_constraint_for_student(
-                        i, subject, student,
-                    ),
-                );
-            }
-        }
-
-        constraints
-    }
-
-    fn is_periodicity_inequality_needed(&self, subject: &Subject, slot: &SlotWithTeacher) -> bool {
-        if subject.period_is_strict {
-            return true;
-        }
-        if !self.is_last_period_incomplete(subject) {
-            return false;
-        }
-
-        let full_period_count = self.data.general.week_count.get() / subject.period.get();
-        let period_number = slot.start.week / subject.period.get();
-
-        period_number + 1 >= full_period_count
-    }
-
-    fn build_periodicity_constraint_for_assigned_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let week_modulo = slot.start.week % subject.period.get();
-
-        let lhs = Expr::var(Variable::GroupInSlot {
-            subject: i,
-            slot: j,
-            group: k,
-        });
-        let rhs = Expr::var(Variable::Periodicity {
-            subject: i,
-            student,
-            week_modulo,
-        });
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_periodicity_constraint_for_not_assigned_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let week_modulo = slot.start.week % subject.period.get();
-
-        let lhs = Expr::var(Variable::DynamicGroupAssignment {
-            subject: i,
-            slot: j,
-            group: k,
-            student,
-        });
-        let rhs = Expr::var(Variable::Periodicity {
-            subject: i,
-            student,
-            week_modulo,
-        });
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_periodicity_constraint_for_incomplete_period(
-        &self,
-        i: usize,
-        subject: &Subject,
-        student: usize,
-    ) -> Constraint<Variable> {
-        let lhs = Expr::var(Variable::StudentNotInLastPeriod {
-            subject: i,
-            student,
-        });
-
-        let mut rhs = Expr::constant(0);
-        let start = self.data.general.week_count.get() % subject.period.get();
-        let end = subject.period.get();
-        for week_modulo in start..end {
-            rhs = rhs
-                + Expr::var(Variable::Periodicity {
-                    subject: i,
-                    student,
-                    week_modulo,
-                });
-        }
-
-        lhs.leq(&rhs)
-    }
-
-    fn build_periodicity_constraints(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
-                if !self.is_periodicity_inequality_needed(subject, slot) {
-                    continue;
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    for student in group.students.iter().copied() {
-                        constraints.insert(self.build_periodicity_constraint_for_assigned_student(
-                            i, subject, j, slot, k, student,
-                        ));
-                    }
-                }
-
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    if Self::is_group_fixed(group, subject) {
-                        continue;
-                    }
-                    for student in subject.groups.not_assigned.iter().copied() {
-                        constraints.insert(
-                            self.build_periodicity_constraint_for_not_assigned_student(
-                                i, subject, j, slot, k, student,
-                            ),
-                        );
-                    }
-                }
-            }
-
-            if self.is_last_period_incomplete(subject) {
-                for student in subject.groups.students_iterator().copied() {
-                    constraints.insert(
-                        self.build_periodicity_constraint_for_incomplete_period(
-                            i, subject, student,
-                        ),
-                    );
                 }
             }
         }
@@ -2342,10 +2103,6 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_student_in_group_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_periodicity_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_student_not_in_last_period_variables())
-            .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
             .expect("Should not have duplicates")
             .add_variables(self.build_incompat_group_for_student_variables())
@@ -2364,10 +2121,6 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_student_in_group_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_periodicity_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_student_not_in_last_period_variables())
-            .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
             .expect("Should not have duplicates")
             .add_variables(self.build_incompat_group_for_student_variables())
@@ -2376,7 +2129,7 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .expect("Variables should be declared")
-            .add_constraints(self.build_one_interrogation_per_period_contraints())
+            .add_constraints(self.build_one_interrogation_per_period_constraints())
             .expect("Variables should be declared")
             .add_constraints(
                 self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints(),
@@ -2389,10 +2142,6 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_dynamic_groups_group_in_slot_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_periodicity_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_interrogations_per_week_constraints())
             .expect("Variables should be declared")
@@ -2479,7 +2228,6 @@ impl<'a> IlpTranslator<'a> {
     ) -> IncrementalInitializer<T, S> {
         let period_length = self.compute_period_length();
 
-        let last_period_full = (self.data.general.week_count.get() % period_length.get()) != 0;
         let period_count = NonZeroU32::new(
             (self.data.general.week_count.get() + period_length.get() - 1) / period_length.get(),
         )
@@ -2490,18 +2238,6 @@ impl<'a> IlpTranslator<'a> {
             .subjects
             .iter()
             .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
-            .collect();
-        let subject_strictness = self
-            .data
-            .subjects
-            .iter()
-            .map(|subject| subject.period_is_strict)
-            .collect();
-        let subject_period = self
-            .data
-            .subjects
-            .iter()
-            .map(|subject| subject.period)
             .collect();
         let grouping_week_map = self
             .data
@@ -2534,11 +2270,8 @@ impl<'a> IlpTranslator<'a> {
 
         IncrementalInitializer {
             period_length,
-            last_period_full,
             period_count,
-            subject_strictness,
             subject_week_map,
-            subject_period,
             grouping_week_map,
             incompat_groups_week_map,
             max_steps,
@@ -2629,11 +2362,8 @@ pub struct ColloscopeSubject {
 #[derive(Clone, Debug)]
 pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     period_length: NonZeroU32,
-    last_period_full: bool,
     period_count: NonZeroU32,
-    subject_strictness: Vec<bool>,
     subject_week_map: Vec<Vec<u32>>,
-    subject_period: Vec<NonZeroU32>,
     grouping_week_map: Vec<BTreeSet<u32>>,
     incompat_groups_week_map: Vec<BTreeSet<u32>>,
     max_steps: Option<usize>,
@@ -2672,22 +2402,8 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
     ) -> Option<()> {
         let problem_builder = problem.clone().into_builder();
 
-        let first_period_problem_no_periodicity = self.construct_period_problem(
-            problem_builder.clone().filter_variables(|v| {
-                if let Variable::Periodicity {
-                    subject: _,
-                    student: _,
-                    week_modulo: _,
-                } = v
-                {
-                    false
-                } else {
-                    true
-                }
-            }),
-            &set_variables,
-            0,
-        );
+        let first_period_problem_no_periodicity =
+            self.construct_period_problem(problem_builder.clone(), &set_variables, 0);
         let first_period_config_no_periodicity =
             self.construct_init_config(&first_period_problem_no_periodicity)?;
         Self::update_set_variables(set_variables, &first_period_config_no_periodicity);
@@ -2779,30 +2495,6 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         false
     }
 
-    fn are_subject_and_period_concerned_with_periodicity(
-        &self,
-        subject: usize,
-        period: u32,
-    ) -> bool {
-        if self.subject_strictness[subject] {
-            return true;
-        }
-
-        // Normally this should be true or we should not have any Periodicity variables
-        assert!(!self.last_period_full);
-
-        if period == self.period_count.get() - 1 {
-            return true;
-        }
-
-        assert!(self.period_count.get() >= 2);
-        assert!(period != self.period_count.get() - 2);
-
-        // If we are on the second to last period, we might need to fix periodicity
-        // if the penultimate subject period (which might be shorter) leaks on that period
-        (2 * self.subject_period[subject].get()) > self.period_length.get()
-    }
-
     fn filter_relevant_variables(
         &self,
         problem_builder: ProblemBuilder<Variable>,
@@ -2817,10 +2509,6 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
                 let week = self.subject_week_map[*subject][*slot];
                 self.is_week_in_period(week, period)
             }
-            Variable::StudentNotInLastPeriod {
-                subject: _,
-                student: _,
-            } => period == self.period_count.get() - 1,
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -2835,11 +2523,6 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
                 student: _,
                 group: _,
             } => self.is_subject_concerned_by_period(*subject, period),
-            Variable::Periodicity {
-                subject,
-                student: _,
-                week_modulo: _,
-            } => self.are_subject_and_period_concerned_with_periodicity(*subject, period),
             Variable::UseGrouping(grouping) => {
                 self.is_grouping_concerned_by_period(*grouping, period)
             }
