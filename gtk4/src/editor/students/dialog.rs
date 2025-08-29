@@ -197,15 +197,27 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.periods = periods;
                 self.student_data = student_data;
+
+                let transformed_data: Vec<_> = self
+                    .periods
+                    .ordered_period_list
+                    .iter()
+                    .scan(0usize, |current_week, (id, period_data)| {
+                        let new_period = PeriodData {
+                            global_first_week: self.periods.first_week.clone(),
+                            first_week_num: *current_week,
+                            week_count: period_data.len(),
+                            enable: !self.student_data.excluded_periods.contains(id),
+                        };
+                        *current_week += period_data.len();
+                        Some(new_period)
+                    })
+                    .collect();
+
                 crate::tools::factories::update_vec_deque(
                     &mut self.period_entries,
-                    self.periods.ordered_period_list.iter().enumerate().map(
-                        |(i, (id, _period))| PeriodData {
-                            name: format!("Période {}", i + 1),
-                            enable: !self.student_data.excluded_periods.contains(id),
-                        },
-                    ),
-                    |data| PeriodInput::UpdateData(data),
+                    transformed_data.into_iter(),
+                    |x| PeriodInput::UpdateData(x),
                 );
             }
             DialogInput::Cancel => {
@@ -267,7 +279,9 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    name: String,
+    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    first_week_num: usize,
+    week_count: usize,
     enable: bool,
 }
 
@@ -303,7 +317,12 @@ impl FactoryComponent for PeriodEntry {
         adw::SwitchRow {
             set_hexpand: true,
             #[watch]
-            set_title: &self.data.name,
+            set_title: &super::super::generate_period_title(
+                &self.data.global_first_week,
+                self.index.current_index(),
+                self.data.first_week_num,
+                self.data.week_count
+            ),
             #[track(self.should_redraw)]
             set_active: self.data.enable,
             connect_active_notify[sender] => move |widget| {
