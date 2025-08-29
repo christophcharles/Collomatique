@@ -41,6 +41,10 @@ impl Expr {
         self.coefs.keys().cloned().collect()
     }
 
+    pub fn get(&self, var: &str) -> Option<i32> {
+        self.coefs.get(var).cloned()
+    }
+
     pub fn leq(&self, rhs: &Expr) -> Constraint {
         Constraint {
             expr: self - rhs,
@@ -109,6 +113,18 @@ impl Expr {
 impl Constraint {
     pub fn variables(&self) -> BTreeSet<String> {
         self.expr.variables()
+    }
+
+    pub fn get_var(&self, var: &str) -> Option<i32> {
+        self.expr.get(var)
+    }
+
+    pub fn get_sign(&self) -> Sign {
+        self.sign
+    }
+
+    pub fn get_constant(&self) -> i32 {
+        self.expr.constant
     }
 
     pub fn clean(&mut self) {
