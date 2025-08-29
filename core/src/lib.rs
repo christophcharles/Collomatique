@@ -30,82 +30,132 @@
 pub mod colloscopes;
 pub mod time;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, ObjectiveSense, UsableData, Variable};
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub enum BaseVariable<M: UsableData, S: UsableData> {
+    Main(M),
+    Structure(S),
+}
+
+impl<M: UsableData, S: UsableData> std::fmt::Display for BaseVariable<M, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Main(v) => write!(f, "{}", v),
+            Self::Structure(v) => write!(f, "{}", v),
+        }
+    }
+}
+
 pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
-    type VariableName: UsableData;
-    type ConstraintDesc: UsableData;
+    type MainVariable: UsableData;
+    type StructureVariable: UsableData;
+    type StructureConstraintDesc: UsableData;
+    type GeneralConstraintDesc: UsableData;
     type Solution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq;
 
-    fn variables(&self) -> Vec<(Self::VariableName, Variable)>;
-    fn constraints(&self) -> Vec<(Constraint<Self::VariableName>, Self::ConstraintDesc)>;
+    fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable>;
+    fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable>;
 
-    fn objective_func(&self) -> LinExpr<Self::VariableName>;
+    fn structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )>;
+    fn general_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
+        Self::GeneralConstraintDesc,
+    )>;
+
+    fn objective_func(&self) -> LinExpr<BaseVariable<Self::MainVariable, Self::StructureVariable>>;
     fn objective_sense(&self) -> ObjectiveSense {
         ObjectiveSense::Minimize
     }
 
-    fn solution_to_configuration(&self, sol: &Self::Solution) -> ConfigData<Self::VariableName>;
-    fn configuration_to_solution(&self, config: &ConfigData<Self::VariableName>) -> Self::Solution;
+    fn solution_to_configuration(&self, sol: &Self::Solution) -> ConfigData<Self::MainVariable>;
+    fn configuration_to_solution(&self, config: &ConfigData<Self::MainVariable>) -> Self::Solution;
+
+    fn reconstruct_structure_variables(
+        &self,
+        config: &ConfigData<Self::MainVariable>,
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum ExtraVariable<B: UsableData, E: UsableData> {
-    Base(B),
+pub enum ExtraVariable<M: UsableData, S: UsableData, E: UsableData> {
+    BaseMain(M),
+    BaseStructure(S),
     Extra(E),
 }
 
-impl<B: UsableData, E: UsableData> std::fmt::Display for ExtraVariable<B, E> {
+impl<M: UsableData, S: UsableData, E: UsableData> std::fmt::Display for ExtraVariable<M, S, E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Base(v) => write!(f, "{}", v),
+            Self::BaseMain(v) => write!(f, "{}", v),
+            Self::BaseStructure(v) => write!(f, "{}", v),
             Self::Extra(v) => write!(f, "{}", v),
         }
     }
 }
 
 pub trait ExtraConstraints<T: BaseConstraints> {
-    type VariableName: UsableData;
-    type ConstraintDesc: UsableData;
+    type StructureVariable: UsableData;
+    type StructureConstraintDesc: UsableData;
+    type GeneralConstraintDesc: UsableData;
 
-    fn extra_variables(&self, base: &T) -> Vec<(Self::VariableName, Variable)>;
-    fn structure_constraints(
+    fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable>;
+    fn extra_structure_constraints(
         &self,
         base: &T,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::VariableName, Self::VariableName>>,
-        Self::ConstraintDesc,
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
     )>;
-    fn extra_constraints(
+
+    fn extra_general_constraints(
         &self,
         base: &T,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::VariableName, Self::VariableName>>,
-        Self::ConstraintDesc,
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::GeneralConstraintDesc,
     )>;
+
+    fn reconstruct_extra_structure_variables(
+        &self,
+        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 pub trait ExtraObjective<T: BaseConstraints> {
-    type VariableName: UsableData;
-    type ConstraintDesc: UsableData;
+    type StructureVariable: UsableData;
+    type StructureConstraintDesc: UsableData;
 
-    fn extra_variables(&self, base: &T) -> Vec<(Self::VariableName, Variable)>;
-    fn structure_constraints(
+    fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable>;
+    fn extra_structure_constraints(
         &self,
         base: &T,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::VariableName, Self::VariableName>>,
-        Self::ConstraintDesc,
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
     )>;
+
     fn objective_func(
         &self,
         base: &T,
-    ) -> LinExpr<ExtraVariable<T::VariableName, Self::VariableName>>;
+    ) -> LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>;
     fn objective_sense(&self, _base: &T) -> ObjectiveSense {
         ObjectiveSense::Minimize
     }
+
+    fn reconstruct_extra_structure_variables(
+        &self,
+        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -135,83 +185,99 @@ impl IdIssuer {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum VariableName<V: UsableData> {
-    Base(V),
-    Extra(InternalId, String),
-    Soft(InternalId, String),
+pub struct IdVariable {
+    id: InternalId,
+    desc: String,
 }
 
-impl<V: UsableData> std::fmt::Display for VariableName<V> {
+impl std::fmt::Display for IdVariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Base(v) => write!(f, "{}", v),
-            Self::Extra(_id, desc) => write!(f, "{}", desc),
-            Self::Soft(id, desc) => write!(f, "soft_{} ({})", id, desc),
-        }
+        write!(f, "{}", self.desc)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProblemBuilder<V, T, P = collomatique_ilp::DefaultRepr<VariableName<V>>>
-where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
+pub struct ProblemBuilder<
+    M,
+    S,
+    T,
+    P = collomatique_ilp::DefaultRepr<ExtraVariable<M, S, IdVariable>>,
+> where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     base: T,
     id_issuer: IdIssuer,
     phantom_p: std::marker::PhantomData<P>,
 
-    objective_func: LinExpr<VariableName<V>>,
+    objective_func: LinExpr<ExtraVariable<M, S, IdVariable>>,
     objective_sense: ObjectiveSense,
 
-    variables: Vec<(VariableName<V>, Variable)>,
+    variables: BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>,
 
-    constraint_descs: BTreeMap<InternalId, T::ConstraintDesc>,
-    constraints: Vec<(Constraint<VariableName<V>>, InternalId)>,
+    general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
+    structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
+    constraints: Vec<(Constraint<ExtraVariable<M, S, IdVariable>>, InternalId)>,
 }
 
-impl<V, T, P> ProblemBuilder<V, T, P>
+impl<M, S, T, P> ProblemBuilder<M, S, T, P>
 where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     pub fn new(base: T) -> Option<Self> {
-        let orig_variables = base.variables();
-        let variable_set = orig_variables
-            .iter()
-            .map(|(v_name, _v_desc)| v_name.clone())
-            .collect::<BTreeSet<_>>();
-        let variables = orig_variables
+        let orig_main_variables = base.main_variables();
+        let orig_structure_variables = base.structure_variables();
+
+        let variables = orig_main_variables
             .into_iter()
-            .map(|(v_name, v_desc)| (VariableName::Base(v_name), v_desc))
-            .collect();
+            .map(|(v_name, v_desc)| (ExtraVariable::BaseMain(v_name), v_desc))
+            .chain(
+                orig_structure_variables
+                    .into_iter()
+                    .map(|(v_name, v_desc)| (ExtraVariable::BaseStructure(v_name), v_desc)),
+            )
+            .collect::<BTreeMap<_, _>>();
 
         let original_objective_func = base.objective_func();
         let mut objective_func = LinExpr::constant(original_objective_func.get_constant());
         for (v, value) in original_objective_func.coefficients() {
-            if !variable_set.contains(v) {
+            let new_v = match v {
+                BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+                BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+            };
+
+            if !variables.contains_key(&new_v) {
                 return None;
             }
-            objective_func = objective_func + value * LinExpr::var(VariableName::Base(v.clone()));
+            objective_func = objective_func + value * LinExpr::var(new_v);
         }
 
         let objective_sense = base.objective_sense();
 
         let mut id_issuer = IdIssuer::new();
 
-        let mut constraint_descs = BTreeMap::new();
+        let mut general_constraint_descs = BTreeMap::new();
+        let mut structure_constraint_descs = BTreeMap::new();
         let mut constraints = Vec::new();
 
-        for (orig_constraint, c_desc) in base.constraints() {
+        for (orig_constraint, c_desc) in base.structure_constraints() {
             let mut expr = LinExpr::constant(orig_constraint.get_constant());
             for (v, value) in orig_constraint.coefficients() {
-                if !variable_set.contains(v) {
+                let new_v = match v {
+                    BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+                    BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+                };
+
+                if !variables.contains_key(&new_v) {
                     return None;
                 }
 
-                expr = expr + value * LinExpr::var(VariableName::Base(v.clone()));
+                expr = expr + value * LinExpr::var(new_v);
             }
 
             let constraint = match orig_constraint.get_symbol() {
@@ -222,7 +288,33 @@ where
             let desc_id = id_issuer.get_id();
 
             constraints.push((constraint, desc_id));
-            constraint_descs.insert(desc_id, c_desc);
+            structure_constraint_descs.insert(desc_id, c_desc);
+        }
+
+        for (orig_constraint, c_desc) in base.general_constraints() {
+            let mut expr = LinExpr::constant(orig_constraint.get_constant());
+            for (v, value) in orig_constraint.coefficients() {
+                let new_v = match v {
+                    BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+                    BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+                };
+
+                if !variables.contains_key(&new_v) {
+                    return None;
+                }
+
+                expr = expr + value * LinExpr::var(new_v);
+            }
+
+            let constraint = match orig_constraint.get_symbol() {
+                collomatique_ilp::linexpr::EqSymbol::Equals => expr.eq(&LinExpr::constant(0.)),
+                collomatique_ilp::linexpr::EqSymbol::LessThan => expr.leq(&LinExpr::constant(0.)),
+            };
+
+            let desc_id = id_issuer.get_id();
+
+            constraints.push((constraint, desc_id));
+            general_constraint_descs.insert(desc_id, c_desc);
         }
 
         Some(ProblemBuilder {
@@ -232,44 +324,48 @@ where
             objective_func,
             objective_sense,
             variables,
-            constraint_descs,
+            general_constraint_descs,
+            structure_constraint_descs,
             constraints,
         })
     }
 
     fn scan_variables<U: UsableData>(
         &mut self,
-        variables: Vec<(U, Variable)>,
+        variables: BTreeMap<U, Variable>,
     ) -> (
-        BTreeMap<U, VariableName<V>>,
-        Vec<(VariableName<V>, Variable)>,
+        BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
+        BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>,
     ) {
+        let mut rev_v_map = BTreeMap::new();
         let mut v_map = BTreeMap::new();
-        let mut vars = Vec::new();
 
         for (v, v_desc) in variables {
             let v_id = self.id_issuer.get_id();
-            let v_name = VariableName::Extra(v_id, format!("{}", v));
+            let v_name = ExtraVariable::Extra(IdVariable {
+                id: v_id,
+                desc: format!("{}", v),
+            });
 
-            vars.push((v_name.clone(), v_desc));
-            v_map.insert(v, v_name);
+            v_map.insert(v_name.clone(), v_desc);
+            rev_v_map.insert(v, v_name);
         }
 
-        (v_map, vars)
+        (rev_v_map, v_map)
     }
 
-    fn add_variables(&mut self, vars: Vec<(VariableName<V>, Variable)>) {
-        self.variables.extend(vars);
+    fn add_variables(&mut self, mut v_map: BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>) {
+        self.variables.append(&mut v_map);
     }
 
-    fn check_variables_expr<U: UsableData>(
+    fn check_variables_in_expr<U: UsableData>(
         &self,
-        expr: &LinExpr<ExtraVariable<V, U>>,
-        v_map: &BTreeMap<U, VariableName<V>>,
+        expr: &LinExpr<ExtraVariable<M, S, U>>,
+        rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
     ) -> bool {
         for (v, _value) in expr.coefficients() {
             if let ExtraVariable::Extra(v_extra) = v {
-                if !v_map.contains_key(v_extra) {
+                if !rev_v_map.contains_key(v_extra) {
                     return false;
                 }
             }
@@ -278,13 +374,13 @@ where
         true
     }
 
-    fn check_variables<U: UsableData, C: UsableData>(
+    fn check_variables_in_constraints<U: UsableData, C: UsableData>(
         &self,
-        constraints: &Vec<(Constraint<ExtraVariable<V, U>>, C)>,
-        v_map: &BTreeMap<U, VariableName<V>>,
+        constraints: &Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
+        rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
     ) -> bool {
         for (c, _c_desc) in constraints {
-            if !self.check_variables_expr(c.get_lhs(), v_map) {
+            if !self.check_variables_in_expr(c.get_lhs(), rev_v_map) {
                 return false;
             }
         }
@@ -294,15 +390,16 @@ where
 
     fn update_var_in_expr<U: UsableData>(
         &self,
-        e: &LinExpr<ExtraVariable<V, U>>,
-        v_map: &BTreeMap<U, VariableName<V>>,
-    ) -> LinExpr<VariableName<V>> {
+        e: &LinExpr<ExtraVariable<M, S, U>>,
+        rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
+    ) -> LinExpr<ExtraVariable<M, S, IdVariable>> {
         let mut expr = LinExpr::constant(e.get_constant());
 
         for (v, value) in e.coefficients() {
             let var = match v {
-                ExtraVariable::Base(v_base) => VariableName::Base(v_base.clone()),
-                ExtraVariable::Extra(v_extra) => v_map.get(v_extra)
+                ExtraVariable::BaseMain(v_main) => ExtraVariable::BaseMain(v_main.clone()),
+                ExtraVariable::BaseStructure(v_struct) => ExtraVariable::BaseStructure(v_struct.clone()),
+                ExtraVariable::Extra(v_extra) => rev_v_map.get(v_extra)
                     .expect("consistency between variables and constraints should be checked beforehand")
                     .clone(),
             };
@@ -314,13 +411,13 @@ where
 
     fn add_constraints<U: UsableData, C: UsableData>(
         &mut self,
-        constraints: Vec<(Constraint<ExtraVariable<V, U>>, C)>,
-        v_map: &BTreeMap<U, VariableName<V>>,
+        constraints: Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
+        rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
     ) -> BTreeMap<InternalId, C> {
         let mut c_map = BTreeMap::new();
 
         for (c, c_desc) in constraints {
-            let expr = self.update_var_in_expr(c.get_lhs(), v_map);
+            let expr = self.update_var_in_expr(c.get_lhs(), rev_v_map);
 
             let constraint = match c.get_symbol() {
                 collomatique_ilp::linexpr::EqSymbol::Equals => expr.eq(&LinExpr::constant(0.)),
@@ -338,41 +435,48 @@ where
     pub fn add_hard_constraints<E: ExtraConstraints<T>>(
         &mut self,
         extra: E,
-    ) -> Option<ConstraintsTranslator<E::ConstraintDesc>> {
-        let extra_variables = extra.extra_variables(&self.base);
-        let structure_constraints = extra.structure_constraints(&self.base);
-        let extra_constraints = extra.extra_constraints(&self.base);
+    ) -> Option<ConstraintsTranslator<T, E>> {
+        let extra_variables = extra.extra_structure_variables(&self.base);
+        let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
+        let extra_general_constraints = extra.extra_general_constraints(&self.base);
 
-        let (v_map, vars) = self.scan_variables(extra_variables);
+        let (rev_v_map, v_map) = self.scan_variables(extra_variables);
 
-        if !self.check_variables(&structure_constraints, &v_map)
-            || !self.check_variables(&extra_constraints, &v_map)
+        if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
+            || !self.check_variables_in_constraints(&extra_general_constraints, &rev_v_map)
         {
             return None;
         }
 
-        self.add_variables(vars);
-        let mut c_map = self.add_constraints(structure_constraints, &v_map);
-        c_map.extend(self.add_constraints(extra_constraints, &v_map));
+        self.add_variables(v_map);
+        let general_c_map = self.add_constraints(extra_general_constraints, &rev_v_map);
+        let structure_c_map = self.add_constraints(extra_structure_constraints, &rev_v_map);
 
-        Some(ConstraintsTranslator { c_map })
+        Some(ConstraintsTranslator {
+            extra,
+            general_c_map,
+            structure_c_map,
+        })
     }
 
     fn convert_constraints_to_soft<U: UsableData, C: UsableData>(
         &mut self,
-        constraints: Vec<(Constraint<ExtraVariable<V, U>>, C)>,
-        v_map: &BTreeMap<U, VariableName<V>>,
-    ) -> LinExpr<VariableName<V>> {
+        constraints: Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
+        rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
+    ) -> LinExpr<ExtraVariable<M, S, IdVariable>> {
         let mut obj = LinExpr::constant(0.);
 
         for (c, c_desc) in constraints {
-            let expr = self.update_var_in_expr(c.get_lhs(), v_map);
+            let expr = self.update_var_in_expr(c.get_lhs(), rev_v_map);
 
             let soft_variable_id = self.id_issuer.get_id();
-            let soft_variable = VariableName::Soft(soft_variable_id, format!("{}", c_desc));
+            let soft_variable = ExtraVariable::Extra(IdVariable {
+                id: soft_variable_id,
+                desc: format!("soft_{} ({})", soft_variable_id, c_desc),
+            });
 
             self.variables
-                .push((soft_variable.clone(), Variable::non_negative()));
+                .insert(soft_variable.clone(), Variable::non_negative());
 
             match c.get_symbol() {
                 collomatique_ilp::linexpr::EqSymbol::Equals => {
@@ -405,23 +509,23 @@ where
         &mut self,
         extra: E,
         obj_coef: f64,
-    ) -> Option<ConstraintsTranslator<E::ConstraintDesc>> {
-        let extra_variables = extra.extra_variables(&self.base);
-        let structure_constraints = extra.structure_constraints(&self.base);
-        let extra_constraints = extra.extra_constraints(&self.base);
+    ) -> Option<ConstraintsTranslator<T, E>> {
+        let extra_variables = extra.extra_structure_variables(&self.base);
+        let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
+        let extra_general_constraints = extra.extra_general_constraints(&self.base);
 
-        let (v_map, vars) = self.scan_variables(extra_variables);
+        let (rev_v_map, v_map) = self.scan_variables(extra_variables);
 
-        if !self.check_variables(&structure_constraints, &v_map)
-            || !self.check_variables(&extra_constraints, &v_map)
+        if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
+            || !self.check_variables_in_constraints(&extra_general_constraints, &rev_v_map)
         {
             return None;
         }
 
-        self.add_variables(vars);
-        let c_map = self.add_constraints(structure_constraints, &v_map);
+        self.add_variables(v_map);
+        let structure_c_map = self.add_constraints(extra_structure_constraints, &rev_v_map);
 
-        let obj_func = self.convert_constraints_to_soft(extra_constraints, &v_map);
+        let obj_func = self.convert_constraints_to_soft(extra_general_constraints, &rev_v_map);
         match self.objective_sense {
             ObjectiveSense::Minimize => {
                 self.objective_func = &self.objective_func + obj_coef * obj_func;
@@ -431,40 +535,48 @@ where
             }
         }
 
-        Some(ConstraintsTranslator { c_map })
+        let general_c_map = BTreeMap::new();
+        Some(ConstraintsTranslator {
+            extra,
+            general_c_map,
+            structure_c_map,
+        })
     }
 
     pub fn add_objective<E: ExtraObjective<T>>(
         &mut self,
         extra: E,
         obj_coef: f64,
-    ) -> Option<ConstraintsTranslator<E::ConstraintDesc>> {
-        let extra_variables = extra.extra_variables(&self.base);
-        let structure_constraints = extra.structure_constraints(&self.base);
+    ) -> Option<ObjectiveTranslator<T, E>> {
+        let extra_structure_variables = extra.extra_structure_variables(&self.base);
+        let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
         let objective_func = extra.objective_func(&self.base);
 
-        let (v_map, vars) = self.scan_variables(extra_variables);
+        let (rev_v_map, v_map) = self.scan_variables(extra_structure_variables);
 
-        if !self.check_variables(&structure_constraints, &v_map)
-            || !self.check_variables_expr(&objective_func, &v_map)
+        if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
+            || !self.check_variables_in_expr(&objective_func, &rev_v_map)
         {
             return None;
         }
 
-        self.add_variables(vars);
-        let c_map = self.add_constraints(structure_constraints, &v_map);
+        self.add_variables(v_map);
+        let structure_c_map = self.add_constraints(extra_structure_constraints, &rev_v_map);
 
-        let obj_func = self.update_var_in_expr(&objective_func, &v_map);
+        let obj_func = self.update_var_in_expr(&objective_func, &rev_v_map);
         if self.objective_sense == extra.objective_sense(&self.base) {
             self.objective_func = &self.objective_func + obj_coef * obj_func;
         } else {
             self.objective_func = &self.objective_func - obj_coef * obj_func;
         }
 
-        Some(ConstraintsTranslator { c_map })
+        Some(ObjectiveTranslator {
+            extra,
+            structure_c_map,
+        })
     }
 
-    pub fn build(self) -> Problem<V, T, P> {
+    pub fn build(self) -> Problem<M, S, T, P> {
         let ilp_problem = collomatique_ilp::ProblemBuilder::new()
             .set_variables(self.variables)
             .add_constraints(self.constraints)
@@ -475,45 +587,58 @@ where
         Problem {
             ilp_problem,
             base: self.base,
-            constraint_descs: self.constraint_descs,
+            general_constraint_descs: self.general_constraint_descs,
+            structure_constraint_descs: self.structure_constraint_descs,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConstraintsTranslator<C: UsableData> {
-    c_map: BTreeMap<InternalId, C>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Problem<V, T, P>
-where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
-{
-    ilp_problem: collomatique_ilp::Problem<VariableName<V>, InternalId, P>,
-    base: T,
-    constraint_descs: BTreeMap<InternalId, T::ConstraintDesc>,
+pub struct ConstraintsTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
+    extra: E,
+    general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
+    structure_c_map: BTreeMap<InternalId, E::StructureConstraintDesc>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DecoratedSolution<'a, V, T, P>
-where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
-{
-    problem: &'a Problem<V, T, P>,
-    internal_solution: T::Solution,
-    ilp_config: collomatique_ilp::Config<'a, VariableName<V>, InternalId, P>,
+pub struct ObjectiveTranslator<T: BaseConstraints, E: ExtraObjective<T>> {
+    extra: E,
+    structure_c_map: BTreeMap<InternalId, E::StructureConstraintDesc>,
 }
 
-impl<'a, V, T, P> DecoratedSolution<'a, V, T, P>
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Problem<M, S, T, P>
 where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+{
+    ilp_problem: collomatique_ilp::Problem<ExtraVariable<M, S, IdVariable>, InternalId, P>,
+    base: T,
+    general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
+    structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecoratedSolution<'a, M, S, T, P>
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+{
+    problem: &'a Problem<M, S, T, P>,
+    internal_solution: T::Solution,
+    ilp_config: collomatique_ilp::Config<'a, ExtraVariable<M, S, IdVariable>, InternalId, P>,
+}
+
+impl<'a, M, S, T, P> DecoratedSolution<'a, M, S, T, P>
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     pub fn inner(&self) -> &T::Solution {
         &self.internal_solution
@@ -523,17 +648,44 @@ where
         self.internal_solution
     }
 
-    pub fn blame(&self) -> impl ExactSizeIterator<Item = &T::ConstraintDesc> {
+    pub fn blame(&self) -> impl ExactSizeIterator<Item = &T::GeneralConstraintDesc> {
         if false {
             return vec![].into_iter();
         }
         todo!()
     }
 
-    pub fn blame_with_translator<'b, C: UsableData>(
+    pub fn blame_with_extra_constraint<'b, E: ExtraConstraints<T>>(
         &self,
-        _translator: &'b ConstraintsTranslator<C>,
-    ) -> impl ExactSizeIterator<Item = &'b C> {
+        _translator: &'b ConstraintsTranslator<T, E>,
+    ) -> impl ExactSizeIterator<Item = &'b E::GeneralConstraintDesc> {
+        if false {
+            return vec![].into_iter();
+        }
+        todo!()
+    }
+
+    pub fn check_structure(&self) -> impl ExactSizeIterator<Item = &T::StructureConstraintDesc> {
+        if false {
+            return vec![].into_iter();
+        }
+        todo!()
+    }
+
+    pub fn check_structure_with_extra_constraint<'b, E: ExtraConstraints<T>>(
+        &self,
+        _translator: &'b ConstraintsTranslator<T, E>,
+    ) -> impl ExactSizeIterator<Item = &'b E::StructureConstraintDesc> {
+        if false {
+            return vec![].into_iter();
+        }
+        todo!()
+    }
+
+    pub fn check_structure_with_extra_objective<'b, E: ExtraObjective<T>>(
+        &self,
+        _translator: &'b ObjectiveTranslator<T, E>,
+    ) -> impl ExactSizeIterator<Item = &'b E::StructureConstraintDesc> {
         if false {
             return vec![].into_iter();
         }
@@ -542,30 +694,37 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TimeLimitSolution<'a, V, T, P>
+pub struct TimeLimitSolution<'a, M, S, T, P>
 where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
-    pub solution: DecoratedSolution<'a, V, T, P>,
+    pub solution: DecoratedSolution<'a, M, S, T, P>,
     pub time_limit_reached: bool,
 }
 
-impl<V, T, P> Problem<V, T, P>
+impl<M, S, T, P> Problem<M, S, T, P>
 where
-    V: UsableData,
-    P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
-    T: BaseConstraints<VariableName = V>,
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     fn feasable_config_into_config_data(
         &self,
-        feasable_config: &collomatique_ilp::FeasableConfig<'_, VariableName<V>, InternalId, P>,
-    ) -> ConfigData<V> {
+        feasable_config: &collomatique_ilp::FeasableConfig<
+            '_,
+            ExtraVariable<M, S, IdVariable>,
+            InternalId,
+            P,
+        >,
+    ) -> ConfigData<M> {
         let mut config_data = ConfigData::new();
 
         for (var, value) in feasable_config.get_values() {
-            if let VariableName::Base(v_name) = var {
+            if let ExtraVariable::BaseMain(v_name) = var {
                 config_data = config_data.set(v_name, value);
             }
         }
@@ -575,11 +734,11 @@ where
 
     pub fn solve<
         'a,
-        S: collomatique_ilp::solvers::Solver<VariableName<T::VariableName>, InternalId, P>,
+        Solver: collomatique_ilp::solvers::Solver<ExtraVariable<M, S, IdVariable>, InternalId, P>,
     >(
         &'a self,
-        solver: &S,
-    ) -> Option<DecoratedSolution<'a, V, T, P>> {
+        solver: &Solver,
+    ) -> Option<DecoratedSolution<'a, M, S, T, P>> {
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self
             .base
@@ -594,16 +753,16 @@ where
 
     pub fn solve_with_time_limit<
         'a,
-        S: collomatique_ilp::solvers::SolverWithTimeLimit<
-            VariableName<T::VariableName>,
+        Solver: collomatique_ilp::solvers::SolverWithTimeLimit<
+            ExtraVariable<M, S, IdVariable>,
             InternalId,
             P,
         >,
     >(
         &'a self,
-        solver: &S,
+        solver: &Solver,
         time_limit_in_seconds: u32,
-    ) -> Option<TimeLimitSolution<'a, V, T, P>> {
+    ) -> Option<TimeLimitSolution<'a, M, S, T, P>> {
         let time_limit_sol =
             solver.solve_with_time_limit(&self.ilp_problem, time_limit_in_seconds)?;
         let internal_solution = self.base.configuration_to_solution(
