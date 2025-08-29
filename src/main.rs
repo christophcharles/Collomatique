@@ -574,11 +574,23 @@ async fn generate_slot_groupings(
 }
 
 async fn generate_grouping_incompats(
-    _db_conn: &SqlitePool,
+    db_conn: &SqlitePool,
+    id_map: &std::collections::BTreeMap<i64, usize>,
 ) -> Result<collomatique::gen::colloscope::SlotGroupingIncompatSet> {
-    use collomatique::gen::colloscope::*;
+    use collomatique::gen::colloscope::{SlotGroupingIncompat, SlotGroupingIncompatSet};
 
-    Ok(SlotGroupingIncompatSet::new())
+    let grouping_incompats_data = sqlx::query!("SELECT id1, id2 FROM grouping_incompats")
+        .fetch_all(db_conn)
+        .await?;
+
+    let mut set = SlotGroupingIncompatSet::new();
+
+    for record in &grouping_incompats_data {
+        let incompat = SlotGroupingIncompat::new(id_map[&record.id1], id_map[&record.id2]);
+        set.insert(incompat);
+    }
+
+    Ok(set)
 }
 
 async fn generate_colloscope_data(
@@ -590,15 +602,15 @@ async fn generate_colloscope_data(
     let incompatibilities = generate_incompatibilies(db_conn).await?;
     let students = generate_students(db_conn, &incompatibilities.id_map).await?;
     let subjects = generate_subjects(db_conn, &students.id_map).await?;
-    let slot_groupings = generate_slot_groupings(db_conn, &subjects.slot_map);
-    let grouping_incompats = generate_grouping_incompats(db_conn);
+    let slot_groupings = generate_slot_groupings(db_conn, &subjects.slot_map).await?;
+    let grouping_incompats = generate_grouping_incompats(db_conn, &slot_groupings.id_map);
 
     Ok(ValidatedData::new(
         general.await?,
         subjects.list,
         incompatibilities.list,
         students.list,
-        slot_groupings.await?.list,
+        slot_groupings.list,
         grouping_incompats.await?,
     )?)
 }
