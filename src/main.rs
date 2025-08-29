@@ -379,7 +379,9 @@ async fn week_count_command(
     match command {
         WeekCountCommand::Set { week_count, force } => {
             if force {
-                todo!("Force flag for \"general set-week-count\"");
+                return Err(anyhow!(
+                    "Force flag for \"general set-week-count\" not yet implemented"
+                ));
             }
 
             if let Err(e) = app_state
