@@ -245,6 +245,52 @@ impl<V: UsableData> LinExpr<V> {
         self.coefs.keys().cloned().collect()
     }
 
+    /// Returns an iterator over the variables that appears in the expression and their associated coefficients
+    /// 
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
+    ///
+    /// // There are 2 variables: "A" and "B"
+    /// assert_eq!(expr.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([
+    ///     (String::from("A"), 2.0),
+    ///     (String::from("B"), -3.0)
+    /// ]));
+    /// ```
+    ///
+    /// This set can be empty :
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeSet;
+    /// let expr = LinExpr::<String>::constant(42.0);
+    ///
+    /// assert!(expr.coefficients().len() == 0); // There are no variables
+    /// ```
+    ///
+    /// But there is a difference between having no coefficient
+    /// (the variable does not appear at all in the expression)
+    /// and having 0 as a coefficient :
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::{BTreeSet,BTreeMap};
+    /// let expr1 = LinExpr::<String>::constant(42.0);
+    /// assert!(expr1.coefficients().len() == 0); // There are no variables
+    ///
+    /// let expr2 = 0 * LinExpr::<String>::var("A");
+    /// // There is actually one variable eventhough its coefficient is 0
+    /// assert_eq!(expr2.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([(String::from("A"),0.0)]));
+    /// ```
+    /// You can use [LinExpr::clean] to remove the 0 coefficients.
+    pub fn coefficients(&self) -> impl ExactSizeIterator<Item=(&V, f64)> {
+        self.coefs.iter().map(|(x,y)| (x, y.into_inner()))
+    }
+
     /// Removes variables that have a 0 coefficient.
     ///
     /// This changes the expression and removes variable whose
@@ -455,6 +501,63 @@ impl<V: UsableData> Constraint<V> {
     /// You can use [Constraint::clean] to remove the 0 coefficients.
     pub fn variables(&self) -> BTreeSet<V> {
         self.expr.variables()
+    }
+
+    /// Returns an iterator over the variables that appear in the constraint and their associated values.
+    ///
+    /// As for [LinExpr::coefficients], if a variable has a zero coefficient
+    /// it is still listed in the list of variables that appear.
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    /// let expr4 = LinExpr::<String>::var("C");
+    ///
+    /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
+    /// let constraint = expr.leq(&expr4);
+    ///
+    /// // There are 3 variables: "A", "B" and "C"
+    /// assert_eq!(constraint.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([
+    ///     (String::from("A"),2.0),
+    ///     (String::from("B"),-3.0),
+    ///     (String::from("C"),-1.0)
+    /// ]));
+    /// ```
+    ///
+    /// This set can be empty :
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = LinExpr::<String>::constant(42.0);
+    /// let expr2 = LinExpr::<String>::constant(-1.0);
+    ///
+    /// let constraint = expr1.eq(&expr2);
+    ///
+    /// assert!(constraint.coefficients().len() == 0); // There are no variables
+    /// ```
+    ///
+    /// But there is a difference between having no coefficient
+    /// (the variable does not appear at all in the expression)
+    /// and having 0 as a coefficient :
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::constant(42.0);
+    /// let expr2 = LinExpr::<String>::constant(-1.0);
+    /// let constraint1 = expr1.leq(&expr2);
+    /// assert!(constraint1.coefficients().len() == 0); // There are no variables
+    ///
+    /// let expr3 = 0 * LinExpr::<String>::var("A");
+    /// let constraint2 = (&expr1 + &expr3).leq(&expr2);
+    /// // There is actually one variable eventhough its coefficient is 0
+    /// assert_eq!(constraint2.coefficients().map(|(x,y)| (x.clone(),y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([(String::from("A"),0.0)]));
+    /// ```
+    /// You can use [Constraint::clean] to remove the 0 coefficients.
+    pub fn coefficients(&self) -> impl ExactSizeIterator<Item=(&V,f64)> {
+        self.expr.coefficients()
     }
 
     /// Returns the coefficient for a variable in the constraint.
