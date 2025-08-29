@@ -16,7 +16,7 @@ pub enum Panel {
 #[derive(Debug, Clone)]
 pub struct State {
     panel: Panel,
-    db: Option<std::path::PathBuf>,
+    db: std::path::PathBuf,
     app_state: std::sync::Arc<
         collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>,
     >,
@@ -110,7 +110,7 @@ impl State {
 
         Ok(Self {
             panel: Panel::SubjectGroups,
-            db: Some(file),
+            db: file,
             app_state: std::sync::Arc::new(app_state),
         })
     }
@@ -307,12 +307,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
 }
 
 pub fn title(state: &State) -> String {
-    match &state.db {
-        Some(file) => {
-            format!("Collomatique - {}", file.to_string_lossy())
-        }
-        None => String::from("Collomatique"),
-    }
+    format!("Collomatique - {}", state.db.to_string_lossy())
 }
 
 pub fn exit_subscription(_state: &State) -> Subscription<GuiMessage> {
