@@ -508,11 +508,11 @@ fn add_slots_to_subjects(
 ) -> Result<
     std::collections::BTreeMap<
         i64,
-        std::collections::BTreeSet<collomatique::gen::colloscope::SlotRef>,
+        std::collections::BTreeMap<u32, collomatique::gen::colloscope::SlotRef>,
     >,
 > {
-    use std::collections::{BTreeMap, BTreeSet};
-    let mut slot_map = BTreeMap::<_, BTreeSet<_>>::new();
+    use std::collections::BTreeMap;
+    let mut slot_map = BTreeMap::<_, BTreeMap<_, _>>::new();
 
     let teacher_id_map: BTreeMap<_, _> = teachers_data
         .iter()
@@ -526,20 +526,28 @@ fn add_slots_to_subjects(
 
         let subject_index = subject_id_map[&slot.subject_id];
 
+        let week = u32::try_from(slot.week)?;
+
         match slot_map.get_mut(&slot.id) {
             Some(val) => {
-                val.insert(SlotRef {
-                    subject: subject_index,
-                    slot: subjects[subject_index].slots.len(),
-                });
+                val.insert(
+                    week,
+                    SlotRef {
+                        subject: subject_index,
+                        slot: subjects[subject_index].slots.len(),
+                    },
+                );
             }
             None => {
                 slot_map.insert(
                     slot.id,
-                    BTreeSet::from([SlotRef {
-                        subject: subject_index,
-                        slot: subjects[subject_index].slots.len(),
-                    }]),
+                    BTreeMap::from([(
+                        week,
+                        SlotRef {
+                            subject: subject_index,
+                            slot: subjects[subject_index].slots.len(),
+                        },
+                    )]),
                 );
             }
         }
@@ -547,7 +555,7 @@ fn add_slots_to_subjects(
         subjects[subject_index].slots.push(SlotWithTeacher {
             teacher: teacher_id_map[&slot.teacher_id],
             start: SlotStart {
-                week: u32::try_from(slot.week)?,
+                week,
                 weekday: Weekday::try_from(usize::try_from(slot.start_day)?)?,
                 start_time: Time::new(u32::try_from(slot.start_time)?)
                     .ok_or(anyhow!("Invalid time"))?,
@@ -743,7 +751,7 @@ struct SubjectsData {
     list: collomatique::gen::colloscope::SubjectList,
     slot_map: std::collections::BTreeMap<
         i64,
-        std::collections::BTreeSet<collomatique::gen::colloscope::SlotRef>,
+        std::collections::BTreeMap<u32, collomatique::gen::colloscope::SlotRef>,
     >,
 }
 
@@ -829,40 +837,74 @@ WHERE colloscope_id = ?;
 #[derive(Debug, Clone)]
 struct SlotGroupingData {
     list: collomatique::gen::colloscope::SlotGroupingList,
-    id_map: std::collections::BTreeMap<i64, usize>,
+    id_map: std::collections::BTreeMap<i64, std::collections::BTreeMap<u32, usize>>,
 }
 
 async fn generate_slot_groupings(
     db_conn: &SqlitePool,
     slot_map: &std::collections::BTreeMap<
         i64,
-        std::collections::BTreeSet<collomatique::gen::colloscope::SlotRef>,
+        std::collections::BTreeMap<u32, collomatique::gen::colloscope::SlotRef>,
     >,
 ) -> Result<SlotGroupingData> {
-    let ids = sqlx::query!("SELECT grouping_id AS id FROM groupings")
-        .fetch_all(db_conn)
-        .await?;
-    use std::collections::BTreeMap;
-    let id_map: BTreeMap<_, _> = ids.iter().enumerate().map(|(i, x)| (x.id, i)).collect();
-
     let slot_groupings_data = sqlx::query!("SELECT grouping_id, time_slot_id FROM grouping_items")
         .fetch_all(db_conn)
         .await?;
 
     use collomatique::gen::colloscope::SlotGrouping;
-    use std::collections::BTreeSet;
-    let mut list = vec![
-        SlotGrouping {
-            slots: BTreeSet::new(),
-        };
-        ids.len()
-    ];
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut grouping_map: BTreeMap<i64, BTreeMap<u32, SlotGrouping>> = BTreeMap::new();
 
     for x in &slot_groupings_data {
-        let slot_index = id_map[&x.grouping_id];
-        let slot_ref = slot_map[&x.time_slot_id].clone();
+        let slot_refs = &slot_map[&x.time_slot_id];
 
-        list[slot_index].slots.extend(slot_ref);
+        match grouping_map.get_mut(&x.grouping_id) {
+            Some(week_map) => {
+                for (week, slot_ref) in slot_refs {
+                    match week_map.get_mut(week) {
+                        Some(slot_set) => {
+                            slot_set.slots.insert(slot_ref.clone());
+                        }
+                        None => {
+                            week_map.insert(
+                                *week,
+                                SlotGrouping {
+                                    slots: BTreeSet::from([slot_ref.clone()]),
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+            None => {
+                let week_grouping: BTreeMap<u32, SlotGrouping> = slot_refs
+                    .iter()
+                    .map(|(week, slot_ref)| {
+                        (
+                            *week,
+                            SlotGrouping {
+                                slots: BTreeSet::from([slot_ref.clone()]),
+                            },
+                        )
+                    })
+                    .collect();
+
+                grouping_map.insert(x.grouping_id, week_grouping);
+            }
+        }
+    }
+
+    let mut id_map = BTreeMap::new();
+    let mut list = vec![];
+    for (grouping, week_map) in grouping_map {
+        let mut week_id_map = BTreeMap::new();
+
+        for (week, slots) in week_map {
+            week_id_map.insert(week, list.len());
+            list.push(slots);
+        }
+
+        id_map.insert(grouping, week_id_map);
     }
 
     Ok(SlotGroupingData { list, id_map })
@@ -870,7 +912,7 @@ async fn generate_slot_groupings(
 
 async fn generate_grouping_incompats(
     db_conn: &SqlitePool,
-    id_map: &std::collections::BTreeMap<i64, usize>,
+    id_map: &std::collections::BTreeMap<i64, std::collections::BTreeMap<u32, usize>>,
 ) -> Result<collomatique::gen::colloscope::SlotGroupingIncompatSet> {
     use collomatique::gen::colloscope::{SlotGroupingIncompat, SlotGroupingIncompatSet};
 
@@ -881,8 +923,26 @@ async fn generate_grouping_incompats(
     let mut set = SlotGroupingIncompatSet::new();
 
     for record in &grouping_incompats_data {
-        let incompat = SlotGroupingIncompat::new(id_map[&record.id1], id_map[&record.id2]);
-        set.insert(incompat);
+        let week_map1 = id_map
+            .get(&record.id1)
+            .ok_or(anyhow!("Invalid grouping ID"))?;
+        let week_map2 = id_map
+            .get(&record.id2)
+            .ok_or(anyhow!("Invalid grouping ID"))?;
+
+        use std::collections::BTreeSet;
+        let weeks1: BTreeSet<_> = week_map1.keys().copied().collect();
+        let weeks2: BTreeSet<_> = week_map2.keys().copied().collect();
+
+        let common_weeks = weeks1.intersection(&weeks2);
+
+        for week in common_weeks {
+            let id1 = week_map1[week];
+            let id2 = week_map2[week];
+
+            let incompat = SlotGroupingIncompat::new(id1, id2);
+            set.insert(incompat);
+        }
     }
 
     Ok(set)
@@ -945,41 +1005,11 @@ async fn main() -> Result<()> {
 
     println!("{}", problem);
 
-    /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
+    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();*/
+    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
-    let total = 1000usize;
-
-    use rayon::prelude::*;
-    let success_count: usize = (0..total)
-        .into_par_iter()
-        .map(|i| {
-            let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
-
-            use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
-            let solver =
-                collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
-            let config = problem.random_config(&mut random_gen);
-
-            use collomatique::ilp::solvers::FeasabilitySolver;
-
-            let max_steps = 1000;
-
-            println!("Trying to solve n°{}...", i);
-            let solution = solver.restore_feasability_with_max_steps(&config, Some(max_steps));
-
-            if solution.is_some() {
-                1
-            } else {
-                0
-            }
-        })
-        .sum();
-
-    println!("\nFinal statistics : {}/{} solved.", success_count, total);
-
-    /*for i in 1.. {
+    for i in 1.. {
         println!("Attempt n°{}...", i);
 
         sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
@@ -998,7 +1028,7 @@ async fn main() -> Result<()> {
                 ilp_translator.read_solution(sol.as_ref())
             );
         }
-    }*/
+    }
 
     Ok(())
 }
