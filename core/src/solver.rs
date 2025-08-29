@@ -79,7 +79,7 @@ impl std::fmt::Display for IdVariable {
 /// Once the problem is entirely described, it can be built using [ProblemBuilder::build].
 ///
 /// It does not follow exactly a builder pattern. This is because [ProblemBuilder::add_constraints]
-/// needs to return extra information (a struct called a translator, see [ExtraTranslator]).
+/// needs to return extra information (a struct called a translator, see [Translator]).
 /// This breaks the flow a bit. See module [crate::examples::simple_schedule] for an example usage.
 
 pub struct ProblemBuilder<
@@ -358,13 +358,13 @@ where
     /// This function can fail and in this case returns `None`. This happens if there is a mismatch
     /// between the variables that appear in the constraints or the objective and the declared variables.
     ///
-    /// If the function succeeds, it returns a translator of type [ExtraTranslator]. This structure contains
+    /// If the function succeeds, it returns a translator of type [Translator]. This structure contains
     /// the necessary data to identify which extra constraints is not correctly satisfied in a (non-feasible) solution.
     pub fn add_constraints<E: ProblemConstraints<T> + 'static>(
         &mut self,
         constraints: E,
         obj_coef: f64,
-    ) -> Option<ExtraTranslator<T, E>> {
+    ) -> Option<Translator<T, E>> {
         if !constraints.is_fit_for_problem(&self.desc) {
             return None;
         }
@@ -411,7 +411,7 @@ where
 
         self.reconstruction_funcs.push(Box::new(reconstruct_func));
 
-        Some(ExtraTranslator {
+        Some(Translator {
             general_c_map,
             structure_c_map,
         })
@@ -447,7 +447,7 @@ where
 /// It is used to restore the correct types for the constraints descriptions associated to a problem extension
 /// (described by [ProblemConstraints]).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExtraTranslator<T: BaseProblem, E: ProblemConstraints<T>> {
+pub struct Translator<T: BaseProblem, E: ProblemConstraints<T>> {
     /// Map between ids and general constraints descriptions for the problem extension
     general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
     /// Map between ids and structure constraints descriptions for the problem extension
@@ -592,7 +592,7 @@ where
     /// If no such constraints exist, an empty list is returned.
     pub fn partial_blame_constraints<E: ProblemConstraints<T>>(
         &self,
-        translator: &ExtraTranslator<T, E>,
+        translator: &Translator<T, E>,
     ) -> Vec<E::GeneralConstraintDesc> {
         self.problem
             .ilp_problem
@@ -634,7 +634,7 @@ where
     /// *always* return an empty list.
     pub fn partial_check_structure_constraints<E: ProblemConstraints<T>>(
         &self,
-        translator: &ExtraTranslator<T, E>,
+        translator: &Translator<T, E>,
     ) -> Vec<E::StructureConstraintDesc> {
         self.problem
             .ilp_problem
@@ -732,7 +732,7 @@ where
     /// If no such constraints exist, an empty list is returned.
     pub fn blame_constraints<E: ProblemConstraints<T>>(
         &self,
-        translator: &ExtraTranslator<T, E>,
+        translator: &Translator<T, E>,
     ) -> Vec<E::GeneralConstraintDesc> {
         self.ilp_config
             .blame()
@@ -764,7 +764,7 @@ where
     /// *always* return an empty list.
     pub fn check_structure_constraints<E: ProblemConstraints<T>>(
         &self,
-        translator: &ExtraTranslator<T, E>,
+        translator: &Translator<T, E>,
     ) -> Vec<E::StructureConstraintDesc> {
         self.ilp_config
             .blame()

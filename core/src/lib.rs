@@ -39,5 +39,5 @@ pub mod solver;
 
 pub use generics::{BaseProblem, BaseVariable, ExtraVariable, ProblemConstraints, SoftConstraints};
 pub use solver::{
-    DecoratedCompleteSolution, ExtraTranslator, Problem, ProblemBuilder, TimeLimitSolution,
+    DecoratedCompleteSolution, Problem, ProblemBuilder, TimeLimitSolution, Translator,
 };
