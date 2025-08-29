@@ -13,7 +13,9 @@
 //! Still, this representation is sufficiently straightforward for testing purposes.
 
 use super::{ConfigRepr, ProblemRepr};
-use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable, f64_is_zero, f64_is_non_negative};
+use crate::{
+    f64_is_non_negative, f64_is_zero, linexpr::EqSymbol, Constraint, UsableData, Variable,
+};
 
 use ndarray::{Array1, Array2};
 use std::collections::{BTreeMap, BTreeSet};

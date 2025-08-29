@@ -13,12 +13,14 @@
 //! In those problems, there are still ten of thousands of constraints but each constraint
 //! only conerns a few variables (maybe ten or so). So a matrix representation suited
 //! for sparse matrices will only lead to *megabytes* of data.
-//! 
+//!
 //! It is still huge but can easily be fitted in a usual computer memory (even a bad one - heck
 //! it fits on most modern smartphones).
 
 use super::{ConfigRepr, ProblemRepr};
-use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable, f64_is_zero, f64_is_non_negative};
+use crate::{
+    f64_is_non_negative, f64_is_zero, linexpr::EqSymbol, Constraint, UsableData, Variable,
+};
 
 use sprs::{CsMat, CsVec, TriMat};
 use std::collections::{BTreeMap, BTreeSet};
@@ -58,7 +60,7 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
             .map(|(i, v)| (v.0.clone(), i))
             .collect();
 
-        let mut mat_tri = TriMat::new((n,p));
+        let mut mat_tri = TriMat::new((n, p));
         let mut constants_indices = Vec::new();
         let mut constants_data = Vec::new();
 
@@ -70,7 +72,7 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
                 if f64_is_zero(val) {
                     continue;
                 }
-                
+
                 let j = variable_map[var];
                 mat_tri.add_triplet(i, j, val);
             }
@@ -98,7 +100,6 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
         vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
     ) -> SprsConfig<'a, V> {
         let p = self.mat.shape().1;
-
 
         let mut indices = Vec::new();
         let mut data = Vec::new();
@@ -209,7 +210,7 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for SprsConfig<'a, V> {
 
         for (i, v) in column.iter() {
             let symb = self.pb_repr.constraint_symbols[i];
-            
+
             match symb {
                 EqSymbol::Equals => {
                     if !f64_is_zero(*v) {
