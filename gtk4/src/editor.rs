@@ -22,9 +22,13 @@ pub struct EditorPanel {
 
 impl EditorPanel {
     fn generate_subtitle(&self) -> String {
+        let default_name = "Fichier sans nom".into();
         match &self.current_file.file_name {
-            Some(path) => path.to_string_lossy().to_string(),
-            None => "Fichier sans nom".into(),
+            Some(path) => match path.file_name() {
+                Some(file_name) => file_name.to_string_lossy().to_string(),
+                None => default_name,
+            },
+            None => default_name,
         }
     }
 }
