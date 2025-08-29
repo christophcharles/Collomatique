@@ -1,50 +1,79 @@
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::component::{AsyncComponent, AsyncComponentParts, AsyncComponentSender};
-use relm4::RelmWidgetExt;
+use gtk::prelude::{BoxExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::component::{
+    AsyncComponent, AsyncComponentParts, AsyncComponentSender, AsyncController,
+    SimpleAsyncComponent,
+};
+use relm4::prelude::AsyncComponentController;
 use relm4::{adw, gtk};
+use relm4::{Component, ComponentController, Controller};
 use std::path::PathBuf;
 
+mod editor;
+mod welcome;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppInit {
     pub new: bool,
     pub file_name: Option<PathBuf>,
 }
 
-struct FileDesc {
-    file_name: Option<PathBuf>,
+struct AppControllers {
+    welcome: Controller<welcome::WelcomePanel>,
+    editor: AsyncController<editor::EditorPanel>,
+}
+
+enum AppState {
+    WelcomeScreen,
+    EditorScreen { current_file: editor::FileDesc },
+}
+
+impl AppState {
+    fn is_welcome_screen(&self) -> bool {
+        match self {
+            AppState::WelcomeScreen => true,
+            _ => false,
+        }
+    }
+
+    fn is_editor_screen(&self) -> bool {
+        match self {
+            AppState::EditorScreen { current_file: _ } => true,
+            _ => false,
+        }
+    }
 }
 
 pub struct AppModel {
-    current_file: Option<FileDesc>,
+    controllers: AppControllers,
+    state: AppState,
 }
 
 #[derive(Debug)]
 pub enum AppInput {
+    Ignore,
     OpenNewColloscope,
     OpenExistingColloscope,
 }
 
-pub struct AppWidgets {}
-
 impl AppModel {
     fn generate_title(&self) -> String {
-        match &self.current_file {
-            Some(file_desc) => match &file_desc.file_name {
+        match &self.state {
+            AppState::WelcomeScreen => "Collomatique".into(),
+            AppState::EditorScreen { current_file } => match &current_file.file_name {
                 Some(path) => {
                     format!("Collomatique - {}", path.to_string_lossy())
                 }
                 None => "Collomatique - Fichier sans nom".into(),
             },
-            None => "Collomatique".into(),
         }
     }
 }
 
 #[relm4::component(async, pub)]
-impl AsyncComponent for AppModel {
+impl SimpleAsyncComponent for AppModel {
     type Input = AppInput;
     type Output = ();
     type Init = AppInit;
-    type CommandOutput = ();
 
     view! {
         #[root]
@@ -57,26 +86,24 @@ impl AsyncComponent for AppModel {
                 set_orientation: gtk::Orientation::Vertical,
                 adw::HeaderBar::new(),
                 gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_margin_all: 5,
-                    set_spacing: 5,
-                    set_halign: gtk::Align::Center,
-                    set_valign: gtk::Align::Center,
                     set_hexpand: true,
                     set_vexpand: true,
 
-                    #[watch]
-                    set_visible: model.current_file.is_none(),
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        #[watch]
+                        set_visible: model.state.is_welcome_screen(),
 
-                    gtk::Button::with_label("Commencer un nouveau colloscope") {
-                        set_margin_all: 5,
-                        add_css_class: "suggested-action",
-                        connect_clicked => AppInput::OpenNewColloscope,
+                        append: model.controllers.welcome.widget(),
                     },
-                    gtk::Button::with_label("Ouvrir un colloscope existant") {
-                        set_margin_all: 5,
-                        add_css_class: "suggested-action",
-                        connect_clicked => AppInput::OpenExistingColloscope,
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        #[watch]
+                        set_visible: model.state.is_editor_screen(),
+
+                        append: model.controllers.editor.widget(),
                     },
                 }
             }
@@ -86,30 +113,63 @@ impl AsyncComponent for AppModel {
     async fn init(
         params: Self::Init,
         root: Self::Root,
-        _sender: AsyncComponentSender<Self>,
+        sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
-        let model = AppModel {
-            current_file: if params.new || params.file_name.is_some() {
-                Some(FileDesc {
-                    file_name: params.file_name,
-                })
-            } else {
-                None
-            },
+        let editor_payload = if params.new {
+            editor::EditorInput::NewFile(params.file_name.clone())
+        } else {
+            match &params.file_name {
+                Some(file_name) => editor::EditorInput::ExistingFile(file_name.clone()),
+                None => editor::EditorInput::NewFile(None),
+            }
         };
+
+        let editor = editor::EditorPanel::builder()
+            .launch(editor_payload)
+            .forward(sender.input_sender(), |_msg| AppInput::Ignore);
+
+        let welcome =
+            welcome::WelcomePanel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    welcome::WelcomeMessage::OpenNewColloscope => AppInput::OpenNewColloscope,
+                    welcome::WelcomeMessage::OpenExistingColloscope => {
+                        AppInput::OpenExistingColloscope
+                    }
+                });
+
+        let controllers = AppControllers { welcome, editor };
+
+        let state = if params.new || params.file_name.is_some() {
+            AppState::EditorScreen {
+                current_file: editor::FileDesc {
+                    file_name: params.file_name,
+                },
+            }
+        } else {
+            AppState::WelcomeScreen
+        };
+
+        let model = AppModel { controllers, state };
+
         let widgets = view_output!();
         AsyncComponentParts { model, widgets }
     }
 
-    async fn update(
-        &mut self,
-        message: Self::Input,
-        _sender: AsyncComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
+    async fn update(&mut self, message: Self::Input, _sender: AsyncComponentSender<Self>) {
         match message {
+            AppInput::Ignore => {
+                // This message exists only to be ignored (as its name suggests)
+            }
             AppInput::OpenNewColloscope => {
-                self.current_file = Some(FileDesc { file_name: None });
+                self.state = AppState::EditorScreen {
+                    current_file: editor::FileDesc { file_name: None },
+                };
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile(None))
+                    .unwrap();
             }
             AppInput::OpenExistingColloscope => {
                 // Ignore for now
