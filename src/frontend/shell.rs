@@ -32,9 +32,6 @@ pub enum CliCommand {
         /// Verbose resolution output
         #[arg(short, long, default_value_t = false)]
         verbose: bool,
-        /// Try to actually have random init config. This is way longer.
-        #[arg(short, long, default_value_t = false)]
-        long_init: bool,
     },
     /// Create, remove or run python script
     Python {
@@ -372,11 +369,10 @@ async fn solve_command(
     name: Option<String>,
     force: bool,
     verbose: bool,
-    long_init: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use indicatif::{ProgressBar, ProgressStyle};
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
+    use indicatif::{ProgressBar, ProgressStyle};
     use std::time::Duration;
 
     let colloscopes = app_state.colloscopes_get_all().await?;
@@ -412,20 +408,13 @@ async fn solve_command(
     pb.finish();
 
     let pb = ProgressBar::new_spinner().with_style(style.clone());
-    let init_config = problem.default_config();
 
     pb.set_message("Building colloscope... (this can take a few minutes)");
     pb.enable_steady_tick(Duration::from_millis(100));
 
     use crate::ilp::solvers::FeasabilitySolver;
-    let first_config_is_only_hint = !long_init;
     let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-    let config_opt = solver.restore_feasability_with_origin_and_max_steps_and_hint_only(
-        &init_config,
-        None,
-        None,
-        first_config_is_only_hint,
-    );
+    let config_opt = solver.solve(&problem);
 
     pb.finish_with_message("Done. Found valid colloscope");
 
@@ -1358,8 +1347,7 @@ pub async fn execute_cli_command(
             name,
             force,
             verbose,
-            long_init,
-        } => solve_command(name, force, verbose, long_init, app_state).await,
+        } => solve_command(name, force, verbose, app_state).await,
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }

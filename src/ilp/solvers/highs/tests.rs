@@ -82,7 +82,7 @@ fn highs() {
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = solver.restore_feasability(&config);
+    let solution = solver.find_closest_solution(&config);
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
@@ -177,7 +177,7 @@ fn highs_2() {
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = solver.restore_feasability(&config);
+    let solution = solver.find_closest_solution(&config);
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
@@ -218,7 +218,7 @@ fn highs_impossible() {
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = solver.restore_feasability(&config);
+    let solution = solver.find_closest_solution(&config);
 
     assert!(solution.is_none());
 }
