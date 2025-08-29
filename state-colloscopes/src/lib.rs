@@ -1744,6 +1744,11 @@ impl Data {
         &self.inner_data.group_lists
     }
 
+    /// Get the rules
+    pub fn get_rules(&self) -> &rules::Rules {
+        &self.inner_data.rules
+    }
+
     /// Used internally
     ///
     /// Apply student operations

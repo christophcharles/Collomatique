@@ -151,6 +151,18 @@ fn generate_group_list_list(data: &Data) -> group_list_list::List {
     }
 }
 
+fn generate_rule_list(data: &Data) -> rule_list::List {
+    let orig_rules = data.get_rules();
+
+    rule_list::List {
+        rule_map: orig_rules
+            .rule_map
+            .iter()
+            .map(|(rule_id, rule)| (rule_id.inner(), rule.into()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
@@ -162,6 +174,7 @@ pub fn encode(data: &Data) -> JsonData {
     let slot_list_entry = ValidEntry::SlotList(generate_slot_list(data));
     let incompat_list_entry = ValidEntry::IncompatList(generate_incompat_list(data));
     let group_list_list_entry = ValidEntry::GroupListList(generate_group_list_list(data));
+    let rule_list_entry = ValidEntry::RuleList(generate_rule_list(data));
 
     JsonData {
         header,
@@ -175,6 +188,7 @@ pub fn encode(data: &Data) -> JsonData {
             slot_list_entry,
             incompat_list_entry,
             group_list_list_entry,
+            rule_list_entry,
         ]
         .into_iter()
         .map(|x| Entry {

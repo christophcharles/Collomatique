@@ -61,6 +61,8 @@ pub enum DecodeError {
     GroupListsDecodedBeforePeriods,
     #[error("Rules data is ill-formed")]
     IllformedRules,
+    #[error("Rules were already decoded from a previous block")]
+    RulesAlreadyDecoded,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
@@ -184,6 +186,7 @@ mod assignment_map;
 mod group_list_list;
 mod incompat_list;
 mod period_list;
+mod rule_list;
 mod slot_list;
 mod student_list;
 mod subject_list;
@@ -226,6 +229,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::GroupListList(group_lists) => {
                 group_list_list::decode_entry(group_lists, &mut pre_data)?;
             }
+            ValidEntry::RuleList(rule_list) => {
+                rule_list::decode_entry(rule_list, &mut pre_data)?;
+            }
         }
     }
 
@@ -256,6 +262,7 @@ pub enum EntryTag {
     SlotList,
     IncompatList,
     GroupListList,
+    RuleList,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -270,6 +277,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::SlotList(_) => EntryTag::SlotList,
             ValidEntry::IncompatList(_) => EntryTag::IncompatList,
             ValidEntry::GroupListList(_) => EntryTag::GroupListList,
+            ValidEntry::RuleList(_) => EntryTag::RuleList,
         }
     }
 }
