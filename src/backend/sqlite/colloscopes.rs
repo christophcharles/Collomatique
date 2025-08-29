@@ -237,7 +237,88 @@ pub async fn add(
 }
 
 pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), Error> {
-    todo!()
+    let colloscope_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        r#"
+DELETE FROM collo_week_items
+WHERE collo_week_id IN
+(
+    SELECT collo_week_id FROM collo_weeks
+    WHERE collo_time_slot_id IN
+    (
+        SELECT collo_time_slot_id FROM collo_time_slots
+        WHERE collo_subject_id IN
+        (
+            SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+        )
+    )
+);
+
+DELETE FROM collo_weeks
+WHERE collo_time_slot_id IN
+(
+    SELECT collo_time_slot_id FROM collo_time_slots
+    WHERE collo_subject_id IN
+    (
+        SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+    )
+);
+
+DELETE FROM collo_time_slots
+WHERE collo_subject_id IN
+(
+    SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+);
+
+DELETE FROM collo_group_items
+WHERE collo_group_id IN
+(
+    SELECT collo_group_id FROM collo_groups
+    WHERE collo_subject_id IN
+    (
+        SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+    )
+);
+
+DELETE FROM collo_groups
+WHERE collo_subject_id IN
+(
+    SELECT collo_subject_id FROM collo_subjects WHERE colloscope_id = ?
+);
+
+DELETE FROM collo_subjects WHERE colloscope_id = ?;
+        "#,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+        colloscope_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    let count = sqlx::query!(
+        "DELETE FROM colloscopes WHERE colloscope_id = ?",
+        colloscope_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if count > 1 {
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple colloscopes with id {:?}",
+            index
+        )));
+    }
+
+    Ok(())
 }
 
 pub async fn update(
