@@ -423,6 +423,55 @@ impl<V: UsableData> LinExpr<V> {
             constant: ordered_float::OrderedFloat(new_constant),
         }
     }
+
+    /// Evaluate an expression on a set of values for its variables.
+    ///
+    /// This function takes a list of values for its variables
+    /// and substitute these values into the expression.
+    ///
+    /// The list of variables can contain variables that do not appear in
+    /// the expression.
+    ///
+    /// However, if some variables of the expression do not have a value
+    /// the function will fail and will return as an error the partially reduced
+    /// expression.
+    ///
+    /// If all the variables have a value assigned to them, then the function
+    /// succeeds and returns a single floating point value.
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    ///
+    /// let bad_eval = expr.eval(&BTreeMap::from([
+    ///     (String::from("A"), -1.0),
+    ///     (String::from("C"), 2.0),
+    /// ]));
+    /// let bad_eval_expected = Err(-3.0*&expr2 - 44.0);
+    /// assert_eq!(bad_eval, bad_eval_expected);
+    ///
+    /// let good_eval = expr.eval(&BTreeMap::from([
+    ///     (String::from("A"), -1.0),
+    ///     (String::from("B"), -3.0),
+    ///     (String::from("C"), 2.0),
+    /// ]));
+    /// let good_eval_expected = Ok(-35.0);
+    /// assert_eq!(good_eval, good_eval_expected);
+    /// ```
+    pub fn eval(&self, vars: &BTreeMap<V, f64>) -> Result<f64, LinExpr<V>> {
+        let reduced = self.reduce(vars);
+
+        if !reduced.coefs.is_empty() {
+            return Err(reduced);
+        }
+
+        Ok(reduced.get_constant())
+    }
 }
 
 impl<V: UsableData> LinExpr<V> {
