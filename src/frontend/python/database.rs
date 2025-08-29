@@ -635,6 +635,9 @@ impl<'scope> SessionConnection<'scope> {
                         UpdateError::TeacherRemoved(_) => {
                             PyValueError::new_err("Teacher was previsouly removed")
                         }
+                        UpdateError::TeacherDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this teacher",
+                        ),
                         _ => panic!("Unexpected error!"),
                     })?;
 
