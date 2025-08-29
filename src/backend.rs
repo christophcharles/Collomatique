@@ -62,6 +62,11 @@ pub trait Storage {
         &self,
         index: Self::TeacherId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
+    async fn teachers_update(
+        &self,
+        index: Self::TeacherId,
+        teacher: Teacher,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
 }
 
 use std::collections::BTreeSet;

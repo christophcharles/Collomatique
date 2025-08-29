@@ -397,4 +397,13 @@ impl Storage for Store {
     > + Send {
         teachers::remove(&self.pool, index)
     }
+    fn teachers_update(
+        &self,
+        index: Self::TeacherId,
+        teacher: Teacher,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
+    > + Send {
+        teachers::update(&self.pool, index, teacher)
+    }
 }
