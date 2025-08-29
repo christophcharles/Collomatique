@@ -4,7 +4,7 @@ use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
-struct Args {
+struct Cli {
     /// Create new database - won't override an existing one
     #[arg(short, long, default_value_t = false)]
     create: bool,
@@ -12,11 +12,11 @@ struct Args {
     db: std::path::PathBuf,
     /// Command to run on the database
     #[command(subcommand)]
-    command: Command,
+    command: CliCommand,
 }
 
 #[derive(Debug, Subcommand)]
-enum Command {
+enum CliCommand {
     /// Act on general parameters of the colloscope
     General {
         #[command(subcommand)]
@@ -36,6 +36,46 @@ enum Command {
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
     },
+    /// Open interactive shell
+    Shell,
+}
+
+#[derive(Debug, Parser)]
+#[clap(disable_help_flag = true)]
+#[command(name = "")]
+struct ShellLine {
+    /// Command to run on the database
+    #[command(subcommand)]
+    command: ShellCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum ShellCommand {
+    /// Act on general parameters of the colloscope
+    General {
+        #[command(subcommand)]
+        command: GeneralCommand,
+    },
+    /// Create, remove and configure week patterns
+    WeekPatterns {
+        #[command(subcommand)]
+        command: WeekPatternCommand,
+    },
+    /// Try and solve the colloscope
+    Solve {
+        /// Numbers of optimizing steps - default is 1000
+        #[arg(short, long)]
+        steps: Option<usize>,
+        /// Number of concurrent threads to solve the colloscope - default is the number of CPU core
+        #[arg(short = 'n')]
+        thread_count: Option<NonZeroUsize>,
+    },
+    /// Undo last command
+    Undo,
+    /// Redo previously undone command
+    Redo,
+    /// Exit shell
+    Exit,
 }
 
 const DEFAULT_OPTIMIZING_STEP_COUNT: usize = 1000;
@@ -213,6 +253,7 @@ async fn solve_command(
     steps: Option<usize>,
     thread_count: Option<NonZeroUsize>,
     app_state: &mut AppState<sqlite::Store>,
+    new_line_needed: bool,
 ) -> Result<()> {
     use indicatif::MultiProgress;
     use std::time::Duration;
@@ -301,6 +342,9 @@ async fn solve_command(
     };
 
     print!("Best cost found is: {}", best_cost.0);
+    if new_line_needed {
+        println!("");
+    }
 
     Ok(())
 }
@@ -308,6 +352,7 @@ async fn solve_command(
 async fn general_command(
     command: GeneralCommand,
     app_state: &mut AppState<sqlite::Store>,
+    new_line_needed: bool,
 ) -> Result<()> {
     use collomatique::frontend::state::{Operation, UpdateError};
 
@@ -440,6 +485,9 @@ async fn general_command(
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let week_count = general_data.week_count.get();
             print!("{}", week_count);
+            if new_line_needed {
+                println!("");
+            }
         }
         GeneralCommand::GetMaxInterrogationsPerDay => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
@@ -448,6 +496,9 @@ async fn general_command(
                 Some(value) => print!("{}", value.get()),
                 None => print!("none"),
             }
+            if new_line_needed {
+                println!("");
+            }
         }
         GeneralCommand::GetInterrogationsPerWeekRange => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
@@ -455,6 +506,9 @@ async fn general_command(
             match interrogations_per_week {
                 Some(value) => print!("{}..{}", value.start, value.end - 1),
                 None => print!("none"),
+            }
+            if new_line_needed {
+                println!("");
             }
         }
     }
@@ -465,24 +519,81 @@ async fn general_command(
 async fn week_pattern_command(
     _command: WeekPatternCommand,
     _app_state: &mut AppState<sqlite::Store>,
+    _new_line_needed: bool,
 ) -> Result<()> {
-    todo!("Week pattern commands not yet implemented");
+    return Err(anyhow!("Week pattern commands not yet implemented"));
+}
+
+async fn shell_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
+    use clap_repl::ClapEditor;
+    use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory};
+
+    let mut prompt = DefaultPrompt::default();
+    prompt.left_prompt = DefaultPromptSegment::Basic("collomatique".to_owned());
+    let mut rl = ClapEditor::<ShellLine>::new_with_prompt(Box::new(prompt), |reed| {
+        // Do custom things with `Reedline` instance here
+        reed.with_history(Box::new(FileBackedHistory::new(10000).unwrap()))
+    });
+    loop {
+        match respond(&mut rl, app_state).await {
+            Ok(quit) => {
+                if quit {
+                    break;
+                }
+            }
+            Err(err) => {
+                use std::io::Write;
+                writeln!(std::io::stderr(), "{err}")?;
+                std::io::stderr().flush()?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn respond(
+    rl: &mut clap_repl::ClapEditor<ShellLine>,
+    app_state: &mut AppState<sqlite::Store>,
+) -> Result<bool> {
+    let shell_command = match rl.read_command() {
+        Some(cmd) => cmd,
+        None => return Ok(false),
+    };
+
+    match shell_command.command {
+        ShellCommand::General { command } => general_command(command, app_state, true).await?,
+        ShellCommand::WeekPatterns { command } => {
+            week_pattern_command(command, app_state, true).await?
+        }
+        ShellCommand::Solve {
+            steps,
+            thread_count,
+        } => solve_command(steps, thread_count, app_state, true).await?,
+        ShellCommand::Undo => app_state.undo().await?,
+        ShellCommand::Redo => app_state.redo().await?,
+        ShellCommand::Exit => return Ok(true),
+    }
+
+    Ok(false)
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Cli::parse();
 
     let logic = Logic::new(connect_db(args.create, args.db.as_path()).await?);
     let mut app_state = AppState::new(logic);
 
     match args.command {
-        Command::General { command } => general_command(command, &mut app_state).await?,
-        Command::WeekPatterns { command } => week_pattern_command(command, &mut app_state).await?,
-        Command::Solve {
+        CliCommand::General { command } => general_command(command, &mut app_state, false).await?,
+        CliCommand::WeekPatterns { command } => {
+            week_pattern_command(command, &mut app_state, false).await?
+        }
+        CliCommand::Solve {
             steps,
             thread_count,
-        } => solve_command(steps, thread_count, &mut app_state).await?,
+        } => solve_command(steps, thread_count, &mut app_state, false).await?,
+        CliCommand::Shell => shell_command(&mut app_state).await?,
     }
     Ok(())
 }
