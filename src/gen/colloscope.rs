@@ -127,7 +127,7 @@ impl GroupsDesc {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
-    pub students_per_slot: RangeInclusive<NonZeroUsize>,
+    pub students_per_group: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
@@ -226,10 +226,10 @@ impl ValidatedData {
                 ));
             }
 
-            if subject.students_per_slot.is_empty() {
+            if subject.students_per_group.is_empty() {
                 return Err(Error::SubjectWithInvalidStudentsPerSlotRange(
                     i,
-                    subject.students_per_slot.clone(),
+                    subject.students_per_group.clone(),
                 ));
             }
 
@@ -268,15 +268,15 @@ impl ValidatedData {
                 if !group.can_be_extended {
                     continue;
                 }
-                if group.students.len() >= subject.students_per_slot.end().get() {
+                if group.students.len() >= subject.students_per_group.end().get() {
                     continue;
                 }
-                remaining_seats += subject.students_per_slot.end().get() - group.students.len();
+                remaining_seats += subject.students_per_group.end().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() > remaining_seats {
                 return Err(Error::SubjectWithTooFewGroups(
                     i,
-                    subject.students_per_slot.clone(),
+                    subject.students_per_group.clone(),
                 ));
             }
 
@@ -285,15 +285,15 @@ impl ValidatedData {
                 if !group.can_be_extended {
                     continue;
                 }
-                if group.students.len() >= subject.students_per_slot.start().get() {
+                if group.students.len() >= subject.students_per_group.start().get() {
                     continue;
                 }
-                min_seats += subject.students_per_slot.start().get() - group.students.len();
+                min_seats += subject.students_per_group.start().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() < min_seats {
                 return Err(Error::SubjectWithTooManyGroups(
                     i,
-                    subject.students_per_slot.clone(),
+                    subject.students_per_group.clone(),
                 ));
             }
 
@@ -309,20 +309,20 @@ impl ValidatedData {
                         students_no_duplicate.insert(*k, j);
                     }
                 }
-                if group.students.len() > subject.students_per_slot.end().get() {
+                if group.students.len() > subject.students_per_group.end().get() {
                     return Err(Error::SubjectWithTooLargeAssignedGroup(
                         i,
                         j,
-                        subject.students_per_slot.clone(),
+                        subject.students_per_group.clone(),
                     ));
                 }
-                if group.students.len() < subject.students_per_slot.start().get()
+                if group.students.len() < subject.students_per_group.start().get()
                     && !group.can_be_extended
                 {
                     return Err(Error::SubjectWithTooSmallNonExtensibleGroup(
                         i,
                         j,
-                        subject.students_per_slot.clone(),
+                        subject.students_per_group.clone(),
                     ));
                 }
             }
@@ -515,7 +515,7 @@ enum StudentStatus {
 
 impl<'a> IlpTranslator<'a> {
     fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
-        !group.can_be_extended || (group.students.len() == subject.students_per_slot.end().get())
+        !group.can_be_extended || (group.students.len() == subject.students_per_group.end().get())
     }
 
     fn compute_needed_time_resolution(&self) -> u32 {
@@ -1089,7 +1089,7 @@ impl<'a> IlpTranslator<'a> {
         k: usize,
         group: &GroupDesc,
     ) -> Option<Constraint<Variable>> {
-        let min = subject.students_per_slot.start().get();
+        let min = subject.students_per_group.start().get();
         if min <= group.students.len() {
             return None;
         }
@@ -1108,7 +1108,7 @@ impl<'a> IlpTranslator<'a> {
         k: usize,
         group: &GroupDesc,
     ) -> Constraint<Variable> {
-        let max = subject.students_per_slot.end().get();
+        let max = subject.students_per_group.end().get();
         assert!(group.students.len() <= max);
 
         let max_i32: i32 = (max - group.students.len())
