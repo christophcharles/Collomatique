@@ -353,7 +353,7 @@ struct SubjectData {
 
 impl GenColloscopeTranslator {
     fn build_bare_subjects(data: &GenColloscopeData) -> BareSubjectData {
-        use crate::gen::colloscope::{BalancingRequirements, GroupsDesc, Subject};
+        use crate::gen::colloscope::{GroupsDesc, Subject};
 
         let mut output = BareSubjectData {
             subject_list: vec![],
@@ -367,15 +367,7 @@ impl GenColloscopeTranslator {
                 period: subject.period,
                 period_is_strict: subject.period_is_strict,
                 is_tutorial: subject.is_tutorial,
-                balancing_requirements: match (
-                    subject.balancing_requirements.timeslots,
-                    subject.balancing_requirements.teachers,
-                ) {
-                    (false, false) => BalancingRequirements::None,
-                    (true, false) => BalancingRequirements::Timeslots,
-                    (false, true) => BalancingRequirements::Teachers,
-                    (true, true) => BalancingRequirements::TeachersAndTimeslots,
-                },
+                balancing_requirements: None,
                 duration: subject.duration,
                 slots: vec![],
                 groups: GroupsDesc::default(),
@@ -465,6 +457,42 @@ impl GenColloscopeTranslator {
         }
 
         Ok(slot_id_map)
+    }
+
+    fn add_balancing_requirements_to_subjects(
+        data: &GenColloscopeData,
+        subjects: &mut crate::gen::colloscope::SubjectList,
+        subject_id_map: &BTreeMap<SubjectHandle, usize>,
+    ) {
+        use crate::gen::colloscope::{BalancingObject, BalancingRequirements, BalancingStrictness};
+
+        for (&subject_id, orig_subject) in &data.subjects {
+            let subject_num = subject_id_map
+                .get(&subject_id)
+                .expect("Every subject should be mapped");
+            let subject = subjects
+                .get_mut(*subject_num)
+                .expect("Every mapped subject index should be valid");
+
+            let balacing_object = match (
+                orig_subject.balancing_requirements.teachers,
+                orig_subject.balancing_requirements.timeslots,
+            ) {
+                (false, false) => None,
+                (true, false) => Some(BalancingObject::teachers_from_slots(&subject.slots)),
+                (false, true) => Some(BalancingObject::timeslots_from_slots(&subject.slots)),
+                (true, true) => Some(BalancingObject::teachers_and_timeslots_from_slots(
+                    &subject.slots,
+                )),
+            };
+
+            let balancing_requirements = balacing_object.map(|obj| BalancingRequirements {
+                strictness: BalancingStrictness::default(),
+                object: obj,
+            });
+
+            subject.balancing_requirements = balancing_requirements;
+        }
     }
 
     fn default_empty_groups_count(subject: &crate::gen::colloscope::Subject) -> Option<usize> {
@@ -679,6 +707,12 @@ impl GenColloscopeTranslator {
             &mut subject_reverse_data,
             &bare_subject_data.id_map,
         )?;
+
+        Self::add_balancing_requirements_to_subjects(
+            data,
+            &mut bare_subject_data.subject_list,
+            &bare_subject_data.id_map,
+        );
 
         Self::add_groups_to_subjects::<T>(
             data,
