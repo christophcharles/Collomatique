@@ -196,6 +196,174 @@ pub trait Manager: ManagerInternal {
         Vec<SubjectGroupDependancy<SubjectHandle, StudentHandle>>,
         IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
     >;
+    async fn incompats_get_all(
+        &self,
+    ) -> Result<
+        BTreeMap<IncompatHandle, backend::Incompat<WeekPatternHandle>>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn incompats_get(
+        &self,
+        handle: IncompatHandle,
+    ) -> Result<
+        backend::Incompat<WeekPatternHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
+    >;
+    async fn incompats_check_data(
+        &self,
+        incompat: &backend::Incompat<WeekPatternHandle>,
+    ) -> Result<
+        backend::DataStatusWithId<WeekPatternHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn incompats_check_can_remove(
+        &self,
+        handle: IncompatHandle,
+    ) -> Result<
+        Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
+    >;
+    async fn group_lists_get_all(
+        &self,
+    ) -> Result<
+        BTreeMap<GroupListHandle, backend::GroupList<StudentHandle>>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn group_lists_get(
+        &self,
+        handle: GroupListHandle,
+    ) -> Result<
+        backend::GroupList<StudentHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
+    >;
+    async fn group_lists_check_data(
+        &self,
+        group_list: &backend::GroupList<StudentHandle>,
+    ) -> Result<
+        backend::DataStatusWithIdAndInvalidState<StudentHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn group_lists_check_can_remove(
+        &self,
+        handle: GroupListHandle,
+    ) -> Result<
+        Vec<SubjectHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
+    >;
+    async fn subjects_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<
+            SubjectHandle,
+            backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        >,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn subjects_get(
+        &self,
+        handle: SubjectHandle,
+    ) -> Result<
+        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
+    >;
+    async fn subjects_check_data(
+        &self,
+        subject: &backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    ) -> Result<
+        backend::DataStatusWithId3<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn subjects_check_can_remove(
+        &self,
+        handle: SubjectHandle,
+    ) -> Result<
+        Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
+    >;
+    async fn time_slots_get_all(
+        &self,
+    ) -> Result<
+        BTreeMap<
+            TimeSlotHandle,
+            backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        >,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn time_slots_get(
+        &self,
+        handle: TimeSlotHandle,
+    ) -> Result<
+        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
+    >;
+    async fn time_slots_check_data(
+        &self,
+        time_slot: &backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    ) -> Result<
+        backend::DataStatusWithId3<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn time_slots_check_can_remove(
+        &self,
+        handle: TimeSlotHandle,
+    ) -> Result<
+        Vec<GroupingHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
+    >;
+    async fn groupings_get_all(
+        &self,
+    ) -> Result<
+        BTreeMap<GroupingHandle, backend::Grouping<TimeSlotHandle>>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn groupings_get(
+        &self,
+        handle: GroupingHandle,
+    ) -> Result<
+        backend::Grouping<TimeSlotHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
+    >;
+    async fn groupings_check_data(
+        &self,
+        grouping: &backend::Grouping<TimeSlotHandle>,
+    ) -> Result<
+        backend::DataStatusWithId<TimeSlotHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn groupings_check_can_remove(
+        &self,
+        handle: GroupingHandle,
+    ) -> Result<
+        Vec<GroupingIncompatHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
+    >;
+    async fn grouping_incompats_get_all(
+        &self,
+    ) -> Result<
+        BTreeMap<GroupingIncompatHandle, backend::GroupingIncompat<GroupingHandle>>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn grouping_incompats_get(
+        &self,
+        handle: GroupingIncompatHandle,
+    ) -> Result<
+        backend::GroupingIncompat<GroupingHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
+    >;
+    async fn grouping_incompats_check_data(
+        &self,
+        grouping_incompat: &backend::GroupingIncompat<GroupingHandle>,
+    ) -> Result<
+        backend::DataStatusWithId<GroupingHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn grouping_incompats_check_can_remove(
+        &self,
+        handle: GroupingIncompatHandle,
+    ) -> Result<
+        (),
+        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
+    >;
 
     async fn apply(
         &mut self,
@@ -607,6 +775,294 @@ impl<T: ManagerInternal> Manager for T {
 
             Ok(subject_group_deps)
         }
+    }
+
+    fn incompats_get(
+        &self,
+        _index: IncompatHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::Incompat<WeekPatternHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn incompats_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<IncompatHandle, backend::Incompat<WeekPatternHandle>>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn incompats_check_data(
+        &self,
+        _incompat: &backend::Incompat<WeekPatternHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId<WeekPatternHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn incompats_check_can_remove(
+        &self,
+        _index: IncompatHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn group_lists_get(
+        &self,
+        _handle: GroupListHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::GroupList<StudentHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn group_lists_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<GroupListHandle, backend::GroupList<StudentHandle>>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn group_lists_check_data(
+        &self,
+        _group_list: &backend::GroupList<StudentHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithIdAndInvalidState<StudentHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn group_lists_check_can_remove(
+        &self,
+        _handle: GroupListHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<SubjectHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn subjects_get(
+        &self,
+        _handle: SubjectHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn subjects_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                SubjectHandle,
+                backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+            >,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn subjects_check_data(
+        &self,
+        _subject: &backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId3<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn subjects_check_can_remove(
+        &self,
+        _handle: SubjectHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn time_slots_get(
+        &self,
+        _handle: TimeSlotHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn time_slots_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<
+                TimeSlotHandle,
+                backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+            >,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn time_slots_check_data(
+        &self,
+        _time_slot: &backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId3<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn time_slots_check_can_remove(
+        &self,
+        _handle: TimeSlotHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<GroupingHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn groupings_get(
+        &self,
+        _handle: GroupingHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::Grouping<TimeSlotHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn groupings_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<GroupingHandle, backend::Grouping<TimeSlotHandle>>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn groupings_check_data(
+        &self,
+        _grouping: &backend::Grouping<TimeSlotHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId<TimeSlotHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn groupings_check_can_remove(
+        &self,
+        _handle: GroupingHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<GroupingIncompatHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn grouping_incompats_get(
+        &self,
+        _handle: GroupingIncompatHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::GroupingIncompat<GroupingHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn grouping_incompats_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<GroupingIncompatHandle, backend::GroupingIncompat<GroupingHandle>>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn grouping_incompats_check_data(
+        &self,
+        _grouping_incompat: &backend::GroupingIncompat<GroupingHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId<GroupingHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async { todo!() }
+    }
+
+    fn grouping_incompats_check_can_remove(
+        &self,
+        _handle: GroupingIncompatHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            (),
+            IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
+        >,
+    > + Send {
+        async { todo!() }
     }
 
     fn apply(
@@ -1079,12 +1535,12 @@ pub(super) mod private {
             AnnotatedOperation::Teachers(op) => update_teachers_state(manager, op).await,
             AnnotatedOperation::Students(op) => update_students_state(manager, op).await,
             AnnotatedOperation::SubjectGroups(op) => update_subject_groups_state(manager, op).await,
-            AnnotatedOperation::Incompats(op) => todo!(),
-            AnnotatedOperation::GroupLists(op) => todo!(),
-            AnnotatedOperation::Subjects(op) => todo!(),
-            AnnotatedOperation::TimeSlots(op) => todo!(),
-            AnnotatedOperation::Groupings(op) => todo!(),
-            AnnotatedOperation::GroupingIncompats(op) => todo!(),
+            AnnotatedOperation::Incompats(_op) => todo!(),
+            AnnotatedOperation::GroupLists(_op) => todo!(),
+            AnnotatedOperation::Subjects(_op) => todo!(),
+            AnnotatedOperation::TimeSlots(_op) => todo!(),
+            AnnotatedOperation::Groupings(_op) => todo!(),
+            AnnotatedOperation::GroupingIncompats(_op) => todo!(),
         }
     }
 
@@ -1359,12 +1815,12 @@ pub(super) mod private {
             AnnotatedOperation::SubjectGroups(op) => AnnotatedOperation::SubjectGroups(
                 build_backward_subject_groups_op(manager, op).await?,
             ),
-            AnnotatedOperation::Incompats(op) => todo!(),
-            AnnotatedOperation::GroupLists(op) => todo!(),
-            AnnotatedOperation::Subjects(op) => todo!(),
-            AnnotatedOperation::TimeSlots(op) => todo!(),
-            AnnotatedOperation::Groupings(op) => todo!(),
-            AnnotatedOperation::GroupingIncompats(op) => todo!(),
+            AnnotatedOperation::Incompats(_op) => todo!(),
+            AnnotatedOperation::GroupLists(_op) => todo!(),
+            AnnotatedOperation::Subjects(_op) => todo!(),
+            AnnotatedOperation::TimeSlots(_op) => todo!(),
+            AnnotatedOperation::Groupings(_op) => todo!(),
+            AnnotatedOperation::GroupingIncompats(_op) => todo!(),
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
