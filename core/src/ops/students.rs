@@ -154,10 +154,10 @@ impl StudentsUpdateOp {
                                 *student_id,
                                 *group_list_id,
                             ),
-                            ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
                                 *group_list_id,
                                 new_prefilled_groups,
-                            ))],
+                            )),
                         });
                     }
                     if group_list.params.excluded_students.contains(student_id) {
@@ -168,10 +168,10 @@ impl StudentsUpdateOp {
                                 *student_id,
                                 *group_list_id,
                             ),
-                            ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
                                 *group_list_id,
                                 new_params,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -182,26 +182,21 @@ impl StudentsUpdateOp {
                         continue;
                     }
 
-                    let mut ops = vec![];
                     for (subject_id, assigned_students) in &period_assignments.subject_map {
                         if assigned_students.contains(student_id) {
-                            ops.push(UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                                *period_id,
-                                *student_id,
-                                *subject_id,
-                                false,
-                            )));
+                            return Some(PreCleaningOp {
+                                warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                                    *student_id,
+                                    *period_id,
+                                ),
+                                op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                    *period_id,
+                                    *student_id,
+                                    *subject_id,
+                                    false,
+                                )),
+                            });
                         }
-                    }
-
-                    if !ops.is_empty() {
-                        return Some(PreCleaningOp {
-                            warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
-                                *student_id,
-                                *period_id,
-                            ),
-                            ops,
-                        });
                     }
                 }
 
@@ -222,26 +217,21 @@ impl StudentsUpdateOp {
                         continue;
                     }
 
-                    let mut ops = vec![];
                     for (subject_id, assigned_students) in &period_assignments.subject_map {
                         if assigned_students.contains(student_id) {
-                            ops.push(UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                                *period_id,
-                                *student_id,
-                                *subject_id,
-                                false,
-                            )));
+                            return Some(PreCleaningOp {
+                                warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                                    *student_id,
+                                    *period_id,
+                                ),
+                                op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                    *period_id,
+                                    *student_id,
+                                    *subject_id,
+                                    false,
+                                )),
+                            });
                         }
-                    }
-
-                    if !ops.is_empty() {
-                        return Some(PreCleaningOp {
-                            warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
-                                *student_id,
-                                *period_id,
-                            ),
-                            ops,
-                        });
                     }
                 }
 

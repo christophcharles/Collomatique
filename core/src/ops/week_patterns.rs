@@ -121,7 +121,7 @@ impl WeekPatternsUpdateOp {
                                 warning: WeekPatternsUpdateWarning::LooseInterrogationSlot(
                                     *slot_id,
                                 ),
-                                ops: vec![UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id))],
+                                op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
                             });
                         }
                     }
@@ -131,9 +131,9 @@ impl WeekPatternsUpdateOp {
                     if incompat.week_pattern_id == Some(*week_pattern_id) {
                         return Some(PreCleaningOp {
                             warning: WeekPatternsUpdateWarning::LooseScheduleIncompat(*incompat_id),
-                            ops: vec![UpdateOp::Incompatibilities(
+                            op: UpdateOp::Incompatibilities(
                                 IncompatibilitiesUpdateOp::DeleteIncompat(*incompat_id),
-                            )],
+                            ),
                         });
                     }
                 }

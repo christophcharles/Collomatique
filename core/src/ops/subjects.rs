@@ -237,10 +237,10 @@ impl SubjectsUpdateOp {
                                     *teacher_id,
                                     *subject_id,
                                 ),
-                                ops: vec![UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(
+                                op: UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(
                                     *teacher_id,
                                     new_teacher,
-                                ))],
+                                )),
                             });
                         }
                     }
@@ -255,18 +255,17 @@ impl SubjectsUpdateOp {
                                     *group_list_id,
                                     *period_id,
                                 ),
-                                ops: vec![UpdateOp::GroupLists(
+                                op: UpdateOp::GroupLists(
                                     GroupListsUpdateOp::AssignGroupListToSubject(
                                         *period_id,
                                         *subject_id,
                                         None,
                                     ),
-                                )],
+                                ),
                             });
                         }
                     }
 
-                    let mut ops = vec![];
                     let subject_slots = data
                         .get_data()
                         .get_slots()
@@ -274,12 +273,9 @@ impl SubjectsUpdateOp {
                         .get(subject_id)
                         .expect("Subject should have associated slots at this point");
                     for (slot_id, _slot) in &subject_slots.ordered_slots {
-                        ops.push(UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)));
-                    }
-                    if !ops.is_empty() {
                         return Some(PreCleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
-                            ops,
+                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
                         });
                     }
                 }
@@ -304,25 +300,18 @@ impl SubjectsUpdateOp {
                             .get(subject_id)
                             .expect("subject_id should be available in subject map at this point");
 
-                        if !assigned_students.is_empty() {
-                            let ops = assigned_students
-                                .iter()
-                                .map(|student_id| {
-                                    UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                                        *period_id,
-                                        *student_id,
-                                        *subject_id,
-                                        false,
-                                    ))
-                                })
-                                .collect();
-
+                        for student_id in assigned_students {
                             return Some(PreCleaningOp {
                                 warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
                                     *period_id,
                                     *subject_id,
                                 ),
-                                ops,
+                                op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                    *period_id,
+                                    *student_id,
+                                    *subject_id,
+                                    false,
+                                )),
                             });
                         }
                     }
@@ -340,13 +329,13 @@ impl SubjectsUpdateOp {
                                     *group_list_id,
                                     *period_id,
                                 ),
-                                ops: vec![UpdateOp::GroupLists(
+                                op: UpdateOp::GroupLists(
                                     GroupListsUpdateOp::AssignGroupListToSubject(
                                         *period_id,
                                         *subject_id,
                                         None,
                                     ),
-                                )],
+                                ),
                             });
                         }
                     }
@@ -364,10 +353,10 @@ impl SubjectsUpdateOp {
                                 *teacher_id,
                                 *subject_id,
                             ),
-                            ops: vec![UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(
+                            op: UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(
                                 *teacher_id,
                                 new_teacher,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -382,13 +371,11 @@ impl SubjectsUpdateOp {
                                 *group_list_id,
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::GroupLists(
-                                GroupListsUpdateOp::AssignGroupListToSubject(
-                                    *period_id,
-                                    *subject_id,
-                                    None,
-                                ),
-                            )],
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                                *period_id,
+                                *subject_id,
+                                None,
+                            )),
                         });
                     }
                 }
@@ -400,23 +387,19 @@ impl SubjectsUpdateOp {
                                 *subject_id,
                                 *incompat_id,
                             ),
-                            ops: vec![UpdateOp::Incompatibilities(
+                            op: UpdateOp::Incompatibilities(
                                 IncompatibilitiesUpdateOp::DeleteIncompat(*incompat_id),
-                            )],
+                            ),
                         });
                     }
                 }
 
                 if let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
                 {
-                    let mut ops = vec![];
                     for (slot_id, _slot) in &subject_slots.ordered_slots {
-                        ops.push(UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)));
-                    }
-                    if !subject_slots.ordered_slots.is_empty() {
                         return Some(PreCleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
-                            ops,
+                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
                         });
                     }
                 }
@@ -436,22 +419,18 @@ impl SubjectsUpdateOp {
                     let assigned_students = period_assignments.subject_map.get(subject_id)
                         .expect("Assignment data is inconsistent and does not have a required subject entry");
 
-                    let mut ops = vec![];
                     for student_id in assigned_students {
-                        ops.push(UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                            *period_id,
-                            *student_id,
-                            *subject_id,
-                            false,
-                        )));
-                    }
-                    if !ops.is_empty() {
                         return Some(PreCleaningOp {
                             warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
                                 *period_id,
                                 *subject_id,
                             ),
-                            ops,
+                            op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                *period_id,
+                                *student_id,
+                                *subject_id,
+                                false,
+                            )),
                         });
                     }
                 }

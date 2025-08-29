@@ -214,11 +214,11 @@ impl GeneralPlanningUpdateOp {
                                 *subject_id,
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                            op: UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
                                 *subject_id,
                                 *period_id,
                                 true,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -229,9 +229,9 @@ impl GeneralPlanningUpdateOp {
                             warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
                                 *rule_id, *period_id,
                             ),
-                            ops: vec![UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
+                            op: UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
                                 *rule_id, *period_id, true,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -245,10 +245,10 @@ impl GeneralPlanningUpdateOp {
                                 *student_id,
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
+                            op: UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
                                 *student_id,
                                 new_student,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -265,12 +265,12 @@ impl GeneralPlanningUpdateOp {
                             warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                            op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
                                 *period_id,
                                 *student_id,
                                 *subject_id,
                                 false,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -288,13 +288,11 @@ impl GeneralPlanningUpdateOp {
                                 *subject_id,
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::GroupLists(
-                                GroupListsUpdateOp::AssignGroupListToSubject(
-                                    *period_id,
-                                    *subject_id,
-                                    None,
-                                ),
-                            )],
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                                *period_id,
+                                *subject_id,
+                                None,
+                            )),
                         });
                     }
                 }
@@ -323,11 +321,11 @@ impl GeneralPlanningUpdateOp {
                                 *subject_id,
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                            op: UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
                                 *subject_id,
                                 *period_id,
                                 !subject.excluded_periods.contains(&previous_id),
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -340,11 +338,11 @@ impl GeneralPlanningUpdateOp {
                             warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
                                 *rule_id, *period_id,
                             ),
-                            ops: vec![UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
+                            op: UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
                                 *rule_id,
                                 *period_id,
                                 !rule.excluded_periods.contains(&previous_id),
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -364,10 +362,10 @@ impl GeneralPlanningUpdateOp {
                                 *student_id,
                                 *period_id,
                             ),
-                            ops: vec![UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
+                            op: UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
                                 *student_id,
                                 new_student,
-                            ))],
+                            )),
                         });
                     }
                 }
@@ -397,11 +395,9 @@ impl GeneralPlanningUpdateOp {
                             for student_id in assigned_students {
                                 return Some(PreCleaningOp {
                                     warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
-                                    ops: vec![
-                                        UpdateOp::Assignments(
+                                    op: UpdateOp::Assignments(
                                             AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, false)
-                                        )
-                                    ],
+                                        ),
                                 });
                             }
                         }
@@ -414,11 +410,9 @@ impl GeneralPlanningUpdateOp {
                                 {
                                     return Some(PreCleaningOp {
                                         warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
-                                        ops: vec![
-                                            UpdateOp::Assignments(
-                                                AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, previous_students.contains(student_id))
-                                            )
-                                        ],
+                                        op: UpdateOp::Assignments(
+                                            AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, previous_students.contains(student_id))
+                                        ),
                                     });
                                 }
                             }
@@ -451,13 +445,13 @@ impl GeneralPlanningUpdateOp {
                                         *subject_id,
                                         *period_id,
                                     ),
-                                    ops: vec![UpdateOp::GroupLists(
+                                    op: UpdateOp::GroupLists(
                                         GroupListsUpdateOp::AssignGroupListToSubject(
                                             *period_id,
                                             *subject_id,
                                             Some(*group_list_id_2),
                                         ),
-                                    )],
+                                    ),
                                 });
                             }
                             None => {
@@ -467,13 +461,13 @@ impl GeneralPlanningUpdateOp {
                                         *subject_id,
                                         *period_id,
                                     ),
-                                    ops: vec![UpdateOp::GroupLists(
+                                    op: UpdateOp::GroupLists(
                                         GroupListsUpdateOp::AssignGroupListToSubject(
                                             *period_id,
                                             *subject_id,
                                             None,
                                         ),
-                                    )],
+                                    ),
                                 });
                             }
                         }
