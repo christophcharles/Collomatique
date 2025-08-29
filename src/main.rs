@@ -32,6 +32,11 @@ enum CliCommandOrShell {
     Global(CliCommand),
     /// Open a shell command line rather than opening a GUI
     Shell,
+    /// Backup the database in json
+    Backup {
+        /// Output json file
+        out: std::path::PathBuf,
+    },
 }
 
 fn main() -> Result<()> {

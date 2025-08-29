@@ -190,15 +190,22 @@ use super::CliCommandOrShell;
 
 async fn async_cli(create: bool, db: std::path::PathBuf, command: CliCommandOrShell) -> Result<()> {
     let logic = Logic::new(connect_db(create, db.as_path()).await?);
-    let mut app_state = AppState::new(logic);
 
     collomatique::frontend::python::initialize();
 
     match command {
         CliCommandOrShell::Shell => {
+            let mut app_state = AppState::new(logic);
             interactive_shell(&mut app_state).await?;
         }
+        CliCommandOrShell::Backup { out } => {
+            let backup = logic.backup().await?;
+
+            let file = std::fs::File::create(out)?;
+            serde_json::to_writer_pretty(file, &backup)?;
+        }
         CliCommandOrShell::Global(command) => {
+            let mut app_state = AppState::new(logic);
             let output =
                 collomatique::frontend::shell::execute_cli_command(command, &mut app_state).await?;
             if let Some(msg) = output {
