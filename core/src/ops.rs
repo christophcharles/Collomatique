@@ -133,19 +133,28 @@ impl UpdateOp {
         }
     }
 
-    pub fn get_warnings(&self) -> Vec<UpdateWarning> {
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        data: &T,
+    ) -> Vec<UpdateWarning> {
         match self {
             UpdateOp::GeneralPlanning(period_op) => {
-                UpdateWarning::from_iter(period_op.get_warnings())
+                UpdateWarning::from_iter(period_op.get_warnings(data))
             }
-            UpdateOp::Subjects(subject_op) => UpdateWarning::from_iter(subject_op.get_warnings()),
-            UpdateOp::Teachers(teacher_op) => UpdateWarning::from_iter(teacher_op.get_warnings()),
-            UpdateOp::Students(student_op) => UpdateWarning::from_iter(student_op.get_warnings()),
+            UpdateOp::Subjects(subject_op) => {
+                UpdateWarning::from_iter(subject_op.get_warnings(data))
+            }
+            UpdateOp::Teachers(teacher_op) => {
+                UpdateWarning::from_iter(teacher_op.get_warnings(data))
+            }
+            UpdateOp::Students(student_op) => {
+                UpdateWarning::from_iter(student_op.get_warnings(data))
+            }
             UpdateOp::Assignments(assignment_op) => {
-                UpdateWarning::from_iter(assignment_op.get_warnings())
+                UpdateWarning::from_iter(assignment_op.get_warnings(data))
             }
             UpdateOp::WeekPatterns(week_pattern_op) => {
-                UpdateWarning::from_iter(week_pattern_op.get_warnings())
+                UpdateWarning::from_iter(week_pattern_op.get_warnings(data))
             }
         }
     }

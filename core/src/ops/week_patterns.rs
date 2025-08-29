@@ -57,7 +57,10 @@ impl WeekPatternsUpdateOp {
         }
     }
 
-    pub fn get_warnings(&self) -> Vec<WeekPatternsUpdateWarning> {
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> Vec<WeekPatternsUpdateWarning> {
         vec![]
     }
 

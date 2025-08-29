@@ -102,7 +102,10 @@ impl GeneralPlanningUpdateOp {
         }
     }
 
-    pub fn get_warnings(&self) -> Vec<GeneralPlanningUpdateWarning> {
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> Vec<GeneralPlanningUpdateWarning> {
         vec![]
     }
 

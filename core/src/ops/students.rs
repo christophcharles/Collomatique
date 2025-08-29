@@ -61,7 +61,10 @@ impl StudentsUpdateOp {
         }
     }
 
-    pub fn get_warnings(&self) -> Vec<StudentsUpdateWarning> {
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> Vec<StudentsUpdateWarning> {
         vec![]
     }
 
