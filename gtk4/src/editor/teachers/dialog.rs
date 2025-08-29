@@ -66,7 +66,7 @@ impl SimpleComponent for Dialog {
             #[watch]
             set_visible: !model.hidden,
             set_title: Some("Configuration du colleur"),
-            set_size_request: (500, 600),
+            set_size_request: (500, 300),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
