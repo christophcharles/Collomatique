@@ -1990,6 +1990,21 @@ impl Data {
                             *period_id, *id,
                         ));
                     }
+
+                    let subject_map = self
+                        .inner_data
+                        .group_lists
+                        .subjects_associations
+                        .get(period_id)
+                        .expect("Period id should be valid at this point");
+
+                    if let Some(group_list_id) = subject_map.get(id) {
+                        return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                            *id,
+                            *group_list_id,
+                            *period_id,
+                        ));
+                    }
                 }
 
                 self.inner_data.subjects.ordered_subject_list[position].1 = new_params.clone();
