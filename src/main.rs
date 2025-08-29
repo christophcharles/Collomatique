@@ -956,7 +956,10 @@ async fn generate_grouping_incompats(
             let id1 = week_map1[week];
             let id2 = week_map2[week];
 
-            let incompat = SlotGroupingIncompat::new(id1, id2);
+            let incompat = SlotGroupingIncompat {
+                groupings: BTreeSet::from([id1, id2]),
+                max_count: NonZeroUsize::new(1).unwrap(),
+            };
             set.insert(incompat);
         }
     }

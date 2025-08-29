@@ -159,7 +159,10 @@ fn simple_validated_data() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+        max_count: NonZeroUsize::new(1).unwrap(),
+    }]);
 
     let expected_result = ValidatedData {
         general: general.clone(),
@@ -751,7 +754,10 @@ fn grouping_incompact_invalid_ref() {
             }]),
         },
     ];
-    let grouping_incompats = BTreeSet::from([SlotGroupingIncompat::new(0, 2)]);
+    let grouping_incompats = BTreeSet::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 2]),
+        max_count: NonZeroUsize::new(1).unwrap(),
+    }]);
 
     assert_eq!(
         ValidatedData::new(
@@ -4056,7 +4062,10 @@ fn use_grouping() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+        max_count: NonZeroUsize::new(1).unwrap(),
+    }]);
 
     let data = ValidatedData::new(
         general,
@@ -5247,7 +5256,7 @@ fn students_per_group_count() {
         (&sig_0_6_1 + &sig_0_7_1 + &sig_0_8_1 + &sig_0_9_1 + &sig_0_10_1 + &sig_0_11_1).geq(&Expr::constant(1)),
 
         (&sig_0_6_2 + &sig_0_7_2 + &sig_0_8_2 + &sig_0_9_2 + &sig_0_10_2 + &sig_0_11_2).leq(&Expr::constant(1)),
-        
+
         (&sig_0_6_3 + &sig_0_7_3 + &sig_0_8_3 + &sig_0_9_3 + &sig_0_10_3 + &sig_0_11_3).leq(&Expr::constant(3)),
         (&sig_0_6_3 + &sig_0_7_3 + &sig_0_8_3 + &sig_0_9_3 + &sig_0_10_3 + &sig_0_11_3).geq(&Expr::constant(2)),
     ]);
@@ -6682,7 +6691,10 @@ fn grouping_inequalities() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+        max_count: NonZeroUsize::new(1).unwrap(),
+    }]);
 
     let data = ValidatedData::new(
         general,
@@ -6835,7 +6847,10 @@ fn grouping_incompats() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+        max_count: NonZeroUsize::new(1).unwrap(),
+    }]);
 
     let data = ValidatedData::new(
         general,
@@ -7870,11 +7885,11 @@ fn max_interrogations_per_day() {
         (&gis_0_0_0 + &dga_1_0_1_0).leq(&Expr::constant(1)),
         (&gis_0_0_0 + &dga_1_0_1_1).leq(&Expr::constant(1)),
         (&gis_0_0_0 + &dga_1_0_1_2).leq(&Expr::constant(1)),
-        
+
         (&gis_0_1_0 + &dga_1_1_1_0).leq(&Expr::constant(1)),
         (&gis_0_1_0 + &dga_1_1_1_1).leq(&Expr::constant(1)),
         (&gis_0_1_0 + &dga_1_1_1_2).leq(&Expr::constant(1)),
-        
+
         (&dga_0_0_1_3 + &gis_1_0_0).leq(&Expr::constant(1)),
         (&dga_0_0_1_4 + &gis_1_0_0).leq(&Expr::constant(1)),
         (&dga_0_0_1_5 + &gis_1_0_0).leq(&Expr::constant(1)),
