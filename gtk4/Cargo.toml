@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 collomatique-core = { path = "../core" }
-relm4 = "0.9"
+relm4 = { version = "0.9", features = [ "libadwaita" ] }
