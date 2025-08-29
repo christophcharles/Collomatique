@@ -14,7 +14,7 @@ pub enum GeneralPlanningUpdateWarning {
 }
 
 impl GeneralPlanningUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> String {
@@ -162,7 +162,7 @@ impl GeneralPlanningUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<GeneralPlanningUpdateWarning> {
@@ -302,7 +302,7 @@ impl GeneralPlanningUpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::PeriodId>, GeneralPlanningUpdateError> {
@@ -397,7 +397,7 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
@@ -505,7 +505,7 @@ impl GeneralPlanningUpdateOp {
 
                 let new_desc = desc.split_off(*new_week_count);
 
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 let result = session
                     .apply(
@@ -626,7 +626,7 @@ impl GeneralPlanningUpdateOp {
 
                 prev_desc.extend(desc);
 
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 let result = session
                     .apply(

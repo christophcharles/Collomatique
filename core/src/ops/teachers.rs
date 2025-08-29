@@ -6,7 +6,7 @@ pub enum TeachersUpdateWarning {
 }
 
 impl TeachersUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> String {
@@ -74,7 +74,7 @@ impl TeachersUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<TeachersUpdateWarning> {
@@ -120,7 +120,7 @@ impl TeachersUpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::TeacherId>, TeachersUpdateError> {
@@ -154,7 +154,7 @@ impl TeachersUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateTeacher(teacher_id, teacher) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     if teacher.subjects.contains(subject_id) {
@@ -212,7 +212,7 @@ impl TeachersUpdateOp {
                 Ok(None)
             }
             Self::DeleteTeacher(teacher_id) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {

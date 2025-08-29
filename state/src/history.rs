@@ -90,7 +90,7 @@
 
 use std::collections::VecDeque;
 
-use crate::Operation;
+use crate::{traits::Description, Operation};
 
 /// Reversible operation
 ///
@@ -197,9 +197,9 @@ impl<T: Operation> AggregatedOp<T> {
 /// It can optionnaly manage a finite size history and forget
 /// operations that are deemed too old.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct ModificationHistory<T: Operation> {
+pub struct ModificationHistory<T: Operation, D: Description> {
     /// Actual history of operations
-    history: VecDeque<(AggregatedOp<T>, String)>,
+    history: VecDeque<(AggregatedOp<T>, D)>,
 
     /// Points to the place of the next operation to store in history
     history_pointer: usize,
@@ -217,7 +217,7 @@ pub struct ModificationHistory<T: Operation> {
     max_history_size: Option<usize>,
 }
 
-impl<T: Operation> ModificationHistory<T> {
+impl<T: Operation, D: Description> ModificationHistory<T, D> {
     /// Used internally
     ///
     /// Truncate the history if it has become too big.
@@ -242,7 +242,7 @@ impl<T: Operation> ModificationHistory<T> {
     }
 }
 
-impl<T: Operation> ModificationHistory<T> {
+impl<T: Operation, D: Description> ModificationHistory<T, D> {
     /// Creates a new modification history with default parameters
     ///
     /// By default, [ModificationHistory] maintains a potentially
@@ -287,17 +287,17 @@ impl<T: Operation> ModificationHistory<T> {
     /// if some operation was cancelled and remained in history
     /// to be able to apply them, they will be discarded and this branch
     /// of history is lost.
-    pub fn store(&mut self, aggregated_op: AggregatedOp<T>, name: String) {
+    pub fn store(&mut self, aggregated_op: AggregatedOp<T>, desc: D) {
         self.history.truncate(self.history_pointer);
 
         self.history_pointer += 1;
-        self.history.push_back((aggregated_op, name));
+        self.history.push_back((aggregated_op, desc));
 
         self.truncate_history_as_needed();
     }
 
     /// Returns the name of the last operation if it exists
-    pub fn get_undo_name(&self) -> Option<&str> {
+    pub fn get_undo_name(&self) -> Option<&D> {
         if self.history_pointer == 0 {
             return None;
         }
@@ -306,7 +306,7 @@ impl<T: Operation> ModificationHistory<T> {
     }
 
     /// Returns the name of the next operation if it exists
-    pub fn get_redo_name(&self) -> Option<&str> {
+    pub fn get_redo_name(&self) -> Option<&D> {
         if self.history_pointer == self.history.len() {
             return None;
         }
@@ -338,8 +338,8 @@ impl<T: Operation> ModificationHistory<T> {
 
         assert!(self.history_pointer <= self.history.len());
         assert!(self.history_pointer > 0);
-        let last_ops = self.history[self.history_pointer - 1].clone();
-        Some(last_ops.0)
+        let last_ops = self.history[self.history_pointer - 1].0.clone();
+        Some(last_ops)
     }
 
     /// Cancels the last operation in history
@@ -361,9 +361,9 @@ impl<T: Operation> ModificationHistory<T> {
 
         assert!(self.history_pointer < self.history.len());
 
-        let last_ops = self.history[self.history_pointer].clone();
+        let last_ops = self.history[self.history_pointer].0.clone();
 
-        Some(last_ops.0.rev())
+        Some(last_ops.rev())
     }
 
     /// Redo the last cancelled operation
@@ -381,10 +381,10 @@ impl<T: Operation> ModificationHistory<T> {
             return None;
         }
 
-        let new_ops = self.history[self.history_pointer].clone();
+        let new_ops = self.history[self.history_pointer].0.clone();
         self.history_pointer += 1;
 
-        Some(new_ops.0)
+        Some(new_ops)
     }
 
     /// Builds an aggregated operation corresponding to the full history

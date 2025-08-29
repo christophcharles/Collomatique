@@ -4,7 +4,7 @@ use super::*;
 pub enum AssignmentsUpdateWarning {}
 
 impl AssignmentsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         _data: &T,
     ) -> String {
@@ -119,14 +119,14 @@ impl AssignmentsUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         _data: &T,
     ) -> Vec<AssignmentsUpdateWarning> {
         vec![]
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<(), AssignmentsUpdateError> {
@@ -207,7 +207,7 @@ impl AssignmentsUpdateOp {
                     .get(&previous_period_id)
                     .expect("Previous period id should be valid at this point");
 
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (student_id, student) in &data.get_data().get_students().student_map {
                     if student.excluded_periods.contains(period_id) {
@@ -266,7 +266,7 @@ impl AssignmentsUpdateOp {
                     );
                 }
 
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (student_id, student) in &data.get_data().get_students().student_map {
                     if student.excluded_periods.contains(period_id) {

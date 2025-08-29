@@ -16,7 +16,7 @@ pub enum SubjectsUpdateWarning {
 }
 
 impl SubjectsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> String {
@@ -167,7 +167,7 @@ impl SubjectsUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<SubjectsUpdateWarning> {
@@ -296,7 +296,7 @@ impl SubjectsUpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::SubjectId>, SubjectsUpdateError> {
@@ -347,7 +347,7 @@ impl SubjectsUpdateOp {
 
                 let no_more_interrogations = params.interrogation_parameters.is_none();
 
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 if previously_had_interrogations && no_more_interrogations {
                     for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
@@ -424,7 +424,7 @@ impl SubjectsUpdateOp {
                 Ok(None)
             }
             Self::DeleteSubject(subject_id) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
                     if teacher.subjects.contains(subject_id) {
@@ -580,7 +580,7 @@ impl SubjectsUpdateOp {
                     Err(UpdatePeriodStatusError::InvalidPeriodId(*period_id))?;
                 }
 
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 let mut subject = data
                     .get_data()

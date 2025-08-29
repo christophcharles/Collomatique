@@ -31,6 +31,8 @@ pub use week_patterns::*;
 pub mod slots;
 pub use slots::*;
 
+pub type Desc = String;
+
 #[derive(Debug)]
 pub enum UpdateOp {
     GeneralPlanning(GeneralPlanningUpdateOp),
@@ -114,7 +116,7 @@ impl From<SlotsUpdateWarning> for UpdateWarning {
 }
 
 impl UpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = String>>(
         &self,
         data: &T,
     ) -> String {
@@ -147,7 +149,7 @@ impl UpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = String>>(
         &self,
         data: &T,
     ) -> Vec<UpdateWarning> {
@@ -174,7 +176,7 @@ impl UpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = String>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {

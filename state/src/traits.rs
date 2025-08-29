@@ -6,6 +6,11 @@
 /// This trait represents an operation (annotated or not)
 pub trait Operation: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq {}
 
+/// This trait represents an action description (to be stored in history)
+pub trait Description: Send + Sync + Clone {}
+
+impl<T: Send + Sync + Clone> Description for T {}
+
 /// In memory data trait
 ///
 /// This trait should be implemented by an struct
@@ -104,7 +109,7 @@ pub trait Manager: private::ManagerInternal {
     fn apply(
         &mut self,
         op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
-        name: String,
+        desc: <Self as private::ManagerInternal>::Desc,
     ) -> Result<
         <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
         <<Self as private::ManagerInternal>::Data as InMemoryData>::Error,
@@ -123,18 +128,18 @@ pub trait Manager: private::ManagerInternal {
 
         let aggregated_op = crate::history::AggregatedOp::new(vec![rev_op]);
         self.get_modification_history_mut()
-            .store(aggregated_op, name);
+            .store(aggregated_op, desc);
 
         Ok(new_info)
     }
 
     /// Returns the name of the last operation if it exists
-    fn get_undo_name(&self) -> Option<&str> {
+    fn get_undo_name(&self) -> Option<&<Self as private::ManagerInternal>::Desc> {
         self.get_modification_history().get_undo_name()
     }
 
     /// Returns the name of the next operation if it exists
-    fn get_redo_name(&self) -> Option<&str> {
+    fn get_redo_name(&self) -> Option<&<Self as private::ManagerInternal>::Desc> {
         self.get_modification_history().get_redo_name()
     }
 
@@ -284,6 +289,7 @@ pub(crate) mod private {
     pub trait ManagerInternal: Send + Sync + Clone {
         /// Type of the underlying data
         type Data: InMemoryData;
+        type Desc: Description;
 
         /// Return a mutable reference to the in-memory data
         fn get_in_memory_data_mut(&mut self) -> &mut Self::Data;
@@ -292,6 +298,7 @@ pub(crate) mod private {
             &mut self,
         ) -> &mut crate::history::ModificationHistory<
             <Self::Data as InMemoryData>::AnnotatedOperation,
+            Self::Desc,
         >;
 
         /// Return a non-mutable reference to the in-memory data
@@ -299,6 +306,9 @@ pub(crate) mod private {
         /// Return a non-mutable reference to the modification history
         fn get_modification_history(
             &self,
-        ) -> &crate::history::ModificationHistory<<Self::Data as InMemoryData>::AnnotatedOperation>;
+        ) -> &crate::history::ModificationHistory<
+            <Self::Data as InMemoryData>::AnnotatedOperation,
+            Self::Desc,
+        >;
     }
 }

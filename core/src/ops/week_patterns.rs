@@ -6,7 +6,7 @@ pub enum WeekPatternsUpdateWarning {
 }
 
 impl WeekPatternsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> String {
@@ -92,7 +92,7 @@ impl WeekPatternsUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<WeekPatternsUpdateWarning> {
@@ -116,7 +116,7 @@ impl WeekPatternsUpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::WeekPatternId>, WeekPatternsUpdateError>
@@ -170,7 +170,7 @@ impl WeekPatternsUpdateOp {
                 Ok(None)
             }
             Self::DeleteWeekPattern(week_pattern_id) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {

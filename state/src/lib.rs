@@ -11,4 +11,4 @@ pub mod tools;
 pub mod traits;
 
 pub use state::{AppSession, AppState};
-pub use traits::{InMemoryData, Operation};
+pub use traits::{Description, InMemoryData, Operation};
