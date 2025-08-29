@@ -23,13 +23,19 @@
 //! and teachers are represented with numbers and that's it. It is the job of other crates
 //! from collomatique to provide necessary utilities to make working the algorithm
 //! somewhat pleasant.
-//!
+//! 
+//! Two modules ([generics] and [solver]) are actually somewhat generic. Their role is
+//! to allow a somewhat generic description of a problem and a generic interface for
+//! its translation into an ILp formulation.
 //! The main struct is [ProblemBuilder] and you should start from there to see how this crate
 //! works. If you want to implement a problem, you should implement [BaseProblem] on some structure
 //! and possibly [ProblemConstraints] on a few others.
 //! A generic usage example is provided in the [examples::simple_schedule] module.
+//! 
+//! The colloscope logic itself is found in the module [colloscopes].
 
 pub mod colloscopes_draft;
+pub mod colloscopes;
 pub mod time;
 
 pub mod examples;
