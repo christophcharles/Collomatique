@@ -839,6 +839,7 @@ impl Data {
             start_time: slot.start_time,
             extra_info: slot.extra_info,
             week_pattern,
+            cost: slot.cost,
         };
 
         Ok(new_slot)

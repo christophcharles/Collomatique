@@ -28,6 +28,7 @@ pub struct Slot {
     pub start_time: chrono::NaiveTime,
     pub extra_info: String,
     pub week_pattern: Option<u64>,
+    pub cost: i32,
 }
 
 impl From<&collomatique_state_colloscopes::slots::Slot> for Slot {
@@ -38,6 +39,7 @@ impl From<&collomatique_state_colloscopes::slots::Slot> for Slot {
             start_time: value.start_time.start_time.clone(),
             extra_info: value.extra_info.clone(),
             week_pattern: value.week_pattern.map(|x| x.inner()),
+            cost: value.cost,
         }
     }
 }
@@ -52,6 +54,7 @@ impl From<Slot> for collomatique_state_colloscopes::slots::SlotExternalData {
             },
             extra_info: value.extra_info,
             week_pattern: value.week_pattern,
+            cost: value.cost,
         }
     }
 }
