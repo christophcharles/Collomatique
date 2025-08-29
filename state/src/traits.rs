@@ -14,7 +14,7 @@ pub trait Operation: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq {}
 ///
 /// It is built upon by the state crate to have
 /// a consistent modification history, sessions, etc.
-pub trait InMemoryData: Send + Sync + std::fmt::Debug {
+pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// Non-annotated type for the operations
     type OriginalOperation: Operation;
 

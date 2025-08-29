@@ -34,6 +34,7 @@ pub enum EditorInput {
     UpdateOp(EditorUpdateOp),
     RunScriptClicked,
     RunScript(PathBuf, String),
+    NewStateFromScript(AppState<Data>),
 }
 
 #[derive(Debug)]
@@ -332,7 +333,11 @@ impl Component for EditorPanel {
         let run_script_dialog = run_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .forward(sender.input_sender(), |_| EditorInput::Ignore);
+            .forward(sender.input_sender(), |msg| match msg {
+                run_script::DialogOutput::NewData(new_data) => {
+                    EditorInput::NewStateFromScript(new_data)
+                }
+            });
 
         let pages_names = vec!["general_planning", "test2", "test3"];
         let pages_titles_map = BTreeMap::from([
@@ -474,8 +479,17 @@ impl Component for EditorPanel {
             EditorInput::RunScript(path, script) => {
                 self.run_script_dialog
                     .sender()
-                    .send(run_script::DialogInput::Run(path, script))
+                    .send(run_script::DialogInput::Run(
+                        path,
+                        script,
+                        self.data.clone(),
+                    ))
                     .unwrap();
+            }
+            EditorInput::NewStateFromScript(new_data) => {
+                self.data = new_data;
+                self.dirty = true;
+                self.send_msg_for_interface_update(sender);
             }
         }
     }

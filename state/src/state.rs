@@ -13,7 +13,7 @@ use history::ModificationHistory;
 /// Build an [AppState] with [AppState::new] starting with some
 /// structure implementing [InMemoryData]. [AppState] takes
 /// ownership of this data and maintains a consistent history of modifications.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppState<T: InMemoryData> {
     data: T,
     mod_history: ModificationHistory<T::AnnotatedOperation>,
