@@ -45,7 +45,7 @@ impl Component for Assignments {
         gtk::ScrolledWindow {
             set_hexpand: true,
             set_margin_all: 5,
-            set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+            set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
             gtk::Box {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,

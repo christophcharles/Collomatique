@@ -112,11 +112,15 @@ impl FactoryComponent for PeriodEntry {
                 set_label: "<i>Pas d'élèves inscrits sur la période</i>",
                 set_use_markup: true,
             },
-            #[local_ref]
-            column_view_widget -> gtk::ColumnView {
-                add_css_class: "frame",
-                #[watch]
-                set_visible: !self.data.filtered_students.is_empty(),
+            gtk::ScrolledWindow {
+                set_hexpand: true,
+                set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Never),
+                #[local_ref]
+                column_view_widget -> gtk::ColumnView {
+                    add_css_class: "frame",
+                    #[watch]
+                    set_visible: !self.data.filtered_students.is_empty(),
+                },
             },
         },
     }
