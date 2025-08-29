@@ -226,6 +226,10 @@ pub enum SubjectError {
     /// The subject is referenced by a slot
     #[error("subject id ({0:?}) is referenced by slots")]
     SubjectStillHasAssociatedSlots(SubjectId),
+
+    /// The subject is referenced by a schedule incompatibility
+    #[error("subject id ({0:?}) is referenced by the incompat id {1:?}")]
+    SubjectStillHasAssociatedIncompats(SubjectId, IncompatId),
 }
 
 /// Errors for teacher operations
@@ -300,6 +304,10 @@ pub enum WeekPatternError {
     /// The week pattern is referenced by a slot
     #[error("week pattern id ({0:?}) is referenced by a slot ({1:?})")]
     WeekPatternStillHasAssociatedSlots(WeekPatternId, SlotId),
+
+    /// The week pattern is referenced by a schedule incompatibility
+    #[error("week pattern id ({0:?}) is referenced by an incompat ({1:?})")]
+    WeekPatternStillHasAssociatedIncompat(WeekPatternId, IncompatId),
 }
 
 /// Errors for interrogation slot operations
@@ -1595,6 +1603,15 @@ impl Data {
                     }
                 }
 
+                for (incompat_id, incompat) in &self.inner_data.incompats.incompat_map {
+                    if incompat.subject_id == *id {
+                        return Err(SubjectError::SubjectStillHasAssociatedIncompats(
+                            *id,
+                            *incompat_id,
+                        ));
+                    }
+                }
+
                 let params = &self.inner_data.subjects.ordered_subject_list[position].1;
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
                     if params.excluded_periods.contains(period_id) {
@@ -1925,6 +1942,17 @@ impl Data {
                                     *id, *slot_id,
                                 ));
                             }
+                        }
+                    }
+                }
+
+                for (incompat_id, incompat) in &self.inner_data.incompats.incompat_map {
+                    if let Some(week_pattern_id) = &incompat.week_pattern_id {
+                        if *id == *week_pattern_id {
+                            return Err(WeekPatternError::WeekPatternStillHasAssociatedIncompat(
+                                *id,
+                                *incompat_id,
+                            ));
                         }
                     }
                 }
