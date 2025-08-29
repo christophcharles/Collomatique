@@ -40,11 +40,11 @@ impl UpdateOp {
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
         data: &mut T,
-    ) -> Result<(), UpdateError> {
+    ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {
         match self {
             UpdateOp::GeneralPlanning(period_op) => {
-                period_op.apply(data)?;
-                Ok(())
+                let result = period_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
             }
         }
     }

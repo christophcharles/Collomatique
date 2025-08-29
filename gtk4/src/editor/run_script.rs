@@ -270,14 +270,16 @@ impl Component for Dialog {
                     };
 
                     match op.apply(app_session) {
-                        Ok(()) => {
+                        Ok(new_id) => {
                             self.add_command(
                                 sender,
                                 msg_display::EntryData::Success(op.get_desc()),
                             );
                             self.rpc_logger
                                 .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack))
+                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(
+                                    new_id.map(|x| x.into()),
+                                )))
                                 .unwrap();
                         }
                         Err(e) => {

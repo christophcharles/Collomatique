@@ -43,3 +43,12 @@ impl From<collomatique_state_colloscopes::PeriodId> for MsgPeriodId {
         MsgPeriodId(value.inner())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgStudentId(pub u64);
+
+impl From<collomatique_state_colloscopes::StudentId> for MsgStudentId {
+    fn from(value: collomatique_state_colloscopes::StudentId) -> Self {
+        MsgStudentId(value.inner())
+    }
+}
