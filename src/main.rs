@@ -467,6 +467,7 @@ fn generate_bare_subjects(
 
             Subject {
                 students_per_group: students_per_slot,
+                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 period: NonZeroU32::new(
                     u32::try_from(x.period).expect("Valid u32 for subject period"),
                 )
