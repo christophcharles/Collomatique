@@ -16,7 +16,7 @@
 //!
 //! Here a simple example of using the library to solve such a simple scheduling problem:
 //! ```
-//! # use collomatique_core::{examples::simple_schedule::{SimpleScheduleDesc, SimpleScheduleConstraints}, ProblemBuilder};
+//! # use collomatique_solver::{examples::simple_schedule::{SimpleScheduleDesc, SimpleScheduleConstraints}, ProblemBuilder};
 //! # use std::collections::BTreeSet;
 //! let problem_desc = SimpleScheduleDesc {
 //!     group_count: 2,
