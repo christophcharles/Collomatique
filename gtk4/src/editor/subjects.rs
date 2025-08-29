@@ -3,6 +3,8 @@ use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
 
+use collomatique_core::ops::SubjectsUpdateOp;
+
 mod subjects_display;
 
 #[derive(Debug)]
@@ -12,6 +14,12 @@ pub enum SubjectsInput {
         collomatique_state_colloscopes::subjects::Subjects,
     ),
     AddSubjectClicked,
+
+    EditSubjectClicked(collomatique_state_colloscopes::SubjectId),
+    DeleteSubjectClicked(collomatique_state_colloscopes::SubjectId),
+    MoveUpSubjectClicked(collomatique_state_colloscopes::SubjectId),
+    MoveDownSubjectClicked(collomatique_state_colloscopes::SubjectId),
+    PeriodStatusUpdated(collomatique_state_colloscopes::SubjectId, usize, bool),
 }
 
 pub struct Subjects {
@@ -23,7 +31,7 @@ pub struct Subjects {
 #[relm4::component(pub)]
 impl Component for Subjects {
     type Input = SubjectsInput;
-    type Output = ();
+    type Output = SubjectsUpdateOp;
     type Init = ();
     type CommandOutput = ();
 
@@ -62,11 +70,27 @@ impl Component for Subjects {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let subjects_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                subjects_display::EntryOutput::EditClicked(id) => {
+                    SubjectsInput::EditSubjectClicked(id)
+                }
+                subjects_display::EntryOutput::DeleteClicked(id) => {
+                    SubjectsInput::DeleteSubjectClicked(id)
+                }
+                subjects_display::EntryOutput::MoveUpClicked(id) => {
+                    SubjectsInput::MoveUpSubjectClicked(id)
+                }
+                subjects_display::EntryOutput::MoveDownClicked(id) => {
+                    SubjectsInput::MoveDownSubjectClicked(id)
+                }
+                subjects_display::EntryOutput::PeriodStatusUpdated(id, period_num, status) => {
+                    SubjectsInput::PeriodStatusUpdated(id, period_num, status)
+                }
+            });
 
         let model = Subjects {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -79,7 +103,7 @@ impl Component for Subjects {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             SubjectsInput::Update(new_periods, new_subjects) => {
                 self.periods = new_periods;
@@ -108,6 +132,25 @@ impl Component for Subjects {
                 );
             }
             SubjectsInput::AddSubjectClicked => {}
+            SubjectsInput::EditSubjectClicked(_id) => {}
+            SubjectsInput::DeleteSubjectClicked(id) => {
+                sender.output(SubjectsUpdateOp::DeleteSubject(id)).unwrap();
+            }
+            SubjectsInput::MoveUpSubjectClicked(id) => {
+                sender.output(SubjectsUpdateOp::MoveUp(id)).unwrap();
+            }
+            SubjectsInput::MoveDownSubjectClicked(id) => {
+                sender.output(SubjectsUpdateOp::MoveDown(id)).unwrap();
+            }
+            SubjectsInput::PeriodStatusUpdated(id, period_num, status) => {
+                sender
+                    .output(SubjectsUpdateOp::UpdatePeriodStatus(
+                        id,
+                        self.periods.ordered_period_list[period_num].0,
+                        status,
+                    ))
+                    .unwrap();
+            }
         }
     }
 }
