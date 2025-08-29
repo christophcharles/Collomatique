@@ -41,7 +41,7 @@ async fn create_db(db_url: &str) -> Result<SqlitePool> {
         r#"
 CREATE TABLE "colloscopes" (
     "colloscope_id"	INTEGER NOT NULL,
-    "name"	TEXT NOT NULL,
+    "name"	TEXT NOT NULL UNIQUE,
     PRIMARY KEY("colloscope_id" AUTOINCREMENT)
 );
 INSERT INTO "colloscopes" ( "name" ) VALUES ( "Colloscope_1" );
