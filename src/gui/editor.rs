@@ -1,4 +1,5 @@
 use collomatique::backend::json;
+use collomatique::frontend::state::Manager;
 use thiserror::Error;
 
 use iced::widget::{button, center, column, container, row, text, tooltip, Space};
@@ -56,6 +57,7 @@ pub struct State {
     panel: Panel,
     path: Option<std::path::PathBuf>,
     app_state: AppStateBox,
+    init_state: collomatique::backend::json::JsonStore,
 }
 
 #[derive(Debug, Error, Clone)]
@@ -101,11 +103,13 @@ impl State {
 
         let logic = Logic::new(json::JsonStore::new());
         let app_state = AppState::new(logic);
+        let init_state = app_state.get_logic().get_storage().clone();
 
         Ok(Self {
             panel: Panel::SubjectGroups,
             path,
             app_state: AppStateBox::new(app_state),
+            init_state,
         })
     }
 
@@ -119,18 +123,25 @@ impl State {
 
         let logic = Logic::new(json::JsonStore::from_json(&content)?);
         let app_state = AppState::new(logic);
+        let init_state = app_state.get_logic().get_storage().clone();
 
         Ok(Self {
             panel: Panel::SubjectGroups,
             path: Some(file),
             app_state: AppStateBox::new(app_state),
+            init_state,
         })
     }
 }
 
 impl State {
     fn is_modified(&self) -> bool {
-        true
+        let app_state_lock = self.app_state.read_lock();
+        let Some(app_state) = &*app_state_lock else {
+            return true;
+        };
+
+        *app_state.get_logic().get_storage() != self.init_state
     }
 }
 
@@ -292,12 +303,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 Some(Message::OpenClicked.into())
             ),
             Space::with_height(2),
-            icon_button(
-                tools::Icon::SaveAs,
-                button::primary,
-                "Enregistrer",
-                None
-            ),
+            icon_button(tools::Icon::SaveAs, button::primary, "Enregistrer", None),
             Space::with_height(20),
             icon_button(tools::Icon::Undo, button::primary, "Annuler", {
                 use collomatique::frontend::state::Manager;
