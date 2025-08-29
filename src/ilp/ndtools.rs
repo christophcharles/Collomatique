@@ -14,7 +14,10 @@ pub struct NdProblem {
 }
 
 impl NdProblem {
-    pub fn new(variables_vec: &Vec<String>, constraints: &Vec<linexpr::Constraint>) -> NdProblem {
+    pub fn new(
+        variables_vec: &Vec<String>,
+        constraints: &Vec<linexpr::Constraint<String>>,
+    ) -> NdProblem {
         let p = variables_vec.len();
 
         let mut leq_mat = Array2::zeros((0, p));
