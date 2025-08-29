@@ -38,11 +38,49 @@ pub enum EditorCommandOutput {
     SaveFailed(PathBuf, String),
 }
 
+mod toast {
+    use std::sync::atomic::AtomicBool;
+
+    pub struct ToastInfo {
+        need_update: AtomicBool,
+        text: String,
+    }
+
+    impl ToastInfo {
+        pub fn new() -> Self {
+            ToastInfo {
+                need_update: AtomicBool::new(false),
+                text: String::new(),
+            }
+        }
+
+        pub fn new_toast(&mut self, text: String) {
+            self.need_update
+                .store(true, std::sync::atomic::Ordering::Release);
+            self.text = text;
+        }
+
+        pub fn get_toast(&self) -> &str {
+            &self.text
+        }
+
+        pub fn updated(&self) {
+            self.need_update
+                .store(false, std::sync::atomic::Ordering::Release);
+        }
+
+        pub fn need_update(&self) -> bool {
+            self.need_update.load(std::sync::atomic::Ordering::Acquire)
+        }
+    }
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data>,
     dirty: bool,
     save_dialog: Controller<dialogs::open_save::Dialog>,
+    toast_info: toast::ToastInfo,
 }
 
 impl EditorPanel {
@@ -208,6 +246,7 @@ impl Component for EditorPanel {
             data: AppState::new(Data::new()),
             dirty: false,
             save_dialog,
+            toast_info: toast::ToastInfo::new(),
         };
         let widgets = view_output!();
 
@@ -254,6 +293,10 @@ impl Component for EditorPanel {
                 let data_copy = self.data.get_data().clone();
                 self.dirty = false;
                 self.file_name = Some(path.clone());
+                self.toast_info.new_toast(format!(
+                    "Enregistrement en cours de {}...",
+                    path.to_string_lossy()
+                ));
                 sender.oneshot_command(async move {
                     match collomatique_storage::save_data_to_file(&data_copy, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
@@ -284,7 +327,10 @@ impl Component for EditorPanel {
         _root: &Self::Root,
     ) {
         match message {
-            EditorCommandOutput::SaveSuccessful(_path) => {}
+            EditorCommandOutput::SaveSuccessful(path) => {
+                self.toast_info
+                    .new_toast(format!("{} enregistré", path.to_string_lossy()));
+            }
             EditorCommandOutput::SaveFailed(path, error) => {
                 if Some(&path) != self.file_name.as_ref() {
                     return;
@@ -293,6 +339,16 @@ impl Component for EditorPanel {
                 sender.output(EditorOutput::UpdateActions).unwrap();
                 sender.output(EditorOutput::SaveError(path, error)).unwrap();
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.toast_info.need_update() {
+            widgets.toast_overlay.dismiss_all();
+            widgets
+                .toast_overlay
+                .add_toast(adw::Toast::new(self.toast_info.get_toast()));
+            self.toast_info.updated();
         }
     }
 }
