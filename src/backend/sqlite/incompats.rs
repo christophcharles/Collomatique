@@ -219,10 +219,78 @@ WHERE incompat_id = ?
 }
 
 pub async fn add(
-    _pool: &SqlitePool,
-    _incompat: Incompat<week_patterns::Id>,
+    pool: &SqlitePool,
+    incompat: Incompat<week_patterns::Id>,
 ) -> std::result::Result<Id, CrossError<Error, week_patterns::Id>> {
-    todo!()
+    let week_pattern_ids = sqlx::query!("SELECT week_pattern_id FROM week_patterns",)
+        .fetch_all(pool)
+        .await
+        .map_err(Error::from)?
+        .iter()
+        .map(|x| x.week_pattern_id)
+        .collect::<BTreeSet<_>>();
+
+    for incompat_group in &incompat.groups {
+        for slot in &incompat_group.slots {
+            if !week_pattern_ids.contains(&slot.week_pattern_id.0) {
+                return Err(CrossError::InvalidCrossId(slot.week_pattern_id));
+            }
+        }
+    }
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let max_count_i64 = i64::try_from(incompat.max_count).map_err(|_| {
+        Error::RepresentationError(format!(
+            "Cannot represent max_count (value: {}) as an i64 for the database",
+            incompat.max_count
+        ))
+    })?;
+
+    let incompat_id = sqlx::query!(
+        "INSERT INTO incompats (name, max_count) VALUES (?1, ?2)",
+        incompat.name,
+        max_count_i64,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .last_insert_rowid();
+
+    for incompat_group in &incompat.groups {
+        let incompat_group_id = sqlx::query!(
+            "INSERT INTO incompat_groups (incompat_id) VALUES (?)",
+            incompat_id
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .last_insert_rowid();
+
+        for slot in &incompat_group.slots {
+            let start_day: i64 = usize::from(slot.start.day)
+                .try_into()
+                .expect("day number should fit in i64");
+            let start_time = slot.start.time.get();
+            let duration = slot.duration.get();
+
+            let _ = sqlx::query!(
+                r#"
+INSERT INTO incompat_group_items (incompat_group_id, week_pattern_id, start_day, start_time, duration)
+VALUES (?1, ?2, ?3, ?4, ?5)
+                "#,
+                incompat_group_id,
+                slot.week_pattern_id.0,
+                start_day,
+                start_time,
+                duration
+            )
+            .execute(&mut *conn)
+            .await.map_err(Error::from)?;
+        }
+    }
+
+    Ok(Id(incompat_id))
 }
 
 pub async fn remove(_pool: &SqlitePool, _index: Id) -> std::result::Result<(), IdError<Error, Id>> {
