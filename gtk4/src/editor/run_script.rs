@@ -222,7 +222,7 @@ impl Component for Dialog {
                                 msg_display::EntryData::Success("Successful command".into())
                             }
                             CmdMsg::Warning => {
-                                msg_display::EntryData::Warning("Failed command".into())
+                                msg_display::EntryData::Failed("Failed command".into())
                             }
                         },
                     );
@@ -232,7 +232,7 @@ impl Component for Dialog {
                         .unwrap();
                 }
                 Err(e) => {
-                    self.add_command(sender, msg_display::EntryData::Error(e));
+                    self.add_command(sender, msg_display::EntryData::Invalid(e));
                     self.rpc_logger
                         .sender()
                         .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Invalid))
