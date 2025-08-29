@@ -38,6 +38,7 @@ impl State {
 #[derive(Debug, Clone)]
 pub enum Message {
     PanelChanged(Panel),
+    CloseClicked,
 }
 
 pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
@@ -50,6 +51,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             editor_state.panel = new_panel;
             Task::none()
         }
+        Message::CloseClicked => Task::none(),
     }
 }
 
@@ -57,16 +59,19 @@ fn icon_button<'a>(
     ico: tools::Icon,
     style: impl Fn(&Theme, button::Status) -> button::Style + 'a,
     label: &'a str,
+    message: Option<GuiMessage>,
 ) -> Element<'a, GuiMessage> {
-    tooltip(
-        button(container(tools::icon(ico)).center_x(20))
-            .style(style)
-            .padding(2),
-        text(label).size(10),
-        tooltip::Position::FollowCursor,
-    )
-    .style(container::bordered_box)
-    .into()
+    let btn = button(container(tools::icon(ico)).center_x(20))
+        .style(style)
+        .padding(2);
+    let btn = match message {
+        Some(msg) => btn.on_press(msg),
+        None => btn,
+    };
+
+    tooltip(btn, text(label).size(10), tooltip::Position::FollowCursor)
+        .style(container::bordered_box)
+        .into()
 }
 
 pub fn view(state: &State) -> Element<GuiMessage> {
@@ -75,20 +80,32 @@ pub fn view(state: &State) -> Element<GuiMessage> {
             icon_button(
                 tools::Icon::New,
                 button::primary,
-                "Créer un nouveau colloscope"
+                "Créer un nouveau colloscope",
+                None
             ),
             icon_button(
                 tools::Icon::Open,
                 button::primary,
-                "Ouvrir un colloscope existant"
+                "Ouvrir un colloscope existant",
+                None
             ),
             Space::with_width(2),
-            icon_button(tools::Icon::SaveAs, button::primary, "Enregistrer sous"),
+            icon_button(
+                tools::Icon::SaveAs,
+                button::primary,
+                "Enregistrer sous",
+                None
+            ),
             Space::with_width(20),
-            icon_button(tools::Icon::Undo, button::primary, "Annuler"),
-            icon_button(tools::Icon::Redo, button::primary, "Rétablir"),
+            icon_button(tools::Icon::Undo, button::primary, "Annuler", None),
+            icon_button(tools::Icon::Redo, button::primary, "Rétablir", None),
             Space::with_width(Length::Fill),
-            icon_button(tools::Icon::Close, button::danger, "Fermer le colloscope"),
+            icon_button(
+                tools::Icon::Close,
+                button::danger,
+                "Fermer le colloscope",
+                Some(GuiMessage::EditorMessage(Message::CloseClicked))
+            ),
         ]
         .spacing(2)
         .padding(0),
