@@ -108,9 +108,39 @@ impl WeekPatternsUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<PreCleaningOp<WeekPatternsUpdateWarning>> {
-        todo!()
+        match self {
+            Self::AddNewWeekPattern(_) => None,
+            Self::UpdateWeekPattern(_, _) => None,
+            Self::DeleteWeekPattern(week_pattern_id) => {
+                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern == Some(*week_pattern_id) {
+                            return Some(PreCleaningOp {
+                                warning: WeekPatternsUpdateWarning::LooseInterrogationSlot(
+                                    *slot_id,
+                                ),
+                                ops: vec![UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id))],
+                            });
+                        }
+                    }
+                }
+
+                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                    if incompat.week_pattern_id == Some(*week_pattern_id) {
+                        return Some(PreCleaningOp {
+                            warning: WeekPatternsUpdateWarning::LooseScheduleIncompat(*incompat_id),
+                            ops: vec![UpdateOp::Incompatibilities(
+                                IncompatibilitiesUpdateOp::DeleteIncompat(*incompat_id),
+                            )],
+                        });
+                    }
+                }
+
+                None
+            }
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
@@ -120,7 +150,88 @@ impl WeekPatternsUpdateOp {
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::WeekPatternId>, WeekPatternsUpdateError>
     {
-        todo!()
+        match self {
+            Self::AddNewWeekPattern(week_pattern) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::WeekPattern(
+                            collomatique_state_colloscopes::WeekPatternOp::Add(
+                                week_pattern.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Unexpected error during AddNewWeekPattern");
+                let Some(collomatique_state_colloscopes::NewId::WeekPatternId(new_id)) = result
+                else {
+                    panic!("Unexpected result from WeekPatternOp::Add");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateWeekPattern(week_pattern_id, week_pattern) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::WeekPattern(
+                            collomatique_state_colloscopes::WeekPatternOp::Update(
+                                *week_pattern_id,
+                                week_pattern.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
+                            match wpe {
+                                collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
+                                    UpdateWeekPatternError::InvalidWeekPatternId(id),
+                                _ => panic!(
+                                    "Unexpected week pattern error during UpdateWeekPattern: {:?}",
+                                    wpe
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during UpdateWeekPattern: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteWeekPattern(week_pattern_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::WeekPattern(
+                            collomatique_state_colloscopes::WeekPatternOp::Remove(*week_pattern_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
+                            match wpe {
+                                collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
+                                    DeleteWeekPatternError::InvalidWeekPatternId(id),
+                                collomatique_state_colloscopes::WeekPatternError::WeekPatternStillHasAssociatedIncompat(_, _) => {
+                                    panic!("Incompats should be cleaned before removing week patterns");
+                                }
+                                collomatique_state_colloscopes::WeekPatternError::WeekPatternStillHasAssociatedSlots(_, _) => {
+                                    panic!("Slots should be cleaned before removing week patterns");
+                                }
+                                _ => panic!(
+                                    "Unexpected week pattern error during DeleteWeekPattern: {:?}",
+                                    wpe
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteWeekPattern: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
