@@ -53,12 +53,12 @@
 //! we can solve it using a [solvers::Solver].
 //! Alternatively, we can build a configuration using [ConfigData] and [Config] and use [Config::blame] to
 //! find out which constraints are not satisfied.
-//! 
+//!
 //! Let's now discuss a somewhat complete example.
-//! 
+//!
 //! Example
 //! ---
-//! 
+//!
 //! We have two student groups X and Y.
 //! They must both attend exactly once two different courses (1 and 2)
 //! on the span of two weeks.
@@ -75,7 +75,7 @@
 //! We represent this with 8 boolean variables.
 //! The variable `xij` is 1 if X is written in the cell on the line i and column j, 0 otherwise.
 //! The same pattern is used for `yij`.
-//! 
+//!
 //! We have three broad conditions :
 //! - We should not put an X and a Y in the same cell. But a cell can possibly be empty.
 //!   This means that for all i and j, we have `xij + yij <= 1`.
@@ -140,15 +140,15 @@
 //!     .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
 //!     .build()
 //!     .unwrap();
-//! 
+//!
 //! // Now pb represents our ILP problem. We can solve it using a solver
 //! # use collomatique_ilp::solvers;
 //! let solver = solvers::coin_cbc::CbcSolver::new();
-//! 
+//!
 //! use solvers::Solver;
 //! // Solver::solve returns None when there is no solution
 //! let config = solver.solve(&pb).expect("There should be a solution");
-//! 
+//!
 //! // Now config is the optimal solution. We can prob it/
 //! // Because Group X should have course 1 on week 1 (this is prefered by the objective function)
 //! // Group Y should have course 2 the same week. Let's check that:

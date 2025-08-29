@@ -1,5 +1,5 @@
 //! COIN-CBC solver
-//! 
+//!
 //! This module implements a solver which uses the
 //! [coin_cbc] crate as a backend. This crate is
 //! an interface to the COIN-CBC solver which is
@@ -8,11 +8,11 @@
 #[cfg(test)]
 mod tests;
 
-use crate::{ConfigData, Problem, UsableData, VariableType, linexpr::EqSymbol, ObjectiveSense};
-use super::{SolverWithTimeLimit, ProblemRepr, TimeLimitSolution};
+use super::{ProblemRepr, SolverWithTimeLimit, TimeLimitSolution};
+use crate::{linexpr::EqSymbol, ConfigData, ObjectiveSense, Problem, UsableData, VariableType};
 
 /// Coin-cbc solver
-/// 
+///
 /// To create such a solver, use [CbcSolver::new].
 #[derive(Debug, Clone)]
 pub struct CbcSolver {
@@ -21,11 +21,10 @@ pub struct CbcSolver {
 
 impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverWithTimeLimit<V, C, P> for CbcSolver {
     fn solve_with_time_limit<'a>(
-            &self,
-            problem: &'a Problem<V, C, P>,
-            time_limit_in_seconds: Option<u32>,
-        ) -> Option<TimeLimitSolution<'a, V, C, P>>
-    {
+        &self,
+        problem: &'a Problem<V, C, P>,
+        time_limit_in_seconds: Option<u32>,
+    ) -> Option<TimeLimitSolution<'a, V, C, P>> {
         self.solve_internal(problem, time_limit_in_seconds)
     }
 }
@@ -43,10 +42,10 @@ impl Default for CbcSolver {
 
 impl CbcSolver {
     /// Returns a default CBC solver.
-    /// 
+    ///
     /// The only real configuration for this solver is
     /// to enable or disable logging.
-    /// 
+    ///
     /// By default, logging is disabled. But you can change that
     /// using [CbcSolver::with_disable_logging] rather than this function.
     pub fn new() -> Self {
@@ -56,7 +55,7 @@ impl CbcSolver {
     }
 
     /// Builds a CBC solver.
-    /// 
+    ///
     /// By default, logging is disabled for the CBC solver.
     /// You can change it here by passing `false` for the `disable_logging`
     /// argument.
@@ -70,8 +69,7 @@ impl CbcSolver {
         &self,
         problem: &'a Problem<V, C, P>,
         time_limit_in_seconds: Option<u32>,
-    ) -> Option<TimeLimitSolution<'a, V, C, P>>
-    {
+    ) -> Option<TimeLimitSolution<'a, V, C, P>> {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
         let stdout_gag = gag::Gag::stdout();
@@ -119,7 +117,7 @@ impl CbcSolver {
                             Some(m) => model.set_col_lower(col, m.max(0.0)),
                             None => model.set_col_lower(col, 0.0),
                         }
-        
+
                         match desc.get_max() {
                             Some(m) => model.set_col_upper(col, m.min(1.0)),
                             None => model.set_col_upper(col, 1.0),
@@ -134,7 +132,7 @@ impl CbcSolver {
                             Some(m) => model.set_col_lower(col, m),
                             None => model.set_col_lower(col, -f64::INFINITY),
                         }
-        
+
                         match desc.get_max() {
                             Some(m) => model.set_col_upper(col, m),
                             None => model.set_col_upper(col, f64::INFINITY),
@@ -149,7 +147,7 @@ impl CbcSolver {
                             Some(m) => model.set_col_lower(col, m),
                             None => model.set_col_lower(col, -f64::INFINITY),
                         }
-        
+
                         match desc.get_max() {
                             Some(m) => model.set_col_upper(col, m),
                             None => model.set_col_upper(col, f64::INFINITY),
@@ -192,12 +190,12 @@ impl CbcSolver {
         problem: &Problem<V, C, P>,
     ) {
         use coin_cbc::Sense;
-        cbc_model.model.set_obj_sense(
-            match problem.get_objective_sense() {
+        cbc_model
+            .model
+            .set_obj_sense(match problem.get_objective_sense() {
                 ObjectiveSense::Maximize => Sense::Maximize,
                 ObjectiveSense::Minimize => Sense::Minimize,
-            }
-        );
+            });
 
         for (var, coef) in problem.get_objective_function().coefficients() {
             let col = cbc_model.cols[var];
@@ -213,14 +211,14 @@ impl CbcSolver {
     ) -> Option<TimeLimitSolution<'a, V, C, P>> {
         let raw_model = sol.raw();
 
-        let time_limit_reached = (raw_model.status() == coin_cbc::raw::Status::Stopped) &&
-            (raw_model.secondary_status() == coin_cbc::raw::SecondaryStatus::StoppedOnTime);
+        let time_limit_reached = (raw_model.status() == coin_cbc::raw::Status::Stopped)
+            && (raw_model.secondary_status() == coin_cbc::raw::SecondaryStatus::StoppedOnTime);
 
-        let config_data = ConfigData::new()
-            .set_iter(cols.iter().map(|(v, col)| (v.clone(), sol.col(*col))));
+        let config_data =
+            ConfigData::new().set_iter(cols.iter().map(|(v, col)| (v.clone(), sol.col(*col))));
 
         let config = problem.build_config(config_data).ok()?;
-        
+
         let feasable_config = config.into_feasable()?;
 
         Some(TimeLimitSolution {
