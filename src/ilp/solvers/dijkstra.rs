@@ -37,7 +37,7 @@ impl<'a> FeasabilitySolver for Solver<'a> {
                     candidate
                         .neighbours()
                         .into_iter()
-                        .filter(|x| explored_configs.contains(x)),
+                        .filter(|x| !explored_configs.contains(x)),
                 );
                 explored_configs.insert(candidate);
             }
