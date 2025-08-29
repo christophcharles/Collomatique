@@ -1,18 +1,17 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::ndtools::{ConfigRepr, MatRepr};
+use crate::ilp::ndtools::ConfigRepr;
 use crate::ilp::{Config, FeasableConfig, Problem};
 
 #[derive(Debug, Clone)]
 pub struct Solver<'a> {
-    mat_repr: MatRepr<'a>,
+    problem: &'a Problem,
 }
 
 impl<'a> Solver<'a> {
     pub fn new(problem: &'a Problem) -> Self {
-        let mat_repr = MatRepr::new(problem);
-        Solver { mat_repr }
+        Solver { problem }
     }
 }
 
@@ -20,21 +19,18 @@ use super::FeasabilitySolver;
 use std::collections::BTreeSet;
 
 impl<'a> FeasabilitySolver<'a> for Solver<'a> {
-    fn restore_feasability_exclude<'b>(
-        &'b self,
-        config: &Config,
+    fn restore_feasability_exclude(
+        &self,
+        config: &Config<'a>,
         exclude_list: &BTreeSet<&FeasableConfig>,
-    ) -> Option<FeasableConfig<'a>>
-    where
-        'a: 'b,
-    {
-        let config_repr = self.mat_repr.config(config)?;
+    ) -> Option<FeasableConfig<'a>> {
+        let config_repr = self.problem.mat_repr.config(config);
 
         use std::collections::VecDeque;
 
-        let exclude_configs: BTreeSet<ConfigRepr<'_, '_>> = exclude_list
+        let exclude_configs: BTreeSet<ConfigRepr<'_>> = exclude_list
             .iter()
-            .map(|x| self.mat_repr.config(x.inner()).unwrap())
+            .map(|x| self.problem.mat_repr.config(x.inner()))
             .collect();
         let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();
