@@ -28,6 +28,7 @@ struct AppControllers {
     warn_dirty: Controller<dialogs::warning_changed::Dialog>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum GlobalState {
     WelcomeScreen,
     LoadingScreen,
@@ -268,6 +269,9 @@ impl SimpleComponent for AppModel {
                     .unwrap();
             }
             AppInput::ColloscopeLoaded(path, data) => {
+                if self.state != GlobalState::LoadingScreen {
+                    return;
+                }
                 self.state = GlobalState::EditorScreen;
                 self.controllers
                     .editor

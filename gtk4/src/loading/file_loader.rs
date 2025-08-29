@@ -26,7 +26,7 @@ impl Worker for FileLoader {
     fn update(&mut self, msg: FileLoadingInput, sender: ComponentSender<Self>) {
         // Simulating heavy CPU-bound task
         use std::time::Duration;
-        std::thread::sleep(Duration::from_secs(3));
+        std::thread::sleep(Duration::from_secs(10));
 
         let FileLoadingInput::Load(path) = msg;
         let data = collomatique_state_colloscopes::Data::new();
