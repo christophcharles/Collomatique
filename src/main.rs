@@ -75,8 +75,8 @@ fn main() {
 
     sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
 
-    let dijkstra_solver = collomatique::ilp::solvers::dijkstra::Solver::new();
-    let iterator = sa_optimizer.iterate(dijkstra_solver, &mut random_gen);
+    let solver = collomatique::ilp::solvers::a_star::Solver::new();
+    let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
         println!("{}: {} - {}", i, cost, sol.inner().clone());

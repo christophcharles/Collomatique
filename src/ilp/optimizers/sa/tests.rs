@@ -93,10 +93,8 @@ fn test_sa() {
     let config = pb.config_from(["x12", "y11", "y22"]).unwrap(); // We choose a starting closer to the "good" (low cost) solution
     sa_optimizer.set_init_config(config);
 
-    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new();
-    let solution = sa_optimizer
-        .iterate(dijkstra_solver, &mut random_gen)
-        .best_in(2);
+    let solver = crate::ilp::solvers::a_star::Solver::new();
+    let solution = sa_optimizer.iterate(solver, &mut random_gen).best_in(2);
 
     assert_eq!(
         solution.expect("Solution found").0.inner().clone(),
