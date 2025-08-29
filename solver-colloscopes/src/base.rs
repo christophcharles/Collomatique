@@ -4,16 +4,16 @@
 //! The main such structure is [Colloscope] which describes
 //! a (partially completed or not) colloscope.
 
-use std::collections::{HashMap, HashSet, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-pub trait Identifier : Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + std::hash::Hash + Send + Sync {}
+pub trait Identifier : Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
     group_count: usize,
-    assigned_students: HashMap<StudentId, usize>,
-    unassigned_students: HashSet<StudentId>,
+    assigned_students: BTreeMap<StudentId, usize>,
+    unassigned_students: BTreeSet<StudentId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,20 +30,20 @@ pub struct InterrogationSlot {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeacherInterrogations<InterrogationId: Identifier> {
-    interrogation_slots: HashMap<InterrogationId, InterrogationSlot>,
+    interrogation_slots: BTreeMap<InterrogationId, InterrogationSlot>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectInterrogations<TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier> {
     duration: collomatique_time::NonZeroDurationInMinutes,
     group_list_id: GroupListId,
-    teacher_map: HashMap<TeacherId, TeacherInterrogations<InterrogationId>>,
+    teacher_map: BTreeMap<TeacherId, TeacherInterrogations<InterrogationId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Colloscope<SubjectId: Identifier, TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
     week_count: usize,
-    subject_map: HashMap<SubjectId, SubjectInterrogations<TeacherId, InterrogationId, GroupListId>>,
-    group_lists: HashMap<GroupListId, GroupList<StudentId>>,
+    subject_map: BTreeMap<SubjectId, SubjectInterrogations<TeacherId, InterrogationId, GroupListId>>,
+    group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
 }
 
