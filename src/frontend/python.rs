@@ -3,6 +3,9 @@ use std::{collections::BTreeSet, path::PathBuf};
 use pyo3::{prelude::*, types::IntoPyDict};
 
 mod csv_file;
+mod database;
+
+use super::state;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonCode {
@@ -53,63 +56,96 @@ impl PythonCode {
         Ok(python_code)
     }
 
-    pub fn run(&self) -> PyResult<()> {
-        self.run_internal(None)
+    pub fn run<T: state::Manager>(&self, manager: &mut T) -> PyResult<()> {
+        self.run_internal(manager, None)
     }
 
-    pub fn run_with_csv_file(&self, csv_extract: super::csv::Extract) -> PyResult<()> {
-        self.run_internal(Some(csv_extract))
-    }
-
-    pub fn run_func(&self, func: &str) -> PyResult<()> {
-        self.run_func_internal(func, None)
-    }
-
-    pub fn run_func_with_csv_file(
+    pub fn run_with_csv_file<T: state::Manager>(
         &self,
+        manager: &mut T,
+        csv_extract: super::csv::Extract,
+    ) -> PyResult<()> {
+        self.run_internal(manager, Some(csv_extract))
+    }
+
+    pub fn run_func<T: state::Manager>(&self, manager: &mut T, func: &str) -> PyResult<()> {
+        self.run_func_internal(manager, func, None)
+    }
+
+    pub fn run_func_with_csv_file<T: state::Manager>(
+        &self,
+        manager: &mut T,
         func: &str,
         csv_extract: super::csv::Extract,
     ) -> PyResult<()> {
-        self.run_func_internal(func, Some(csv_extract))
+        self.run_func_internal(manager, func, Some(csv_extract))
     }
 
-    fn run_internal(&self, csv_extract: Option<super::csv::Extract>) -> PyResult<()> {
-        Python::with_gil(|py| {
-            let mut vars = vec![];
+    fn run_internal<T: state::Manager>(
+        &self,
+        manager: &mut T,
+        csv_extract: Option<super::csv::Extract>,
+    ) -> PyResult<()> {
+        std::thread::scope(|scope| {
+            let session_connection = database::SessionConnection::new(scope, manager);
 
-            if let Some(extract) = csv_extract {
-                let csv_file = Py::new(py, csv_file::CsvFile::from_extract(extract))?.into_any();
-                vars.push(("csv", csv_file));
-            }
+            Python::with_gil(|py| {
+                let mut vars = vec![];
 
-            let locals = vars.into_py_dict_bound(py);
+                if let Some(extract) = csv_extract {
+                    let csv_file =
+                        Py::new(py, csv_file::CsvFile::from_extract(extract))?.into_any();
+                    vars.push(("csv", csv_file));
+                }
 
-            py.run_bound(&self.code, None, Some(&locals))?;
+                let db = session_connection.python_database();
+                let python_db = Py::new(py, db)?.into_any();
+                vars.push(("db", python_db));
+
+                let locals = vars.into_py_dict_bound(py);
+
+                py.run_bound(&self.code, None, Some(&locals))?;
+
+                PyResult::Ok(())
+            })?;
+
+            session_connection.join();
 
             Ok(())
         })
     }
 
-    fn run_func_internal(
+    fn run_func_internal<T: state::Manager>(
         &self,
+        manager: &mut T,
         func: &str,
         csv_extract: Option<super::csv::Extract>,
     ) -> PyResult<()> {
-        Python::with_gil(|py| {
-            let python_code = PyModule::from_code_bound(
-                py,
-                &self.code,
-                &self.file.to_string_lossy(),
-                &self
-                    .file
-                    .as_path()
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy(),
-            )?;
+        std::thread::scope(|scope| {
+            let session_connection = database::SessionConnection::new(scope, manager);
 
-            let func: Py<PyAny> = python_code.getattr(func)?.into();
-            Self::call_func(py, &func, csv_extract)?;
+            Python::with_gil(|py| {
+                let python_code = PyModule::from_code_bound(
+                    py,
+                    &self.code,
+                    &self.file.to_string_lossy(),
+                    &self
+                        .file
+                        .as_path()
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                )?;
+
+                let func: Py<PyAny> = python_code.getattr(func)?.into();
+
+                let db = session_connection.python_database();
+                Self::call_func(py, &func, csv_extract, db)?;
+
+                PyResult::Ok(())
+            })?;
+
+            session_connection.join();
 
             Ok(())
         })
@@ -119,6 +155,7 @@ impl PythonCode {
         py: Python,
         func: &Py<PyAny>,
         csv_extract: Option<super::csv::Extract>,
+        db: database::Database,
     ) -> PyResult<()> {
         use pyo3::types::PyTuple;
 
@@ -128,12 +165,17 @@ impl PythonCode {
         };
         let csv_names = BTreeSet::from(["csv", "csv_file", "csv_data"]);
 
+        let python_db = Py::new(py, db)?.into_any();
+        let db_names = BTreeSet::from(["db", "database"]);
+
         let arg_names = extract_function_arguments(py, &func)?;
         let args = PyTuple::new_bound(
             py,
             arg_names.iter().map(|name| {
                 if csv_names.contains(name.as_str()) {
                     csv_file.clone_ref(py)
+                } else if db_names.contains(name.as_str()) {
+                    python_db.clone_ref(py)
                 } else {
                     py.None()
                 }

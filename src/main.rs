@@ -317,7 +317,7 @@ enum PythonCommand {
 
 use collomatique::backend::sqlite;
 use collomatique::backend::Logic;
-use collomatique::frontend::state::AppState;
+use collomatique::frontend::state::{AppSession, AppState};
 
 async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Store> {
     if create {
@@ -524,7 +524,7 @@ async fn week_count_command(
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use collomatique::frontend::state::{
-        AppSession, GeneralOperation, Manager, Operation, UpdateError, WeekPatternsOperation,
+        GeneralOperation, Manager, Operation, UpdateError, WeekPatternsOperation,
     };
 
     match command {
@@ -1150,7 +1150,7 @@ async fn week_pattern_command(
 
 async fn python_command(
     command: PythonCommand,
-    _app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     match command {
         PythonCommand::Create {
@@ -1195,18 +1195,52 @@ async fn python_command(
 
                 let csv_extract = csv_content.extract(&params)?;
 
-                match func {
-                    Some(f) => python_code.run_func_with_csv_file(&f, csv_extract)?,
-                    None => python_code.run_with_csv_file(csv_extract)?,
+                {
+                    let mut app_session = AppSession::new(app_state);
+                    match func {
+                        Some(f) => {
+                            if let Err(e) = python_code.run_func_with_csv_file(
+                                &mut app_session,
+                                &f,
+                                csv_extract,
+                            ) {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                        None => {
+                            if let Err(e) =
+                                python_code.run_with_csv_file(&mut app_session, csv_extract)
+                            {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                    app_session.commit();
                 }
 
                 Ok(None)
             } else {
                 let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
 
-                match func {
-                    Some(f) => python_code.run_func(&f)?,
-                    None => python_code.run()?,
+                {
+                    let mut app_session = AppSession::new(app_state);
+                    match func {
+                        Some(f) => {
+                            if let Err(e) = python_code.run_func(&mut app_session, &f) {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                        None => {
+                            if let Err(e) = python_code.run(&mut app_session) {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                    app_session.commit();
                 }
 
                 Ok(None)
