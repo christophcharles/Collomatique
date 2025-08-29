@@ -1354,6 +1354,8 @@ pub struct TimeSlot {
     week_pattern_handle: WeekPatternHandle,
     #[pyo3(set, get)]
     room: String,
+    #[pyo3(set, get)]
+    cost: u32,
 }
 
 #[pymethods]
@@ -1373,17 +1375,19 @@ impl TimeSlot {
             },
             week_pattern_handle,
             room: String::new(),
+            cost: 0,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
-            "{{ subject_handle = {:?}, teacher_handle = {:?}, start = {}, week_pattern_handle = {:?}, room = {} }}",
+            "{{ subject_handle = {:?}, teacher_handle = {:?}, start = {}, week_pattern_handle = {:?}, room = {}, cost = {} }}",
             self_.subject_handle,
             self_.teacher_handle,
             self_.start,
             self_.week_pattern_handle,
             self_.room,
+            self_.cost,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -1406,6 +1410,7 @@ impl From<&backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::
             start: value.start.clone().into(),
             week_pattern_handle: value.week_pattern_id.clone().into(),
             room: value.room.clone(),
+            cost: value.cost,
         }
     }
 }
@@ -1434,6 +1439,7 @@ impl From<&TimeSlot>
             start: value.start.clone().into(),
             week_pattern_id: value.week_pattern_handle.clone().into(),
             room: value.room.clone(),
+            cost: value.cost,
         }
     }
 }

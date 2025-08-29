@@ -428,7 +428,7 @@ impl GenColloscopeTranslator {
                         weekday: time_slot.start.day,
                         start_time: time_slot.start.time.clone(),
                     },
-                    cost: 0,
+                    cost: time_slot.cost,
                 };
 
                 ids.insert(
