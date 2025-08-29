@@ -489,7 +489,7 @@ pub struct IlpTranslator<'a> {
 }
 
 use crate::ilp::linexpr::{Constraint, Expr};
-use crate::ilp::{Problem, ProblemBuilder};
+use crate::ilp::{FeasableConfig, Problem, ProblemBuilder};
 
 enum StudentStatus {
     Assigned(usize),
@@ -1711,4 +1711,77 @@ impl<'a> IlpTranslator<'a> {
             .simplify_trivial_constraints()
             .build()
     }
+
+    fn read_subject(
+        &self,
+        config: &FeasableConfig<'_, Variable>,
+        i: usize,
+        subject: &Subject,
+    ) -> Option<ColloscopeSubject> {
+        let mut groups = Vec::with_capacity(subject.groups.prefilled_groups.len());
+
+        for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+            let mut output = group.students.clone();
+
+            for student in subject.groups.not_assigned.iter().copied() {
+                if config
+                    .get(&Variable::StudentInGroup {
+                        subject: i,
+                        student,
+                        group: k,
+                    })
+                    .ok()?
+                {
+                    output.insert(student);
+                }
+            }
+
+            groups.push(output)
+        }
+
+        let mut slots = Vec::with_capacity(subject.slots.len());
+
+        for (j, _slot) in subject.slots.iter().enumerate() {
+            let mut assigned_group = None;
+
+            for k in 0..subject.groups.prefilled_groups.len() {
+                if config
+                    .get(&Variable::GroupInSlot {
+                        subject: i,
+                        slot: j,
+                        group: k,
+                    })
+                    .ok()?
+                {
+                    assigned_group = Some(k);
+                    break;
+                }
+            }
+
+            slots.push(assigned_group);
+        }
+
+        Some(ColloscopeSubject { groups, slots })
+    }
+
+    pub fn read_solution(&self, config: &FeasableConfig<'_, Variable>) -> Option<Colloscope> {
+        let mut subjects = Vec::with_capacity(self.data.subjects.len());
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            subjects.push(self.read_subject(config, i, subject)?);
+        }
+
+        Some(Colloscope { subjects })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Colloscope {
+    pub subjects: Vec<ColloscopeSubject>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeSubject {
+    pub groups: Vec<BTreeSet<usize>>,
+    pub slots: Vec<Option<usize>>,
 }
