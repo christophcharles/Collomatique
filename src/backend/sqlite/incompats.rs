@@ -293,8 +293,42 @@ VALUES (?1, ?2, ?3, ?4, ?5)
     Ok(Id(incompat_id))
 }
 
-pub async fn remove(_pool: &SqlitePool, _index: Id) -> std::result::Result<(), IdError<Error, Id>> {
-    todo!()
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+    let incompat_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        r#"
+DELETE FROM incompat_group_items
+WHERE incompat_group_id IN
+(SELECT incompat_group_id FROM incompat_groups WHERE incompat_id = ?)
+        "#,
+        incompat_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        "DELETE FROM incompat_groups WHERE incompat_id = ?",
+        incompat_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    let rows_affected = sqlx::query!("DELETE FROM incompats WHERE incompat_id = ?", incompat_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .rows_affected();
+
+    if rows_affected != 1 {
+        return Err(IdError::InvalidId(index));
+    }
+
+    Ok(())
 }
 
 pub async fn update(
