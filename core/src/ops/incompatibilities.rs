@@ -57,15 +57,23 @@ pub enum UpdateIncompatError {
 }
 
 impl IncompatibilitiesUpdateOp {
-    pub(crate) fn get_cleaning_ops<
+    pub(crate) fn get_next_cleaning_op<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
         _data: &T,
-    ) -> CleaningOps<IncompatibilitiesUpdateWarning> {
-        CleaningOps {
-            cleaning_ops: vec![],
-        }
+    ) -> Option<CleaningOp<IncompatibilitiesUpdateWarning>> {
+        None
+    }
+
+    pub(crate) fn apply_no_cleaning<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &mut T,
+    ) -> Result<Option<collomatique_state_colloscopes::IncompatId>, IncompatibilitiesUpdateError>
+    {
+        todo!()
     }
 
     pub fn get_desc(&self) -> String {

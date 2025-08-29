@@ -97,15 +97,22 @@ pub enum DuplicatePreviousPeriodError {
 }
 
 impl AssignmentsUpdateOp {
-    pub(crate) fn get_cleaning_ops<
+    pub(crate) fn get_next_cleaning_op<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
         _data: &T,
-    ) -> CleaningOps<AssignmentsUpdateWarning> {
-        CleaningOps {
-            cleaning_ops: vec![],
-        }
+    ) -> Option<CleaningOp<AssignmentsUpdateWarning>> {
+        None
+    }
+
+    pub(crate) fn apply_no_cleaning<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &mut T,
+    ) -> Result<(), AssignmentsUpdateError> {
+        todo!()
     }
 
     pub fn get_desc(&self) -> String {

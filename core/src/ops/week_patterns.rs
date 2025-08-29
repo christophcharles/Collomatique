@@ -102,12 +102,22 @@ pub enum DeleteWeekPatternError {
 }
 
 impl WeekPatternsUpdateOp {
-    pub(crate) fn get_cleaning_ops<
+    pub(crate) fn get_next_cleaning_op<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        data: &T,
-    ) -> CleaningOps<WeekPatternsUpdateWarning> {
+        _data: &T,
+    ) -> Option<CleaningOp<WeekPatternsUpdateWarning>> {
+        todo!()
+    }
+
+    pub(crate) fn apply_no_cleaning<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &mut T,
+    ) -> Result<Option<collomatique_state_colloscopes::WeekPatternId>, WeekPatternsUpdateError>
+    {
         todo!()
     }
 
