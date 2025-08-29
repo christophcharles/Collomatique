@@ -17,6 +17,7 @@ pub enum AnnotatedGeneralOperation {
 pub enum AnnotatedWeekPatternsOperation {
     Add(handles::WeekPatternHandle, backend::WeekPattern),
     Remove(handles::WeekPatternHandle),
+    Update(handles::WeekPatternHandle, backend::WeekPattern),
 }
 
 impl AnnotatedGeneralOperation {
@@ -46,6 +47,9 @@ impl AnnotatedWeekPatternsOperation {
                 AnnotatedWeekPatternsOperation::Add(handle, pattern)
             }
             WeekPatternsOperation::Remove(handle) => AnnotatedWeekPatternsOperation::Remove(handle),
+            WeekPatternsOperation::Update(handle, pattern) => {
+                AnnotatedWeekPatternsOperation::Update(handle, pattern)
+            }
         }
     }
 }

@@ -27,6 +27,7 @@ pub enum GeneralOperation {
 pub enum WeekPatternsOperation {
     Add(backend::WeekPattern),
     Remove(handles::WeekPatternHandle),
+    Update(handles::WeekPatternHandle, backend::WeekPattern),
 }
 
 #[derive(Debug)]
@@ -186,7 +187,7 @@ impl<T: backend::Storage> AppState<T> {
         op: &AnnotatedWeekPatternsOperation,
     ) -> Result<AnnotatedWeekPatternsOperation, T::InternalError> {
         let backward = match op {
-            AnnotatedWeekPatternsOperation::Add(handle, ref _pattern) => {
+            AnnotatedWeekPatternsOperation::Add(handle, _pattern) => {
                 AnnotatedWeekPatternsOperation::Remove(*handle)
             }
             AnnotatedWeekPatternsOperation::Remove(handle) => {
@@ -206,6 +207,24 @@ impl<T: backend::Storage> AppState<T> {
                         backend::IdError::InternalError(int_err) => int_err,
                     })?;
                 AnnotatedWeekPatternsOperation::Add(*handle, pattern)
+            }
+            AnnotatedWeekPatternsOperation::Update(handle, _new_pattern) => {
+                let week_pattern_id = self
+                    .handle_managers
+                    .week_patterns
+                    .get_id(*handle)
+                    .expect("week pattern to update should exist");
+                let pattern = self
+                    .backend_logic
+                    .week_patterns_get(week_pattern_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedWeekPatternsOperation::Update(*handle, pattern)
             }
         };
         Ok(backward)
@@ -339,6 +358,28 @@ impl<T: backend::Storage> AppState<T> {
                 self.handle_managers
                     .week_patterns
                     .update_handle(*week_pattern_handle, None);
+                Ok(())
+            }
+            AnnotatedWeekPatternsOperation::Update(week_pattern_handle, pattern) => {
+                let week_pattern_id = self
+                    .handle_managers
+                    .week_patterns
+                    .get_id(*week_pattern_handle)
+                    .expect("week pattern to update should exist");
+                self.backend_logic
+                    .week_patterns_update(week_pattern_id, pattern)
+                    .await
+                    .map_err(|e| match e {
+                        backend::WeekPatternIdError::WeekNumberTooBig(week_number) => {
+                            UpdateError::WeekNumberTooBig(week_number)
+                        }
+                        backend::WeekPatternIdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::WeekPatternIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
                 Ok(())
             }
         }
