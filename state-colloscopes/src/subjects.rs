@@ -119,7 +119,10 @@ pub enum SubjectPeriodicity {
     /// for a student.
     AmountInYear {
         /// Total number of interrogations during the year
-        interrogation_count_in_year: bool,
+        ///
+        /// The total amount can be in a range and it is technically possible
+        /// to have a minimum of zero interrogations
+        interrogation_count_in_year: std::ops::RangeInclusive<u32>,
         /// Minimum of weeks between two interrogations for the same student
         ///
         /// Note that `0` is a valid possibility: it might be possible to have
