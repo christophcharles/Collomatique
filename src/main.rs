@@ -13,16 +13,22 @@ struct Args {
 }
 
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::SqliteConnection;
-use sqlx::Connection;
+use sqlx::sqlite::SqlitePool;
 
-async fn create_db(db_url: &str) -> Result<SqliteConnection> {
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct GeneralDataDb {
+    interrogations_per_week: Option<std::ops::Range<u32>>,
+}
+
+async fn create_db(db_url: &str) -> Result<SqlitePool> {
     if sqlx::Sqlite::database_exists(db_url).await? {
         return Err(anyhow!("Database \"{}\" already exists", db_url));
     }
 
     sqlx::Sqlite::create_database(db_url).await?;
-    let mut db = SqliteConnection::connect(&db_url).await?;
+    let db = SqlitePool::connect(&db_url).await?;
 
     sqlx::query(
         r#"
@@ -63,10 +69,12 @@ CREATE TABLE "course_incompat_items" (
 );
 
 CREATE TABLE "general_data" (
-	"name"	TEXT NOT NULL,
-	"value"	INTEGER,
-	PRIMARY KEY("name")
+	"id"	INTEGER NOT NULL,
+	"value"	TEXT NOT NULL,
+	PRIMARY KEY("id" AUTOINCREMENT)
 );
+
+INSERT INTO "general_data" ( "value" ) VALUES ( ? );
 
 CREATE TABLE "teachers" (
 	"teacher_id"	INTEGER NOT NULL,
@@ -158,21 +166,24 @@ CREATE TABLE "student_subjects" (
 	PRIMARY KEY("subject_id","student_id")
 );"#,
     )
-    .execute(&mut db)
+    .bind(serde_json::to_string(&GeneralDataDb {
+        interrogations_per_week: None,
+    })?)
+    .execute(&db)
     .await?;
 
-    Ok(SqliteConnection::connect(&db_url).await?)
+    Ok(db)
 }
 
-async fn open_db(db_url: &str) -> Result<SqliteConnection> {
+async fn open_db(db_url: &str) -> Result<SqlitePool> {
     if !sqlx::Sqlite::database_exists(db_url).await? {
         return Err(anyhow!("Database \"{}\" does not exist", db_url));
     }
 
-    Ok(SqliteConnection::connect(db_url).await?)
+    Ok(SqlitePool::connect(db_url).await?)
 }
 
-async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqliteConnection> {
+async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqlitePool> {
     let filename = match path.to_str() {
         Some(f) => f,
         None => return Err(anyhow!("Non UTF-8 file name")),
@@ -187,20 +198,41 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqliteConnec
 }
 
 async fn generate_general_data(
-    _db_conn: &mut SqliteConnection,
+    db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::GeneralData> {
     use collomatique::gen::colloscope::*;
     use std::num::NonZeroU32;
 
+    let teacher_count_req =
+        sqlx::query!("SELECT COUNT(*) AS teacher_count FROM teachers").fetch_all(db_conn);
+    let week_count_req = sqlx::query!("SELECT MAX(week) AS week_max FROM weeks").fetch_all(db_conn);
+    let interrogations_per_week_req =
+        sqlx::query!("SELECT value FROM general_data WHERE id = ?", 1).fetch_all(db_conn);
+
+    let teacher_count = usize::try_from(teacher_count_req.await?[0].teacher_count).unwrap();
+    let week_count = match week_count_req.await?[0].week_max {
+        Some(week_max) => NonZeroU32::new(u32::try_from(week_max).unwrap() + 1).unwrap(),
+        None => NonZeroU32::new(1).unwrap(),
+    };
+    let interrogations_per_week = match interrogations_per_week_req.await?.first() {
+        Some(val) => {
+            let general_data_db: GeneralDataDb = serde_json::from_str(&val.value)?;
+            general_data_db.interrogations_per_week
+        }
+        None => {
+            return Err(anyhow!("Bad general_data in database"));
+        }
+    };
+
     Ok(GeneralData {
-        teacher_count: 0,
-        week_count: NonZeroU32::new(2).unwrap(),
-        interrogations_per_week: None,
+        teacher_count,
+        week_count,
+        interrogations_per_week,
     })
 }
 
 async fn generate_subjects(
-    _db_conn: &mut SqliteConnection,
+    _db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::SubjectList> {
     use collomatique::gen::colloscope::*;
 
@@ -208,7 +240,7 @@ async fn generate_subjects(
 }
 
 async fn generate_incompatibilies(
-    _db_conn: &mut SqliteConnection,
+    _db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::IncompatibilityList> {
     use collomatique::gen::colloscope::*;
 
@@ -216,7 +248,7 @@ async fn generate_incompatibilies(
 }
 
 async fn generate_students(
-    _db_conn: &mut SqliteConnection,
+    _db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::StudentList> {
     use collomatique::gen::colloscope::*;
 
@@ -224,7 +256,7 @@ async fn generate_students(
 }
 
 async fn generate_slot_groupings(
-    _db_conn: &mut SqliteConnection,
+    _db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::SlotGroupingList> {
     use collomatique::gen::colloscope::*;
 
@@ -232,7 +264,7 @@ async fn generate_slot_groupings(
 }
 
 async fn generate_grouping_incompats(
-    _db_conn: &mut SqliteConnection,
+    _db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::SlotGroupingIncompatSet> {
     use collomatique::gen::colloscope::*;
 
@@ -240,27 +272,24 @@ async fn generate_grouping_incompats(
 }
 
 async fn generate_colloscope_data(
-    db_conn: &mut SqliteConnection,
+    db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::ValidatedData> {
     use collomatique::gen::colloscope::*;
-    /*let result = sqlx::query!("SELECT * FROM students")
-    .fetch_all(db_conn)
-    .await?;*/
 
-    let general = generate_general_data(db_conn).await?;
-    let subjects = generate_subjects(db_conn).await?;
-    let incompatibilities = generate_incompatibilies(db_conn).await?;
-    let students = generate_students(db_conn).await?;
-    let slot_groupings = generate_slot_groupings(db_conn).await?;
-    let grouping_incompats = generate_grouping_incompats(db_conn).await?;
+    let general = generate_general_data(db_conn);
+    let subjects = generate_subjects(db_conn);
+    let incompatibilities = generate_incompatibilies(db_conn);
+    let students = generate_students(db_conn);
+    let slot_groupings = generate_slot_groupings(db_conn);
+    let grouping_incompats = generate_grouping_incompats(db_conn);
 
     Ok(ValidatedData::new(
-        general,
-        subjects,
-        incompatibilities,
-        students,
-        slot_groupings,
-        grouping_incompats,
+        general.await?,
+        subjects.await?,
+        incompatibilities.await?,
+        students.await?,
+        slot_groupings.await?,
+        grouping_incompats.await?,
     )?)
 }
 
@@ -268,9 +297,9 @@ async fn generate_colloscope_data(
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let mut db = connect_db(args.create, args.db.as_path()).await?;
+    let db = connect_db(args.create, args.db.as_path()).await?;
 
-    let result = generate_colloscope_data(&mut db).await?;
+    let result = generate_colloscope_data(&db).await?;
 
     println!("{:?}", result);
 

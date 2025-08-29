@@ -231,6 +231,8 @@ dependencies = [
  "ndarray",
  "ordered-float",
  "rand",
+ "serde",
+ "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
