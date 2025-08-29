@@ -1,95 +1,322 @@
-use collomatique::ilp::linexpr::Expr;
-use collomatique::ilp::ProblemBuilder;
+use collomatique::gen::colloscope::*;
+use collomatique::gen::time;
+
+use std::collections::BTreeSet;
+use std::num::{NonZeroU32, NonZeroUsize};
 
 fn main() {
-    // We test on a simple scheduling problem.
-    //
-    // We have two student groups x and y.
-    // They must both attend exactly once two different courses (1 and 2)
-    // on the span of two weeks.
-    // But the courses happen simultaneously.
-    //
-    // This means we must fill a timtable of the following form:
-    //
-    // ------------------------------
-    // |          | Week 1 | Week 2 |
-    // ------------------------------
-    // | Course 1 |        |        |
-    // ------------------------------
-    // | Course 2 |        |        |
-    // ------------------------------
-    //
-    // by putting an x or a y in each cell.
-    //
-    // We have three broad conditions :
-    // - we should not put an x and a y in the same cell. But a cell can possibly be empty
-    // - we should not put two xs or two ys in the same column (but column could have zero)
-    // - we must put exactly one x and one y on each line
-    //
-    // We represent this with 8 boolean variables.
-    // The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
-    // The same pattern is used for yij.
+    let general = GeneralData {
+        teacher_count: 5,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
 
-    let x11 = Expr::<String>::var("x11");
-    let x12 = Expr::<String>::var("x12");
-    let x21 = Expr::<String>::var("x21");
-    let x22 = Expr::<String>::var("x22");
+    let subjects = vec![
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(1).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([6, 7, 8]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([9, 10, 11]),
+                        can_be_extended: false,
+                    },
+                ],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 2,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Wednesday,
+                        start_time: time::Time::from_hm(14, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 2,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Wednesday,
+                        start_time: time::Time::from_hm(15, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 2,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Wednesday,
+                        start_time: time::Time::from_hm(14, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 2,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Wednesday,
+                        start_time: time::Time::from_hm(15, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([6, 7, 8]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([9, 10, 11]),
+                        can_be_extended: false,
+                    },
+                ],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 3,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Thursday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 3,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Thursday,
+                        start_time: time::Time::from_hm(18, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 3,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Thursday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 3,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Thursday,
+                        start_time: time::Time::from_hm(18, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([6, 10, 11]),
+                        can_be_extended: false,
+                    },
+                ],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 4,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Wednesday,
+                        start_time: time::Time::from_hm(14, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 4,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Wednesday,
+                        start_time: time::Time::from_hm(14, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![GroupDesc {
+                    students: BTreeSet::from([7, 8, 9]),
+                    can_be_extended: false,
+                }],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+    ];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
-    let y11 = Expr::<String>::var("y11");
-    let y12 = Expr::<String>::var("y12");
-    let y21 = Expr::<String>::var("y21");
-    let y22 = Expr::<String>::var("y22");
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
 
-    let one = Expr::constant(1);
+    let ilp_translator = data.ilp_translator();
+    let problem = ilp_translator.problem();
 
-    let pb = ProblemBuilder::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
-        .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
-        .unwrap()
-        // Both class should not attend a course at the same time
-        .add_constraint((&x11 + &y11).leq(&one))
-        .unwrap()
-        .add_constraint((&x12 + &y12).leq(&one))
-        .unwrap()
-        .add_constraint((&x21 + &y21).leq(&one))
-        .unwrap()
-        .add_constraint((&x22 + &y22).leq(&one))
-        .unwrap()
-        // Each class should not attend more than one course at a given time
-        .add_constraint((&x11 + &x21).leq(&one))
-        .unwrap()
-        .add_constraint((&x12 + &x22).leq(&one))
-        .unwrap()
-        .add_constraint((&y11 + &y21).leq(&one))
-        .unwrap()
-        .add_constraint((&y12 + &y22).leq(&one))
-        .unwrap()
-        // Each class must complete each course exactly once
-        .add_constraint((&x11 + &x12).eq(&one))
-        .unwrap()
-        .add_constraint((&x21 + &x22).eq(&one))
-        .unwrap()
-        .add_constraint((&y11 + &y12).eq(&one))
-        .unwrap()
-        .add_constraint((&y21 + &y22).eq(&one))
-        .unwrap()
-        // eval func
-        .eval_fn(collomatique::debuggable!(|x| if x.get("y12").unwrap() {
-            1000.0
-        } else {
-            0.0
-        }))
-        .simplify_trivial_constraints()
-        .build();
+    println!("{}", problem);
 
-    println!("{}", pb);
-
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb);
+    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
     let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
-    sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
+    sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
 
     let solver = collomatique::ilp::solvers::backtracking::Solver::new();
     let iterator = sa_optimizer.iterate(solver, &mut random_gen);
