@@ -1012,7 +1012,7 @@ async fn main() -> Result<()> {
     use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
     let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
     let max_steps = Some(1000);
-    let retries = 5;
+    let retries = 20;
     let mut incremental_initializer =
         ilp_translator.incremental_initializer(random_initializer, solver, max_steps, retries);
 
