@@ -13,15 +13,15 @@ pub trait Identifier:
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubjectDescription<StudentId: Identifier> {
+pub struct PeriodDescription<StudentId: Identifier> {
     pub students: BTreeSet<StudentId>,
     pub group_count: RangeInclusive<NonZeroU32>,
-    pub students_per_group: RangeInclusive<NonZeroU32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeriodDescription<SubjectId: Identifier, StudentId: Identifier> {
-    pub subject_descriptions: BTreeMap<SubjectId, SubjectDescription<StudentId>>,
+pub struct SubjectDescription<PeriodId: Identifier, StudentId: Identifier> {
+    pub students_per_group: RangeInclusive<NonZeroU32>,
+    pub period_descriptions: BTreeMap<PeriodId, PeriodDescription<StudentId>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub struct GroupListProblem<
     SubjectId: Identifier + 'static,
     StudentId: Identifier + 'static,
 > {
-    pub period_descriptions: BTreeMap<PeriodId, PeriodDescription<SubjectId, StudentId>>,
+    pub subject_descriptions: BTreeMap<SubjectId, SubjectDescription<PeriodId, StudentId>>,
 }
 
 impl<
@@ -46,15 +46,17 @@ impl<
     fn main_variables(
         &self,
     ) -> std::collections::BTreeMap<Self::MainVariable, collomatique_ilp::Variable> {
-        self.period_descriptions
+        self.subject_descriptions
             .iter()
-            .flat_map(|(period_id, period_desc)| {
-                let period = period_id.clone();
-                period_desc.subject_descriptions.iter().flat_map(
-                    move |(subject_id, subject_desc)| {
-                        let max_group = subject_desc.group_count.end().get() - 1;
-                        let subject = subject_id.clone();
-                        subject_desc.students.iter().map(move |student_id| {
+            .flat_map(|(subject_id, subject_desc)| {
+                let subject = subject_id.clone();
+                subject_desc
+                    .period_descriptions
+                    .iter()
+                    .flat_map(move |(period_id, period_desc)| {
+                        let period = period_id.clone();
+                        let max_group = period_desc.group_count.end().get() - 1;
+                        period_desc.students.iter().map(move |student_id| {
                             (
                                 variables::MainVariable::GroupForStudent {
                                     period,
@@ -66,8 +68,7 @@ impl<
                                     .max(max_group.into()),
                             )
                         })
-                    },
-                )
+                    })
             })
             .collect()
     }
@@ -86,10 +87,10 @@ impl<
     > {
         let mut output = vec![];
 
-        for (period_id, period_desc) in &self.period_descriptions {
-            for (subject_id, subject_desc) in &period_desc.subject_descriptions {
-                let max_group = subject_desc.group_count.end().get() - 1;
-                for student_id in &subject_desc.students {
+        for (subject_id, subject_desc) in &self.subject_descriptions {
+            for (period_id, period_desc) in &subject_desc.period_descriptions {
+                let max_group = period_desc.group_count.end().get() - 1;
+                for student_id in &period_desc.students {
                     let subject = subject_id.clone();
                     let student = student_id.clone();
                     let period = period_id.clone();
@@ -125,7 +126,7 @@ impl<
                                 group,
                             },
                         ),
-                        original_variables: subject_desc
+                        original_variables: period_desc
                             .students
                             .iter()
                             .map(|student_id| {
@@ -153,21 +154,21 @@ impl<
         config: &collomatique_ilp::ConfigData<Self::MainVariable>,
     ) -> Self::PartialSolution {
         solution::GroupListSolution {
-            period_map: self
-                .period_descriptions
+            subject_map: self
+                .subject_descriptions
                 .iter()
-                .map(|(period_id, period_desc)| {
+                .map(|(subject_id, subject_desc)| {
                     (
-                        period_id.clone(),
-                        solution::GroupListsForPeriod {
-                            group_lists: period_desc
-                                .subject_descriptions
+                        subject_id.clone(),
+                        solution::GroupListsForSubject {
+                            period_map: subject_desc
+                                .period_descriptions
                                 .iter()
-                                .map(|(subject_id, subject_desc)| {
+                                .map(|(period_id, period_desc)| {
                                     (
-                                        subject_id.clone(),
+                                        period_id.clone(),
                                         solution::GroupList {
-                                            student_map: subject_desc
+                                            student_map: period_desc
                                                 .students
                                                 .iter()
                                                 .filter_map(|student_id| {
@@ -202,19 +203,19 @@ impl<
     ) -> Option<collomatique_ilp::ConfigData<Self::MainVariable>> {
         let mut config = collomatique_ilp::ConfigData::new();
 
-        for (period_id, lists_for_period) in &sol.period_map {
-            let Some(period_desc) = self.period_descriptions.get(period_id) else {
+        for (subject_id, lists_for_subject) in &sol.subject_map {
+            let Some(subject_desc) = self.subject_descriptions.get(subject_id) else {
                 return None;
             };
 
-            for (subject_id, group_list) in &lists_for_period.group_lists {
-                let Some(subject_desc) = period_desc.subject_descriptions.get(subject_id) else {
+            for (period_id, group_list) in &lists_for_subject.period_map {
+                let Some(period_desc) = subject_desc.period_descriptions.get(period_id) else {
                     return None;
                 };
 
-                let max_group = subject_desc.students_per_group.end().get() - 1;
+                let max_group = period_desc.group_count.end().get() - 1;
                 for (student_id, group_num) in &group_list.student_map {
-                    if !subject_desc.students.contains(student_id) {
+                    if !period_desc.students.contains(student_id) {
                         return None;
                     }
                     if *group_num > max_group {

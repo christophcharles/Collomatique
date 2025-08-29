@@ -26,10 +26,10 @@ impl<
     type StructureVariable = ();
 
     fn is_fit_for_problem(&self, desc: &Self::Problem) -> bool {
-        if let Some(period_desc) = desc.period_descriptions.get(&self.period_id) {
-            period_desc
-                .subject_descriptions
-                .contains_key(&self.subject_id)
+        if let Some(subject_desc) = desc.subject_descriptions.get(&self.subject_id) {
+            subject_desc
+                .period_descriptions
+                .contains_key(&self.period_id)
         } else {
             false
         }
@@ -80,9 +80,9 @@ impl<
     > {
         let mut counting_group_expr = collomatique_ilp::LinExpr::constant(0.);
 
-        if let Some(period_desc) = desc.period_descriptions.get(&self.period_id) {
-            if let Some(subject_desc) = period_desc.subject_descriptions.get(&self.subject_id) {
-                let max_group = subject_desc.group_count.end().get() - 1;
+        if let Some(subject_desc) = desc.subject_descriptions.get(&self.subject_id) {
+            if let Some(period_desc) = subject_desc.period_descriptions.get(&self.period_id) {
+                let max_group = period_desc.group_count.end().get() - 1;
                 for group in 0..=max_group {
                     counting_group_expr = counting_group_expr
                         + collomatique_ilp::LinExpr::var(

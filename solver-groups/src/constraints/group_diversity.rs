@@ -69,12 +69,12 @@ impl<
 
         let mut students = BTreeSet::new();
 
-        for (period_id, period_desc) in &desc.period_descriptions {
-            for (subject_id, subject_desc) in &period_desc.subject_descriptions {
-                let max_group = subject_desc.group_count.end().get() - 1;
-                for student1 in &subject_desc.students {
+        for (subject_id, subject_desc) in &desc.subject_descriptions {
+            for (period_id, period_desc) in &subject_desc.period_descriptions {
+                let max_group = period_desc.group_count.end().get() - 1;
+                for student1 in &period_desc.students {
                     students.insert(student1.clone());
-                    for student2 in &subject_desc.students {
+                    for student2 in &period_desc.students {
                         if student2 <= student1 {
                             continue;
                         }
@@ -123,15 +123,15 @@ impl<
 
                 let mut original_variables = BTreeSet::new();
 
-                for (period_id, period_desc) in &desc.period_descriptions {
-                    for (subject_id, subject_desc) in &period_desc.subject_descriptions {
-                        if !subject_desc.students.contains(student1)
-                            || !subject_desc.students.contains(student2)
+                for (subject_id, subject_desc) in &desc.subject_descriptions {
+                    for (period_id, period_desc) in &subject_desc.period_descriptions {
+                        if !period_desc.students.contains(student1)
+                            || !period_desc.students.contains(student2)
                         {
                             continue;
                         }
 
-                        let max_group = subject_desc.group_count.end().get() - 1;
+                        let max_group = period_desc.group_count.end().get() - 1;
                         for group in 0..=max_group {
                             original_variables.insert(
                                 collomatique_solver::generics::ExtraVariable::Extra(
@@ -194,9 +194,9 @@ impl<
 
         let mut students = BTreeSet::new();
 
-        for (_period_id, period_desc) in &desc.period_descriptions {
-            for (_subject_id, subject_desc) in &period_desc.subject_descriptions {
-                students.extend(subject_desc.students.iter().cloned());
+        for (_subject_id, subject_desc) in &desc.subject_descriptions {
+            for (_period_id, period_desc) in &subject_desc.period_descriptions {
+                students.extend(period_desc.students.iter().cloned());
             }
         }
 
