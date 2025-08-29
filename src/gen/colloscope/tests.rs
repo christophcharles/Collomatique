@@ -82,11 +82,15 @@ fn simple_validated_data() {
                     can_be_extended: false,
                 },
                 GroupDesc {
-                    students: BTreeSet::from([3, 4, 5]),
-                    can_be_extended: false,
+                    students: BTreeSet::from([3, 4]),
+                    can_be_extended: true,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([]),
+                    can_be_extended: true,
                 },
             ],
-            not_assigned: BTreeSet::from([6, 7, 8]),
+            not_assigned: BTreeSet::from([5, 6, 7, 8]),
         },
     }];
     let incompatibilities = vec![Incompatibility {
@@ -987,8 +991,8 @@ fn duplicated_student_not_assigned() {
         groups: GroupsDesc {
             assigned_to_group: vec![
                 GroupDesc {
-                    students: BTreeSet::from([0, 1, 2]),
-                    can_be_extended: false,
+                    students: BTreeSet::from([0, 1]),
+                    can_be_extended: true,
                 },
                 GroupDesc {
                     students: BTreeSet::from([3, 4, 5]),

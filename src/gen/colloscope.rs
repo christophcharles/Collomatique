@@ -37,6 +37,8 @@ pub enum Error {
         "Subject {0} has an invalid non-extensible group ({1}) which is too small given the constraint ({2:?})"
     )]
     SubjectWithTooSmallNonExtensibleGroup(usize, usize, RangeInclusive<NonZeroUsize>),
+    #[error("Subject {0} has not enough groups to fit all non-assigned students")]
+    SubjectWithTooFewGroups(usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error(
@@ -218,6 +220,17 @@ impl ValidatedData {
                 if *j >= students.len() {
                     return Err(Error::SubjectWithInvalidNotAssignedStudent(i, *j));
                 }
+            }
+
+            let mut remaining_seats = 0usize;
+            for group in &subject.groups.assigned_to_group {
+                if group.can_be_extended {
+                    remaining_seats +=
+                        subject.students_per_interrogation.end().get() - group.students.len();
+                }
+            }
+            if subject.groups.not_assigned.len() > remaining_seats {
+                return Err(Error::SubjectWithTooFewGroups(i));
             }
 
             let mut students_no_duplicate = BTreeMap::new();
