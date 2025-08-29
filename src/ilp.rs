@@ -12,6 +12,7 @@ mod tests;
 use thiserror::Error;
 
 use linexpr::VariableName;
+use mat_repr::{ConfigRepr, ProblemRepr};
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error<V: VariableName> {
@@ -23,18 +24,18 @@ pub enum Error<V: VariableName> {
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
 
-pub type EvalFn<V> = dbg::Debuggable<dyn Fn(&FeasableConfig<V>) -> f64>;
+pub type EvalFn<V, P> = dbg::Debuggable<dyn Fn(&FeasableConfig<V, P>) -> f64>;
 
-impl<V: VariableName> Default for EvalFn<V> {
+impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     fn default() -> Self {
         crate::debuggable!(|_x| 0.)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ProblemBuilder<V: VariableName> {
+pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = mat_repr::nd::NdProblem<V>> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    eval_fn: EvalFn<V>,
+    eval_fn: EvalFn<V, P>,
     variables: BTreeSet<V>,
     constants: BTreeMap<V, bool>,
 }
@@ -57,7 +58,7 @@ pub enum ConstraintError<V: VariableName> {
 
 pub type ConstraintResult<T, V> = std::result::Result<T, ConstraintError<V>>;
 
-impl<V: VariableName> Default for ProblemBuilder<V> {
+impl<V: VariableName, P: ProblemRepr<V>> Default for ProblemBuilder<V, P> {
     fn default() -> Self {
         ProblemBuilder {
             constraints: BTreeSet::new(),
@@ -68,7 +69,7 @@ impl<V: VariableName> Default for ProblemBuilder<V> {
     }
 }
 
-impl<V: VariableName> ProblemBuilder<V> {
+impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -100,7 +101,7 @@ impl<V: VariableName> ProblemBuilder<V> {
         Ok(self)
     }
 
-    pub fn eval_fn(mut self, func: EvalFn<V>) -> Self {
+    pub fn eval_fn(mut self, func: EvalFn<V, P>) -> Self {
         self.eval_fn = func;
         self
     }
@@ -154,15 +155,14 @@ impl<V: VariableName> ProblemBuilder<V> {
         Ok(self)
     }
 
-    pub fn build(self) -> Problem<V> {
+    pub fn build(self) -> Problem<V, P> {
         let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
         let mut variables_lookup = BTreeMap::new();
         for (i, var) in variables_vec.iter().enumerate() {
             variables_lookup.insert(var.clone(), i);
         }
 
-        use mat_repr::ProblemRepr;
-        let nd_problem = mat_repr::nd::NdProblem::new(&variables_vec, &self.constraints);
+        let nd_problem = P::new(&variables_vec, &self.constraints);
 
         Problem {
             variables: self.variables,
@@ -171,11 +171,11 @@ impl<V: VariableName> ProblemBuilder<V> {
             constraints: self.constraints,
             constants: self.constants,
             eval_fn: self.eval_fn,
-            nd_problem,
+            pb_repr: nd_problem,
         }
     }
 
-    pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V> {
+    pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V, P> {
         let (constraints, constants) = Self::iterate_simplify(&self.constraints);
 
         let variables: BTreeSet<_> = self
@@ -194,7 +194,7 @@ impl<V: VariableName> ProblemBuilder<V> {
     }
 }
 
-impl<V: VariableName> ProblemBuilder<V> {
+impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
     fn simple_simplify(
         constraints: &mut BTreeSet<linexpr::Constraint<V>>,
     ) -> linexpr::SimpleSolution<V> {
@@ -252,17 +252,17 @@ impl<V: VariableName> ProblemBuilder<V> {
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
-pub struct Problem<V: VariableName> {
+pub struct Problem<V: VariableName, P: ProblemRepr<V> = mat_repr::nd::NdProblem<V>> {
     variables: BTreeSet<V>,
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
     constants: BTreeMap<V, bool>,
-    eval_fn: EvalFn<V>,
-    nd_problem: mat_repr::nd::NdProblem<V>,
+    eval_fn: EvalFn<V, P>,
+    pb_repr: P,
 }
 
-impl<V: VariableName> std::fmt::Display for Problem<V> {
+impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "variables : [")?;
         for v in &self.variables {
@@ -290,19 +290,18 @@ impl<V: VariableName> std::fmt::Display for Problem<V> {
     }
 }
 
-impl<V: VariableName> Problem<V> {
-    pub fn default_config<'a>(&'a self) -> Config<'a, V> {
-        use mat_repr::ProblemRepr;
+impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
+    pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
         Config {
             problem: self,
-            nd_config: self.nd_problem.default_nd_config(),
+            cfg_repr: self.pb_repr.default_nd_config(),
         }
     }
 
     pub fn config_from<'a, 'b, U, T: IntoIterator<Item = &'b U>>(
         &'a self,
         vars: T,
-    ) -> Result<Config<'a, V>, V>
+    ) -> Result<Config<'a, V, P>, V>
     where
         V: std::borrow::Borrow<U>,
         U: Ord + ?Sized + 'b,
@@ -317,11 +316,10 @@ impl<V: VariableName> Problem<V> {
         Ok(config)
     }
 
-    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'_, V> {
-        use mat_repr::ProblemRepr;
+    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'_, V, P> {
         Config {
             problem: self,
-            nd_config: self.nd_problem.random_nd_config(random_gen),
+            cfg_repr: self.pb_repr.random_nd_config(random_gen),
         }
     }
 
@@ -337,13 +335,13 @@ impl<V: VariableName> Problem<V> {
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
-pub struct Config<'a, V: VariableName> {
-    problem: &'a Problem<V>,
-    nd_config: mat_repr::nd::NdConfig<V>,
+pub struct Config<'a, V: VariableName, P: ProblemRepr<V>> {
+    problem: &'a Problem<V, P>,
+    cfg_repr: P::Config,
 }
 
-impl<'a, V: VariableName> Config<'a, V> {
-    pub fn get_problem(&self) -> &Problem<V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
+    pub fn get_problem(&self) -> &Problem<V, P> {
         self.problem
     }
 
@@ -361,8 +359,7 @@ impl<'a, V: VariableName> Config<'a, V> {
             Some(i) => i,
             None => return Err(Error::InvalidVariable(var.into())),
         };
-        use mat_repr::ConfigRepr;
-        Ok(unsafe { self.nd_config.get_unchecked(*i) == 1 })
+        Ok(unsafe { self.cfg_repr.get_unchecked(*i) == 1 })
     }
 
     pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
@@ -380,8 +377,7 @@ impl<'a, V: VariableName> Config<'a, V> {
             None => return Err(Error::InvalidVariable(var.into())),
         };
         unsafe {
-            use mat_repr::ConfigRepr;
-            self.nd_config.set_unchecked(*i, if val { 1 } else { 0 });
+            self.cfg_repr.set_unchecked(*i, if val { 1 } else { 0 });
         }
         Ok(())
     }
@@ -389,47 +385,42 @@ impl<'a, V: VariableName> Config<'a, V> {
     pub fn random_neighbour<T: random::RandomGen>(
         &self,
         random_gen: &mut T,
-    ) -> Option<Config<'a, V>> {
+    ) -> Option<Config<'a, V, P>> {
         if self.problem.variables.is_empty() {
             return None;
         }
 
-        use mat_repr::ConfigRepr;
         Some(Config {
             problem: self.problem,
-            nd_config: self.nd_config.random_neighbour(random_gen),
+            cfg_repr: self.cfg_repr.random_neighbour(random_gen),
         })
     }
 
-    pub fn neighbours(&self) -> Vec<Config<'a, V>> {
-        use mat_repr::ConfigRepr;
-        self.nd_config
+    pub fn neighbours(&self) -> Vec<Config<'a, V, P>> {
+        self.cfg_repr
             .neighbours()
             .into_iter()
             .map(|x| Config {
                 problem: self.problem,
-                nd_config: x,
+                cfg_repr: x,
             })
             .collect()
     }
 
     pub fn max_distance_to_constraint(&self) -> f32 {
-        use mat_repr::ConfigRepr;
-        self.nd_config
-            .max_distance_to_constraint(&self.problem.nd_problem)
+        self.cfg_repr
+            .max_distance_to_constraint(&self.problem.pb_repr)
     }
 
     pub fn compute_lhs(&self) -> BTreeMap<linexpr::Constraint<V>, i32> {
-        use mat_repr::ConfigRepr;
-        self.nd_config.compute_lhs(&self.problem.nd_problem)
+        self.cfg_repr.compute_lhs(&self.problem.pb_repr)
     }
 
     pub fn is_feasable(&self) -> bool {
-        use mat_repr::ConfigRepr;
-        self.nd_config.is_feasable(&self.problem.nd_problem)
+        self.cfg_repr.is_feasable(&self.problem.pb_repr)
     }
 
-    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V>> {
+    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V, P>> {
         if !self.is_feasable() {
             return None;
         }
@@ -437,12 +428,12 @@ impl<'a, V: VariableName> Config<'a, V> {
         Some(unsafe { self.into_feasable_unchecked() })
     }
 
-    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V> {
+    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, P> {
         FeasableConfig(self)
     }
 }
 
-impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Config<'a, V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut variables: BTreeMap<_, _> = self
             .problem
@@ -450,13 +441,12 @@ impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
             .iter()
             .map(|(k, v)| (k.clone(), if *v { 1 } else { 0 }))
             .collect();
-        use mat_repr::ConfigRepr;
         variables.extend(
             self.problem
                 .variables_vec
                 .iter()
                 .enumerate()
-                .map(|(i, var)| (var.clone(), unsafe { self.nd_config.get_unchecked(i) })),
+                .map(|(i, var)| (var.clone(), unsafe { self.cfg_repr.get_unchecked(i) })),
         );
 
         write!(f, "[ ")?;
@@ -471,56 +461,78 @@ impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
     }
 }
 
-impl<'a, V: VariableName> PartialEq for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialEq for Config<'a, V, P> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a, V: VariableName> Eq for Config<'a, V> {}
+impl<'a, V: VariableName, P: ProblemRepr<V>> Eq for Config<'a, V, P> {}
 
-impl<'a, V: VariableName> Ord for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> Ord for Config<'a, V, P> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let p1: *const Problem<V> = &*self.problem;
-        let p2: *const Problem<V> = &*other.problem;
+        let p1: *const Problem<V, P> = &*self.problem;
+        let p2: *const Problem<V, P> = &*other.problem;
 
         let problem_ord = p1.cmp(&p2);
         if problem_ord != std::cmp::Ordering::Equal {
             return problem_ord;
         }
 
-        return self.nd_config.cmp(&other.nd_config);
+        return self.cfg_repr.cmp(&other.cfg_repr);
     }
 }
 
-impl<'a, V: VariableName> PartialOrd for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialOrd for Config<'a, V, P> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FeasableConfig<'a, V: VariableName>(Config<'a, V>);
+#[derive(Debug, Clone)]
+pub struct FeasableConfig<'a, V: VariableName, P: ProblemRepr<V> = mat_repr::nd::NdProblem<V>>(
+    Config<'a, V, P>,
+);
 
-impl<'a, V: VariableName> FeasableConfig<'a, V> {
-    pub fn into_inner(self) -> Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialEq for FeasableConfig<'a, V, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Eq for FeasableConfig<'a, V, P> {}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Ord for FeasableConfig<'a, V, P> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner().cmp(other.inner())
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialOrd for FeasableConfig<'a, V, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> FeasableConfig<'a, V, P> {
+    pub fn into_inner(self) -> Config<'a, V, P> {
         self.0
     }
 
-    pub fn inner(&self) -> &Config<'a, V> {
+    pub fn inner(&self) -> &Config<'a, V, P> {
         &self.0
     }
 }
 
-impl<'a, V: VariableName> std::ops::Deref for FeasableConfig<'a, V> {
-    type Target = Config<'a, V>;
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::ops::Deref for FeasableConfig<'a, V, P> {
+    type Target = Config<'a, V, P>;
 
     fn deref(&self) -> &Self::Target {
         self.inner()
     }
 }
 
-impl<'a, V: VariableName> std::fmt::Display for FeasableConfig<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::fmt::Display for FeasableConfig<'a, V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner().fmt(f)
     }

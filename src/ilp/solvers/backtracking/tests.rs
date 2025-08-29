@@ -43,7 +43,7 @@ fn test_backtracking() {
 
     let one = Expr::<String>::constant(1);
 
-    let pb = ProblemBuilder::new()
+    let pb = ProblemBuilder::<String>::new()
         .add_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_variables(["y11", "y12", "y21", "y22"])
@@ -138,7 +138,7 @@ fn test_backtracking_2() {
 
     let one = Expr::<String>::constant(1);
 
-    let pb = ProblemBuilder::new()
+    let pb = ProblemBuilder::<String>::new()
         .add_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_variables(["y11", "y12", "y21", "y22"])
@@ -200,7 +200,7 @@ fn impossible_backtracking() {
 
     let one = Expr::<String>::constant(1);
 
-    let pb = ProblemBuilder::new()
+    let pb = ProblemBuilder::<String>::new()
         .add_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_constraints([

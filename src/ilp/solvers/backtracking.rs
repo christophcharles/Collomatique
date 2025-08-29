@@ -19,9 +19,9 @@ impl<H: heuristics::Heuristic> Solver<H> {
         Solver { heuristic }
     }
 
-    fn compute_next_step<'a, V: VariableName>(
+    fn compute_next_step<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &Config<'a, V>,
+        config: &Config<'a, V, P>,
         available_variables: &BTreeSet<V>,
     ) -> NextStep<V> {
         if config.is_feasable() {
@@ -38,8 +38,8 @@ impl<H: heuristics::Heuristic> Solver<H> {
         }
     }
 
-    fn select_variable<'a, V: VariableName>(
-        config: &mut Config<'a, V>,
+    fn select_variable<'a, V: VariableName, P: ProblemRepr<V>>(
+        config: &mut Config<'a, V, P>,
         available_variables: &mut BTreeSet<V>,
         guess_list_stack: &Vec<(Vec<V>, usize)>,
     ) {
@@ -57,8 +57,8 @@ impl<H: heuristics::Heuristic> Solver<H> {
         available_variables.remove(&var);
     }
 
-    fn unselect_variable<'a, V: VariableName>(
-        config: &mut Config<'a, V>,
+    fn unselect_variable<'a, V: VariableName, P: ProblemRepr<V>>(
+        config: &mut Config<'a, V, P>,
         available_variables: &mut BTreeSet<V>,
         guess_list_stack: &Vec<(Vec<V>, usize)>,
     ) {
@@ -76,9 +76,9 @@ impl<H: heuristics::Heuristic> Solver<H> {
         available_variables.insert(var.clone());
     }
 
-    fn backtrack<'a, V: VariableName>(
+    fn backtrack<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
-        config: &mut Config<'a, V>,
+        config: &mut Config<'a, V, P>,
         available_variables: &mut BTreeSet<V>,
         guess_list_stack: &mut Vec<(Vec<V>, usize)>,
     ) -> bool {
@@ -112,14 +112,17 @@ enum NextStep<V: VariableName> {
 }
 
 use super::FeasabilitySolver;
+use crate::ilp::mat_repr::ProblemRepr;
 
-impl<V: VariableName, H: heuristics::Heuristic> FeasabilitySolver<V> for Solver<H> {
+impl<V: VariableName, H: heuristics::Heuristic, P: ProblemRepr<V>> FeasabilitySolver<V, P>
+    for Solver<H>
+{
     fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
-        config: &Config<'a, V>,
-        origin: Option<&FeasableConfig<'a, V>>,
+        config: &Config<'a, V, P>,
+        origin: Option<&FeasableConfig<'a, V, P>>,
         mut max_steps: Option<usize>,
-    ) -> Option<FeasableConfig<'a, V>> {
+    ) -> Option<FeasableConfig<'a, V, P>> {
         let mut available_variables = match origin {
             Some(o) => config
                 .get_problem()
