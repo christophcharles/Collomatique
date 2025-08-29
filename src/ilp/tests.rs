@@ -166,9 +166,7 @@ fn problem_filter_variable() {
     use crate::ilp::linexpr::Expr;
 
     let pb1 = ProblemBuilder::<String>::new()
-        .add_variables(["X", "Y", "Z", "W"])
-        .unwrap()
-        .add_constants([("T", false), ("S", true)])
+        .add_variables(["T", "S", "X", "Y", "Z", "W"])
         .unwrap()
         .add_constraints([
             (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
@@ -181,9 +179,7 @@ fn problem_filter_variable() {
         .filter_variables(|v| (*v != String::from("Z")) && (*v != String::from("S")));
 
     let pb2 = ProblemBuilder::<String>::new()
-        .add_variables(["X", "Y", "W"])
-        .unwrap()
-        .add_constants([("T", false)])
+        .add_variables(["T", "X", "Y", "W"])
         .unwrap()
         .add_constraints([
             (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
@@ -193,5 +189,4 @@ fn problem_filter_variable() {
 
     assert_eq!(pb1.constraints, pb2.constraints);
     assert_eq!(pb1.variables, pb2.variables);
-    assert_eq!(pb1.constants, pb2.constants);
 }
