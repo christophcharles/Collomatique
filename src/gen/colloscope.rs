@@ -146,10 +146,10 @@ pub enum BalancingConstraints {
     StrictWithCuts,
     StrictWithCutsAndOverall,
     Strict,
-    OptimizeAndNonConsecutive,
-    OverallAndNonConsecutive,
-    StrictWithCutsAndNonConsecutive,
-    StrictWithCutsAndOverallAndNonConsecutive,
+    OptimizeAndConsecutiveDifferentTeachers,
+    OverallAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndOverallAndConsecutiveDifferentTeachers,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2305,6 +2305,70 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_balancing_constraints_for_non_consecutive_teacher_for_range_teacher_and_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        teacher: usize,
+        range: &std::ops::Range<u32>,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let mut lhs = Expr::constant(0);
+
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+            if !range.contains(&slot.start.week) {
+                continue;
+            }
+            if slot.teacher != teacher {
+                continue;
+            }
+
+            lhs = lhs
+                + Expr::var(Variable::GroupInSlot {
+                    subject: i,
+                    slot: j,
+                    group: k,
+                });
+        }
+
+        lhs.leq(&Expr::constant(1))
+    }
+
+    fn build_balancing_constraints_for_non_consecutive_teacher(
+        &self,
+        i: usize,
+        subject: &Subject,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let window_size = subject.period.get() * 2;
+
+        let ranges = (0..self.data.general.week_count.get())
+            .step_by(subject.period.get().try_into().unwrap())
+            .map(|start| {
+                let end = self.data.general.week_count.get().min(start + window_size);
+                start..end
+            });
+
+        let mut output = BTreeSet::new();
+
+        for range in ranges {
+            for teacher in 0..self.data.general.teacher_count {
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    output.insert(
+                        self.build_balancing_constraints_for_non_consecutive_teacher_for_range_teacher_and_group(
+                            i,
+                            subject,
+                            teacher,
+                            &range,
+                            k,
+                        )
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
     fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
@@ -2354,24 +2418,34 @@ impl<'a> IlpTranslator<'a> {
                         slot_selections,
                     ));
                 }
-                BalancingConstraints::OptimizeAndNonConsecutive => {} // Ignore, no strict constraint in this case
-                BalancingConstraints::OverallAndNonConsecutive => {
+                BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
+                    );
+                }
+                BalancingConstraints::OverallAndConsecutiveDifferentTeachers => {
                     constraints.extend(self.build_balancing_constraints_for_subject_overall(
                         i,
                         subject,
                         slot_selections,
-                    ))
+                    ));
+                    constraints.extend(
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
+                    );
                 }
-                BalancingConstraints::StrictWithCutsAndNonConsecutive => {
+                BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers => {
                     constraints.extend(self.build_balancing_constraints_for_subject_strict(
                         i,
                         subject,
                         slot_selections,
                         true,
                         false,
-                    ))
+                    ));
+                    constraints.extend(
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
+                    );
                 }
-                BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive => {
+                BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
                     constraints.extend(self.build_balancing_constraints_for_subject_strict(
                         i,
                         subject,
@@ -2384,6 +2458,9 @@ impl<'a> IlpTranslator<'a> {
                         subject,
                         slot_selections,
                     ));
+                    constraints.extend(
+                        self.build_balancing_constraints_for_non_consecutive_teacher(i, subject),
+                    );
                 }
             }
         }
