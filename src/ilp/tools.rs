@@ -81,3 +81,15 @@ pub struct ConfigRepr<'a, 'b: 'a> {
     values: Array1<i32>,
 }
 
+impl<'a,'b: 'a> From<ConfigRepr<'a,'b>> for Config {
+    fn from(value: ConfigRepr<'a,'b>) -> Self {
+        let mut config = Config::new();
+        for (i,var) in value.mat_repr.problem.variables.iter().enumerate() {
+            config.set(
+                var,
+                value.values[i] == 1
+            );
+        }
+        config
+    }
+}
