@@ -78,7 +78,7 @@ impl RulesUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<PreCleaningOp<RulesUpdateWarning>> {
+    ) -> Option<CleaningOp<RulesUpdateWarning>> {
         None
     }
 

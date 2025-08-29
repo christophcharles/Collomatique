@@ -73,7 +73,7 @@ impl TeachersUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<TeachersUpdateWarning>> {
+    ) -> Option<CleaningOp<TeachersUpdateWarning>> {
         match self {
             Self::AddNewTeacher(_) => None,
             Self::UpdateTeacher(teacher_id, teacher) => {
@@ -83,7 +83,7 @@ impl TeachersUpdateOp {
                     }
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: TeachersUpdateWarning::LooseInterrogationSlots(
                                     *teacher_id,
                                 ),
@@ -99,7 +99,7 @@ impl TeachersUpdateOp {
                 for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: TeachersUpdateWarning::LooseInterrogationSlots(
                                     *teacher_id,
                                 ),

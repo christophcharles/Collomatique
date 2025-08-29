@@ -109,7 +109,7 @@ impl WeekPatternsUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<WeekPatternsUpdateWarning>> {
+    ) -> Option<CleaningOp<WeekPatternsUpdateWarning>> {
         match self {
             Self::AddNewWeekPattern(_) => None,
             Self::UpdateWeekPattern(_, _) => None,
@@ -117,7 +117,7 @@ impl WeekPatternsUpdateOp {
                 for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern == Some(*week_pattern_id) {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: WeekPatternsUpdateWarning::LooseInterrogationSlot(
                                     *slot_id,
                                 ),
@@ -129,7 +129,7 @@ impl WeekPatternsUpdateOp {
 
                 for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
                     if incompat.week_pattern_id == Some(*week_pattern_id) {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: WeekPatternsUpdateWarning::LooseScheduleIncompat(*incompat_id),
                             op: UpdateOp::Incompatibilities(
                                 IncompatibilitiesUpdateOp::DeleteIncompat(*incompat_id),
