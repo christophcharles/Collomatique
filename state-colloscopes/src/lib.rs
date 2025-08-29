@@ -388,6 +388,10 @@ pub enum SlotError {
     /// Slot overlaps with next day
     #[error("The slot start time is too late and the slot overlaps with the next day")]
     SlotOverlapsWithNextDay,
+
+    /// The slot is referenced by a rule
+    #[error("Slot id ({0:?}) is referenced by rule {1:?}")]
+    SlotIsReferencedByRule(SlotId, RuleId),
 }
 
 /// Errors for schedule incompatibility operations
@@ -2595,6 +2599,12 @@ impl Data {
                 else {
                     return Err(SlotError::InvalidSlotId(*id));
                 };
+
+                for (rule_id, rule) in &self.inner_data.rules.rule_map {
+                    if rule.desc.references_slot(*id) {
+                        return Err(SlotError::SlotIsReferencedByRule(*id, *rule_id));
+                    }
+                }
 
                 let subject_slots = self
                     .inner_data
