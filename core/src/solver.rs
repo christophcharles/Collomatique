@@ -272,9 +272,27 @@ where
         rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
     ) -> bool {
         for (v, _value) in expr.coefficients() {
-            if let ExtraVariable::Extra(v_extra) = v {
-                if !rev_v_map.contains_key(v_extra) {
-                    return false;
+            match v {
+                ExtraVariable::BaseMain(v) => {
+                    if !self
+                        .variables
+                        .contains_key(&ExtraVariable::BaseMain(v.clone()))
+                    {
+                        return false;
+                    }
+                }
+                ExtraVariable::BaseStructure(v) => {
+                    if !self
+                        .variables
+                        .contains_key(&ExtraVariable::BaseStructure(v.clone()))
+                    {
+                        return false;
+                    }
+                }
+                ExtraVariable::Extra(v_extra) => {
+                    if !rev_v_map.contains_key(v_extra) {
+                        return false;
+                    }
                 }
             }
         }
