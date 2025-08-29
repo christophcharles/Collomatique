@@ -352,6 +352,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-time",
+ "non-empty-string",
  "pyo3",
  "serde",
  "serde_json",
