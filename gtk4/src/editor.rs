@@ -42,6 +42,7 @@ pub enum EditorInput {
     UpdateOp(collomatique_core::ops::UpdateOp),
     CommitUpdateOp(collomatique_core::ops::UpdateOp),
     ContinueOp,
+    CancelOp,
     RunScriptClicked,
     RunScript(PathBuf, String),
     NewStateFromScript(AppState<Data>),
@@ -481,6 +482,7 @@ impl Component for EditorPanel {
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 warning_op::DialogOutput::Continue => EditorInput::ContinueOp,
+                warning_op::DialogOutput::Cancel => EditorInput::CancelOp,
             });
 
         let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
@@ -639,6 +641,13 @@ impl Component for EditorPanel {
                 if let Some(op) = self.op_to_commit.take() {
                     sender.input(EditorInput::CommitUpdateOp(op));
                 }
+            }
+            EditorInput::CancelOp => {
+                // Update interface
+                // this is useful if we need to restore
+                // some GUI element to the correct state
+                // because of the cancelation
+                self.send_msg_for_interface_update(sender);
             }
             EditorInput::RunScriptClicked => {
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();

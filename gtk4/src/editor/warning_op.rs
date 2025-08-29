@@ -17,6 +17,7 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Continue,
+    Cancel,
 }
 
 impl Dialog {
@@ -91,7 +92,10 @@ impl SimpleComponent for Dialog {
                 self.hidden = true;
                 sender.output(DialogOutput::Continue).unwrap()
             }
-            DialogInput::Cancel => self.hidden = true,
+            DialogInput::Cancel => {
+                self.hidden = true;
+                sender.output(DialogOutput::Cancel).unwrap()
+            }
         }
     }
 }
