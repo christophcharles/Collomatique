@@ -5,16 +5,28 @@ pub mod handles;
 mod history;
 
 use crate::backend;
-use history::{AnnotatedOperation, ModificationHistory, ReversibleOperation};
+use history::{
+    AnnotatedGeneralOperation, AnnotatedOperation, AnnotatedWeekPatternsOperation,
+    ModificationHistory, ReversibleOperation,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
-    GeneralSetWeekCount(NonZeroU32),
-    GeneralSetMaxInterrogationsPerDay(Option<NonZeroU32>),
-    GeneralSetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
+    General(GeneralOperation),
+    WeekPatterns(WeekPatternsOperation),
+}
 
-    WeekPatternsAdd(backend::WeekPattern),
-    WeekPatternsRemove(handles::WeekPatternHandle),
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GeneralOperation {
+    SetWeekCount(NonZeroU32),
+    SetMaxInterrogationsPerDay(Option<NonZeroU32>),
+    SetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WeekPatternsOperation {
+    Add(backend::WeekPattern),
+    Remove(handles::WeekPatternHandle),
 }
 
 #[derive(Debug)]
@@ -144,57 +156,44 @@ where
 }
 
 impl<T: backend::Storage> AppState<T> {
-    async fn build_rev_op(
+    async fn build_backward_general_op(
         &mut self,
-        op: Operation,
-    ) -> Result<ReversibleOperation, T::InternalError> {
-        let forward = AnnotatedOperation::annotate(op, &mut self.handle_managers);
-        match forward {
-            AnnotatedOperation::GeneralSetWeekCount(_new_week_count) => {
+        op: &AnnotatedGeneralOperation,
+    ) -> Result<AnnotatedGeneralOperation, T::InternalError> {
+        let backward = match op {
+            AnnotatedGeneralOperation::SetWeekCount(_new_week_count) => {
                 let general_data = self.backend_logic.general_data_get().await?;
-
-                let rev_op = ReversibleOperation {
-                    forward,
-                    backward: AnnotatedOperation::GeneralSetWeekCount(general_data.week_count),
-                };
-
-                Ok(rev_op)
+                AnnotatedGeneralOperation::SetWeekCount(general_data.week_count)
             }
-            AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(_max_interrogations_per_day) => {
+            AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(_max_interrogations_per_day) => {
                 let general_data = self.backend_logic.general_data_get().await?;
-
-                let rev_op = ReversibleOperation {
-                    forward,
-                    backward: AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(
-                        general_data.max_interrogations_per_day,
-                    ),
-                };
-
-                Ok(rev_op)
+                AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(
+                    general_data.max_interrogations_per_day,
+                )
             }
-            AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(
-                ref _interrogations_per_week,
-            ) => {
+            AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(_interrogations_per_week) => {
                 let general_data = self.backend_logic.general_data_get().await?;
-
-                let rev_op = ReversibleOperation {
-                    forward,
-                    backward: AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(
-                        general_data.interrogations_per_week,
-                    ),
-                };
-
-                Ok(rev_op)
+                AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(
+                    general_data.interrogations_per_week,
+                )
             }
-            AnnotatedOperation::WeekPatternsAdd(handle, ref _pattern) => Ok(ReversibleOperation {
-                forward,
-                backward: AnnotatedOperation::WeekPatternsRemove(handle),
-            }),
-            AnnotatedOperation::WeekPatternsRemove(handle) => {
+        };
+        Ok(backward)
+    }
+
+    async fn build_backward_week_patterns_op(
+        &mut self,
+        op: &AnnotatedWeekPatternsOperation,
+    ) -> Result<AnnotatedWeekPatternsOperation, T::InternalError> {
+        let backward = match op {
+            AnnotatedWeekPatternsOperation::Add(handle, ref _pattern) => {
+                AnnotatedWeekPatternsOperation::Remove(*handle)
+            }
+            AnnotatedWeekPatternsOperation::Remove(handle) => {
                 let week_pattern_id = self
                     .handle_managers
                     .week_patterns
-                    .get_id(handle)
+                    .get_id(*handle)
                     .expect("week pattern to remove should exist");
                 let pattern = self
                     .backend_logic
@@ -206,21 +205,35 @@ impl<T: backend::Storage> AppState<T> {
                         }
                         backend::IdError::InternalError(int_err) => int_err,
                     })?;
-                let rev_op = ReversibleOperation {
-                    forward,
-                    backward: AnnotatedOperation::WeekPatternsAdd(handle, pattern),
-                };
-                Ok(rev_op)
+                AnnotatedWeekPatternsOperation::Add(*handle, pattern)
             }
-        }
+        };
+        Ok(backward)
     }
 
-    async fn update_internal_state(
+    async fn build_rev_op(
         &mut self,
-        op: &AnnotatedOperation,
+        op: Operation,
+    ) -> Result<ReversibleOperation, T::InternalError> {
+        let forward = AnnotatedOperation::annotate(op, &mut self.handle_managers);
+        let backward = match &forward {
+            AnnotatedOperation::General(op) => {
+                AnnotatedOperation::General(self.build_backward_general_op(op).await?)
+            }
+            AnnotatedOperation::WeekPatterns(op) => {
+                AnnotatedOperation::WeekPatterns(self.build_backward_week_patterns_op(op).await?)
+            }
+        };
+        let rev_op = ReversibleOperation { forward, backward };
+        Ok(rev_op)
+    }
+
+    async fn update_general_state(
+        &mut self,
+        op: &AnnotatedGeneralOperation,
     ) -> Result<(), UpdateError<T>> {
         match op {
-            AnnotatedOperation::GeneralSetWeekCount(new_week_count) => {
+            AnnotatedGeneralOperation::SetWeekCount(new_week_count) => {
                 let mut general_data = self.backend_logic.general_data_get().await?;
                 general_data.week_count = *new_week_count;
                 self.backend_logic
@@ -236,7 +249,7 @@ impl<T: backend::Storage> AppState<T> {
                     })?;
                 Ok(())
             }
-            AnnotatedOperation::GeneralSetMaxInterrogationsPerDay(
+            AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(
                 new_max_interrogations_per_day,
             ) => {
                 let mut general_data = self.backend_logic.general_data_get().await?;
@@ -254,7 +267,7 @@ impl<T: backend::Storage> AppState<T> {
                     })?;
                 Ok(())
             }
-            AnnotatedOperation::GeneralSetInterrogationsPerWeekRange(
+            AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(
                 new_interrogations_per_week,
             ) => {
                 if let Some(range) = new_interrogations_per_week {
@@ -277,7 +290,15 @@ impl<T: backend::Storage> AppState<T> {
                     })?;
                 Ok(())
             }
-            AnnotatedOperation::WeekPatternsAdd(week_pattern_handle, pattern) => {
+        }
+    }
+
+    async fn update_week_patterns_state(
+        &mut self,
+        op: &AnnotatedWeekPatternsOperation,
+    ) -> Result<(), UpdateError<T>> {
+        match op {
+            AnnotatedWeekPatternsOperation::Add(week_pattern_handle, pattern) => {
                 let new_id = self
                     .backend_logic
                     .week_patterns_add(pattern)
@@ -295,7 +316,7 @@ impl<T: backend::Storage> AppState<T> {
                     .update_handle(*week_pattern_handle, Some(new_id));
                 Ok(())
             }
-            AnnotatedOperation::WeekPatternsRemove(week_pattern_handle) => {
+            AnnotatedWeekPatternsOperation::Remove(week_pattern_handle) => {
                 let week_pattern_id = self
                     .handle_managers
                     .week_patterns
@@ -321,5 +342,16 @@ impl<T: backend::Storage> AppState<T> {
                 Ok(())
             }
         }
+    }
+
+    async fn update_internal_state(
+        &mut self,
+        op: &AnnotatedOperation,
+    ) -> Result<(), UpdateError<T>> {
+        match op {
+            AnnotatedOperation::General(op) => self.update_general_state(op).await?,
+            AnnotatedOperation::WeekPatterns(op) => self.update_week_patterns_state(op).await?,
+        }
+        Ok(())
     }
 }
