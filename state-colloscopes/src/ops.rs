@@ -68,13 +68,13 @@ pub enum PeriodOp {
 pub enum SubjectOp {
     /// Add a subject after an existing subject
     /// If `None`, it is placed first
-    AddAfter(Option<SubjectId>, subjects::SubjectExternalData),
+    AddAfter(Option<SubjectId>, subjects::Subject),
     /// Remove an existing subject
     Remove(SubjectId),
     /// Move a subject to another position in the list
     ChangePosition(SubjectId, usize),
     /// Update the parameters of an existing subject
-    Update(SubjectId, subjects::SubjectExternalData),
+    Update(SubjectId, subjects::Subject),
 }
 
 /// Annotated operation
@@ -163,13 +163,13 @@ pub enum AnnotatedSubjectOp {
     /// Add a period after an existing period
     /// First parameter is the period id for the new period
     /// If the second parameter is `None`, the subject is added at the first place
-    AddAfter(SubjectId, Option<SubjectId>, subjects::SubjectExternalData),
+    AddAfter(SubjectId, Option<SubjectId>, subjects::Subject),
     /// Remove an existing subject
     Remove(SubjectId),
     /// Move a subject to another position in the list
     ChangePosition(SubjectId, usize),
     /// Update the parameters of an existing subject
-    Update(SubjectId, subjects::SubjectExternalData),
+    Update(SubjectId, subjects::Subject),
 }
 
 impl Operation for AnnotatedOp {}
