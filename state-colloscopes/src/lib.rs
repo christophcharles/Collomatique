@@ -416,7 +416,13 @@ impl Data {
         let student_ids = student_list.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
-        let id_issuer = IdIssuer::new(student_ids, period_ids, subject_ids)?;
+        let teacher_ids = vec![];
+        let id_issuer = IdIssuer::new(
+            student_ids,
+            period_ids,
+            subject_ids,
+            teacher_ids.into_iter(),
+        )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
             .ordered_period_list
