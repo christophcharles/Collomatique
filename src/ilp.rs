@@ -32,8 +32,10 @@ impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     }
 }
 
+type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
+
 #[derive(Debug, Clone)]
-pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = mat_repr::sparse::SprsProblem<V>> {
+pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     eval_fn: EvalFn<V, P>,
     variables: BTreeSet<V>,
@@ -252,7 +254,7 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
-pub struct Problem<V: VariableName, P: ProblemRepr<V> = mat_repr::sparse::SprsProblem<V>> {
+pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables: BTreeSet<V>,
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
@@ -490,7 +492,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> PartialOrd for Config<'a, V, P> {
 }
 
 #[derive(Debug, Clone)]
-pub struct FeasableConfig<'a, V: VariableName, P: ProblemRepr<V> = mat_repr::sparse::SprsProblem<V>>(
+pub struct FeasableConfig<'a, V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>>(
     Config<'a, V, P>,
 );
 
