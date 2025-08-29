@@ -119,12 +119,45 @@ where
 }
 
 #[derive(Error, Debug)]
+pub enum Cross2Error<T, CrossId1, CrossId2>
+where
+    T: std::fmt::Debug + std::error::Error,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Cross2IdError<T, Id, CrossId1, CrossId2>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
 pub enum Cross3Error<T, CrossId1, CrossId2, CrossId3>
 where
     T: std::fmt::Debug + std::error::Error,
     CrossId1: std::fmt::Debug,
     CrossId2: std::fmt::Debug,
-    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
 {
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId1(CrossId1),
@@ -748,6 +781,17 @@ pub struct SlotSelection<SubjectId: OrdId, TimeSlotId: OrdId> {
     pub slot_groups: Vec<SlotGroup<TimeSlotId>>,
 }
 
+impl<SubjectId: OrdId, TimeSlotId: OrdId> SlotSelection<SubjectId, TimeSlotId> {
+    fn references_time_slot(&self, index: TimeSlotId) -> bool {
+        for slot_group in &self.slot_groups {
+            if slot_group.slots.contains(&index) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Grouping<TimeSlotId: OrdId> {
     pub name: String,
@@ -853,10 +897,22 @@ pub enum IncompatDependancy<SubjectId: OrdId, StudentId: OrdId> {
 }
 
 #[derive(Clone, Debug)]
-pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId, ColloscopeId: OrdId> {
+pub enum SubjectDependancy<
+    TimeSlotId: OrdId,
+    StudentId: OrdId,
+    ColloscopeId: OrdId,
+    SlotSelectionId: OrdId,
+> {
     TimeSlot(TimeSlotId),
     Student(StudentId),
     Colloscope(ColloscopeId),
+    SlotSelection(SlotSelectionId),
+}
+
+#[derive(Clone, Debug)]
+pub enum TimeSlotDependancy<GroupingId: OrdId, SlotSelectionId: OrdId> {
+    Grouping(GroupingId),
+    SlotSelection(SlotSelectionId),
 }
 
 #[derive(Clone, Debug)]
@@ -1715,7 +1771,7 @@ impl<T: Storage> Logic<T> {
         &self,
         index: T::SubjectId,
     ) -> std::result::Result<
-        Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId>>,
+        Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId, T::SlotSelectionId>>,
         IdError<T::InternalError, T::SubjectId>,
     > {
         let subject = self.subjects_get(index).await?;
@@ -1753,6 +1809,13 @@ impl<T: Storage> Logic<T> {
             }
         }
 
+        let slot_selections = self.slot_selections_get_all().await?;
+        for (slot_selection_id, slot_selection) in slot_selections {
+            if slot_selection.subject_id == index {
+                dependancies.push(SubjectDependancy::SlotSelection(slot_selection_id));
+            }
+        }
+
         Ok(dependancies)
     }
     pub async fn subjects_remove(
@@ -1763,7 +1826,9 @@ impl<T: Storage> Logic<T> {
         CheckedIdError<
             T::InternalError,
             T::SubjectId,
-            Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId>>,
+            Vec<
+                SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId, T::SlotSelectionId>,
+            >,
         >,
     > {
         let dependancies = self
@@ -1844,29 +1909,61 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
+    async fn is_time_slot_referenced_by_slot_selections(
+        &self,
+        index: T::TimeSlotId,
+    ) -> std::result::Result<Option<T::SlotSelectionId>, T::InternalError> {
+        let slot_selections = self.slot_selections_get_all().await?;
+
+        for (slot_selection_id, slot_selection) in slot_selections {
+            if slot_selection.references_time_slot(index) {
+                return Ok(Some(slot_selection_id));
+            }
+        }
+
+        Ok(None)
+    }
     pub async fn time_slots_update(
         &mut self,
         index: T::TimeSlotId,
         time_slot: &TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
     ) -> std::result::Result<
         (),
-        Cross3IdError<
+        Cross3IdWithDepError<
             T::InternalError,
             T::TimeSlotId,
             T::SubjectId,
             T::TeacherId,
             T::WeekPatternId,
+            T::SlotSelectionId,
         >,
     > {
         if !self.time_slots_check_id(index).await? {
-            return Err(Cross3IdError::InvalidId(index));
+            return Err(Cross3IdWithDepError::InvalidId(index));
+        }
+
+        if let Some(slot_selection_id) = self
+            .is_time_slot_referenced_by_slot_selections(index)
+            .await?
+        {
+            let current_time_slot = self.time_slots_get(index).await.map_err(|e| match e {
+                IdError::InvalidId(id) => panic!(
+                    "Time slot id {:?} should be valid as it was already checked",
+                    id
+                ),
+                IdError::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+            })?;
+
+            if current_time_slot.subject_id != time_slot.subject_id {
+                return Err(Cross3IdWithDepError::BlockingDependancy(slot_selection_id));
+            }
         }
 
         let data_status = self.time_slots_check_data(time_slot).await?;
         match data_status {
-            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
-            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
-            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
+            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
+            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
                 unsafe { self.storage.time_slots_update_unchecked(index, time_slot) }.await?;
                 Ok(())
@@ -1876,7 +1973,10 @@ impl<T: Storage> Logic<T> {
     pub async fn time_slots_check_can_remove(
         &self,
         index: T::TimeSlotId,
-    ) -> std::result::Result<Vec<T::GroupingId>, IdError<T::InternalError, T::TimeSlotId>> {
+    ) -> std::result::Result<
+        Vec<TimeSlotDependancy<T::GroupingId, T::SlotSelectionId>>,
+        IdError<T::InternalError, T::TimeSlotId>,
+    > {
         if !self.time_slots_check_id(index).await? {
             return Err(IdError::InvalidId(index));
         }
@@ -1886,7 +1986,14 @@ impl<T: Storage> Logic<T> {
         let groupings = self.groupings_get_all().await?;
         for (grouping_id, grouping) in groupings {
             if grouping.references_time_slot(index) {
-                dependancies.push(grouping_id);
+                dependancies.push(TimeSlotDependancy::Grouping(grouping_id));
+            }
+        }
+
+        let slot_selections = self.slot_selections_get_all().await?;
+        for (slot_selection_id, slot_selection) in slot_selections {
+            if slot_selection.references_time_slot(index) {
+                dependancies.push(TimeSlotDependancy::SlotSelection(slot_selection_id));
             }
         }
 
@@ -1895,8 +2002,14 @@ impl<T: Storage> Logic<T> {
     pub async fn time_slots_remove(
         &mut self,
         index: T::TimeSlotId,
-    ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TimeSlotId, Vec<T::GroupingId>>>
-    {
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            T::InternalError,
+            T::TimeSlotId,
+            Vec<TimeSlotDependancy<T::GroupingId, T::SlotSelectionId>>,
+        >,
+    > {
         let dependancies = self
             .time_slots_check_can_remove(index)
             .await
@@ -2312,6 +2425,121 @@ impl<T: Storage> Logic<T> {
             DataStatusWithId3::BadCrossId3(id) => Err(Cross3IdError::InvalidCrossId3(id)),
             DataStatusWithId3::Ok => {
                 unsafe { self.storage.colloscopes_update_unchecked(index, colloscope) }.await?;
+                Ok(())
+            }
+        }
+    }
+
+    pub async fn slot_selections_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<T::SlotSelectionId, SlotSelection<T::SubjectId, T::TimeSlotId>>,
+        T::InternalError,
+    > {
+        self.storage.slot_selections_get_all().await
+    }
+    pub async fn slot_selections_get(
+        &self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<
+        SlotSelection<T::SubjectId, T::TimeSlotId>,
+        IdError<T::InternalError, T::SlotSelectionId>,
+    > {
+        self.storage.slot_selections_get(index).await
+    }
+    pub async fn slot_selections_check_id(
+        &self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<bool, T::InternalError> {
+        let slot_selections = self.slot_selections_get_all().await?;
+
+        Ok(slot_selections.contains_key(&index))
+    }
+    pub async fn slot_selections_check_data(
+        &self,
+        slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
+    ) -> std::result::Result<DataStatusWithId2<T::SubjectId, T::TimeSlotId>, T::InternalError> {
+        let subjects = self.subjects_get_all().await?;
+        let time_slots = self.time_slots_get_all().await?;
+
+        if !subjects.contains_key(&slot_selection.subject_id) {
+            return Ok(DataStatusWithId2::BadCrossId1(slot_selection.subject_id));
+        }
+
+        for slot_group in &slot_selection.slot_groups {
+            for &time_slot_id in &slot_group.slots {
+                match time_slots.get(&time_slot_id) {
+                    None => return Ok(DataStatusWithId2::BadCrossId2(time_slot_id)),
+                    Some(time_slot) => {
+                        if time_slot.subject_id != slot_selection.subject_id {
+                            return Ok(DataStatusWithId2::BadCrossId2(time_slot_id));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(DataStatusWithId2::Ok)
+    }
+    pub async fn slot_selections_add(
+        &mut self,
+        slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
+    ) -> std::result::Result<
+        T::SlotSelectionId,
+        Cross2Error<T::InternalError, T::SubjectId, T::TimeSlotId>,
+    > {
+        let data_status = self.slot_selections_check_data(slot_selection).await?;
+        match data_status {
+            DataStatusWithId2::BadCrossId1(id) => Err(Cross2Error::InvalidCrossId1(id)),
+            DataStatusWithId2::BadCrossId2(id) => Err(Cross2Error::InvalidCrossId2(id)),
+            DataStatusWithId2::Ok => {
+                let id =
+                    unsafe { self.storage.slot_selections_add_unchecked(slot_selection) }.await?;
+                Ok(id)
+            }
+        }
+    }
+    pub async fn slot_selections_check_can_remove(
+        &self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::SlotSelectionId>> {
+        if !self.slot_selections_check_id(index).await? {
+            return Err(IdError::InvalidId(index));
+        }
+
+        Ok(())
+    }
+    pub async fn slot_selections_remove(
+        &mut self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::SlotSelectionId>> {
+        self.slot_selections_check_can_remove(index).await?;
+
+        unsafe { self.storage.slot_selections_remove_unchecked(index) }.await?;
+        Ok(())
+    }
+    pub async fn slot_selections_update(
+        &mut self,
+        index: T::SlotSelectionId,
+        slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
+    ) -> std::result::Result<
+        (),
+        Cross2IdError<T::InternalError, T::SlotSelectionId, T::SubjectId, T::TimeSlotId>,
+    > {
+        if !self.slot_selections_check_id(index).await? {
+            return Err(Cross2IdError::InvalidId(index));
+        }
+
+        let data_status = self.slot_selections_check_data(slot_selection).await?;
+        match data_status {
+            DataStatusWithId2::BadCrossId1(id) => Err(Cross2IdError::InvalidCrossId1(id)),
+            DataStatusWithId2::BadCrossId2(id) => Err(Cross2IdError::InvalidCrossId2(id)),
+            DataStatusWithId2::Ok => {
+                unsafe {
+                    self.storage
+                        .slot_selections_update_unchecked(index, slot_selection)
+                }
+                .await?;
                 Ok(())
             }
         }
