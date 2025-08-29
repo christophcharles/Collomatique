@@ -37,8 +37,8 @@
 //! // The solution should be complete as it was found by the solver
 //! assert!(solution.is_complete());
 //! // There should be less than one assignment per cell as the constraints are satisfied
-//! for group in 0..1 {
-//!     for week in 0..1 {
+//! for group in 0..2 {
+//!     for week in 0..2 {
 //!         assert!(solution.get_assigned(group, week).unwrap().len() <= 1);
 //!     }
 //! }
