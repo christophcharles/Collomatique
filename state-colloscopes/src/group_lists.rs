@@ -25,12 +25,8 @@ pub struct GroupLists {
 /// Description of a single group list
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList {
-    /// Range of possible count of students per group
-    pub students_per_group: RangeInclusive<NonZeroU32>,
-    /// Range of possible number of groups in the list
-    pub group_count: RangeInclusive<u32>,
-    /// Students set that are not covered by the group list
-    pub excluded_students: BTreeSet<StudentId>,
+    /// parameters for the group list
+    pub params: GroupListParameters,
     /// Prefilled groups
     /// To each student, associate a group number
     /// Group numbers should be in the values allowed by [GroupList::group_count]
@@ -42,13 +38,27 @@ pub struct GroupList {
     pub prefilled_groups: BTreeMap<StudentId, u32>,
 }
 
-impl GroupList {
+/// Parameters for a single group list
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupListParameters {
+    /// Range of possible count of students per group
+    pub students_per_group: RangeInclusive<NonZeroU32>,
+    /// Range of possible number of groups in the list
+    pub group_count: RangeInclusive<u32>,
+    /// Students set that are not covered by the group list
+    pub excluded_students: BTreeSet<StudentId>,
+}
+
+impl GroupListParameters {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
-    /// See [GroupListsExternalData::validate_all] and [GroupListExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: GroupListExternalData) -> GroupList {
-        GroupList {
+    /// See [GroupListsExternalData::validate_all], [GroupListExternalData::validate] and
+    /// [GroupListParametersExternalData::validate].
+    pub(crate) unsafe fn from_external_data(
+        external_data: GroupListParametersExternalData,
+    ) -> GroupListParameters {
+        GroupListParameters {
             students_per_group: external_data.students_per_group,
             group_count: external_data.group_count,
             excluded_students: external_data
@@ -56,6 +66,19 @@ impl GroupList {
                 .into_iter()
                 .map(|x| unsafe { StudentId::new(x) })
                 .collect(),
+        }
+    }
+}
+
+impl GroupList {
+    /// Builds an interrogation slot from external data
+    ///
+    /// No checks is done for consistency so this is unsafe.
+    /// See [GroupListsExternalData::validate_all], [GroupListExternalData::validate] and
+    /// [GroupListParametersExternalData::validate].
+    pub(crate) unsafe fn from_external_data(external_data: GroupListExternalData) -> GroupList {
+        GroupList {
+            params: unsafe { GroupListParameters::from_external_data(external_data.params) },
             prefilled_groups: external_data
                 .prefilled_groups
                 .into_iter()
@@ -69,7 +92,8 @@ impl GroupLists {
     /// Builds interrogation slots from external data
     ///
     /// No checks is done for consistency so this is unsafe.
-    /// See [GroupListsExternalData::validate_all] and [GroupListExternalData::validate]
+    /// See [GroupListsExternalData::validate_all], [GroupListExternalData::validate] and
+    /// [GroupListParametersExternalData::validate].
     pub(crate) unsafe fn from_external_data(external_data: GroupListsExternalData) -> GroupLists {
         GroupLists {
             group_list_map: external_data
@@ -153,12 +177,8 @@ impl GroupListsExternalData {
 /// This should be used when extracting from a file for instance
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupListExternalData {
-    /// Range of possible count of students per group
-    pub students_per_group: RangeInclusive<NonZeroU32>,
-    /// Range of possible number of groups in the list
-    pub group_count: RangeInclusive<u32>,
-    /// Students set that are not covered by the group list
-    pub excluded_students: BTreeSet<u64>,
+    /// Parameters for the group list
+    pub params: GroupListParametersExternalData,
     /// Prefilled groups
     /// To each student, associate a group number
     /// Group numbers should be in the values allowed by [GroupList::group_count]
@@ -170,28 +190,35 @@ pub struct GroupListExternalData {
     pub prefilled_groups: BTreeMap<u64, u32>,
 }
 
+/// Parameters of a single group list but unchecked
+///
+/// This structure is an unchecked equivalent of [GroupListParameters].
+/// The main difference is that there are no garantees for the
+/// validity of the ids.
+///
+/// This should be used when extracting from a file for instance
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupListParametersExternalData {
+    /// Range of possible count of students per group
+    pub students_per_group: RangeInclusive<NonZeroU32>,
+    /// Range of possible number of groups in the list
+    pub group_count: RangeInclusive<u32>,
+    /// Students set that are not covered by the group list
+    pub excluded_students: BTreeSet<u64>,
+}
+
 impl GroupListExternalData {
     /// Checks the validity of a [GroupListExternalData]
     pub fn validate(&self, student_ids: &BTreeSet<u64>) -> bool {
-        if self.students_per_group.is_empty() {
+        if !self.params.validate(student_ids) {
             return false;
         }
-        if self.group_count.is_empty() {
-            return false;
-        }
-        if !self
-            .excluded_students
-            .iter()
-            .all(|x| student_ids.contains(x))
-        {
-            return false;
-        }
-        let max_group = self.group_count.end().clone();
+        let max_group = self.params.group_count.end().clone();
         if !self.prefilled_groups.iter().all(|(id, group_num)| {
             if !student_ids.contains(id) {
                 return false;
             }
-            if self.excluded_students.contains(id) {
+            if self.params.excluded_students.contains(id) {
                 return false;
             }
             if *group_num >= max_group {
@@ -208,17 +235,45 @@ impl GroupListExternalData {
 impl From<GroupList> for GroupListExternalData {
     fn from(value: GroupList) -> Self {
         GroupListExternalData {
+            params: value.params.into(),
+            prefilled_groups: value
+                .prefilled_groups
+                .into_iter()
+                .map(|(id, group)| (id.inner(), group))
+                .collect(),
+        }
+    }
+}
+
+impl GroupListParametersExternalData {
+    /// Checks the validity of a [GroupListExternalData]
+    pub fn validate(&self, student_ids: &BTreeSet<u64>) -> bool {
+        if self.students_per_group.is_empty() {
+            return false;
+        }
+        if self.group_count.is_empty() {
+            return false;
+        }
+        if !self
+            .excluded_students
+            .iter()
+            .all(|x| student_ids.contains(x))
+        {
+            return false;
+        }
+        true
+    }
+}
+
+impl From<GroupListParameters> for GroupListParametersExternalData {
+    fn from(value: GroupListParameters) -> Self {
+        GroupListParametersExternalData {
             students_per_group: value.students_per_group,
             group_count: value.group_count,
             excluded_students: value
                 .excluded_students
                 .into_iter()
                 .map(|x| x.inner())
-                .collect(),
-            prefilled_groups: value
-                .prefilled_groups
-                .into_iter()
-                .map(|(id, group)| (id.inner(), group))
                 .collect(),
         }
     }

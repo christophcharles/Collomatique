@@ -1126,23 +1126,23 @@ impl Data {
         group_list: &group_lists::GroupList,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        if group_list.group_count.is_empty() {
+        if group_list.params.group_count.is_empty() {
             return Err(GroupListError::GroupCountRangeIsEmpty);
         }
-        if group_list.students_per_group.is_empty() {
+        if group_list.params.students_per_group.is_empty() {
             return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
         }
-        for student_id in &group_list.excluded_students {
+        for student_id in &group_list.params.excluded_students {
             if !students.student_map.contains_key(student_id) {
                 return Err(GroupListError::InvalidStudentId(*student_id));
             }
         }
-        let max_group = group_list.group_count.end().clone();
+        let max_group = group_list.params.group_count.end().clone();
         for (student_id, group_num) in &group_list.prefilled_groups {
             if !students.student_map.contains_key(student_id) {
                 return Err(GroupListError::InvalidStudentId(*student_id));
             }
-            if group_list.excluded_students.contains(student_id) {
+            if group_list.params.excluded_students.contains(student_id) {
                 return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
             }
             if *group_num >= max_group {
