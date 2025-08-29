@@ -1,4 +1,5 @@
 pub mod linexpr;
+pub mod optimizers;
 pub mod random;
 pub mod solvers;
 mod tools;
@@ -10,12 +11,12 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct EvalFn {
-    func: Arc<dyn Fn(&Config) -> Option<f64>>,
+    func: Arc<dyn Fn(&FeasableConfig) -> f64>,
     debug_payload: &'static str,
 }
 
 impl EvalFn {
-    pub fn new(func: Arc<dyn Fn(&Config) -> Option<f64>>, debug_payload: &'static str) -> EvalFn {
+    pub fn new(func: Arc<dyn Fn(&FeasableConfig) -> f64>, debug_payload: &'static str) -> EvalFn {
         EvalFn {
             func,
             debug_payload,
@@ -40,8 +41,8 @@ impl std::fmt::Debug for EvalFn {
 }
 
 impl std::ops::Deref for EvalFn {
-    type Target = Arc<dyn Fn(&Config) -> Option<f64>>;
-    fn deref(&self) -> &Arc<dyn Fn(&Config) -> Option<f64>> {
+    type Target = Arc<dyn Fn(&FeasableConfig) -> f64>;
+    fn deref(&self) -> &Arc<dyn Fn(&FeasableConfig) -> f64> {
         &self.func
     }
 }
@@ -122,6 +123,51 @@ impl Problem {
         }
         config
     }
+
+    pub fn random_neighbour<T: random::RandomGen>(
+        &self,
+        config: &Config,
+        random_gen: &mut T,
+    ) -> Config {
+        let mut output = config.clone();
+
+        let variables_vec: Vec<_> = self.variables.iter().collect();
+        let var = random_gen.rand_elem(&variables_vec[..]);
+
+        output.set(var, !config.get(var));
+
+        output
+    }
+
+    fn into_linexpr_config(&self, config: &Config) -> Option<linexpr::Config> {
+        if !config.variables.is_subset(&self.variables) {
+            return None;
+        }
+
+        let mut cfg = linexpr::Config::new();
+
+        for v in &self.variables {
+            cfg.set(v, config.get(v));
+        }
+
+        Some(cfg)
+    }
+
+    pub fn into_feasable<'a, 'b>(&'a self, config: &'b Config) -> Option<FeasableConfig<'a>> {
+        let cfg = self.into_linexpr_config(config)?;
+
+        for c in &self.constraints {
+            let res = c.eval(&cfg)?;
+            if !res {
+                return None;
+            }
+        }
+
+        Some(FeasableConfig {
+            variables: config.variables.clone(),
+            problem: self,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Clone)]
@@ -164,5 +210,72 @@ where
         }
 
         config
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FeasableConfig<'a> {
+    variables: BTreeSet<String>,
+    problem: &'a Problem,
+}
+
+impl<'a> FeasableConfig<'a> {
+    pub fn get<T: Into<String>>(&self, var: T) -> bool {
+        self.variables.contains(&var.into())
+    }
+}
+
+impl<'a> From<&FeasableConfig<'a>> for Config {
+    fn from(value: &FeasableConfig<'a>) -> Self {
+        Config {
+            variables: value.variables.clone(),
+        }
+    }
+}
+
+impl<'a> From<FeasableConfig<'a>> for Config {
+    fn from(value: FeasableConfig<'a>) -> Self {
+        Config::from(&value)
+    }
+}
+
+impl<'a> PartialEq for FeasableConfig<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+
+impl<'a> Eq for FeasableConfig<'a> {}
+
+impl<'a> Ord for FeasableConfig<'a> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let p1: *const Problem = &*self.problem;
+        let p2: *const Problem = &*other.problem;
+
+        let mat_repr_ord = p1.cmp(&p2);
+        if mat_repr_ord != std::cmp::Ordering::Equal {
+            return mat_repr_ord;
+        }
+
+        for v in &self.problem.variables {
+            let v1 = self.get(v);
+            let v2 = other.get(v);
+
+            if v1 != v2 {
+                if v2 {
+                    return std::cmp::Ordering::Less;
+                } else {
+                    return std::cmp::Ordering::Greater;
+                }
+            }
+        }
+
+        return std::cmp::Ordering::Equal;
+    }
+}
+
+impl<'a> PartialOrd for FeasableConfig<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }

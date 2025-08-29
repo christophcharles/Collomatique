@@ -10,7 +10,7 @@ fn main() {
 
     let pb = ProblemBuilder::new()
         .add((&a + &b).leq(&one))
-        .eval_fn(eval_fn!(|x| Some(if x.get("a") { 1.0 } else { -1.0 })))
+        .eval_fn(eval_fn!(|x| if x.get("a") { 1.0 } else { -1.0 }))
         .build();
 
     println!("{}", pb);
