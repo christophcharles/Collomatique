@@ -28,8 +28,14 @@ enum Command {
         command: WeekPatternCommand,
     },
     /// Try and solve the colloscope
-    Solve,
+    Solve {
+        /// Numbers of optimizing steps - default is 1000
+        #[arg(short, long)]
+        steps: Option<usize>,
+    },
 }
+
+const DEFAULT_OPTIMIZING_STEP_COUNT: usize = 1000;
 
 #[derive(Debug, Subcommand)]
 enum GeneralCommand {
@@ -104,18 +110,48 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Stor
     }
 }
 
-async fn solve_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
+async fn solve_command(
+    steps: Option<usize>,
+    app_state: &mut AppState<sqlite::Store>,
+) -> Result<()> {
+    use indicatif::{ProgressBar, ProgressStyle};
+    use std::time::Duration;
+
+    let style =
+        ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} {msg}").unwrap();
+
     let logic = app_state.get_backend_logic();
     let gen_colloscope_translator = logic.gen_colloscope_translator();
     let data = gen_colloscope_translator.build_validated_data().await?;
 
     let ilp_translator = data.ilp_translator();
 
-    println!("Generating ILP problem...");
-    let problem = ilp_translator.problem();
+    let pb = ProgressBar::new_spinner().with_style(style.clone());
+    pb.set_message("Generating ILP problem...");
+    pb.enable_steady_tick(Duration::from_millis(20));
+    //let problem = ilp_translator.problem();
+    let problem = ilp_translator
+        .problem_builder()
+        .eval_fn(collomatique::debuggable!(|x| {
+            if !x
+                .get(&collomatique::gen::colloscope::Variable::GroupInSlot {
+                    subject: 0,
+                    slot: 0,
+                    group: 0,
+                })
+                .unwrap()
+            {
+                100.
+            } else {
+                0.
+            }
+        }))
+        .build();
+    pb.finish();
 
-    println!("{}", problem);
-
+    let pb = ProgressBar::new_spinner().with_style(style.clone());
+    pb.set_message("Building initial guess... (this can take a few minutes)");
+    pb.enable_steady_tick(Duration::from_millis(20));
     let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
         0.01,
@@ -130,20 +166,40 @@ async fn solve_command(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
 
     use collomatique::ilp::initializers::ConfigInitializer;
     let init_config = incremental_initializer.build_init_config(&problem);
-    let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
+    pb.finish();
 
+    let pb = ProgressBar::new_spinner().with_style(style.clone());
+    pb.set_message("Building initial colloscope... (this can take a few minutes)");
+    pb.enable_steady_tick(Duration::from_millis(20));
+    let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
     let mutation_policy =
         collomatique::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
-    let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
+    let mut iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
+    let first_opt = iterator.next();
+    pb.finish();
+    let (_first_sol, first_cost) = match first_opt {
+        Some(value) => value,
+        None => return Err(anyhow!("No solution found, colloscope is unfeasable!\nThis means the constraints are incompatible and no colloscope can be built that follows all of them. Relax some constraints and try again.")),
+    };
 
-    for (i, (sol, cost)) in iterator.enumerate() {
-        eprintln!(
-            "{}: {} - {:?}",
-            i,
-            cost,
-            ilp_translator.read_solution(sol.as_ref())
-        );
+    let step_count = steps.unwrap_or(DEFAULT_OPTIMIZING_STEP_COUNT);
+    if step_count != 0 {
+        let style = ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} Optimizing colloscope... [{bar:25.green}] {pos}/{len} - {wide_msg:!}").unwrap()
+            .progress_chars("=> ");
+        let pb = ProgressBar::new(step_count.try_into().unwrap()).with_style(style);
+        pb.enable_steady_tick(Duration::from_millis(20));
+        pb.set_message(format!(
+            "Cost (current/best): {}/{}",
+            first_cost, first_cost
+        ));
+        let mut min_cost = first_cost;
+        for (_sol, cost) in iterator.take(step_count) {
+            min_cost = if min_cost > cost { cost } else { min_cost };
+            pb.set_message(format!("Cost (current/best): {}/{}", cost, min_cost));
+            pb.inc(1);
+        }
+        pb.finish();
     }
 
     Ok(())
@@ -327,7 +383,7 @@ async fn main() -> Result<()> {
     match args.command {
         Command::General { command } => general_command(command, &mut app_state).await?,
         Command::WeekPatterns { command } => week_pattern_command(command, &mut app_state).await?,
-        Command::Solve => solve_command(&mut app_state).await?,
+        Command::Solve { steps } => solve_command(steps, &mut app_state).await?,
     }
     Ok(())
 }
