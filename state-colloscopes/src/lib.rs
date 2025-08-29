@@ -6,7 +6,7 @@
 
 use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use subjects::{Subjects, SubjectsExternalData};
 
 pub mod ids;
@@ -200,8 +200,83 @@ impl Data {
 }
 
 impl Data {
-    /// Internal function for checks
+    /// USED INTERNALLY
+    ///
+    /// Checks that there are no duplicate ids in data
+    ///
+    /// Even ids for different type of data should be different
+    fn check_no_duplicate_ids(&self) -> bool {
+        let mut ids_so_far = BTreeSet::new();
+
+        for (id, _) in &self.inner_data.periods.ordered_period_list {
+            if !ids_so_far.insert(id.inner()) {
+                return false;
+            }
+        }
+
+        for (id, _) in &self.inner_data.subjects.ordered_period_list {
+            if !ids_so_far.insert(id.inner()) {
+                return false;
+            }
+        }
+
+        for (id, _) in &self.inner_data.student_list {
+            if !ids_so_far.insert(id.inner()) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that all the periods ids used in subjects data are valid
+    fn check_subjects_data_has_correct_period_ids(&self, period_ids: &BTreeSet<PeriodId>) -> bool {
+        for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
+            for period_id in &subject.excluded_periods {
+                if !period_ids.contains(period_id) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in subject data
+    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) -> bool {
+        if !self.check_subjects_data_has_correct_period_ids(period_ids) {
+            return false;
+        }
+        true
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Build the set of PeriodIds
+    ///
+    /// This is useful to check that references are valid
+    fn build_period_ids(&self) -> BTreeSet<PeriodId> {
+        let mut ids = BTreeSet::new();
+        for (id, _) in &self.inner_data.periods.ordered_period_list {
+            ids.insert(*id);
+        }
+        ids
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks all the invariants of data
     fn check_invariants(&self) -> bool {
+        if !self.check_no_duplicate_ids() {
+            return false;
+        }
+        let period_ids = self.build_period_ids();
+        if !self.check_subjects_data_consistency(&period_ids) {
+            return false;
+        }
         true
     }
 }
