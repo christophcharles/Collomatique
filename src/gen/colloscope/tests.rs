@@ -1880,8 +1880,18 @@ fn fixed_group_variables() {
                 slots: vec![
                     SlotStart {
                         week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 0,
                         weekday: time::Weekday::Tuesday,
                         start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
                     },
                     SlotStart {
                         week: 1,
@@ -1895,8 +1905,18 @@ fn fixed_group_variables() {
                 slots: vec![
                     SlotStart {
                         week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 0,
                         weekday: time::Weekday::Tuesday,
                         start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
                     },
                     SlotStart {
                         week: 1,
@@ -1916,12 +1936,38 @@ fn fixed_group_variables() {
                     students: BTreeSet::from([3, 4, 5]),
                     can_be_extended: false,
                 },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
             ],
-            not_assigned: BTreeSet::new(),
+            not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
     }];
     let incompatibilities = vec![];
     let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
         Student {
             incompatibilities: BTreeSet::new(),
         },
@@ -1984,6 +2030,30 @@ fn fixed_group_variables() {
         },
         Variable::FixedGroup {
             subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 0,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 1,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 0,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 1,
+        },
+        Variable::FixedGroup {
+            subject: 0,
             interrogation: 1,
             slot: 0,
             group: 0,
@@ -2004,9 +2074,853 @@ fn fixed_group_variables() {
             subject: 0,
             interrogation: 1,
             slot: 1,
+            group: 1,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 0,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 1,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 0,
+        },
+        Variable::FixedGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
             group: 1,
         },
     ]);
 
     assert_eq!(fixed_group_variables, expected_result);
+}
+
+#[test]
+fn dynamic_group_variables() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![
+            Interrogation {
+                teacher: 0,
+                slots: vec![
+                    SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                ],
+            },
+            Interrogation {
+                teacher: 1,
+                slots: vec![
+                    SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                ],
+            },
+        ],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
+        },
+    }];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let dynamic_group_variables = ilp_translator.build_dynamic_group_variables();
+
+    let expected_result = BTreeSet::from([
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 0,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 1,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 2,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 0,
+            slot: 3,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 0,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 1,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 2,
+            group: 3,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 2,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 2,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 2,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 2,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 2,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 2,
+            student: 11,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 3,
+            student: 6,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 3,
+            student: 7,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 3,
+            student: 8,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 3,
+            student: 9,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 3,
+            student: 10,
+        },
+        Variable::DynamicGroup {
+            subject: 0,
+            interrogation: 1,
+            slot: 3,
+            group: 3,
+            student: 11,
+        },
+    ]);
+
+    assert_eq!(dynamic_group_variables, expected_result);
 }
