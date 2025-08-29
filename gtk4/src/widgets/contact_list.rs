@@ -201,7 +201,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 #[watch]
                 set_label: &self.generate_email_text(),
                 #[watch]
-                set_use_markup: self.data.contact.tel.is_none(),
+                set_use_markup: self.data.contact.email.is_none(),
             },
             gtk::Box {
                 set_hexpand: true,
