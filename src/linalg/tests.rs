@@ -52,3 +52,65 @@ fn expr_mul() {
     let expr2 = Expr::from(0);
     assert_eq!(0*expr1, expr2);
 }
+
+#[test]
+fn expr_reduce() {
+    let expr1 = -2* Expr::from("a") + 3 *  Expr::from("b") - 4 * Expr::from("c") + 1;
+
+    let config = Config {
+        values: BTreeMap::from([
+            ("a".into(), true),
+            ("c".into(), false),
+        ]),
+    };
+
+    let expr2 = 3 * Expr::from("b") - 1;
+
+    assert_eq!(expr1.reduce(&config), expr2);
+}
+
+#[test]
+fn expr_to_value() {
+    let expr1 = -2* Expr::from("a") + 3 *  Expr::from("b") - 4 * Expr::from("c") + 1;
+    let expr2 = Expr::from(42);
+
+    assert_eq!(expr1.to_value(), None);
+    assert_eq!(expr2.to_value(), Some(42));
+}
+
+#[test]
+fn expr_eval() {
+    let expr1 = -2* Expr::from("a") + 3 *  Expr::from("b") - 4 * Expr::from("c") + 1;
+    let expr2 = -2* Expr::from("a") - 4 * Expr::from("c") + 1;
+
+    let config = Config {
+        values: BTreeMap::from([
+            ("a".into(), true),
+            ("c".into(), false),
+        ]),
+    };
+
+    assert_eq!(expr1.eval(&config), None);
+    assert_eq!(expr2.eval(&config), Some(-1));
+}
+
+#[test]
+fn constraint_eval() {
+    let expr1 = -2* Expr::from("a") + 3 *  Expr::from("b") - 4 * Expr::from("c") + 1;
+    let expr2 = -2* Expr::from("a") - 4 * Expr::from("c") + 1;
+
+    let constraint1 = expr1.leq(&0.into());
+    let constraint2 = expr2.eq(&0.into());
+    let constraint3 = expr2.geq(&(-2).into());
+
+    let config = Config {
+        values: BTreeMap::from([
+            ("a".into(), true),
+            ("c".into(), false),
+        ]),
+    };
+
+    assert_eq!(constraint1.eval(&config), None);
+    assert_eq!(constraint2.eval(&config), Some(false));
+    assert_eq!(constraint3.eval(&config), Some(true));
+}

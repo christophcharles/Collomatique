@@ -17,7 +17,11 @@ impl PartialEq for Expr {
 
 impl Eq for Expr {}
 
-#[derive(Debug,Clone,PartialEq,Eq,Default)]
+pub struct Config {
+    values: BTreeMap<String, bool>,
+}
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Default)]
 pub enum Sign {
     Equals,
     #[default]
@@ -63,6 +67,37 @@ impl Expr {
         output.clean();
         output
     }
+
+    pub fn reduce(&self, config: &Config) -> Expr {
+        let mut constant = self.constant;
+        let mut coefs = BTreeMap::new();
+        for (key, coef) in self.coefs.iter() {
+            match config.values.get(key) {
+                Some(val) => if *val {
+                    constant += *coef;
+                },
+                None => {
+                    coefs.insert(key.clone(), *coef);
+                },
+            }
+        }
+        Expr {
+            coefs,
+            constant,
+        }
+    }
+
+    pub fn to_value(&self) -> Option<i32> {
+        if self.cleaned().coefs.is_empty() {
+            Some(self.constant)
+        } else {
+            None
+        }
+    }
+
+    pub fn eval(&self, config: &Config) -> Option<i32> {
+        self.reduce(config).to_value()
+    }
 }
 
 impl Constraint {
@@ -74,6 +109,28 @@ impl Constraint {
         let mut output = self.clone();
         output.clean();
         output
+    }
+
+    pub fn reduce(&self, config: &Config) -> Constraint {
+        Constraint {
+            expr: self.expr.reduce(config),
+            sign: self.sign,
+        }
+    }
+
+    pub fn to_bool(&self) -> Option<bool> {
+        let val = self.expr.to_value()?;
+
+        Some(
+            match self.sign {
+                Sign::Equals => val == 0,
+                Sign::LessThan => val <= 0,
+            }
+        )
+    }
+
+    pub fn eval(&self, config: &Config) -> Option<bool> {
+        self.reduce(config).to_bool()
     }
 }
 
