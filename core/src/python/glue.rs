@@ -34,8 +34,12 @@ pub struct Session {
 }
 
 mod general_planning;
+use general_planning::Period;
 mod subjects;
+use subjects::Subject;
 mod time;
+
+use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId};
 
 #[pymethods]
 impl Session {
@@ -45,10 +49,42 @@ impl Session {
         }
     }
 
-    fn subjects(self_: PyRef<'_, Self>) -> subjects::SessionSubjects {
-        subjects::SessionSubjects {
-            token: self_.token.clone(),
-        }
+    fn subjects_get(self_: PyRef<'_, Self>) -> Vec<subjects::Subject> {
+        self_
+            .token
+            .get_data()
+            .get_subjects()
+            .ordered_subject_list
+            .iter()
+            .map(|(id, data)| Subject {
+                id: MsgSubjectId::from(*id).into(),
+                parameters: data.parameters.clone().into(),
+            })
+            .collect()
+    }
+
+    fn periods_get_first_week(self_: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
+        self_
+            .token
+            .get_data()
+            .get_periods()
+            .first_week
+            .as_ref()
+            .map(|x| x.clone().into())
+    }
+
+    fn periods_get(self_: PyRef<'_, Self>) -> Vec<Period> {
+        self_
+            .token
+            .get_data()
+            .get_periods()
+            .ordered_period_list
+            .iter()
+            .map(|(id, data)| Period {
+                id: MsgPeriodId::from(*id).into(),
+                weeks_status: data.clone(),
+            })
+            .collect()
     }
 }
 
