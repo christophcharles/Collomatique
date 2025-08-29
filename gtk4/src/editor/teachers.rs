@@ -1,5 +1,4 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
-use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
@@ -30,19 +29,18 @@ enum TeacherFilter {
     Subject(collomatique_state_colloscopes::SubjectId),
 }
 
-#[derive(Debug)]
-pub struct ContactInfo {
-    pub id: collomatique_state_colloscopes::TeacherId,
-    pub contact: collomatique_state_colloscopes::PersonWithContact,
-    pub extra: String,
-}
+use crate::widgets::contact_list::ContactInfo;
+
 pub struct Teachers {
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     teachers: collomatique_state_colloscopes::teachers::Teachers,
 
     teacher_modification_reason: TeacherModificationReason,
     current_filter: TeacherFilter,
-    current_list: Vec<ContactInfo>,
+    current_list: Vec<ContactInfo<collomatique_state_colloscopes::TeacherId>>,
+
+    contact_list:
+        Controller<crate::widgets::contact_list::Widget<collomatique_state_colloscopes::TeacherId>>,
 
     filter_dropdown: Controller<crate::widgets::droplist::Widget>,
 }
@@ -100,206 +98,10 @@ impl Component for Teachers {
                         set_use_markup: true,
                     },
                 },
-                gtk::ListBox {
+                #[local_ref]
+                contact_list_widget -> gtk::Box {
                     set_hexpand: true,
                     set_margin_top: 20,
-                    add_css_class: "boxed-list",
-                    set_selection_mode: gtk::SelectionMode::None,
-                    append = &gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        gtk::Button {
-                            set_icon_name: "edit-symbolic",
-                            add_css_class: "flat",
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_xalign: 0.,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_label: "Thomas DURAND",
-                            set_size_request: (150, -1),
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Image {
-                            set_halign: gtk::Align::Start,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_icon_name: Some("contact-symbolic"),
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_margin_end: 5,
-                            set_label: "06 06 06 06 06",
-                            set_size_request: (120, -1),
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Image {
-                            set_halign: gtk::Align::Start,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_icon_name: Some("emblem-mail-symbolic"),
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_xalign: 0.,
-                            set_margin_end: 5,
-                            set_label: "thomas.durand@gmail.com",
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::End,
-                            set_margin_end: 5,
-                            set_label: "Mathématiques, Physique",
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Button {
-                            set_icon_name: "edit-delete",
-                            add_css_class: "flat",
-                        },
-                    },
-                    append = &gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        gtk::Button {
-                            set_icon_name: "edit-symbolic",
-                            add_css_class: "flat",
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_xalign: 0.,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_label: "Érica DUMONT",
-                            set_size_request: (150, -1),
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Image {
-                            set_halign: gtk::Align::Start,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_icon_name: Some("contact-symbolic"),
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_margin_end: 5,
-                            set_label: "07 07 07 07 07",
-                            set_size_request: (120, -1),
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Image {
-                            set_halign: gtk::Align::Start,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_icon_name: Some("emblem-mail-symbolic"),
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_xalign: 0.,
-                            set_margin_end: 5,
-                            set_label: "<i>Non renseigné</i>",
-                            set_use_markup: true,
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::End,
-                            set_margin_end: 5,
-                            set_label: "Espagnol",
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Button {
-                            set_icon_name: "edit-delete",
-                            add_css_class: "flat",
-                        },
-                    },
-                    append = &gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        gtk::Button {
-                            set_icon_name: "edit-symbolic",
-                            add_css_class: "flat",
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_xalign: 0.,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_label: "Gertrude DUPOND",
-                            set_size_request: (150, -1),
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Image {
-                            set_halign: gtk::Align::Start,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_icon_name: Some("contact-symbolic"),
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_margin_end: 5,
-                            set_label: "<i>Non renseigné</i>",
-                            set_use_markup: true,
-                            set_size_request: (120, -1),
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Image {
-                            set_halign: gtk::Align::Start,
-                            set_margin_start: 5,
-                            set_margin_end: 5,
-                            set_icon_name: Some("emblem-mail-symbolic"),
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_xalign: 0.,
-                            set_margin_end: 5,
-                            set_label: "<i>Non renseigné</i>",
-                            set_use_markup: true,
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                        },
-                        gtk::Label {
-                            set_halign: gtk::Align::End,
-                            set_margin_end: 5,
-                            set_label: "Espagnol",
-                        },
-                        gtk::Separator {
-                            set_orientation: gtk::Orientation::Vertical,
-                        },
-                        gtk::Button {
-                            set_icon_name: "edit-delete",
-                            add_css_class: "flat",
-                        },
-                    },
                 },
                 gtk::Button {
                     set_margin_top: 10,
@@ -318,6 +120,9 @@ impl Component for Teachers {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let contact_list = crate::widgets::contact_list::Widget::builder()
+            .launch(())
+            .detach();
         let filter_dropdown = crate::widgets::droplist::Widget::builder()
             .launch(crate::widgets::droplist::WidgetParams {
                 initial_list: vec!["Toutes les matières".into(), "Aucune matière".into()],
@@ -336,8 +141,10 @@ impl Component for Teachers {
             teacher_modification_reason: TeacherModificationReason::New,
             current_filter: TeacherFilter::NoFilter,
             current_list: vec![],
+            contact_list,
             filter_dropdown,
         };
+        let contact_list_widget = model.contact_list.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -446,5 +253,12 @@ impl Teachers {
                 });
             }
         }
+
+        self.contact_list
+            .sender()
+            .send(crate::widgets::contact_list::WidgetInput::UpdateList(
+                self.current_list.clone(),
+            ))
+            .unwrap();
     }
 }
