@@ -945,11 +945,41 @@ async fn main() -> Result<()> {
 
     println!("{}", problem);
 
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
+    /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();*/
 
-    for i in 1.. {
+    let total = 1000usize;
+
+    use rayon::prelude::*;
+    let success_count: usize = (0..total)
+        .into_par_iter()
+        .map(|i| {
+            let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+
+            use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
+            let solver =
+                collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
+            let config = problem.random_config(&mut random_gen);
+
+            use collomatique::ilp::solvers::FeasabilitySolver;
+
+            let max_steps = 1000;
+
+            println!("Trying to solve n°{}...", i);
+            let solution = solver.restore_feasability_with_max_steps(&config, Some(max_steps));
+
+            if solution.is_some() {
+                1
+            } else {
+                0
+            }
+        })
+        .sum();
+
+    println!("\nFinal statistics : {}/{} solved.", success_count, total);
+
+    /*for i in 1.. {
         println!("Attempt n°{}...", i);
 
         sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
@@ -968,7 +998,7 @@ async fn main() -> Result<()> {
                 ilp_translator.read_solution(sol.as_ref())
             );
         }
-    }
+    }*/
 
     Ok(())
 }
