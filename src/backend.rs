@@ -2680,6 +2680,36 @@ impl<T: Storage> Logic<T> {
             })
             .collect::<BackupResult<_, _>>()?;
 
+        let mut grouping_ids = BTreeMap::<T::GroupingId, BackupGroupingId>::new();
+        let groupings: BTreeMap<_, _> = self
+            .groupings_get_all()
+            .await?
+            .into_iter()
+            .map(|(id, x)| {
+                let new_id = get_backup_id(&mut next_id, &mut grouping_ids, id);
+                BackupResult::<_, T::InternalError>::Ok((
+                    new_id,
+                    translate_grouping(x, &time_slot_ids).ok_or(BackupError::InconsistentId)?,
+                ))
+            })
+            .collect::<BackupResult<_, _>>()?;
+
+        let mut grouping_incompat_ids =
+            BTreeMap::<T::GroupingIncompatId, BackupGroupingIncompatId>::new();
+        let grouping_incompats: BTreeMap<_, _> = self
+            .grouping_incompats_get_all()
+            .await?
+            .into_iter()
+            .map(|(id, x)| {
+                let new_id = get_backup_id(&mut next_id, &mut grouping_incompat_ids, id);
+                BackupResult::<_, T::InternalError>::Ok((
+                    new_id,
+                    translate_grouping_incompat(x, &grouping_ids)
+                        .ok_or(BackupError::InconsistentId)?,
+                ))
+            })
+            .collect::<BackupResult<_, _>>()?;
+
         todo!()
     }
 }
@@ -2800,6 +2830,42 @@ fn translate_time_slot<T: OrdId, U: OrdId, V: OrdId>(
         week_pattern_id: week_pattern_ids.get(&time_slot.week_pattern_id).cloned()?,
         room: time_slot.room,
         cost: time_slot.cost,
+    })
+}
+
+fn translate_grouping<T: OrdId>(
+    grouping: Grouping<T>,
+    time_slot_ids: &BTreeMap<T, BackupTimeSlotId>,
+) -> Option<Grouping<BackupTimeSlotId>> {
+    Some(Grouping {
+        name: grouping.name,
+        slots: grouping
+            .slots
+            .into_iter()
+            .map(|time_slot_id| {
+                let new_time_slot_id = time_slot_ids.get(&time_slot_id).cloned()?;
+
+                Some(new_time_slot_id)
+            })
+            .collect::<Option<_>>()?,
+    })
+}
+
+fn translate_grouping_incompat<T: OrdId>(
+    grouping_incompat: GroupingIncompat<T>,
+    grouping_ids: &BTreeMap<T, BackupGroupingId>,
+) -> Option<GroupingIncompat<BackupGroupingId>> {
+    Some(GroupingIncompat {
+        max_count: grouping_incompat.max_count,
+        groupings: grouping_incompat
+            .groupings
+            .into_iter()
+            .map(|grouping_id| {
+                let new_grouping_id = grouping_ids.get(&grouping_id).cloned()?;
+
+                Some(new_grouping_id)
+            })
+            .collect::<Option<_>>()?,
     })
 }
 
