@@ -23,6 +23,8 @@ pub enum Message {
         std::sync::Arc<dyn Fn(bool) -> GuiMessage + Send + Sync>,
     ),
     AlertDialogClosed(bool),
+    ErrorDialog(String, String),
+    ErrorDialogClosed,
 }
 
 impl std::fmt::Debug for Message {
@@ -42,6 +44,12 @@ impl std::fmt::Debug for Message {
             Message::AlertDialogClosed(result) => {
                 write!(f, "Message::AlertDialogClose({:?})", result)
             }
+            Message::ErrorDialog(title, txt) => {
+                write!(f, "Message::ErrorDialog({:?}, {:?})", title, txt)
+            }
+            Message::ErrorDialogClosed => {
+                write!(f, "Message::ErrorDialogClosed")
+            }
         }
     }
 }
@@ -54,6 +62,7 @@ pub enum DialogShown {
         String,
         std::sync::Arc<dyn Fn(bool) -> GuiMessage + Send + Sync>,
     ),
+    Error(String, String),
 }
 
 impl std::fmt::Debug for DialogShown {
@@ -62,6 +71,9 @@ impl std::fmt::Debug for DialogShown {
             DialogShown::FileChooser(_msg) => write!(f, "DialogShown::FileChooser(Fn)"),
             DialogShown::Alert(title, txt, _msg) => {
                 write!(f, "DialogShown::Alert({:?}, {:?}, Fn)", title, txt)
+            }
+            DialogShown::Error(title, txt) => {
+                write!(f, "DialogShown::Error({:?}, {:?})", title, txt)
             }
         }
     }
@@ -113,6 +125,24 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             *state = dialog_state.previous_state.as_ref().clone();
             Task::done(msg(result))
         }
+        Message::ErrorDialog(title, txt) => {
+            *state = GuiState::DialogShown(State {
+                previous_state: Box::new(state.clone()),
+                dialog_shown: DialogShown::Error(title, txt),
+            });
+            Task::none()
+        }
+        Message::ErrorDialogClosed => {
+            let GuiState::DialogShown(dialog_state) = state else {
+                panic!("Dialog message but not in dialog state");
+            };
+            let DialogShown::Error(_title, _txt) = dialog_state.dialog_shown.clone() else {
+                panic!("Error dialog message but not in error dialog state");
+            };
+
+            *state = dialog_state.previous_state.as_ref().clone();
+            Task::none()
+        }
     }
 }
 
@@ -161,6 +191,32 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                             .on_press(Message::AlertDialogClosed(false).into()),
                     ]
                     .spacing(2)
+                ]
+                .spacing(2),
+            )
+            .style(container::rounded_box)
+            .width(400)
+            .padding(5)
+            .into()
+        }
+        DialogShown::Error(title, txt) => {
+            let mut bold_font = iced::Font::default();
+            bold_font.weight = iced::font::Weight::Bold;
+
+            container(
+                column![
+                    container(text(title).style(text::danger).font(bold_font))
+                        .center_x(Length::Fill)
+                        .padding(5)
+                        .style(container::bordered_box),
+                    container(text(txt))
+                        .center_x(Length::Fill)
+                        .center_y(200)
+                        .padding(5),
+                    button(container("OK").center_x(Length::Fill))
+                        .style(button::danger)
+                        .width(Length::Fill)
+                        .on_press(Message::ErrorDialogClosed.into()),
                 ]
                 .spacing(2),
             )

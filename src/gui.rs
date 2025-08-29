@@ -63,7 +63,13 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
                 *state = GuiState::Editor(editor_state);
                 Task::none()
             }
-            Err(_e) => Task::none(),
+            Err(e) => Task::done(
+                dialogs::Message::ErrorDialog(
+                    "Erreur à l'ouverture du fichier".into(),
+                    e.to_string(),
+                )
+                .into(),
+            ),
         },
         GuiMessage::OpenExistingFile => Task::done(
             dialogs::Message::FileChooserDialog(
