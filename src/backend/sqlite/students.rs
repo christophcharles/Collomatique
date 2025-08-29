@@ -60,10 +60,21 @@ pub async fn add(pool: &SqlitePool, student: &Student) -> Result<Id> {
     Ok(student_id)
 }
 
-pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), Error> {
     let student_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        "DELETE FROM student_incompats WHERE student_id = ?",
+        index.0,
+    )
+    .execute(pool)
+    .await?;
+
+    let _ = sqlx::query!("DELETE FROM student_subjects WHERE student_id = ?", index.0,)
+        .execute(pool)
+        .await?;
 
     let count = sqlx::query!("DELETE FROM students WHERE student_id = ?", student_id)
         .execute(&mut *conn)
@@ -72,12 +83,10 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
         .rows_affected();
 
     if count > 1 {
-        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "Multiple students with id {:?}",
             index
-        ))));
-    } else if count == 0 {
-        return Err(IdError::InvalidId(index));
+        )));
     }
 
     Ok(())

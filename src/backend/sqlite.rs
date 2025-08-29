@@ -507,9 +507,8 @@ impl Storage for Store {
     unsafe fn students_remove_unchecked(
         &mut self,
         index: Self::StudentId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         students::remove(&self.pool, index)
     }
     fn students_update(
