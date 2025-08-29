@@ -45,24 +45,37 @@ fn test_astar() {
 
     let pb = ProblemBuilder::new()
         .add_variables(["x11", "x12", "x21", "x22"])
+        .unwrap()
         .add_variables(["y11", "y12", "y21", "y22"])
+        .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
+        .unwrap()
         .add_constraint((&x12 + &y12).leq(&one))
+        .unwrap()
         .add_constraint((&x21 + &y21).leq(&one))
+        .unwrap()
         .add_constraint((&x22 + &y22).leq(&one))
+        .unwrap()
         // Each class should not attend more than one course at a given time
         .add_constraint((&x11 + &x21).leq(&one))
+        .unwrap()
         .add_constraint((&x12 + &x22).leq(&one))
+        .unwrap()
         .add_constraint((&y11 + &y21).leq(&one))
+        .unwrap()
         .add_constraint((&y12 + &y22).leq(&one))
+        .unwrap()
         // Each class must complete each course exactly once
         .add_constraint((&x11 + &x12).eq(&one))
+        .unwrap()
         .add_constraint((&x21 + &x22).eq(&one))
+        .unwrap()
         .add_constraint((&y11 + &y12).eq(&one))
+        .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
-        .build()
-        .unwrap();
+        .unwrap()
+        .build();
     let config = pb.config_from(["x11", "y12", "y21"]).unwrap();
 
     let solver = super::Solver::new();

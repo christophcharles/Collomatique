@@ -439,6 +439,12 @@ pub enum Variable {
     UseGrouping(usize),
 }
 
+impl<'a> From<&'a Variable> for Variable {
+    fn from(value: &'a Variable) -> Self {
+        value.clone()
+    }
+}
+
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1653,32 +1659,52 @@ impl<'a> IlpTranslator<'a> {
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_dynamic_group_assignment_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_student_in_group_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_periodicity_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_student_not_in_last_period_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
+            .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_one_interrogation_per_period_contraints())
+            .expect("Variables should be declared")
             .add_constraints(
                 self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints(),
             )
+            .expect("Variables should be declared")
             .add_constraints(self.build_students_per_group_count_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_student_in_single_group_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_dynamic_groups_group_in_slot_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_periodicity_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_interrogations_per_week_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_grouping_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_grouping_incompats_constraints())
+            .expect("Variables should be declared")
             .add_constraints(self.build_students_incompats_constraints())
+            .expect("Variables should be declared")
     }
 
     pub fn problem(&self) -> Problem<Variable> {
         self.problem_builder()
+            .simplify_trivial_constraints()
             .build()
-            .expect("Automatically built problem should be valid")
     }
 }

@@ -4,8 +4,8 @@ use super::*;
 fn test_config_from_iterator() {
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["x", "y", "z", "t"])
-        .build()
-        .unwrap();
+        .unwrap()
+        .build();
 
     let config = pb.config_from(["x", "y", "z"]).unwrap();
 
@@ -24,8 +24,8 @@ fn test_config_from_iterator() {
 fn invalid_variable_in_config() {
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["x", "y", "z", "t"])
-        .build()
-        .unwrap();
+        .unwrap()
+        .build();
 
     let config = pb.config_from(["x", "y", "w"]);
 
@@ -46,14 +46,20 @@ fn test_is_feasable() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variable("a")
+        .unwrap()
         .add_variable("b")
+        .unwrap()
         .add_variable("c")
+        .unwrap()
         .add_variable("d")
+        .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
+        .unwrap()
         .add_constraint((&c + &d).leq(&Expr::constant(1)))
+        .unwrap()
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
-        .build()
-        .unwrap();
+        .unwrap()
+        .build();
 
     let config_0 = pb.default_config();
     let config_1 = pb.config_from(["a"]).unwrap();
@@ -94,8 +100,8 @@ fn test_is_feasable() {
 fn test_is_feasable_no_constraint() {
     let pb: Problem<String> = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b"])
-        .build()
-        .unwrap();
+        .unwrap()
+        .build();
 
     let config_0 = pb.default_config();
     let config_1 = pb.config_from(["a"]).unwrap();
@@ -110,7 +116,7 @@ fn test_is_feasable_no_constraint() {
 
 #[test]
 fn problem_extra_variable() {
-    let pb = ProblemBuilder::new().add_variable("X").build().unwrap();
+    let pb = ProblemBuilder::new().add_variable("X").unwrap().build();
 
     assert_eq!(pb.variables, BTreeSet::from([String::from("X")]));
 }
@@ -119,10 +125,12 @@ fn problem_extra_variable() {
 fn problem_extra_variables() {
     let pb = ProblemBuilder::new()
         .add_variable("X")
+        .unwrap()
         .add_variable("Y")
+        .unwrap()
         .add_variables(["Z", "W"])
-        .build()
-        .unwrap();
+        .unwrap()
+        .build();
 
     assert_eq!(
         pb.variables,
@@ -139,14 +147,14 @@ fn problem_extra_variables() {
 fn problem_undeclared_variable() {
     use crate::ilp::linexpr::Expr;
 
-    let pb = ProblemBuilder::new()
+    let res = ProblemBuilder::new()
         .add_variable("X")
-        .add_constraint((Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)))
-        .build();
+        .unwrap()
+        .add_constraint((Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)));
 
     assert_eq!(
-        pb.err(),
-        Some(Error::UndeclaredVariable(0, String::from("Y")))
+        res.err(),
+        Some(ConstraintError::UndeclaredVariable(String::from("Y")))
     );
 }
 
