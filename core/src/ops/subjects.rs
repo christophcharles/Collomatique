@@ -139,15 +139,47 @@ impl SubjectsUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateSubject(subject_id, params) => {
-                let excluded_periods = data
+                let current_subject = data
                     .get_data()
                     .get_subjects()
                     .find_subject(*subject_id)
-                    .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?
-                    .excluded_periods
-                    .clone();
+                    .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?;
 
-                let result = data
+                let excluded_periods = current_subject.excluded_periods.clone();
+
+                let previously_had_interrogations = current_subject
+                    .parameters
+                    .interrogation_parameters
+                    .is_some();
+
+                let no_more_interrogations = params.interrogation_parameters.is_none();
+
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                if previously_had_interrogations && no_more_interrogations {
+                    for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
+                        if teacher.subjects.contains(subject_id) {
+                            let mut new_teacher = teacher.clone();
+                            new_teacher.subjects.remove(subject_id);
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Teacher(
+                                        collomatique_state_colloscopes::TeacherOp::Update(
+                                            *teacher_id,
+                                            new_teacher,
+                                        ),
+                                    ),
+                                    "Enlever une référence à la matière à mettre à jour".into(),
+                                )
+                                .expect("All data should be valid at this point");
+                            if result.is_some() {
+                                panic!("Unexpected result! {:?}", result);
+                            }
+                        }
+                    }
+                }
+
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Update(
@@ -158,7 +190,7 @@ impl SubjectsUpdateOp {
                                 }
                             )
                         ),
-                        self.get_desc()
+                        "Mise à jour effective de la matière".into(),
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
                         match se {
                             collomatique_state_colloscopes::SubjectError::InvalidSubjectId(_id) => panic!("Subject ID should be valid at this point"),
@@ -172,6 +204,8 @@ impl SubjectsUpdateOp {
                     })?;
 
                 assert!(result.is_none());
+
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
