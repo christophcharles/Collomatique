@@ -38,11 +38,9 @@ pub struct GenColloscopeTranslator {
 }
 
 impl GenColloscopeTranslator {
-    pub async fn new<T: Manager>(
-        manager: &mut T,
-    ) -> GenColloscopeResult<GenColloscopeTranslator, T> {
+    pub fn new<T: Manager>(manager: &mut T) -> GenColloscopeResult<GenColloscopeTranslator, T> {
         Ok(GenColloscopeTranslator {
-            data_cache: GenColloscopeTranslator::build_data_cache(manager).await?,
+            data_cache: GenColloscopeTranslator::build_data_cache(manager)?,
         })
     }
 }
@@ -108,9 +106,7 @@ struct GenColloscopeData {
 }
 
 impl GenColloscopeTranslator {
-    async fn extract_data<T: Manager>(
-        manager: &mut T,
-    ) -> GenColloscopeResult<GenColloscopeData, T> {
+    fn extract_data<T: Manager>(manager: &mut T) -> GenColloscopeResult<GenColloscopeData, T> {
         let incompats = manager.incompats_get_all()?;
         let students = manager.students_get_all()?;
 
@@ -870,11 +866,11 @@ impl GenColloscopeTranslator {
 }
 
 impl GenColloscopeTranslator {
-    async fn build_data_cache<T: Manager>(
+    fn build_data_cache<T: Manager>(
         manager: &mut T,
     ) -> GenColloscopeResult<GenColloscopeCache<StudentHandle, SubjectHandle, TeacherHandle>, T>
     {
-        let data = Self::extract_data(manager).await?;
+        let data = Self::extract_data(manager)?;
 
         let general = Self::build_general_data(&data);
         let incompatibility_data = Self::build_incompatibility_data(&data, general.week_count);
