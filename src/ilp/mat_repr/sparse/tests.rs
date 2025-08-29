@@ -1,9 +1,9 @@
 use super::*;
 #[test]
-fn nd_problem_definition() {
+fn sprs_problem_definition() {
     use crate::ilp::linexpr::Expr;
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String, SprsProblem<_>>::new()
         .add_variables(["a", "b", "c", "d", "e"])
         .unwrap()
         .add_constraint(
@@ -23,16 +23,32 @@ fn nd_problem_definition() {
         .unwrap()
         .build();
 
-    use ndarray::array;
+    let mut trimat = sprs::TriMat::new((2, 5));
+    trimat.add_triplet(0, 0, -3);
+    trimat.add_triplet(0, 1, 1);
+    trimat.add_triplet(0, 2, 3);
+    trimat.add_triplet(0, 3, 5);
+
+    trimat.add_triplet(1, 1, -3);
+    trimat.add_triplet(1, 2, 4);
+    trimat.add_triplet(1, 3, 5);
 
     assert_eq!(
         pb.pb_repr.leq_mat,
-        array![[-3, 1, 3, 5, 0], [0, -3, 4, 5, 0]] // We must follow lexicographical order because of BTreeSet
+        trimat.to_csr() // We must follow lexicographical order because of BTreeSet
     );
-    assert_eq!(pb.pb_repr.eq_mat, array![[0, 0, 1, -3, 5]]);
 
-    assert_eq!(pb.pb_repr.leq_constants, array![3, -3]);
-    assert_eq!(pb.pb_repr.eq_constants, array![2]);
+    let mut trimat = sprs::TriMat::new((1, 5));
+    trimat.add_triplet(0, 2, 1);
+    trimat.add_triplet(0, 3, -3);
+    trimat.add_triplet(0, 4, 5);
+    assert_eq!(pb.pb_repr.eq_mat, trimat.to_csr());
+
+    let expected = CsVec::new(2, vec![0, 1], vec![3, -3]);
+    assert_eq!(pb.pb_repr.leq_constants, expected);
+
+    let expected = CsVec::new(1, vec![0], vec![2]);
+    assert_eq!(pb.pb_repr.eq_constants, expected);
 }
 
 #[test]
@@ -44,7 +60,7 @@ fn test_is_feasable() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String, SprsProblem<_>>::new()
         .add_variables(["a", "b", "c", "d"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -72,32 +88,32 @@ fn test_is_feasable() {
     let config_e = pb.config_from(["b", "c", "d"]).unwrap();
     let config_f = pb.config_from(["a", "b", "c", "d"]).unwrap();
 
-    let nd_problem = &pb.pb_repr;
+    let sprs_problem = &pb.pb_repr;
 
     use crate::ilp::mat_repr::ConfigRepr;
-    assert_eq!(config_0.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_1.cfg_repr.is_feasable(nd_problem), true);
-    assert_eq!(config_2.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_3.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_4.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_5.cfg_repr.is_feasable(nd_problem), true);
-    assert_eq!(config_6.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_7.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_8.cfg_repr.is_feasable(nd_problem), true);
-    assert_eq!(config_9.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_a.cfg_repr.is_feasable(nd_problem), true);
-    assert_eq!(config_b.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_c.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_d.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_e.cfg_repr.is_feasable(nd_problem), false);
-    assert_eq!(config_f.cfg_repr.is_feasable(nd_problem), false);
+    assert_eq!(config_0.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_1.cfg_repr.is_feasable(sprs_problem), true);
+    assert_eq!(config_2.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_3.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_4.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_5.cfg_repr.is_feasable(sprs_problem), true);
+    assert_eq!(config_6.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_7.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_8.cfg_repr.is_feasable(sprs_problem), true);
+    assert_eq!(config_9.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_a.cfg_repr.is_feasable(sprs_problem), true);
+    assert_eq!(config_b.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_c.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_d.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_e.cfg_repr.is_feasable(sprs_problem), false);
+    assert_eq!(config_f.cfg_repr.is_feasable(sprs_problem), false);
 }
 
 #[test]
 fn test_is_feasable_no_constraint() {
     use crate::ilp::Problem;
 
-    let pb: Problem<String, NdProblem<_>> = crate::ilp::ProblemBuilder::new()
+    let pb: Problem<String, SprsProblem<_>> = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b"])
         .unwrap()
         .build();
@@ -123,7 +139,7 @@ fn test_neighbours() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String, SprsProblem<_>>::new()
         .add_variables(["a", "b", "c", "d"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -136,40 +152,40 @@ fn test_neighbours() {
 
     let config = pb.config_from(["a", "b"]).unwrap();
 
-    let nd_config = config.cfg_repr.clone();
+    let sprs_config = config.cfg_repr.clone();
 
     use crate::ilp::mat_repr::ConfigRepr;
     use std::collections::BTreeSet;
-    let neighbours = nd_config
+    let neighbours = sprs_config
         .neighbours()
         .into_iter()
-        .collect::<BTreeSet<NdConfig<String>>>();
+        .collect::<BTreeSet<SprsConfig<String>>>();
 
     let config_0 = pb.config_from(["b"]).unwrap();
     let config_1 = pb.config_from(["a"]).unwrap();
     let config_2 = pb.config_from(["a", "b", "c"]).unwrap();
     let config_3 = pb.config_from(["a", "b", "d"]).unwrap();
 
-    let nd_config_0 = config_0.cfg_repr.clone();
-    let nd_config_1 = config_1.cfg_repr.clone();
-    let nd_config_2 = config_2.cfg_repr.clone();
-    let nd_config_3 = config_3.cfg_repr.clone();
+    let sprs_config_0 = config_0.cfg_repr.clone();
+    let sprs_config_1 = config_1.cfg_repr.clone();
+    let sprs_config_2 = config_2.cfg_repr.clone();
+    let sprs_config_3 = config_3.cfg_repr.clone();
 
     let neighbours_expected =
-        BTreeSet::from_iter([nd_config_0, nd_config_1, nd_config_2, nd_config_3]);
+        BTreeSet::from_iter([sprs_config_0, sprs_config_1, sprs_config_2, sprs_config_3]);
 
     assert_eq!(neighbours, neighbours_expected);
 }
 
 #[test]
-fn nd_config_ord() {
+fn sprs_config_ord() {
     use crate::ilp::linexpr::Expr;
 
     let a = Expr::<String>::var("a");
     let b = Expr::<String>::var("b");
     let c = Expr::<String>::var("c");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String, SprsProblem<_>>::new()
         .add_variables(["a", "b", "c"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -187,58 +203,58 @@ fn nd_config_ord() {
     let config_6 = pb.config_from(["b", "c"]).unwrap();
     let config_7 = pb.config_from(["a", "b", "c"]).unwrap();
 
-    let nd_config_0 = config_0.cfg_repr.clone();
-    let nd_config_1 = config_1.cfg_repr.clone();
-    let nd_config_2 = config_2.cfg_repr.clone();
-    let nd_config_3 = config_3.cfg_repr.clone();
-    let nd_config_4 = config_4.cfg_repr.clone();
-    let nd_config_5 = config_5.cfg_repr.clone();
-    let nd_config_6 = config_6.cfg_repr.clone();
-    let nd_config_7 = config_7.cfg_repr.clone();
+    let sprs_config_0 = config_0.cfg_repr.clone();
+    let sprs_config_1 = config_1.cfg_repr.clone();
+    let sprs_config_2 = config_2.cfg_repr.clone();
+    let sprs_config_3 = config_3.cfg_repr.clone();
+    let sprs_config_4 = config_4.cfg_repr.clone();
+    let sprs_config_5 = config_5.cfg_repr.clone();
+    let sprs_config_6 = config_6.cfg_repr.clone();
+    let sprs_config_7 = config_7.cfg_repr.clone();
 
-    assert_eq!(nd_config_0.cmp(&nd_config_0), std::cmp::Ordering::Equal);
-    assert!(nd_config_0 < nd_config_1);
-    assert!(nd_config_0 < nd_config_2);
-    assert!(nd_config_0 < nd_config_3);
-    assert!(nd_config_0 < nd_config_4);
-    assert!(nd_config_0 < nd_config_5);
-    assert!(nd_config_0 < nd_config_6);
-    assert!(nd_config_0 < nd_config_7);
+    assert_eq!(sprs_config_0.cmp(&sprs_config_0), std::cmp::Ordering::Equal);
+    assert!(sprs_config_0 < sprs_config_1);
+    assert!(sprs_config_0 < sprs_config_2);
+    assert!(sprs_config_0 < sprs_config_3);
+    assert!(sprs_config_0 < sprs_config_4);
+    assert!(sprs_config_0 < sprs_config_5);
+    assert!(sprs_config_0 < sprs_config_6);
+    assert!(sprs_config_0 < sprs_config_7);
 
-    assert_eq!(nd_config_1.cmp(&nd_config_1), std::cmp::Ordering::Equal);
-    assert!(nd_config_1 > nd_config_2);
-    assert!(nd_config_1 < nd_config_3);
-    assert!(nd_config_1 > nd_config_4);
-    assert!(nd_config_1 < nd_config_5);
-    assert!(nd_config_1 > nd_config_6);
-    assert!(nd_config_1 < nd_config_7);
+    assert_eq!(sprs_config_1.cmp(&sprs_config_1), std::cmp::Ordering::Equal);
+    assert!(sprs_config_1 > sprs_config_2);
+    assert!(sprs_config_1 < sprs_config_3);
+    assert!(sprs_config_1 > sprs_config_4);
+    assert!(sprs_config_1 < sprs_config_5);
+    assert!(sprs_config_1 > sprs_config_6);
+    assert!(sprs_config_1 < sprs_config_7);
 
-    assert_eq!(nd_config_2.cmp(&nd_config_2), std::cmp::Ordering::Equal);
-    assert!(nd_config_2 < nd_config_3);
-    assert!(nd_config_2 > nd_config_4);
-    assert!(nd_config_2 < nd_config_5);
-    assert!(nd_config_2 < nd_config_6);
-    assert!(nd_config_2 < nd_config_7);
+    assert_eq!(sprs_config_2.cmp(&sprs_config_2), std::cmp::Ordering::Equal);
+    assert!(sprs_config_2 < sprs_config_3);
+    assert!(sprs_config_2 > sprs_config_4);
+    assert!(sprs_config_2 < sprs_config_5);
+    assert!(sprs_config_2 < sprs_config_6);
+    assert!(sprs_config_2 < sprs_config_7);
 
-    assert_eq!(nd_config_3.cmp(&nd_config_3), std::cmp::Ordering::Equal);
-    assert!(nd_config_3 > nd_config_4);
-    assert!(nd_config_3 > nd_config_5);
-    assert!(nd_config_3 > nd_config_6);
-    assert!(nd_config_3 < nd_config_7);
+    assert_eq!(sprs_config_3.cmp(&sprs_config_3), std::cmp::Ordering::Equal);
+    assert!(sprs_config_3 > sprs_config_4);
+    assert!(sprs_config_3 > sprs_config_5);
+    assert!(sprs_config_3 > sprs_config_6);
+    assert!(sprs_config_3 < sprs_config_7);
 
-    assert_eq!(nd_config_4.cmp(&nd_config_4), std::cmp::Ordering::Equal);
-    assert!(nd_config_4 < nd_config_5);
-    assert!(nd_config_4 < nd_config_6);
-    assert!(nd_config_4 < nd_config_7);
+    assert_eq!(sprs_config_4.cmp(&sprs_config_4), std::cmp::Ordering::Equal);
+    assert!(sprs_config_4 < sprs_config_5);
+    assert!(sprs_config_4 < sprs_config_6);
+    assert!(sprs_config_4 < sprs_config_7);
 
-    assert_eq!(nd_config_5.cmp(&nd_config_5), std::cmp::Ordering::Equal);
-    assert!(nd_config_5 > nd_config_6);
-    assert!(nd_config_5 < nd_config_7);
+    assert_eq!(sprs_config_5.cmp(&sprs_config_5), std::cmp::Ordering::Equal);
+    assert!(sprs_config_5 > sprs_config_6);
+    assert!(sprs_config_5 < sprs_config_7);
 
-    assert_eq!(nd_config_6.cmp(&nd_config_6), std::cmp::Ordering::Equal);
-    assert!(nd_config_6 < nd_config_7);
+    assert_eq!(sprs_config_6.cmp(&sprs_config_6), std::cmp::Ordering::Equal);
+    assert!(sprs_config_6 < sprs_config_7);
 
-    assert_eq!(nd_config_7.cmp(&nd_config_7), std::cmp::Ordering::Equal);
+    assert_eq!(sprs_config_7.cmp(&sprs_config_7), std::cmp::Ordering::Equal);
 }
 
 #[test]
@@ -250,7 +266,7 @@ fn compute_lhs() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
+    let pb = crate::ilp::ProblemBuilder::<String, SprsProblem<_>>::new()
         .add_variables(["a", "b", "c", "d"])
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
@@ -278,19 +294,20 @@ fn compute_lhs() {
     let config_e = pb.config_from(["b", "c", "d"]).unwrap();
     let config_f = pb.config_from(["a", "b", "c", "d"]).unwrap();
 
-    let nd_problem = &pb.pb_repr;
+    let sprs_problem = &pb.pb_repr;
 
     use crate::ilp::mat_repr::ConfigRepr;
     assert_eq!(
-        config_0.cfg_repr.compute_lhs(nd_problem),
+        config_0.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), -1),
             ((&c + &d).leq(&Expr::constant(1)), -1),
             ((&a + &d).eq(&Expr::constant(1)), -1),
         ])
     );
+    println!("{:?}", config_1.cfg_repr);
     assert_eq!(
-        config_1.cfg_repr.compute_lhs(nd_problem),
+        config_1.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), -1),
@@ -298,7 +315,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_2.cfg_repr.compute_lhs(nd_problem),
+        config_2.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), -1),
@@ -306,7 +323,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_3.cfg_repr.compute_lhs(nd_problem),
+        config_3.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 1),
             ((&c + &d).leq(&Expr::constant(1)), -1),
@@ -314,7 +331,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_4.cfg_repr.compute_lhs(nd_problem),
+        config_4.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), -1),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -322,7 +339,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_5.cfg_repr.compute_lhs(nd_problem),
+        config_5.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -330,7 +347,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_6.cfg_repr.compute_lhs(nd_problem),
+        config_6.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -338,7 +355,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_7.cfg_repr.compute_lhs(nd_problem),
+        config_7.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 1),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -346,7 +363,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_8.cfg_repr.compute_lhs(nd_problem),
+        config_8.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), -1),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -354,7 +371,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_9.cfg_repr.compute_lhs(nd_problem),
+        config_9.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -362,7 +379,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_a.cfg_repr.compute_lhs(nd_problem),
+        config_a.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -370,7 +387,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_b.cfg_repr.compute_lhs(nd_problem),
+        config_b.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 1),
             ((&c + &d).leq(&Expr::constant(1)), 0),
@@ -378,7 +395,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_c.cfg_repr.compute_lhs(nd_problem),
+        config_c.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), -1),
             ((&c + &d).leq(&Expr::constant(1)), 1),
@@ -386,7 +403,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_d.cfg_repr.compute_lhs(nd_problem),
+        config_d.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), 1),
@@ -394,7 +411,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_e.cfg_repr.compute_lhs(nd_problem),
+        config_e.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 0),
             ((&c + &d).leq(&Expr::constant(1)), 1),
@@ -402,7 +419,7 @@ fn compute_lhs() {
         ])
     );
     assert_eq!(
-        config_f.cfg_repr.compute_lhs(nd_problem),
+        config_f.cfg_repr.compute_lhs(sprs_problem),
         BTreeMap::from([
             ((&a + &b).leq(&Expr::constant(1)), 1),
             ((&c + &d).leq(&Expr::constant(1)), 1),
