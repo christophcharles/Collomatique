@@ -310,6 +310,7 @@ impl Store {
 use super::*;
 
 mod group_lists;
+mod grouping_incompats;
 mod groupings;
 mod incompats;
 mod students;
@@ -328,7 +329,8 @@ impl Storage for Store {
     type GroupListId = group_lists::Id;
     type SubjectId = subjects::Id;
     type TimeSlotId = time_slots::Id;
-    type GroupingsId = groupings::Id;
+    type GroupingId = groupings::Id;
+    type GroupingIncompatId = grouping_incompats::Id;
 
     type InternalError = Error;
 
@@ -809,11 +811,11 @@ impl Storage for Store {
 
     fn groupings_get(
         &self,
-        index: Self::GroupingsId,
+        index: Self::GroupingId,
     ) -> impl core::future::Future<
         Output = std::result::Result<
             Grouping<Self::TimeSlotId>,
-            IdError<Self::InternalError, Self::GroupingsId>,
+            IdError<Self::InternalError, Self::GroupingId>,
         >,
     > + Send {
         groupings::get(&self.pool, index)
@@ -822,7 +824,7 @@ impl Storage for Store {
         &self,
     ) -> impl core::future::Future<
         Output = std::result::Result<
-            BTreeMap<Self::GroupingsId, Grouping<Self::TimeSlotId>>,
+            BTreeMap<Self::GroupingId, Grouping<Self::TimeSlotId>>,
             Self::InternalError,
         >,
     > + Send {
@@ -833,7 +835,7 @@ impl Storage for Store {
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
-            Self::GroupingsId,
+            Self::GroupingId,
             CrossError<Self::InternalError, Self::TimeSlotId>,
         >,
     > + Send {
@@ -841,22 +843,75 @@ impl Storage for Store {
     }
     fn groupings_remove(
         &self,
-        index: Self::GroupingsId,
+        index: Self::GroupingId,
     ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingsId>>,
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingId>>,
     > + Send {
         groupings::remove(&self.pool, index)
     }
     fn groupings_update(
         &self,
-        index: Self::GroupingsId,
+        index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
             (),
-            CrossIdError<Self::InternalError, Self::GroupingsId, Self::TimeSlotId>,
+            CrossIdError<Self::InternalError, Self::GroupingId, Self::TimeSlotId>,
         >,
     > + Send {
         groupings::update(&self.pool, index, grouping)
+    }
+
+    fn grouping_incompats_get(
+        &self,
+        index: Self::GroupingIncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            GroupingIncompat<Self::GroupingId>,
+            IdError<Self::InternalError, Self::GroupingIncompatId>,
+        >,
+    > + Send {
+        grouping_incompats::get(&self.pool, index)
+    }
+    fn grouping_incompats_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::GroupingIncompatId, GroupingIncompat<Self::GroupingId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        grouping_incompats::get_all(&self.pool)
+    }
+    fn grouping_incompats_add(
+        &self,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Self::GroupingIncompatId,
+            CrossError<Self::InternalError, Self::GroupingId>,
+        >,
+    > + Send {
+        grouping_incompats::add(&self.pool, grouping_incompat)
+    }
+    fn grouping_incompats_remove(
+        &self,
+        index: Self::GroupingIncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>>,
+    > + Send {
+        grouping_incompats::remove(&self.pool, index)
+    }
+    fn grouping_incompats_update(
+        &self,
+        index: Self::GroupingIncompatId,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            CrossIdError<Self::InternalError, Self::GroupingIncompatId, Self::GroupingId>,
+        >,
+    > + Send {
+        grouping_incompats::update(&self.pool, index, grouping_incompat)
     }
 }
