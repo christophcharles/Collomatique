@@ -14,12 +14,46 @@ pub enum Panel {
 }
 
 #[derive(Debug, Clone)]
+struct AppStateBox {
+    state: std::sync::Arc<
+        std::sync::RwLock<
+            Option<collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>>,
+        >,
+    >,
+}
+
+impl AppStateBox {
+    fn read_lock(
+        &self,
+    ) -> std::sync::RwLockReadGuard<
+        '_,
+        Option<collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>>,
+    > {
+        self.state.read().unwrap()
+    }
+
+    fn extract(
+        &mut self,
+    ) -> Option<collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>> {
+        let mut lock = self.state.write().unwrap();
+
+        lock.take()
+    }
+
+    fn new(
+        value: collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>,
+    ) -> Self {
+        AppStateBox {
+            state: std::sync::Arc::new(std::sync::RwLock::new(Some(value))),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct State {
     panel: Panel,
     db: std::path::PathBuf,
-    app_state: std::sync::Arc<
-        collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>,
-    >,
+    app_state: AppStateBox,
 }
 
 #[derive(Debug, Error, Clone)]
@@ -111,16 +145,27 @@ impl State {
         Ok(Self {
             panel: Panel::SubjectGroups,
             db: file,
-            app_state: std::sync::Arc::new(app_state),
+            app_state: AppStateBox::new(app_state),
         })
     }
 }
+
+type UndoErr = collomatique::frontend::state::UndoError<
+    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::InternalError,
+>;
+type RedoErr = collomatique::frontend::state::RedoError<
+    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::InternalError,
+>;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     PanelChanged(Panel),
     NewClicked,
     OpenClicked,
+    UndoClicked,
+    UndoProcessed(std::sync::Arc<Result<(), UndoErr>>),
+    RedoClicked,
+    RedoProcessed(std::sync::Arc<Result<(), RedoErr>>),
     CloseClicked,
     ExitRequest(window::Id),
     ExitValidated(window::Id),
@@ -164,6 +209,64 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             )
             .into(),
         ),
+        Message::UndoClicked => {
+            /*let GuiState::Editor(editor_state) = state else {
+                panic!("Received editor message while not in editor state");
+            };
+
+            let app_state_ref = editor_state.app_state.clone();
+
+            Task::perform(
+                async move {
+                    use collomatique::frontend::state::Manager;
+                    let res = app_state_ref.write().unwrap().undo().await;
+                    std::sync::Arc::new(res)
+                },
+                |x| Message::UndoProcessed(x).into()
+            )*/
+            Task::none()
+        }
+        Message::UndoProcessed(result) => {
+            use collomatique::frontend::state::UndoError;
+            match &*result {
+                Ok(_) => Task::none(),
+                Err(e) => match e {
+                    UndoError::HistoryDepleted => panic!("History depleted for undo but it was still possible to click the undo button"),
+                    UndoError::InternalError(int_err) => Task::done(
+                        super::dialogs::Message::ErrorDialog("Erreur dans la base de donnée".into(), int_err.to_string()).into()
+                    )
+                }
+            }
+        }
+        Message::RedoClicked => {
+            /*let GuiState::Editor(editor_state) = state else {
+                panic!("Received editor message while not in editor state");
+            };
+
+            let app_state_ref = editor_state.app_state.clone();
+            Task::perform(
+                async move {
+                    use collomatique::frontend::state::Manager;
+                    let lock = app_state_ref.write().expect("Should lock successfully");
+                    let res = lock.redo().await;
+                    std::sync::Arc::new(res)
+                },
+                |x| Message::RedoProcessed(x).into()
+            )*/
+            Task::none()
+        }
+        Message::RedoProcessed(result) => {
+            use collomatique::frontend::state::RedoError;
+            match &*result {
+                Ok(_) => Task::none(),
+                Err(e) => match e {
+                    RedoError::HistoryFullyRewounded => panic!("History fully rewounded for redo but it was still possible to click the redo button"),
+                    RedoError::InternalError(int_err) => Task::done(
+                        super::dialogs::Message::ErrorDialog("Erreur dans la base de donnée".into(), int_err.to_string()).into()
+                    )
+                }
+            }
+        }
         Message::CloseClicked => Task::done(
             super::dialogs::Message::YesNoAlertDialog(
                 "Fermer le colloscope ?".into(),
@@ -213,6 +316,11 @@ fn icon_button<'a>(
 }
 
 pub fn view(state: &State) -> Element<GuiMessage> {
+    let app_state_lock = state.app_state.read_lock();
+    let Some(app_state) = &*app_state_lock else {
+        return center(text("Chargement...")).into();
+    };
+
     row![
         column![
             icon_button(
@@ -235,8 +343,22 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 None
             ),
             Space::with_height(20),
-            icon_button(tools::Icon::Undo, button::primary, "Annuler", None),
-            icon_button(tools::Icon::Redo, button::primary, "Rétablir", None),
+            icon_button(tools::Icon::Undo, button::primary, "Annuler", {
+                use collomatique::frontend::state::Manager;
+                if app_state.can_undo() {
+                    Some(Message::UndoClicked.into())
+                } else {
+                    None
+                }
+            }),
+            icon_button(tools::Icon::Redo, button::primary, "Rétablir", {
+                use collomatique::frontend::state::Manager;
+                if app_state.can_redo() {
+                    Some(Message::RedoClicked.into())
+                } else {
+                    None
+                }
+            }),
             Space::with_height(Length::Fill),
             icon_button(
                 tools::Icon::Close,
