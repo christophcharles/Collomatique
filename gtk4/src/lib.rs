@@ -292,6 +292,15 @@ impl SimpleComponent for AppModel {
                     .unwrap();
             }
             AppInput::LoadColloscope(path) => {
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile {
+                        file_name: None,
+                        data: collomatique_state_colloscopes::Data::new(),
+                        dirty: false,
+                    })
+                    .unwrap();
                 self.state = GlobalState::LoadingScreen;
                 self.controllers
                     .loading
