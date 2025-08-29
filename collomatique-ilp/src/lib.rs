@@ -263,14 +263,18 @@ impl<
 /// Further constraints can be imposed with [Variable::min] and [Variable::max].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Variable {
-    is_integer: bool,
+    integer_var: bool,
     min: Option<ordered_float::OrderedFloat<f64>>,
     max: Option<ordered_float::OrderedFloat<f64>>,
 }
 
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let var_type = if self.is_integer { "int" } else { "continuous" };
+        let var_type = if self.integer_var {
+            "int"
+        } else {
+            "continuous"
+        };
 
         match (self.min, self.max) {
             (Some(mi), Some(ma)) => {
@@ -294,7 +298,7 @@ impl Default for Variable {
     /// By default, a variable is continuous without any range restriction.
     fn default() -> Self {
         Variable {
-            is_integer: false,
+            integer_var: false,
             min: None,
             max: None,
         }
@@ -308,13 +312,13 @@ impl Variable {
     /// [Variable::min] and [Variable::max].
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let var_desc = Variable::integer();
-    /// assert_eq!(var_desc.get_type(), VariableType::Integer);
+    /// assert_eq!(var_desc.is_integer(), true);
     /// ```
     pub fn integer() -> Self {
         Variable {
-            is_integer: true,
+            integer_var: true,
             min: None,
             max: None,
         }
@@ -329,13 +333,13 @@ impl Variable {
     /// So this functions is just a helper function.
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let var_desc = Variable::binary();
     /// assert_eq!(var_desc, Variable::integer().min(0.0).max(1.0));
     /// ```
     pub fn binary() -> Self {
         Variable {
-            is_integer: true,
+            integer_var: true,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: Some(ordered_float::OrderedFloat(1.0)),
         }
@@ -349,13 +353,13 @@ impl Variable {
     /// So this functions is just a helper function.
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let var_desc = Variable::uinteger();
     /// assert_eq!(var_desc, Variable::integer().min(0.0));
     /// ```
     pub fn uinteger() -> Self {
         Variable {
-            is_integer: true,
+            integer_var: true,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: None,
         }
@@ -367,13 +371,13 @@ impl Variable {
     /// [Variable::min] and [Variable::max].
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let var_desc = Variable::continuous();
-    /// assert_eq!(var_desc.get_type(), VariableType::Continuous);
+    /// assert_eq!(var_desc.is_integer(), false);
     /// ```
     pub fn continuous() -> Self {
         Variable {
-            is_integer: false,
+            integer_var: false,
             min: None,
             max: None,
         }
@@ -385,13 +389,13 @@ impl Variable {
     /// and then [Variable::min].
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let var_desc = Variable::non_negative();
     /// assert_eq!(var_desc, Variable::continuous().min(0.0));
     /// ```
     pub fn non_negative() -> Self {
         Variable {
-            is_integer: false,
+            integer_var: false,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: None,
         }
@@ -403,13 +407,13 @@ impl Variable {
     /// and then [Variable::max].
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let var_desc = Variable::non_positive();
     /// assert_eq!(var_desc, Variable::continuous().max(0.0));
     /// ```
     pub fn non_positive() -> Self {
         Variable {
-            is_integer: false,
+            integer_var: false,
             min: None,
             max: Some(ordered_float::OrderedFloat(0.0)),
         }
@@ -465,18 +469,20 @@ impl Variable {
         self
     }
 
-    /// Returns the type of the variable
+    /// Returns whether the variable is an integer.
+    ///
+    /// Non-integer variables are continuous.
     ///
     /// ```
-    /// # use collomatique_ilp::{Variable, VariableType};
+    /// # use collomatique_ilp::Variable;
     /// let continuous_var = Variable::continuous();
     /// let integer_var = Variable::integer();
     ///
-    /// assert_eq!(continuous_var.get_type(), VariableType::Continuous);
-    /// assert_eq!(integer_var.get_type(), VariableType::Integer);
+    /// assert_eq!(continuous_var.is_integer(), false);
+    /// assert_eq!(integer_var.is_integer(), true);
     /// ```
     pub fn is_integer(&self) -> bool {
-        self.is_integer
+        self.integer_var
     }
 
     /// Returns the minimum bound of the variable.
@@ -710,7 +716,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// If the variable is already declared, its description is simply overwritten.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable};
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variable("A", Variable::binary())
     ///     .build()
@@ -718,7 +724,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// let variables = problem.get_variables();
     /// assert_eq!(variables.len(), 1);
-    /// assert_eq!(variables["A"].get_type(), VariableType::Integer);
+    /// assert_eq!(variables["A"].is_integer(), true);
     /// assert_eq!(variables["A"].get_min(), Some(0.0));
     /// assert_eq!(variables["A"].get_max(), Some(1.0));
     /// ```
@@ -735,7 +741,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// If a variable is already declared, its description is simply overwritten.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable};
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variables([
     ///         ("A", Variable::binary()),
@@ -746,10 +752,10 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// let variables = problem.get_variables();
     /// assert_eq!(variables.len(), 2);
-    /// assert_eq!(variables["A"].get_type(), VariableType::Integer);
+    /// assert_eq!(variables["A"].is_integer(), true);
     /// assert_eq!(variables["A"].get_min(), Some(0.0));
     /// assert_eq!(variables["A"].get_max(), Some(1.0));
-    /// assert_eq!(variables["B"].get_type(), VariableType::Integer);
+    /// assert_eq!(variables["B"].is_integer(), true);
     /// assert_eq!(variables["B"].get_min(), Some(0.0));
     /// assert_eq!(variables["B"].get_max(), None);
     /// ```
@@ -769,7 +775,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// used to add constraints. It takes a constraint (represented with [linexpr::Constraint])
     /// and a description of this constraint (with the generic type C).
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr};
     /// let a = LinExpr::var("A");
     /// let b = LinExpr::var("B");
     ///
@@ -802,7 +808,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// and descriptions of these constraint (with the generic type C).
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr};
     /// let a = LinExpr::var("A");
     /// let b = LinExpr::var("B");
     /// let c = LinExpr::var("C");
@@ -856,7 +862,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// Be careful, all variables must be declared.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr, ObjectiveSense};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
@@ -919,7 +925,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// If some variable is not declared, it returns an error.
     /// ```should_panic
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr, ObjectiveSense};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
@@ -935,7 +941,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// Otherwise, it returns the constructed problem.
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr, ObjectiveSense};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
