@@ -6,7 +6,7 @@ use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
 use relm4::FactorySender;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
@@ -229,7 +229,7 @@ impl PeriodEntry {
                             })
                             .collect(),
                         sender: sender.clone(),
-                        handler_id: None,
+                        handler_ids: BTreeMap::new(),
                     }),
             );
     }
@@ -242,7 +242,7 @@ struct StudentItem {
     firstname: String,
     assigned_subjects: BTreeSet<collomatique_state_colloscopes::SubjectId>,
     sender: FactorySender<PeriodEntry>,
-    handler_id: Option<SignalHandlerId>,
+    handler_ids: BTreeMap<collomatique_state_colloscopes::SubjectId, SignalHandlerId>,
 }
 
 #[derive(Debug, Clone)]
@@ -316,16 +316,19 @@ impl RelmColumn for SubjectColumn {
         let sender = item.sender.clone();
         let student_id = item.student_id;
         let subject_id = self.subject_id;
-        item.handler_id = Some(root.connect_active_notify(move |widget| {
-            let status = widget.is_active();
-            sender.input(PeriodEntryInput::UpdateStatus(
-                student_id, subject_id, status,
-            ));
-        }));
+        item.handler_ids.insert(
+            subject_id.clone(),
+            root.connect_active_notify(move |widget| {
+                let status = widget.is_active();
+                sender.input(PeriodEntryInput::UpdateStatus(
+                    student_id, subject_id, status,
+                ));
+            }),
+        );
     }
 
     fn unbind(&self, item: &mut Self::Item, _widgets: &mut Self::Widgets, root: &mut Self::Root) {
-        if let Some(id) = item.handler_id.take() {
+        if let Some(id) = item.handler_ids.remove(&self.subject_id) {
             root.disconnect(id);
         }
     }
