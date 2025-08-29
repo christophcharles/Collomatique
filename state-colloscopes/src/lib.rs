@@ -781,6 +781,16 @@ impl Data {
         None
     }
 
+    /// Promotes an u64 to a [RuleId] if it is valid
+    pub fn validate_rule_id(&self, id: u64) -> Option<RuleId> {
+        let temp_rule_id = unsafe { RuleId::new(id) };
+        if self.inner_data.rules.rule_map.contains_key(&temp_rule_id) {
+            return Some(temp_rule_id);
+        }
+
+        None
+    }
+
     /// Promotes a [teachers::TeacherExternalData] to a [teachers::Teacher] if it is valid
     pub fn promote_teacher(
         &self,
@@ -931,6 +941,33 @@ impl Data {
 
         Ok(new_prefilled_groups)
     }
+
+    /// Promotes a [rules::LogicRuleExternalData] to a [rules::LogicRule] if it is valid
+    pub fn promote_logic_rule(
+        &self,
+        logic_rule: rules::LogicRuleExternalData,
+    ) -> Result<rules::LogicRule, PromoteLogicRuleError> {
+        use rules::{LogicRule, LogicRuleExternalData};
+        let new_logic_rule = match logic_rule {
+            LogicRuleExternalData::And(l1, l2) => LogicRule::And(
+                Box::new(self.promote_logic_rule(*l1)?),
+                Box::new(self.promote_logic_rule(*l2)?),
+            ),
+            LogicRuleExternalData::Or(l1, l2) => LogicRule::Or(
+                Box::new(self.promote_logic_rule(*l1)?),
+                Box::new(self.promote_logic_rule(*l2)?),
+            ),
+            LogicRuleExternalData::Not(l) => LogicRule::Not(Box::new(self.promote_logic_rule(*l)?)),
+            LogicRuleExternalData::Variable(id) => {
+                let Some(slot_id) = self.validate_slot_id(id) else {
+                    return Err(PromoteLogicRuleError::InvalidSlotId(id));
+                };
+
+                LogicRule::Variable(slot_id)
+            }
+        };
+        Ok(new_logic_rule)
+    }
 }
 
 /// Error type for [Data::promote_slot]
@@ -963,6 +1000,13 @@ pub enum PromoteGroupListParametersError {
 pub enum PromoteGroupListPrefilledGroupsError {
     #[error("Student id {0:?} is invalid")]
     InvalidStudentId(u64),
+}
+
+/// Error type for [Data::promote_logic_rule]
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum PromoteLogicRuleError {
+    #[error("Slot id {0:?} is invalid")]
+    InvalidSlotId(u64),
 }
 
 impl Data {

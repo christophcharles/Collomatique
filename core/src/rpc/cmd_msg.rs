@@ -22,6 +22,8 @@ pub mod incompatibilities;
 pub use incompatibilities::*;
 pub mod group_lists;
 pub use group_lists::*;
+pub mod rules;
+pub use rules::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
@@ -46,6 +48,7 @@ pub enum UpdateMsg {
     Slots(SlotsCmdMsg),
     Incompats(IncompatibilitiesCmdMsg),
     GroupLists(GroupListsCmdMsg),
+    Rules(RulesCmdMsg),
 }
 
 impl UpdateMsg {
@@ -65,6 +68,7 @@ impl UpdateMsg {
             UpdateMsg::Slots(op) => crate::ops::UpdateOp::Slots(op.promote(data)?),
             UpdateMsg::Incompats(op) => crate::ops::UpdateOp::Incompatibilities(op.promote(data)?),
             UpdateMsg::GroupLists(op) => crate::ops::UpdateOp::GroupLists(op.promote(data)?),
+            UpdateMsg::Rules(op) => crate::ops::UpdateOp::Rules(op.promote(data)?),
         })
     }
 }
