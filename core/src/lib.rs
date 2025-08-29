@@ -8,5 +8,6 @@
 //! interface code.
 //!
 
+pub mod ops;
 pub mod python;
 pub mod rpc;

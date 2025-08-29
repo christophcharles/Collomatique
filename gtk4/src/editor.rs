@@ -1,6 +1,5 @@
 use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
-use general_planning::GeneralPlanningUpdateOp;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use relm4::prelude::{ComponentController, RelmWidgetExt};
 use relm4::{adw, gtk};
@@ -31,15 +30,10 @@ pub enum EditorInput {
     SaveClicked,
     UndoClicked,
     RedoClicked,
-    UpdateOp(EditorUpdateOp),
+    UpdateOp(collomatique_core::ops::UpdateOp),
     RunScriptClicked,
     RunScript(PathBuf, String),
     NewStateFromScript(AppState<Data>),
-}
-
-#[derive(Debug)]
-pub enum EditorUpdateOp {
-    GeneralPlanning(GeneralPlanningUpdateOp),
 }
 
 #[derive(Debug)]
@@ -334,7 +328,7 @@ impl Component for EditorPanel {
         let general_planning = general_planning::GeneralPlanning::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(EditorUpdateOp::GeneralPlanning(op))
+                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::GeneralPlanning(op))
             });
 
         let check_script_dialog = check_script::Dialog::builder()
@@ -474,7 +468,7 @@ impl Component for EditorPanel {
             }
             EditorInput::UpdateOp(op) => {
                 match op {
-                    EditorUpdateOp::GeneralPlanning(period_op) => {
+                    collomatique_core::ops::UpdateOp::GeneralPlanning(period_op) => {
                         period_op
                             .apply(&mut self.data)
                             .expect("Operation should be valid");

@@ -347,6 +347,9 @@ name = "collomatique-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-time",
  "pyo3",
  "serde",
  "serde_json",
