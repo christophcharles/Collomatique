@@ -54,6 +54,9 @@
 pub mod linexpr;
 pub mod mat_repr;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
@@ -961,6 +964,12 @@ pub struct ConfigData<V: UsableData> {
     values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
 }
 
+impl<V: UsableData> Default for ConfigData<V> {
+    fn default() -> Self {
+        ConfigData { values: BTreeMap::default() }
+    }
+}
+
 impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>> From<T>
     for ConfigData<V>
 {
@@ -976,6 +985,11 @@ impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>> Fr
 }
 
 impl<V: UsableData> ConfigData<V> {
+    /// Creates an empty [ConfigData] with (initially) no variables at all
+    pub fn new() -> Self {
+        ConfigData::default()
+    }
+
     /// Sets a variable in the configuration to a specific value.
     ///
     /// If the variable does not exist in the configuration yet, it is
@@ -1125,6 +1139,28 @@ impl<'a, V: UsableData, C: UsableData> Config<'a, V, C> {
     /// Returns the [Problem] this [Config] is associated to.
     pub fn get_problem(&self) -> &Problem<V, C> {
         self.problem
+    }
+
+    /// Returns the variables in the configuration
+    ///
+    /// This returns an iterator on the variables in the configuration.
+    /// Only the names are given.
+    ///
+    /// If you also want the values, you should use [Config::get_values].
+    pub fn get_variables(&self) -> impl Iterator<Item = &V> {
+        self.values.keys()
+    }
+
+    /// Returns the variables and their values in the configuration
+    ///
+    /// This returns a map associating each name to a value.
+    ///
+    /// If you only want the variable names, you should use [Config::get_variables].
+    pub fn get_values(&self) -> BTreeMap<V, f64> {
+        self.values
+            .iter()
+            .map(|(x, y)| (x.clone(), y.into_inner()))
+            .collect()
     }
 
     /// Returns the value of the variable `name`.
