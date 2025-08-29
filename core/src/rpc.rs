@@ -47,6 +47,7 @@ impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
 pub enum NewId {
     PeriodId(cmd_msg::MsgPeriodId),
     StudentId(cmd_msg::MsgStudentId),
+    SubjectId(cmd_msg::MsgSubjectId),
 }
 
 impl From<collomatique_state_colloscopes::NewId> for NewId {
@@ -54,6 +55,7 @@ impl From<collomatique_state_colloscopes::NewId> for NewId {
         match value {
             collomatique_state_colloscopes::NewId::PeriodId(id) => NewId::PeriodId(id.into()),
             collomatique_state_colloscopes::NewId::StudentId(id) => NewId::StudentId(id.into()),
+            collomatique_state_colloscopes::NewId::SubjectId(id) => NewId::SubjectId(id.into()),
         }
     }
 }
