@@ -473,6 +473,192 @@ impl<V: UsableData> LinExpr<V> {
         Ok(reduced.get_constant())
     }
 
+    /// Returns the minimum possible value of an expression from a list of variable ranges.
+    ///
+    /// This will return the minimum possible value for the expression given a range
+    /// of possible values for each variable. This is the absolutely worst case scenario.
+    /// If some variable has no range given, it is assumed the variable can take any value.
+    ///
+    /// The range for each variable is described by [super::Variable].
+    ///
+    /// If there is no minimum, then -infinity is returned. This means that arbitrarily low values
+    /// are possible.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::binary()),
+    /// ]);
+    /// let minimum_expected = -45.0; // Here all variables have a range so we can actually find a bound
+    /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    /// ]);
+    /// let minimum_expected = -f64::INFINITY; // Because no range is given to B, there is no lower bound
+    /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::non_negative()),
+    /// ]);
+    /// let minimum_expected = -f64::INFINITY; // Because B is not bounded from above, there is no lower bound for the linear expr
+    /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::non_positive()),
+    /// ]);
+    /// let minimum_expected = -42.0; // But if B is bounded from above, there is a lower bound for the linear expr
+    /// assert_eq!(expr.compute_minimum(&ranges), minimum_expected);
+    /// ```
+    pub fn compute_minimum(&self, vars: &BTreeMap<V, super::Variable>) -> f64 {
+        *self.compute_range(vars).start()
+    }
+
+    /// Returns the maximum possible value of an expression from a list of variable ranges.
+    ///
+    /// This will return the maximum possible value for the expression given a range
+    /// of possible values for each variable. This is the absolutely worst case scenario.
+    /// If some variable has no range given, it is assumed the variable can take any value.
+    ///
+    /// The range for each variable is described by [super::Variable].
+    ///
+    /// If there is no maximum, then +infinity is returned. This means that arbitrarily high values
+    /// are possible.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::binary()),
+    /// ]);
+    /// let maximum_expected = -40.0; // Here all variables have a range so we can actually find a bound
+    /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    /// ]);
+    /// let maximum_expected = f64::INFINITY; // Because no range is given to B, there is no upper bound
+    /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::non_negative()),
+    /// ]);
+    /// let maximum_expected = -40.0; // If B is bounded from below, there is an upper bound for the linear expr
+    /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::non_positive()),
+    /// ]);
+    /// let maximum_expected = f64::INFINITY; // But if B is not bounded from below, there is no upper bound for the linear expr
+    /// assert_eq!(expr.compute_maximum(&ranges), maximum_expected);
+    /// ```
+    pub fn compute_maximum(&self, vars: &BTreeMap<V, super::Variable>) -> f64 {
+        *self.compute_range(vars).end()
+    }
+
+    /// Returns the range of possible values of an expression from a list of variable ranges.
+    ///
+    /// This will return the range of possible values for the expression given a range
+    /// of possible values for each variable. This is the absolutely worst case scenario.
+    /// If some variable has no range given, it is assumed the variable can take any value.
+    ///
+    /// The range for each variable is described by [super::Variable].
+    ///
+    /// If there is no minimum, then -infinity is given for the lower bound. This means that arbitrarily low values
+    /// are possible.
+    /// If there is no maximum, then +infinity is given for the upper bound. This means that arbitrarily high values
+    /// are possible.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::binary()),
+    /// ]);
+    /// assert_eq!(expr.compute_range(&ranges), -45.0..=-40.0);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    /// ]);
+    /// assert_eq!(expr.compute_range(&ranges), -f64::INFINITY..=f64::INFINITY);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::non_negative()),
+    /// ]);
+    /// assert_eq!(expr.compute_range(&ranges), -f64::INFINITY..=-40.0);
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::non_positive()),
+    /// ]);
+    /// assert_eq!(expr.compute_range(&ranges), -42.0..=f64::INFINITY);
+    /// ```
+    pub fn compute_range(
+        &self,
+        vars: &BTreeMap<V, super::Variable>,
+    ) -> std::ops::RangeInclusive<f64> {
+        let mut minimum = self.constant.0;
+        let mut maximum = self.constant.0;
+
+        for (var, coef) in &self.coefs {
+            let var_def = vars.get(var);
+            let var_range = match var_def {
+                Some(def) => {
+                    let min_value = def.get_min().unwrap_or(-f64::INFINITY);
+                    let max_value = def.get_max().unwrap_or(f64::INFINITY);
+
+                    min_value..=max_value
+                }
+                None => -f64::INFINITY..=f64::INFINITY,
+            };
+
+            // Ignore variables that have coefficient 0
+            if f64_is_zero(coef.0) {
+                continue;
+            }
+
+            if coef.0 > 0.0 {
+                minimum += coef.0 * var_range.start();
+                maximum += coef.0 * var_range.end();
+            } else {
+                minimum += coef.0 * var_range.end();
+                maximum += coef.0 * var_range.start();
+            }
+        }
+
+        minimum..=maximum
+    }
+
     /// Transmute variables
     ///
     /// This method creates a new [LinExpr] with a different
@@ -984,6 +1170,85 @@ impl<V: UsableData> Constraint<V> {
         let mut output = self.clone();
         output.clean();
         output
+    }
+
+    /// Reduce a constraint by replacing part or all
+    /// of its variables by values.
+    ///
+    /// This function takes a list of values for some variables
+    /// and substitute these values into the constraint.
+    /// The result is a new constraint (which might be trivial).
+    /// This can be understood as a partial evaluation of the constraint.
+    ///
+    /// The list of variables can contain variables that do not appear in
+    /// the constraint. It can also omit variables that do appear since
+    /// the evaluation is only partial. As such, this function can't fail.
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    /// let constraint = expr.leq(&LinExpr::constant(0.0));
+    ///
+    /// let constraint_reduced = constraint.reduce(&BTreeMap::from([
+    ///     (String::from("A"), -1.0),
+    ///     (String::from("C"), 2.0),
+    /// ]));
+    ///
+    /// let constraint_expected = (-3.0*&expr2 - 44.0).leq(&LinExpr::constant(0.0));
+    /// assert_eq!(constraint_reduced, constraint_expected);
+    /// ```
+    pub fn reduce(&self, vars: &BTreeMap<V, f64>) -> Constraint<V> {
+        let new_expr = self.expr.reduce(vars);
+
+        Constraint {
+            expr: new_expr,
+            symbol: self.symbol,
+        }
+    }
+
+    /// Checks if the constraint is still possible to satisfy
+    /// given ranges of possible values for each variable.
+    ///
+    /// This will return `true` if it is still possible for the constraint to be
+    /// satisfied given the ranges. This is based on a range evaluation (using [LinExpr::compute_range]) of
+    /// the possible values for the linear expression in the constraint.
+    /// If some variable has no range given, it is assumed the variable can take any value.
+    ///
+    /// The range for each variable is described by [super::Variable].
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Variable};
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    ///
+    /// let constraint1 = (2.0*&expr1 - 3.0*&expr2).leq(&LinExpr::constant(0.0));
+    /// let constraint2 = (2.0*&expr1 - 3.0*&expr2).leq(&LinExpr::constant(-4.0));
+    ///
+    /// let ranges = BTreeMap::from([
+    ///     (String::from("A"), Variable::binary()),
+    ///     (String::from("B"), Variable::binary()),
+    /// ]);
+    /// assert_eq!(constraint1.range_check(&ranges), true); // It is possible to satisfy constraint1 with binary variable
+    /// assert_eq!(constraint2.range_check(&ranges), false); // No binary variable will ever satisfy constraint2 (because the lhs >= -3.0).
+    /// ```
+    pub fn range_check(&self, vars: &BTreeMap<V, super::Variable>) -> bool {
+        match self.symbol {
+            EqSymbol::Equals => {
+                let possible_range = self.expr.compute_range(vars);
+                possible_range.contains(&0.0)
+            }
+            EqSymbol::LessThan => {
+                let minimum = self.expr.compute_minimum(vars);
+                minimum <= 0.0
+            }
+        }
     }
 
     /// Transmute variables
