@@ -112,8 +112,8 @@ async fn simple_test(pool: sqlx::SqlitePool) {
                         },
                         room: "1".to_string(),
                         group_assignments: BTreeMap::from([
-                            (Week::new(0), vec![0]),
-                            (Week::new(1), vec![1]),
+                            (Week::new(0), BTreeSet::from([0])),
+                            (Week::new(1), BTreeSet::from([1])),
                         ]),
                     },
                     ColloscopeTimeSlot {
@@ -124,8 +124,8 @@ async fn simple_test(pool: sqlx::SqlitePool) {
                         },
                         room: "2".to_string(),
                         group_assignments: BTreeMap::from([
-                            (Week::new(0), vec![2]),
-                            (Week::new(1), vec![3]),
+                            (Week::new(0), BTreeSet::from([2])),
+                            (Week::new(1), BTreeSet::from([3])),
                         ]),
                     },
                 ]),
@@ -170,8 +170,8 @@ async fn simple_test(pool: sqlx::SqlitePool) {
                         },
                         room: "3".to_string(),
                         group_assignments: BTreeMap::from([
-                            (Week::new(0), vec![0]),
-                            (Week::new(1), vec![1]),
+                            (Week::new(0), BTreeSet::from([0])),
+                            (Week::new(1), BTreeSet::from([1])),
                         ]),
                     },
                     ColloscopeTimeSlot {
@@ -182,8 +182,8 @@ async fn simple_test(pool: sqlx::SqlitePool) {
                         },
                         room: "3".to_string(),
                         group_assignments: BTreeMap::from([
-                            (Week::new(0), vec![2]),
-                            (Week::new(1), vec![3]),
+                            (Week::new(0), BTreeSet::from([2])),
+                            (Week::new(1), BTreeSet::from([3])),
                         ]),
                     },
                 ]),
