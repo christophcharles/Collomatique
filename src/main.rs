@@ -260,8 +260,9 @@ enum PythonCommand {
         name: String,
         /// File to load the python script from
         file: PathBuf,
-        /// Function to run in the file
-        func: String,
+        /// Optional function to run in the file
+        #[arg(long)]
+        func: Option<String>,
         /// Force creating a new python scipt with an existing name
         #[arg(short, long, default_value_t = false)]
         force: bool,
@@ -281,6 +282,7 @@ enum PythonCommand {
         /// Name of the python script to run
         name: String,
         /// Optional csv file to give as input to the python script
+        #[arg(long)]
         csv: Option<PathBuf>,
         /// The csv file does not have headers
         #[arg(long)]
@@ -298,9 +300,11 @@ enum PythonCommand {
     RunFromFile {
         /// Python file to run
         script: PathBuf,
-        /// Function to run in the file
-        func: String,
+        /// Optional function to run in the file
+        #[arg(long)]
+        func: Option<String>,
         /// Optional csv file to give as input to the python script
+        #[arg(long)]
         csv: Option<PathBuf>,
         /// The csv file does not have headers
         #[arg(long)]
@@ -1212,11 +1216,19 @@ async fn python_command(
 
                 let csv_extract = csv_content.extract(&params)?;
 
-                python_code.run_with_csv_file(&func, csv_extract)?;
+                match func {
+                    Some(f) => python_code.run_func_with_csv_file(&f, csv_extract)?,
+                    None => python_code.run_with_csv_file(csv_extract)?,
+                }
+
                 Ok(None)
             } else {
                 let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
-                python_code.run(&func)?;
+
+                match func {
+                    Some(f) => python_code.run_func(&f)?,
+                    None => python_code.run()?,
+                }
 
                 Ok(None)
             }
