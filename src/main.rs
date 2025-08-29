@@ -3,9 +3,9 @@ use collomatique::ilp::linexpr::Expr;
 
 fn main() {
     let pb = ilp::ProblemBuilder::new()
-        .add((2 * Expr::from("a") - 3 * Expr::from("b") + 4 * Expr::from("c") - 3).leq(&(2 * Expr::from("a") - 5 * Expr::from("d"))))
-        .add((- Expr::from("a") + Expr::from("b") + 3 * Expr::from("c") + 3).leq(&(2 * Expr::from("a") - 5 * Expr::from("d"))))
-        .add((2 * Expr::from("c") - 3 * Expr::from("d") + 4 * Expr::from("e") + 2).eq(&(-1 * Expr::from("e") + Expr::from("c"))))
+        .add((2 * Expr::var("a") - 3 * Expr::var("b") + 4 * Expr::var("c") - 3).leq(&(2 * Expr::var("a") - 5 * Expr::var("d"))))
+        .add((- Expr::var("a") + Expr::var("b") + 3 * Expr::var("c") + 3).leq(&(2 * Expr::var("a") - 5 * Expr::var("d"))))
+        .add((2 * Expr::var("c") - 3 * Expr::var("d") + 4 * Expr::var("e") + 2).eq(&(-1 * Expr::var("e") + Expr::var("c"))))
         .build();
 
     println!("{}", pb);
