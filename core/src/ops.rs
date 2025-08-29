@@ -92,7 +92,7 @@ pub enum UpdateError {
     Rules(#[from] RulesUpdateError),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum UpdateWarning {
     GeneralPlanning(GeneralPlanningUpdateWarning),
     Subjects(SubjectsUpdateWarning),

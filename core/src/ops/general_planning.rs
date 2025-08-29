@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GeneralPlanningUpdateWarning {
     LooseStudentExclusionForPeriod(
         collomatique_state_colloscopes::StudentId,

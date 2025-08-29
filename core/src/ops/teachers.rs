@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TeachersUpdateWarning {
     LooseInterrogationSlots(collomatique_state_colloscopes::TeacherId),
 }
