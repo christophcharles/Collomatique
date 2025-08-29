@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::collections::BTreeSet;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -41,6 +42,11 @@ enum CliCommand {
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
     },
+    /// Create, remove or run python script
+    Python {
+        #[command(subcommand)]
+        command: PythonCommand,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -66,6 +72,7 @@ enum ShellExtraCommand {
     Undo,
     /// Redo previously undone command
     Redo,
+    PrintHistory,
     /// Exit shell
     Exit,
 }
@@ -246,9 +253,72 @@ enum WeekPatternFilling {
     Odd,
 }
 
+#[derive(Debug, Subcommand)]
+enum PythonCommand {
+    /// Add new python script into the database
+    Create {
+        /// Name for the python script
+        name: String,
+        /// File to load the python script from
+        file: PathBuf,
+        /// Optional function to run in the file
+        #[arg(long)]
+        func: Option<String>,
+        /// Force creating a new python scipt with an existing name
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
+    /// Delete python script from the database
+    Remove {
+        /// Name of the python script to remove
+        name: String,
+        /// If multiple python scripts have the same name, select which one to use.
+        /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        python_script_number: Option<NonZeroUsize>,
+    },
+    /// Run a python script
+    Run {
+        /// Name of the python script to run
+        name: String,
+        /// Optional csv file to give as input to the python script
+        #[arg(long)]
+        csv: Option<PathBuf>,
+        /// The csv file does not have headers
+        #[arg(long)]
+        no_headers: bool,
+        /// Delimiter for the csv file (default is adjusted for pronote files)
+        #[arg(short, long, default_value_t = ';')]
+        delimiter: char,
+        /// If multiple python scripts have the same name, select which one to use.
+        /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        python_script_number: Option<NonZeroUsize>,
+    },
+    /// Run a python script directly from a file
+    RunFromFile {
+        /// Python file to run
+        script: PathBuf,
+        /// Optional function to run in the file
+        #[arg(long)]
+        func: Option<String>,
+        /// Optional csv file to give as input to the python script
+        #[arg(long)]
+        csv: Option<PathBuf>,
+        /// The csv file does not have headers
+        #[arg(long)]
+        no_headers: bool,
+        /// Delimiter for the csv file (default is adjusted for pronote files)
+        #[arg(short, long, default_value_t = ';')]
+        delimiter: char,
+    },
+}
+
 use collomatique::backend::sqlite;
 use collomatique::backend::Logic;
-use collomatique::frontend::state::AppState;
+use collomatique::frontend::state::{AppSession, AppState};
 
 async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Store> {
     if create {
@@ -372,7 +442,7 @@ async fn solve_command(
         None => num_cpus::get(),
     };
 
-    let logic = app_state.get_backend_logic();
+    let logic = app_state.get_logic();
     let gen_colloscope_translator = logic.gen_colloscope_translator();
     let data = gen_colloscope_translator.build_validated_data().await?;
 
@@ -454,18 +524,16 @@ async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError, AppSession, WeekPatternsOperation};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
             if force {
                 let mut session = AppSession::new(app_state);
 
-                let week_patterns = session.get_backend_logic().week_patterns_get_all().await?;
+                let week_patterns = session.week_patterns_get_all().await?;
 
-                for (wp_id, mut wp) in week_patterns {
-                    let handle = session.get_week_pattern_handle(wp_id);
-
+                for (handle, mut wp) in week_patterns {
                     wp.weeks = wp
                         .weeks
                         .into_iter()
@@ -474,8 +542,7 @@ async fn week_count_command(
 
                     if let Err(e) = session
                         .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                            handle,
-                            wp,
+                            handle, wp,
                         )))
                         .await
                     {
@@ -484,7 +551,9 @@ async fn week_count_command(
                         let err = match e {
                             UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                             UpdateError::WeekNumberTooBig(_week) => {
-                                panic!("The week pattern should be valid as it was checked beforehand")
+                                panic!(
+                                    "The week pattern should be valid as it was checked beforehand"
+                                )
                             }
                             _ => panic!("/!\\ Unexpected error ! {:?}", e),
                         };
@@ -492,12 +561,16 @@ async fn week_count_command(
                     }
                 }
 
-                if let Err(e) = session
-                    .apply(Operation::General(GeneralOperation::SetWeekCount(
-                        week_count,
-                    )))
-                    .await
-                {
+                let mut general_data = match session.general_data_get().await {
+                    Ok(data) => data,
+                    Err(e) => {
+                        session.cancel().await;
+                        return Err(e.into());
+                    }
+                };
+                general_data.week_count = week_count;
+
+                if let Err(e) = session.apply(Operation::GeneralData(general_data)).await {
                     session.cancel().await;
 
                     let err = match e {
@@ -514,18 +587,13 @@ async fn week_count_command(
                 return Ok(None);
             }
 
-            if let Err(e) = app_state
-                .apply(Operation::General(GeneralOperation::SetWeekCount(
-                    week_count,
-                )))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.week_count = week_count;
+
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::WeekPatternsNeedTruncating(week_patterns_to_truncate) => {
-                        let week_patterns = app_state
-                            .get_backend_logic()
-                            .week_patterns_get_all()
-                            .await?;
+                        let week_patterns = app_state.week_patterns_get_all().await?;
 
                         let week_pattern_list = week_patterns_to_truncate.into_iter().map(
                             |week_pattern| week_patterns.get(&week_pattern).expect("Week pattern id should be valid as it is taken from a dependancy")
@@ -547,7 +615,7 @@ async fn week_count_command(
             Ok(None)
         }
         WeekCountCommand::Print => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let week_count = general_data.week_count.get();
             Ok(Some(week_count.to_string()))
         }
@@ -558,18 +626,15 @@ async fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError};
 
     match command {
         MaxInterrogationsPerDayCommand::Set {
             max_interrogations_per_day: max_interrogation_per_day,
         } => {
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetMaxInterrogationsPerDay(Some(max_interrogation_per_day)),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.max_interrogations_per_day = Some(max_interrogation_per_day);
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -579,12 +644,10 @@ async fn max_interrogations_per_day_command(
             Ok(None)
         }
         MaxInterrogationsPerDayCommand::Disable => {
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetMaxInterrogationsPerDay(None),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.max_interrogations_per_day = None;
+
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -594,7 +657,7 @@ async fn max_interrogations_per_day_command(
             Ok(None)
         }
         MaxInterrogationsPerDayCommand::Print => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let max_interrogations_per_day = general_data.max_interrogations_per_day;
             let output = match max_interrogations_per_day {
                 Some(value) => value.get().to_string(),
@@ -609,13 +672,13 @@ async fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError};
 
     match command {
         InterrogationsPerWeekRangeCommand::SetMax {
             max_interrogations_per_week,
         } => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let interrogations_per_week = match general_data.interrogations_per_week {
                 Some(value) => value.start..(max_interrogations_per_week + 1),
                 None => 0..(max_interrogations_per_week + 1),
@@ -623,12 +686,11 @@ async fn interrogations_per_week_range_command(
             if interrogations_per_week.is_empty() {
                 return Err(anyhow!("The maximum number of interrogations per week must be greater than the minimum number"));
             }
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetInterrogationsPerWeekRange(Some(interrogations_per_week)),
-                ))
-                .await
-            {
+
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.interrogations_per_week = Some(interrogations_per_week);
+
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -640,7 +702,7 @@ async fn interrogations_per_week_range_command(
         InterrogationsPerWeekRangeCommand::SetMin {
             min_interrogations_per_week,
         } => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let interrogations_per_week = match general_data.interrogations_per_week {
                 Some(value) => min_interrogations_per_week..value.end,
                 None => min_interrogations_per_week..(min_interrogations_per_week + 1),
@@ -648,12 +710,9 @@ async fn interrogations_per_week_range_command(
             if interrogations_per_week.is_empty() {
                 return Err(anyhow!("The minimum number of interrogations per week must be less than the maximum number"));
             }
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetInterrogationsPerWeekRange(Some(interrogations_per_week)),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.interrogations_per_week = Some(interrogations_per_week);
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -663,12 +722,9 @@ async fn interrogations_per_week_range_command(
             Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Disable => {
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetInterrogationsPerWeekRange(None),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.interrogations_per_week = None;
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -678,7 +734,7 @@ async fn interrogations_per_week_range_command(
             Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Print => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let interrogations_per_week = general_data.interrogations_per_week;
             let output = match interrogations_per_week {
                 Some(value) => format!("{}..={}", value.start, value.end - 1),
@@ -718,19 +774,16 @@ async fn get_week_pattern(
     name: &str,
     week_pattern_number: Option<NonZeroUsize>,
 ) -> Result<(
-    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::WeekPatternId,
+    collomatique::frontend::state::WeekPatternHandle,
     collomatique::backend::WeekPattern,
 )> {
     use collomatique::frontend::state::Manager;
 
-    let week_patterns = app_state
-        .get_backend_logic()
-        .week_patterns_get_all()
-        .await?;
+    let week_patterns = app_state.week_patterns_get_all().await?;
 
     let relevant_week_patterns: Vec<_> = week_patterns
         .into_iter()
-        .filter(|(_id, week_pattern)| week_pattern.name == name)
+        .filter(|(_handle, week_pattern)| week_pattern.name == name)
         .collect();
 
     if relevant_week_patterns.is_empty() {
@@ -777,10 +830,7 @@ async fn week_patterns_check_existing_names(
 ) -> Result<()> {
     use collomatique::frontend::state::Manager;
 
-    let week_patterns = app_state
-        .get_backend_logic()
-        .week_patterns_get_all()
-        .await?;
+    let week_patterns = app_state.week_patterns_get_all().await?;
     for (_, week_pattern) in &week_patterns {
         if week_pattern.name == name {
             return Err(anyhow!(format!(
@@ -808,7 +858,7 @@ async fn week_pattern_command(
             if !force {
                 week_patterns_check_existing_names(app_state, &name).await?;
             }
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
 
             let pattern = WeekPattern {
                 name,
@@ -845,11 +895,10 @@ async fn week_pattern_command(
         } => {
             use collomatique::backend::IdError;
 
-            let (id, _week_pattern) =
+            let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
             let dependancies = app_state
-                .get_backend_logic()
-                .week_patterns_check_can_remove(id)
+                .week_patterns_check_can_remove(handle)
                 .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => anyhow::Error::from(int_err),
@@ -869,7 +918,6 @@ async fn week_pattern_command(
                 ));
             }
 
-            let handle = app_state.get_week_pattern_handle(id);
             if let Err(e) = app_state
                 .apply(Operation::WeekPatterns(WeekPatternsOperation::Remove(
                     handle,
@@ -897,9 +945,8 @@ async fn week_pattern_command(
                 week_patterns_check_existing_names(app_state, &new_name).await?;
             }
 
-            let (id, week_pattern) =
+            let (handle, week_pattern) =
                 get_week_pattern(app_state, &old_name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let new_week_pattern = WeekPattern {
                 name: new_name,
@@ -925,10 +972,7 @@ async fn week_pattern_command(
             Ok(None)
         }
         WeekPatternCommand::PrintAll => {
-            let week_patterns = app_state
-                .get_backend_logic()
-                .week_patterns_get_all()
-                .await?;
+            let week_patterns = app_state.week_patterns_get_all().await?;
 
             let count = week_patterns.len();
             let width = count.to_string().len();
@@ -957,11 +1001,10 @@ async fn week_pattern_command(
             week_pattern_number,
             pattern,
         } => {
-            let (id, _week_pattern) =
+            let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let new_week_pattern = WeekPattern {
                 name,
                 weeks: predefined_week_pattern_weeks(pattern, general_data.week_count),
@@ -989,9 +1032,8 @@ async fn week_pattern_command(
             name,
             week_pattern_number,
         } => {
-            let (id, _week_pattern) =
+            let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let new_week_pattern = WeekPattern {
                 name,
@@ -1023,16 +1065,15 @@ async fn week_pattern_command(
         } => {
             use collomatique::backend::Week;
 
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             for week in &weeks {
                 if week.get() > general_data.week_count.get() {
                     return Err(anyhow!("The week number {} is invalid as it is bigger than week_count (which is {})", week.get(), general_data.week_count.get()));
                 }
             }
 
-            let (id, mut week_pattern) =
+            let (handle, mut week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             week_pattern
                 .weeks
@@ -1063,9 +1104,8 @@ async fn week_pattern_command(
         } => {
             use collomatique::backend::Week;
 
-            let (id, mut week_pattern) =
+            let (handle, mut week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let weeks_to_remove: BTreeSet<_> =
                 weeks.into_iter().map(|w| Week::new(w.get() - 1)).collect();
@@ -1097,6 +1137,107 @@ async fn week_pattern_command(
     }
 }
 
+async fn python_command(
+    command: PythonCommand,
+    app_state: &mut AppState<sqlite::Store>,
+) -> Result<Option<String>> {
+    match command {
+        PythonCommand::Create {
+            name: _name,
+            file: _file,
+            func: _func,
+            force: _force,
+        } => Err(anyhow!("python create command not yet implemented")),
+        PythonCommand::Remove {
+            name: _name,
+            python_script_number: _python_script_number,
+        } => Err(anyhow!("python remove command not yet implemented")),
+        PythonCommand::Run {
+            name: _name,
+            csv: _csv,
+            no_headers: _no_headers,
+            delimiter: _delimiter,
+            python_script_number: _python_script_number,
+        } => Err(anyhow!("python run command not yet implemented")),
+        PythonCommand::RunFromFile {
+            script,
+            func,
+            csv,
+            no_headers,
+            delimiter,
+        } => {
+            if let Some(path) = csv {
+                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+                let csv_content = collomatique::frontend::csv::Content::from_csv_file(&path)?;
+
+                if !delimiter.is_ascii() {
+                    return Err(anyhow!(
+                        "Csv delimiter must be encoded as a single byte  ASCII character"
+                    ));
+                }
+                let delimiter_str = delimiter.to_string();
+
+                let params = collomatique::frontend::csv::Params {
+                    has_headers: !no_headers,
+                    delimiter: delimiter_str.as_bytes()[0],
+                };
+
+                let csv_extract = csv_content.extract(&params)?;
+
+                {
+                    let mut app_session = AppSession::new(app_state);
+                    match func {
+                        Some(f) => {
+                            if let Err(e) = python_code.run_func_with_csv_file(
+                                &mut app_session,
+                                &f,
+                                csv_extract,
+                            ) {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                        None => {
+                            if let Err(e) =
+                                python_code.run_with_csv_file(&mut app_session, csv_extract)
+                            {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                    app_session.commit();
+                }
+
+                Ok(None)
+            } else {
+                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+
+                {
+                    let mut app_session = AppSession::new(app_state);
+                    match func {
+                        Some(f) => {
+                            if let Err(e) = python_code.run_func(&mut app_session, &f) {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                        None => {
+                            if let Err(e) = python_code.run(&mut app_session) {
+                                app_session.cancel().await;
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                    app_session.commit();
+                }
+
+                Ok(None)
+            }
+        }
+    }
+}
+
 struct ReedCompleter {}
 
 impl reedline::Completer for ReedCompleter {
@@ -1117,7 +1258,10 @@ impl reedline::Completer for ReedCompleter {
         let arg_index = args.len() - 1;
         let span = Span::new(pos - args[arg_index].len(), pos);
 
-        let Ok(candidates) = clap_complete::dynamic::complete(&mut cmd, args, arg_index, None)
+        let current_dir = std::env::current_dir().ok();
+        let current_dir_ref = current_dir.as_ref().map(|x| x.as_path());
+        let Ok(candidates) =
+            clap_complete::dynamic::complete(&mut cmd, args, arg_index, current_dir_ref)
         else {
             return vec![];
         };
@@ -1216,14 +1360,20 @@ async fn respond(
 
     let output = match shell_command.command {
         ShellCommand::Global(command) => execute_cli_command(command, app_state).await?,
-        ShellCommand::Extra(extra_command) => {
-            match extra_command {
-                ShellExtraCommand::Undo => app_state.undo().await?,
-                ShellExtraCommand::Redo => app_state.redo().await?,
-                ShellExtraCommand::Exit => return Ok(true),
+        ShellCommand::Extra(extra_command) => match extra_command {
+            ShellExtraCommand::Undo => {
+                app_state.undo().await?;
+                None
             }
-            None
-        }
+            ShellExtraCommand::Redo => {
+                app_state.redo().await?;
+                None
+            }
+            ShellExtraCommand::PrintHistory => {
+                Some(format!("{:?}", app_state.get_aggregated_history()))
+            }
+            ShellExtraCommand::Exit => return Ok(true),
+        },
     };
     if let Some(msg) = output {
         println!("{}", msg);
@@ -1243,6 +1393,7 @@ async fn execute_cli_command(
             steps,
             thread_count,
         } => solve_command(steps, thread_count, app_state).await,
+        CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
 
@@ -1252,6 +1403,8 @@ async fn main() -> Result<()> {
 
     let logic = Logic::new(connect_db(args.create, args.db.as_path()).await?);
     let mut app_state = AppState::new(logic);
+
+    collomatique::frontend::python::initialize();
 
     let Some(command) = args.command else {
         interactive_shell(&mut app_state).await?;
