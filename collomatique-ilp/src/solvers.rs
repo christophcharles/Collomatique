@@ -34,6 +34,26 @@ pub trait Solver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
     ) -> Option<FeasableConfig<'a, V, C, P>>;
 }
 
+/// Result of [SolverWithTimeLimit::solve_with_time_limit].
+/// 
+/// It contains the solution if one was found but also the reason
+/// for returning.
+/// 
+/// If [TimeLimitSolution::time_limit_reached] is `true`, this means
+/// the time limit was reached and the solution might not be optimal.
+/// 
+/// If [TimeLimitSolution::time_limit_reached] is `false`, this means
+/// the time limit was not reached and therefore the solution is indeed optimal.
+pub struct TimeLimitSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    /// The actual solution found by the solver
+    pub config: FeasableConfig<'a, V, C, P>,
+
+    /// Whether the time limit was reached.
+    /// 
+    /// If the time limit is reached, the solution might not be optimal.
+    pub time_limit_reached: bool,
+}
+
 /// Solver with time limit trait
 /// 
 /// A solver implements this trait if it supports having a time limit for solving.
@@ -50,11 +70,13 @@ pub trait SolverWithTimeLimit<V: UsableData, C: UsableData, P: ProblemRepr<V>>: 
     /// If the time limit is reached, the best solution *so far* is returned.
     /// So if no solution was found, it still returns `None`. If a solution is found
     /// it is returned. However, it might not be optimal.
+    /// 
+    /// You can check this by inspecting [TimeLimitSolution::time_limit_reached].
     fn solve_with_time_limit<'a>(
         &self,
         problem: &'a Problem<V, C, P>,
         time_limit_in_seconds: Option<u32>,
-    ) -> Option<FeasableConfig<'a, V, C, P>>;
+    ) -> Option<TimeLimitSolution<'a, V, C, P>>;
 }
 
 impl<V: UsableData, C: UsableData, P: ProblemRepr<V>, T: SolverWithTimeLimit<V, C, P>> Solver<V, C, P> for T {
@@ -62,6 +84,6 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>, T: SolverWithTimeLimit<V, 
             &self,
             problem: &'a Problem<V, C, P>,
         ) -> Option<FeasableConfig<'a, V, C, P>> {
-        self.solve_with_time_limit(problem, None)
+        self.solve_with_time_limit(problem, None).map(|x| x.config)
     }
 }

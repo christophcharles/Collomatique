@@ -8,8 +8,8 @@
 #[cfg(test)]
 mod tests;
 
-use crate::{ConfigData, FeasableConfig, Problem, UsableData, VariableType, linexpr::EqSymbol, ObjectiveSense};
-use super::{SolverWithTimeLimit, ProblemRepr};
+use crate::{ConfigData, Problem, UsableData, VariableType, linexpr::EqSymbol, ObjectiveSense};
+use super::{SolverWithTimeLimit, ProblemRepr, TimeLimitSolution};
 
 /// Coin-cbc solver
 /// 
@@ -24,7 +24,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverWithTimeLimit<V, C, 
             &self,
             problem: &'a Problem<V, C, P>,
             time_limit_in_seconds: Option<u32>,
-        ) -> Option<FeasableConfig<'a, V, C, P>>
+        ) -> Option<TimeLimitSolution<'a, V, C, P>>
     {
         self.solve_internal(problem, time_limit_in_seconds)
     }
@@ -70,7 +70,7 @@ impl CbcSolver {
         &self,
         problem: &'a Problem<V, C, P>,
         time_limit_in_seconds: Option<u32>,
-    ) -> Option<FeasableConfig<'a, V, C, P>>
+    ) -> Option<TimeLimitSolution<'a, V, C, P>>
     {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
@@ -210,12 +210,22 @@ impl CbcSolver {
         problem: &'a Problem<V, C, P>,
         sol: &'b coin_cbc::Solution,
         cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
-    ) -> Option<FeasableConfig<'a, V, C, P>> {
+    ) -> Option<TimeLimitSolution<'a, V, C, P>> {
+        let raw_model = sol.raw();
+
+        let time_limit_reached = (raw_model.status() == coin_cbc::raw::Status::Stopped) &&
+            (raw_model.secondary_status() == coin_cbc::raw::SecondaryStatus::StoppedOnTime);
+
         let config_data = ConfigData::new()
             .set_iter(cols.iter().map(|(v, col)| (v.clone(), sol.col(*col))));
 
         let config = problem.build_config(config_data).ok()?;
         
-        config.into_feasable()
+        let feasable_config = config.into_feasable()?;
+
+        Some(TimeLimitSolution {
+            config: feasable_config,
+            time_limit_reached,
+        })
     }
 }
