@@ -14,14 +14,14 @@ pub trait Identifier:
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubjectDescription<StudentId: Identifier> {
-    students: BTreeSet<StudentId>,
-    group_count: RangeInclusive<NonZeroU32>,
-    students_per_group: RangeInclusive<NonZeroU32>,
+    pub students: BTreeSet<StudentId>,
+    pub group_count: RangeInclusive<NonZeroU32>,
+    pub students_per_group: RangeInclusive<NonZeroU32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupListProblem<SubjectId: Identifier + 'static, StudentId: Identifier + 'static> {
-    subject_descriptions: BTreeMap<SubjectId, SubjectDescription<StudentId>>,
+    pub subject_descriptions: BTreeMap<SubjectId, SubjectDescription<StudentId>>,
 }
 
 impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
