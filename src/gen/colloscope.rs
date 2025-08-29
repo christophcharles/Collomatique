@@ -1922,28 +1922,11 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
 
         let mut set_variables = BTreeMap::new();
 
-        let first_period_problem = self.construct_first_period_problem(problem_builder.clone());
-        let first_period_config = self.build_init_config(&first_period_problem)?;
-        Self::update_set_variables(&mut set_variables, &first_period_config);
-
-        for period in 1..self.period_count.get() - 1 {
-            let period_problem = self.construct_generic_period_problem(
-                problem_builder.clone(),
-                &set_variables,
-                period,
-            );
+        for period in 0..self.period_count.get() {
+            let period_problem =
+                self.construct_period_problem(problem_builder.clone(), &set_variables, period);
             let partial_config = self.build_init_config(&period_problem)?;
             Self::update_set_variables(&mut set_variables, &partial_config);
-        }
-
-        if self.period_count.get() >= 2 {
-            let last_period_problem = self.construct_generic_period_problem(
-                problem_builder.clone(),
-                &set_variables,
-                self.period_count.get() - 1,
-            );
-            let last_period_config = self.build_init_config(&last_period_problem)?;
-            Self::update_set_variables(&mut set_variables, &last_period_config);
         }
 
         let vars: BTreeSet<_> = set_variables
@@ -2100,17 +2083,7 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         problem_builder
     }
 
-    fn construct_first_period_problem(
-        &self,
-        problem_builder: ProblemBuilder<Variable>,
-    ) -> Problem<Variable> {
-        let first_period = 0;
-        self.filter_relevant_variables(problem_builder, first_period)
-            .simplify_trivial_constraints()
-            .build()
-    }
-
-    fn construct_generic_period_problem(
+    fn construct_period_problem(
         &self,
         problem_builder: ProblemBuilder<Variable>,
         set_variables: &BTreeMap<Variable, bool>,
