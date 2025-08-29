@@ -43,7 +43,7 @@ impl RpcLogger {
 pub enum LoggerCommandOutput {
     CheckRunning,
     ProcessKilled(std::io::Result<()>),
-    ProcessLaunched(std::io::Result<tokio::process::Child>),
+    ProcessLaunched(std::io::Result<tokio::process::Child>, InitMsg),
     NewStdoutData(String, BufReader<tokio::process::ChildStdout>),
     NewStderrData(String, BufReader<tokio::process::ChildStderr>),
 }
@@ -96,7 +96,7 @@ impl Component for RpcLogger {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            RpcLoggerInput::RunRcpEngine(_script) => {
+            RpcLoggerInput::RunRcpEngine(init_msg) => {
                 if self.is_running() {
                     panic!("A Python engine is already running!");
                 }
@@ -112,6 +112,7 @@ impl Component for RpcLogger {
                             .stdout(std::process::Stdio::piped())
                             .kill_on_drop(true)
                             .spawn(),
+                        init_msg,
                     )
                 });
             }
@@ -122,8 +123,11 @@ impl Component for RpcLogger {
                     });
                 }
             }
-            RpcLoggerInput::SendMsg(_out_msg) => {
-                todo!()
+            RpcLoggerInput::SendMsg(out_msg) => {
+                if self.child_process.is_none() {
+                    panic!("No running child process to send a message to");
+                }
+                self.send_text_cmd(out_msg.into_text_msg());
             }
         }
     }
@@ -178,7 +182,7 @@ impl Component for RpcLogger {
                     sender.output(RpcLoggerOutput::ProcessFinished).unwrap();
                 }
             }
-            LoggerCommandOutput::ProcessLaunched(child_result) => {
+            LoggerCommandOutput::ProcessLaunched(child_result, init_msg) => {
                 if self.child_process.is_some() {
                     panic!("A Python engine is already running!");
                 }
@@ -199,6 +203,7 @@ impl Component for RpcLogger {
                             self.wait_stderr_data(sender.clone(), stderr_buf);
                         }
 
+                        self.send_text_cmd(init_msg.into_text_msg());
                         self.schedule_check(sender);
                     }
                     Err(e) => {
@@ -216,7 +221,9 @@ impl Component for RpcLogger {
                     self.wait_stdout_data(sender, stdout_buf);
                 }
             }
-            LoggerCommandOutput::NewStderrData(_data, stderr_buf) => {
+            LoggerCommandOutput::NewStderrData(data, stderr_buf) => {
+                let cmd = CmdMsg::from_text_msg(&data);
+                sender.output(RpcLoggerOutput::Cmd(cmd)).unwrap();
                 // Process content and turn into command
                 if self.child_process.is_some() {
                     self.wait_stderr_data(sender, stderr_buf);
@@ -294,4 +301,6 @@ impl RpcLogger {
             LoggerCommandOutput::NewStderrData(line, stderr_buf)
         });
     }
+
+    fn send_text_cmd(&mut self, _cmd: String) {}
 }
