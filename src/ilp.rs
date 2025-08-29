@@ -219,6 +219,21 @@ impl<'a> Config<'a> {
     }
 }
 
+impl<'a> std::fmt::Display for Config<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[ ")?;
+        let slice: Vec<_> = self
+            .variables
+            .iter()
+            .map(|(var, val)| format!("{}: {}", var, val))
+            .collect();
+        write!(f, "{}", slice.join(", "))?;
+        write!(f, " ]")?;
+
+        Ok(())
+    }
+}
+
 impl<'a> PartialEq for Config<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal

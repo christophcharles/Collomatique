@@ -79,6 +79,6 @@ fn main() {
     let iterator = sa_optimizer.iterate(dijkstra_solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
-        println!("{}: {} - {:?}", i, cost, sol.inner());
+        println!("{}: {} - {}", i, cost, sol.inner());
     }
 }
