@@ -11,13 +11,13 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
-    #[error("Subject {0} has empty students_per_interrogation: {1:?}")]
-    SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroUsize>),
-    #[error("Subject {0} has in interrogation {1} the slot {2} after the week count ({3}) of the schedule")]
-    SubjectWithSlotAfterLastWeek(usize, usize, usize, u32),
-    #[error("Subject {0} has in interrogation {1} the slot {2} overlapping next day")]
-    SubjectWithSlotOverlappingNextDay(usize, usize, usize),
-    #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
+    #[error("Subject {0} has empty students_per_slot: {1:?}")]
+    SubjectWithInvalidStudentsPerSlotRange(usize, RangeInclusive<NonZeroUsize>),
+    #[error("Subject {0} has the slot {1} placed after the week count ({2}) of the schedule")]
+    SubjectWithSlotAfterLastWeek(usize, usize, u32),
+    #[error("Subject {0} has the slot {1} overlapping next day")]
+    SubjectWithSlotOverlappingNextDay(usize, usize),
+    #[error("Subject {0} has invalid subject number ({2}) in slot {1}")]
     SubjectWithInvalidTeacher(usize, usize, usize),
     #[error(
         "Subject {0} has a duplicated student ({1}) found first in group {2} and in group {3}"
@@ -43,18 +43,12 @@ pub enum Error {
     SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
-    #[error(
-        "Incompatibility {0} has interrogation slot {1} after the week count ({2}) of the schedule"
-    )]
+    #[error("Incompatibility {0} has slot {1} after the week count ({2}) of the schedule")]
     IncompatibilityWithSlotAfterLastWeek(usize, usize, u32),
     #[error("Incompatibility {0} has interrogation slot {1} overlapping next day")]
     IncompatibilityWithSlotOverlappingNextDay(usize, usize),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
     SlotGroupingWithInvalidSubject(usize, SlotRef),
-    #[error(
-        "The slot grouping {0} has an invalid slot ref {1:?} with invalid interrogation reference"
-    )]
-    SlotGroupingWithInvalidInterrogation(usize, SlotRef),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
     SlotGroupingWithInvalidSlot(usize, SlotRef),
     #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
@@ -73,15 +67,15 @@ pub struct SlotStart {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Slot {
+pub struct SlotWithDuration {
     pub start: SlotStart,
     pub duration: NonZeroU32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Interrogation {
+pub struct SlotWithTeacher {
     pub teacher: usize,
-    pub slots: Vec<SlotStart>,
+    pub start: SlotStart,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,11 +101,11 @@ impl GroupsDesc {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
-    pub students_per_interrogation: RangeInclusive<NonZeroUsize>,
+    pub students_per_slot: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub duration: NonZeroU32,
-    pub interrogations: Vec<Interrogation>,
+    pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
 }
 
@@ -120,7 +114,6 @@ pub type SubjectList = Vec<Subject>;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotRef {
     pub subject: usize,
-    pub interrogation: usize,
     pub slot: usize,
 }
 
@@ -140,7 +133,7 @@ pub type SlotGroupingIncompatList = Vec<SlotGroupingIncompat>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
-    pub slots: Vec<Slot>,
+    pub slots: Vec<SlotWithDuration>,
 }
 
 pub type IncompatibilityList = Vec<Incompatibility>;
@@ -189,33 +182,26 @@ impl ValidatedData {
         grouping_incompats: SlotGroupingIncompatList,
     ) -> Result<ValidatedData> {
         for (i, subject) in subjects.iter().enumerate() {
-            if subject.students_per_interrogation.is_empty() {
-                return Err(Error::SubjectWithInvalidStudentsPerInterrogationRange(
+            if subject.students_per_slot.is_empty() {
+                return Err(Error::SubjectWithInvalidStudentsPerSlotRange(
                     i,
-                    subject.students_per_interrogation.clone(),
+                    subject.students_per_slot.clone(),
                 ));
             }
 
-            for (j, interrogation) in subject.interrogations.iter().enumerate() {
-                if interrogation.teacher >= general.teacher_count {
-                    return Err(Error::SubjectWithInvalidTeacher(
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if slot.teacher >= general.teacher_count {
+                    return Err(Error::SubjectWithInvalidTeacher(i, j, slot.teacher));
+                }
+                if !Self::validate_slot_start(&general, &slot.start) {
+                    return Err(Error::SubjectWithSlotAfterLastWeek(
                         i,
                         j,
-                        interrogation.teacher,
+                        general.week_count.get(),
                     ));
                 }
-                for (k, slot_start) in interrogation.slots.iter().enumerate() {
-                    if !Self::validate_slot_start(&general, slot_start) {
-                        return Err(Error::SubjectWithSlotAfterLastWeek(
-                            i,
-                            j,
-                            k,
-                            general.week_count.get(),
-                        ));
-                    }
-                    if !Self::validate_slot_overlap(slot_start, subject.duration) {
-                        return Err(Error::SubjectWithSlotOverlappingNextDay(i, j, k));
-                    }
+                if !Self::validate_slot_overlap(&slot.start, subject.duration) {
+                    return Err(Error::SubjectWithSlotOverlappingNextDay(i, j));
                 }
             }
 
@@ -238,16 +224,15 @@ impl ValidatedData {
                 if !group.can_be_extended {
                     continue;
                 }
-                if group.students.len() >= subject.students_per_interrogation.end().get() {
+                if group.students.len() >= subject.students_per_slot.end().get() {
                     continue;
                 }
-                remaining_seats +=
-                    subject.students_per_interrogation.end().get() - group.students.len();
+                remaining_seats += subject.students_per_slot.end().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() > remaining_seats {
                 return Err(Error::SubjectWithTooFewGroups(
                     i,
-                    subject.students_per_interrogation.clone(),
+                    subject.students_per_slot.clone(),
                 ));
             }
 
@@ -256,16 +241,15 @@ impl ValidatedData {
                 if !group.can_be_extended {
                     continue;
                 }
-                if group.students.len() >= subject.students_per_interrogation.start().get() {
+                if group.students.len() >= subject.students_per_slot.start().get() {
                     continue;
                 }
-                min_seats +=
-                    subject.students_per_interrogation.start().get() - group.students.len();
+                min_seats += subject.students_per_slot.start().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() < min_seats {
                 return Err(Error::SubjectWithTooManyGroups(
                     i,
-                    subject.students_per_interrogation.clone(),
+                    subject.students_per_slot.clone(),
                 ));
             }
 
@@ -281,20 +265,20 @@ impl ValidatedData {
                         students_no_duplicate.insert(*k, j);
                     }
                 }
-                if group.students.len() > subject.students_per_interrogation.end().get() {
+                if group.students.len() > subject.students_per_slot.end().get() {
                     return Err(Error::SubjectWithTooLargeAssignedGroup(
                         i,
                         j,
-                        subject.students_per_interrogation.clone(),
+                        subject.students_per_slot.clone(),
                     ));
                 }
-                if group.students.len() < subject.students_per_interrogation.start().get()
+                if group.students.len() < subject.students_per_slot.start().get()
                     && !group.can_be_extended
                 {
                     return Err(Error::SubjectWithTooSmallNonExtensibleGroup(
                         i,
                         j,
-                        subject.students_per_interrogation.clone(),
+                        subject.students_per_slot.clone(),
                     ));
                 }
             }
@@ -336,17 +320,7 @@ impl ValidatedData {
                 if slot_ref.subject >= subjects.len() {
                     return Err(Error::SlotGroupingWithInvalidSubject(i, slot_ref.clone()));
                 }
-                if slot_ref.interrogation >= subjects[slot_ref.subject].interrogations.len() {
-                    return Err(Error::SlotGroupingWithInvalidInterrogation(
-                        i,
-                        slot_ref.clone(),
-                    ));
-                }
-                if slot_ref.slot
-                    >= subjects[slot_ref.subject].interrogations[slot_ref.interrogation]
-                        .slots
-                        .len()
-                {
+                if slot_ref.slot >= subjects[slot_ref.subject].slots.len() {
                     return Err(Error::SlotGroupingWithInvalidSlot(i, slot_ref.clone()));
                 }
             }
@@ -385,13 +359,11 @@ impl ValidatedData {
 pub enum Variable {
     FixedGroup {
         subject: usize,
-        interrogation: usize,
         slot: usize,
         group: usize,
     },
     DynamicGroup {
         subject: usize,
-        interrogation: usize,
         slot: usize,
         group: usize,
         student: usize,
@@ -413,21 +385,15 @@ impl std::fmt::Display for Variable {
         match self {
             Variable::FixedGroup {
                 subject,
-                interrogation,
                 slot,
                 group,
-            } => write!(f, "F_{}_{}_{}_{}", *subject, *interrogation, *slot, *group),
+            } => write!(f, "F_{}_{}_{}", *subject, *slot, *group),
             Variable::DynamicGroup {
                 subject,
-                interrogation,
                 slot,
                 group,
                 student,
-            } => write!(
-                f,
-                "D_{}_{}_{}_{}_{}",
-                *subject, *interrogation, *slot, *group, *student
-            ),
+            } => write!(f, "D_{}_{}_{}_{}", *subject, *slot, *group, *student),
             Variable::InGroup {
                 subject,
                 student,
@@ -457,8 +423,7 @@ use crate::ilp::{Problem, ProblemBuilder};
 
 impl<'a> IlpTranslator<'a> {
     fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
-        !group.can_be_extended
-            || (group.students.len() == subject.students_per_interrogation.end().get())
+        !group.can_be_extended || (group.students.len() == subject.students_per_slot.end().get())
     }
 
     fn build_fixed_group_variables(&self) -> BTreeSet<Variable> {
@@ -468,32 +433,25 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject
-                    .interrogations
+                    .slots
                     .iter()
                     .enumerate()
-                    .flat_map(move |(j, interrogation)| {
-                        interrogation
-                            .slots
+                    .flat_map(move |(j, _slot)| {
+                        subject
+                            .groups
+                            .assigned_to_group
                             .iter()
                             .enumerate()
-                            .flat_map(move |(k, _slot)| {
-                                subject
-                                    .groups
-                                    .assigned_to_group
-                                    .iter()
-                                    .enumerate()
-                                    .filter_map(move |(l, group)| {
-                                        if !Self::is_group_fixed(group, subject) {
-                                            return None;
-                                        }
+                            .filter_map(move |(k, group)| {
+                                if !Self::is_group_fixed(group, subject) {
+                                    return None;
+                                }
 
-                                        Some(Variable::FixedGroup {
-                                            subject: i,
-                                            interrogation: j,
-                                            slot: k,
-                                            group: l,
-                                        })
-                                    })
+                                Some(Variable::FixedGroup {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                })
                             })
                     })
             })
@@ -506,35 +464,28 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .flat_map(|(i, subject)| {
-                subject.groups.not_assigned.iter().flat_map(move |m| {
+                subject.groups.not_assigned.iter().flat_map(move |l| {
                     subject
-                        .interrogations
+                        .slots
                         .iter()
                         .enumerate()
-                        .flat_map(move |(j, interrogation)| {
-                            interrogation
-                                .slots
+                        .flat_map(move |(j, _slot)| {
+                            subject
+                                .groups
+                                .assigned_to_group
                                 .iter()
                                 .enumerate()
-                                .flat_map(move |(k, _slot)| {
-                                    subject
-                                        .groups
-                                        .assigned_to_group
-                                        .iter()
-                                        .enumerate()
-                                        .filter_map(move |(l, group)| {
-                                            if Self::is_group_fixed(group, subject) {
-                                                return None;
-                                            }
+                                .filter_map(move |(k, group)| {
+                                    if Self::is_group_fixed(group, subject) {
+                                        return None;
+                                    }
 
-                                            Some(Variable::DynamicGroup {
-                                                subject: i,
-                                                interrogation: j,
-                                                slot: k,
-                                                group: l,
-                                                student: *m,
-                                            })
-                                        })
+                                    Some(Variable::DynamicGroup {
+                                        subject: i,
+                                        slot: j,
+                                        group: k,
+                                        student: *l,
+                                    })
                                 })
                         })
                 })
