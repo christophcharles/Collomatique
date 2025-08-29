@@ -172,6 +172,33 @@ CREATE TABLE "student_subjects" (
     FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
 	FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
 	PRIMARY KEY("subject_id","student_id")
+);
+
+CREATE TABLE "group_lists" (
+	"group_list_id"	INTEGER NOT NULL,
+	"colloscope_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	PRIMARY KEY("group_list_id" AUTOINCREMENT),
+	FOREIGN KEY("colloscope_id") REFERENCES "colloscopes"("colloscope_id")
+);
+
+CREATE TABLE "group_list_items" (
+	"group_list_id"	INTEGER NOT NULL,
+	"group_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	"extendable"	INTEGER NOT NULL,
+	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	PRIMARY KEY("group_id","group_list_id")
+);
+
+CREATE TABLE "group_list_item_items" (
+	"group_list_id"	INTEGER NOT NULL,
+	"group_id"	INTEGER NOT NULL,
+	"student_id"	INTEGER NOT NULL,
+	UNIQUE("group_list_id","student_id"),
+	PRIMARY KEY("student_id","group_list_id","group_id"),
+	FOREIGN KEY("group_list_id","group_id") REFERENCES "group_list_items"("group_list_id","group_id"),
+	FOREIGN KEY("student_id") REFERENCES "students"("student_id")
 );"#,
     )
     .bind(serde_json::to_string(&GeneralDataDb {
