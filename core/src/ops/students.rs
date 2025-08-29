@@ -20,31 +20,31 @@ impl StudentsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             StudentsUpdateWarning::LooseStudentAssignmentForPeriod(student_id, period_id) => {
                 let Some(student) = data.get_data().get_students().student_map.get(student_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(period_index) = data
                     .get_data()
                     .get_periods()
                     .find_period_position(*period_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte des inscriptions de {} {} sur la période {}",
                     student.desc.firstname,
                     student.desc.surname,
                     period_index + 1
-                )
+                ))
             }
             Self::LooseExclusionFromGroupList(student_id, group_list_id) => {
                 let Some(student) = data.get_data().get_students().student_map.get(student_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(group_list) = data
                     .get_data()
@@ -52,17 +52,17 @@ impl StudentsUpdateWarning {
                     .group_list_map
                     .get(group_list_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte de l'exclusion de {} {} de la liste de groupes \"{}\"",
                     student.desc.firstname, student.desc.surname, group_list.params.name,
-                )
+                ))
             }
             Self::LoosePrefilledGroup(student_id, group_list_id) => {
                 let Some(student) = data.get_data().get_students().student_map.get(student_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(group_list) = data
                     .get_data()
@@ -70,12 +70,12 @@ impl StudentsUpdateWarning {
                     .group_list_map
                     .get(group_list_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte du préremplissage de la liste de groupes \"{}\" avec {} {}",
                     group_list.params.name, student.desc.firstname, student.desc.surname,
-                )
+                ))
             }
         }
     }

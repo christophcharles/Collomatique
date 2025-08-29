@@ -17,26 +17,26 @@ impl GeneralPlanningUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(student_id, period_id) => {
                 let Some(student) = data.get_data().get_students().student_map.get(student_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(period_index) = data
                     .get_data()
                     .get_periods()
                     .find_period_position(*period_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte des informations de présence de l'élève {} {} sur la période {}",
                     student.desc.firstname,
                     student.desc.surname,
                     period_index + 1
-                )
+                ))
             }
             GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(period_id) => {
                 let Some(period_index) = data
@@ -44,29 +44,29 @@ impl GeneralPlanningUpdateWarning {
                     .get_periods()
                     .find_period_position(*period_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte des inscriptions des élèves sur la période {}",
                     period_index + 1
-                )
+                ))
             }
             GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(subject_id, period_id) => {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
                 let Some(period_index) = data
                     .get_data()
                     .get_periods()
                     .find_period_position(*period_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte des informations de la matière \"{}\" sur la période {}",
                     subject.parameters.name,
                     period_index + 1
-                )
+                ))
             }
         }
     }

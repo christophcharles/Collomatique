@@ -626,7 +626,7 @@ impl Component for EditorPanel {
                         .send(warning_op::DialogInput::Show(
                             warnings
                                 .into_iter()
-                                .map(|x| x.build_desc(&self.data))
+                                .filter_map(|x| x.build_desc(&self.data))
                                 .collect(),
                         ))
                         .unwrap();

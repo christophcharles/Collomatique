@@ -7,8 +7,8 @@ impl AssignmentsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         _data: &T,
-    ) -> String {
-        String::new()
+    ) -> Option<String> {
+        None
     }
 }
 

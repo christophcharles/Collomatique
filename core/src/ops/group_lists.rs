@@ -18,7 +18,7 @@ impl GroupListsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             Self::LoosePrefilledGroupList(group_list_id, student_id) => {
                 let Some(group_list) = data
@@ -27,16 +27,16 @@ impl GroupListsUpdateWarning {
                     .group_list_map
                     .get(group_list_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(student) = data.get_data().get_students().student_map.get(student_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte du préremplissage de la liste de groupe \"{}\" avec l'élève {} {}",
                     group_list.params.name, student.desc.firstname, student.desc.surname,
-                )
+                ))
             }
             Self::LooseSubjectAssociation(group_list_id, subject_id) => {
                 let Some(group_list) = data
@@ -45,15 +45,15 @@ impl GroupListsUpdateWarning {
                     .group_list_map
                     .get(group_list_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\"",
                     subject.parameters.name, group_list.params.name,
-                )
+                ))
             }
         }
     }
