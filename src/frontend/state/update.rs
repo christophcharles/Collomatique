@@ -164,148 +164,153 @@ use backend::{IdError, WeekPatternDependancy, WeekPatternError};
 
 #[trait_variant::make(Send)]
 pub trait Manager: ManagerInternal {
-    fn get_logic(&self) -> &backend::Logic<Self::Storage>;
+    type InternalStorage: backend::Storage;
+
+    fn get_logic(&self) -> &backend::Logic<Self::InternalStorage>;
 
     async fn general_data_get(
         &self,
-    ) -> Result<backend::GeneralData, <Self::Storage as backend::Storage>::InternalError>;
+    ) -> Result<backend::GeneralData, <Self::InternalStorage as backend::Storage>::InternalError>;
     async fn week_patterns_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<WeekPatternHandle, backend::WeekPattern>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn week_patterns_get(
         &self,
         handle: WeekPatternHandle,
     ) -> Result<
         backend::WeekPattern,
-        IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, WeekPatternHandle>,
     >;
     async fn week_patterns_check_can_remove(
         &mut self,
         handle: WeekPatternHandle,
     ) -> Result<
         Vec<WeekPatternDependancy<IncompatHandle, TimeSlotHandle>>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, WeekPatternHandle>,
     >;
     async fn week_patterns_check_data(
         &self,
         pattern: &backend::WeekPattern,
-    ) -> std::result::Result<(), WeekPatternError<<Self::Storage as backend::Storage>::InternalError>>;
+    ) -> std::result::Result<
+        (),
+        WeekPatternError<<Self::InternalStorage as backend::Storage>::InternalError>,
+    >;
     async fn teachers_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<TeacherHandle, backend::Teacher>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn teachers_get(
         &self,
         handle: TeacherHandle,
     ) -> Result<
         backend::Teacher,
-        IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, TeacherHandle>,
     >;
     async fn teachers_check_can_remove(
         &mut self,
         handle: TeacherHandle,
     ) -> Result<
         Vec<backend::TeacherDependancy<TimeSlotHandle, ColloscopeHandle>>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, TeacherHandle>,
     >;
     async fn students_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<StudentHandle, backend::Student>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn students_get(
         &self,
         handle: StudentHandle,
     ) -> Result<
         backend::Student,
-        IdError<<Self::Storage as backend::Storage>::InternalError, StudentHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, StudentHandle>,
     >;
     async fn students_check_can_remove(
         &mut self,
         handle: StudentHandle,
     ) -> Result<
         Vec<backend::StudentDependancy<GroupListHandle, ColloscopeHandle>>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, StudentHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, StudentHandle>,
     >;
     async fn subject_groups_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn subject_groups_get(
         &self,
         handle: SubjectGroupHandle,
     ) -> Result<
         backend::SubjectGroup,
-        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, SubjectGroupHandle>,
     >;
     async fn subject_groups_check_can_remove(
         &mut self,
         handle: SubjectGroupHandle,
     ) -> Result<
         Vec<SubjectGroupDependancy<SubjectHandle, StudentHandle>>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, SubjectGroupHandle>,
     >;
     async fn incompats_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<IncompatHandle, backend::Incompat<WeekPatternHandle>>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn incompats_get(
         &mut self,
         handle: IncompatHandle,
     ) -> Result<
         backend::Incompat<WeekPatternHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, IncompatHandle>,
     >;
     async fn incompats_check_data(
         &self,
         incompat: &backend::Incompat<WeekPatternHandle>,
     ) -> Result<
         backend::DataStatusWithId<WeekPatternHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn incompats_check_can_remove(
         &mut self,
         handle: IncompatHandle,
     ) -> Result<
         Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, IncompatHandle>,
     >;
     async fn group_lists_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<GroupListHandle, backend::GroupList<StudentHandle>>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn group_lists_get(
         &mut self,
         handle: GroupListHandle,
     ) -> Result<
         backend::GroupList<StudentHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, GroupListHandle>,
     >;
     async fn group_lists_check_data(
         &self,
         group_list: &backend::GroupList<StudentHandle>,
     ) -> Result<
         backend::DataStatusWithIdAndInvalidState<StudentHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn group_lists_check_can_remove(
         &mut self,
         handle: GroupListHandle,
     ) -> Result<
         Vec<SubjectHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, GroupListHandle>,
     >;
     async fn subjects_get_all(
         &mut self,
@@ -314,28 +319,28 @@ pub trait Manager: ManagerInternal {
             SubjectHandle,
             backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
         >,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn subjects_get(
         &mut self,
         handle: SubjectHandle,
     ) -> Result<
         backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, SubjectHandle>,
     >;
     async fn subjects_check_data(
         &self,
         subject: &backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     ) -> Result<
         backend::DataStatusWithId3<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn subjects_check_can_remove(
         &mut self,
         handle: SubjectHandle,
     ) -> Result<
         Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, SubjectHandle>,
     >;
     async fn time_slots_get_all(
         &mut self,
@@ -344,75 +349,75 @@ pub trait Manager: ManagerInternal {
             TimeSlotHandle,
             backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
         >,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn time_slots_get(
         &mut self,
         handle: TimeSlotHandle,
     ) -> Result<
         backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, TimeSlotHandle>,
     >;
     async fn time_slots_check_data(
         &self,
         time_slot: &backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
     ) -> Result<
         backend::DataStatusWithId3<SubjectHandle, TeacherHandle, WeekPatternHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn time_slots_check_can_remove(
         &mut self,
         handle: TimeSlotHandle,
     ) -> Result<
         Vec<GroupingHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, TimeSlotHandle>,
     >;
     async fn groupings_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<GroupingHandle, backend::Grouping<TimeSlotHandle>>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn groupings_get(
         &mut self,
         handle: GroupingHandle,
     ) -> Result<
         backend::Grouping<TimeSlotHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, GroupingHandle>,
     >;
     async fn groupings_check_data(
         &self,
         grouping: &backend::Grouping<TimeSlotHandle>,
     ) -> Result<
         backend::DataStatusWithId<TimeSlotHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn groupings_check_can_remove(
         &mut self,
         handle: GroupingHandle,
     ) -> Result<
         Vec<GroupingIncompatHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, GroupingHandle>,
     >;
     async fn grouping_incompats_get_all(
         &mut self,
     ) -> Result<
         BTreeMap<GroupingIncompatHandle, backend::GroupingIncompat<GroupingHandle>>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn grouping_incompats_get(
         &mut self,
         handle: GroupingIncompatHandle,
     ) -> Result<
         backend::GroupingIncompat<GroupingHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, GroupingIncompatHandle>,
     >;
     async fn grouping_incompats_check_data(
         &self,
         grouping_incompat: &backend::GroupingIncompat<GroupingHandle>,
     ) -> Result<
         backend::DataStatusWithId<GroupingHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn subject_group_for_student_get(
         &mut self,
@@ -421,7 +426,7 @@ pub trait Manager: ManagerInternal {
     ) -> Result<
         Option<SubjectHandle>,
         backend::Id2Error<
-            <Self::Storage as backend::Storage>::InternalError,
+            <Self::InternalStorage as backend::Storage>::InternalError,
             StudentHandle,
             SubjectGroupHandle,
         >,
@@ -433,7 +438,7 @@ pub trait Manager: ManagerInternal {
     ) -> Result<
         bool,
         backend::Id2Error<
-            <Self::Storage as backend::Storage>::InternalError,
+            <Self::InternalStorage as backend::Storage>::InternalError,
             StudentHandle,
             IncompatHandle,
         >,
@@ -445,27 +450,27 @@ pub trait Manager: ManagerInternal {
             ColloscopeHandle,
             backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
         >,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
     async fn colloscopes_get(
         &mut self,
         handle: ColloscopeHandle,
     ) -> Result<
         backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
-        IdError<<Self::Storage as backend::Storage>::InternalError, ColloscopeHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, ColloscopeHandle>,
     >;
     async fn colloscopes_check_data(
         &self,
         colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
     ) -> Result<
         backend::DataStatusWithId3<TeacherHandle, SubjectHandle, StudentHandle>,
-        <Self::Storage as backend::Storage>::InternalError,
+        <Self::InternalStorage as backend::Storage>::InternalError,
     >;
 
     async fn apply(
         &mut self,
         op: Operation,
-    ) -> Result<ReturnHandle, UpdateError<<Self::Storage as backend::Storage>::InternalError>>;
+    ) -> Result<ReturnHandle, UpdateError<<Self::InternalStorage as backend::Storage>::InternalError>>;
     fn can_undo(&self) -> bool;
     fn can_redo(&self) -> bool;
     async fn undo(
@@ -478,6 +483,8 @@ pub trait Manager: ManagerInternal {
 }
 
 impl<T: ManagerInternal> Manager for T {
+    type InternalStorage = T::Storage;
+
     fn get_logic(&self) -> &backend::Logic<T::Storage> {
         self.get_backend_logic()
     }

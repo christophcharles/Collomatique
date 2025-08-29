@@ -26,41 +26,43 @@ struct GenColloscopeCache<StudentId: OrdId, SubjectId: OrdId, TeacherId: OrdId> 
     validated_data: crate::gen::colloscope::ValidatedData,
 }
 
-#[derive(Clone, Debug)]
-pub struct GenColloscopeTranslator<'a, T: Storage> {
-    data_storage: &'a Logic<T>,
-    data_cache:
-        std::cell::RefCell<Option<GenColloscopeCache<T::StudentId, T::SubjectId, T::TeacherId>>>,
+use super::state::{
+    update::Manager, GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle,
+    StudentHandle, SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle,
+    WeekPatternHandle,
+};
+
+#[derive(Debug)]
+pub struct GenColloscopeTranslator {
+    data_cache: GenColloscopeCache<StudentHandle, SubjectHandle, TeacherHandle>,
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    pub fn new(logic: &'a Logic<T>) -> GenColloscopeTranslator<'a, T> {
-        GenColloscopeTranslator {
-            data_storage: logic,
-            data_cache: std::cell::RefCell::new(None),
-        }
+impl GenColloscopeTranslator {
+    pub async fn new<T: Manager>(
+        manager: &mut T,
+    ) -> GenColloscopeResult<GenColloscopeTranslator, T> {
+        Ok(GenColloscopeTranslator {
+            data_cache: GenColloscopeTranslator::build_data_cache(manager).await?,
+        })
     }
 }
 
 #[derive(Debug, Error)]
-pub enum GenColloscopeError<T: Storage, StorageError = <T as Storage>::InternalError>
-where
-    StorageError: std::fmt::Debug + std::error::Error,
-{
+pub enum GenColloscopeError<StorageError: std::fmt::Debug + std::error::Error> {
     #[error("Error in the storage backend: {0:?}")]
     StorageError(#[from] StorageError),
     #[error("Error while validating data: {0:?}")]
     ValidationError(crate::gen::colloscope::Error),
     #[error("Inconsistent data: bad subject id ({0:?})")]
-    BadSubjectId(T::SubjectId),
+    BadSubjectId(SubjectHandle),
     #[error("Inconsistent data: bad teacher id ({0:?})")]
-    BadTeacherId(T::TeacherId),
+    BadTeacherId(TeacherHandle),
     #[error("Inconsistent data: bad week pattern id ({0:?})")]
-    BadWeekPatternId(T::WeekPatternId),
+    BadWeekPatternId(WeekPatternHandle),
     #[error("Inconsistent data: bad group list id ({0:?})")]
-    BadGroupListId(T::GroupListId),
+    BadGroupListId(GroupListHandle),
     #[error("Inconsistent data: bad student id ({0:?})")]
-    BadStudentId(T::StudentId),
+    BadStudentId(StudentHandle),
     #[error("Inconsistent data: bad group index ({0})")]
     BadGroupIndex(usize),
     #[error(
@@ -68,48 +70,54 @@ where
     )]
     InconsistentGroupSizeConstraints(usize, std::ops::RangeInclusive<NonZeroUsize>),
     #[error("Inconsistent data: bad time slot id ({0:?})")]
-    BadTimeSlotId(T::TimeSlotId),
+    BadTimeSlotId(TimeSlotHandle),
     #[error("Inconsistent data: bad grouping id ({0:?})")]
-    BadGroupingId(T::GroupingId),
+    BadGroupingId(GroupingHandle),
+}
+
+#[derive(Debug, Error)]
+pub enum TranslateColloscopeError {
     #[error("Colloscope does not fit validated data. It might not be built for this set of constraints or database")]
     BadColloscope,
 }
 
-impl<T: Storage, StorageError: std::fmt::Debug + std::error::Error>
-    GenColloscopeError<T, StorageError>
-{
+impl<StorageError: std::fmt::Debug + std::error::Error> GenColloscopeError<StorageError> {
     fn from_validation(validation_error: crate::gen::colloscope::Error) -> Self {
         GenColloscopeError::ValidationError(validation_error)
     }
 }
 
-type GenColloscopeResult<R, T> = Result<R, GenColloscopeError<T>>;
+type GenColloscopeResult<R, T> = Result<
+    R,
+    GenColloscopeError<<<T as Manager>::InternalStorage as crate::backend::Storage>::InternalError>,
+>;
 
-struct GenColloscopeData<T: Storage> {
+struct GenColloscopeData {
     general_data: GeneralData,
-    week_patterns: BTreeMap<T::WeekPatternId, WeekPattern>,
-    teachers: BTreeMap<T::TeacherId, Teacher>,
-    incompats: BTreeMap<T::IncompatId, Incompat<T::WeekPatternId>>,
-    students: BTreeMap<T::StudentId, Student>,
-    incompat_for_student_data: BTreeSet<(T::StudentId, T::IncompatId)>,
-    subjects: BTreeMap<T::SubjectId, Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>>,
-    subject_for_student_data: BTreeSet<(T::StudentId, T::SubjectId)>,
-    time_slots: BTreeMap<T::TimeSlotId, TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>>,
-    group_lists: BTreeMap<T::GroupListId, GroupList<T::StudentId>>,
-    groupings: BTreeMap<T::GroupingId, Grouping<T::TimeSlotId>>,
-    grouping_incompats: BTreeMap<T::GroupingIncompatId, GroupingIncompat<T::GroupingId>>,
+    week_patterns: BTreeMap<WeekPatternHandle, WeekPattern>,
+    teachers: BTreeMap<TeacherHandle, Teacher>,
+    incompats: BTreeMap<IncompatHandle, Incompat<WeekPatternHandle>>,
+    students: BTreeMap<StudentHandle, Student>,
+    incompat_for_student_data: BTreeSet<(StudentHandle, IncompatHandle)>,
+    subjects: BTreeMap<SubjectHandle, Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>>,
+    subject_for_student_data: BTreeSet<(StudentHandle, SubjectHandle)>,
+    time_slots: BTreeMap<TimeSlotHandle, TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>>,
+    group_lists: BTreeMap<GroupListHandle, GroupList<StudentHandle>>,
+    groupings: BTreeMap<GroupingHandle, Grouping<TimeSlotHandle>>,
+    grouping_incompats: BTreeMap<GroupingIncompatHandle, GroupingIncompat<GroupingHandle>>,
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    async fn extract_data(&self) -> GenColloscopeResult<GenColloscopeData<T>, T> {
-        let incompats = self.data_storage.incompats_get_all().await?;
-        let students = self.data_storage.students_get_all().await?;
+impl GenColloscopeTranslator {
+    async fn extract_data<T: Manager>(
+        manager: &mut T,
+    ) -> GenColloscopeResult<GenColloscopeData, T> {
+        let incompats = manager.incompats_get_all().await?;
+        let students = manager.students_get_all().await?;
 
         let mut incompat_for_student_data = BTreeSet::new();
         for (&student_id, _student) in &students {
             for (&incompat_id, _incompat) in &incompats {
-                if self
-                    .data_storage
+                if manager
                     .incompat_for_student_get(student_id, incompat_id)
                     .await
                     .map_err(|e| match e {
@@ -125,14 +133,13 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             }
         }
 
-        let subjects = self.data_storage.subjects_get_all().await?;
-        let subject_groups = self.data_storage.subject_groups_get_all().await?;
+        let subjects = manager.subjects_get_all().await?;
+        let subject_groups = manager.subject_groups_get_all().await?;
 
         let mut subject_for_student_data = BTreeSet::new();
         for (&student_id, _student) in &students {
             for (&subject_group_id, _subject_group) in &subject_groups {
-                let subject_opt = self
-                    .data_storage
+                let subject_opt = manager
                     .subject_group_for_student_get(student_id, subject_group_id)
                     .await
                     .map_err(|e| match e {
@@ -150,24 +157,24 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         }
 
         Ok(GenColloscopeData {
-            general_data: self.data_storage.general_data_get().await?,
-            week_patterns: self.data_storage.week_patterns_get_all().await?,
-            teachers: self.data_storage.teachers_get_all().await?,
+            general_data: manager.general_data_get().await?,
+            week_patterns: manager.week_patterns_get_all().await?,
+            teachers: manager.teachers_get_all().await?,
             incompats,
             students,
             incompat_for_student_data,
             subjects,
             subject_for_student_data,
-            time_slots: self.data_storage.time_slots_get_all().await?,
-            group_lists: self.data_storage.group_lists_get_all().await?,
-            groupings: self.data_storage.groupings_get_all().await?,
-            grouping_incompats: self.data_storage.grouping_incompats_get_all().await?,
+            time_slots: manager.time_slots_get_all().await?,
+            group_lists: manager.group_lists_get_all().await?,
+            groupings: manager.groupings_get_all().await?,
+            grouping_incompats: manager.grouping_incompats_get_all().await?,
         })
     }
 
     fn is_week_in_week_pattern(
-        data: &GenColloscopeData<T>,
-        week_pattern_id: T::WeekPatternId,
+        data: &GenColloscopeData,
+        week_pattern_id: WeekPatternHandle,
         week: Week,
     ) -> bool {
         match data.week_patterns.get(&week_pattern_id) {
@@ -176,30 +183,27 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         }
     }
 
-    fn build_general_data(
-        &self,
-        data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::GeneralData, T> {
-        Ok(crate::gen::colloscope::GeneralData {
+    fn build_general_data(data: &GenColloscopeData) -> crate::gen::colloscope::GeneralData {
+        crate::gen::colloscope::GeneralData {
             teacher_count: data.teachers.len(),
             week_count: data.general_data.week_count,
             interrogations_per_week: data.general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: data.general_data.max_interrogations_per_day,
-        })
+        }
     }
 }
 
 #[derive(Clone, Debug)]
-struct IncompatibilitiesData<T: Storage> {
+struct IncompatibilitiesData {
     incompat_list: crate::gen::colloscope::IncompatibilityList,
     incompat_group_list: crate::gen::colloscope::IncompatibilityGroupList,
-    id_map: BTreeMap<T::IncompatId, BTreeSet<usize>>,
+    id_map: BTreeMap<IncompatHandle, BTreeSet<usize>>,
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
+impl GenColloscopeTranslator {
     fn is_week_in_incompat_group(
-        data: &GenColloscopeData<T>,
-        group: &IncompatGroup<T::WeekPatternId>,
+        data: &GenColloscopeData,
+        group: &IncompatGroup<WeekPatternHandle>,
         week: Week,
     ) -> bool {
         for slot in &group.slots {
@@ -211,10 +215,9 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     }
 
     fn build_incompatibility_data(
-        &self,
-        data: &GenColloscopeData<T>,
+        data: &GenColloscopeData,
         week_count: NonZeroU32,
-    ) -> GenColloscopeResult<IncompatibilitiesData<T>, T> {
+    ) -> IncompatibilitiesData {
         use crate::gen::colloscope::{Incompatibility, IncompatibilityGroup, SlotWithDuration};
 
         let mut output = IncompatibilitiesData {
@@ -266,22 +269,21 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             output.id_map.insert(incompat_id, ids);
         }
 
-        Ok(output)
+        output
     }
 }
 
 #[derive(Clone, Debug)]
-struct StudentData<T: Storage> {
+struct StudentData {
     student_list: crate::gen::colloscope::StudentList,
-    id_map: BTreeMap<T::StudentId, usize>,
+    id_map: BTreeMap<StudentHandle, usize>,
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
+impl GenColloscopeTranslator {
     fn build_student_data(
-        &self,
-        data: &GenColloscopeData<T>,
-        incompat_id_map: &BTreeMap<T::IncompatId, BTreeSet<usize>>,
-    ) -> GenColloscopeResult<StudentData<T>, T> {
+        data: &GenColloscopeData,
+        incompat_id_map: &BTreeMap<IncompatHandle, BTreeSet<usize>>,
+    ) -> StudentData {
         use crate::gen::colloscope::Student;
 
         let mut output = StudentData {
@@ -331,28 +333,25 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             output.student_list.push(new_student);
         }
 
-        Ok(output)
+        output
     }
 }
 
 #[derive(Clone, Debug)]
-struct BareSubjectData<T: Storage> {
+struct BareSubjectData {
     subject_list: crate::gen::colloscope::SubjectList,
-    id_map: BTreeMap<T::SubjectId, usize>,
+    id_map: BTreeMap<SubjectHandle, usize>,
 }
 
 #[derive(Clone, Debug)]
-struct SubjectData<T: Storage> {
+struct SubjectData {
     subject_list: crate::gen::colloscope::SubjectList,
-    slot_id_map: BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
-    subject_reverse_data: Vec<GenColloCacheSubject<T::SubjectId, T::TeacherId>>,
+    slot_id_map: BTreeMap<TimeSlotHandle, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
+    subject_reverse_data: Vec<GenColloCacheSubject<SubjectHandle, TeacherHandle>>,
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_bare_subjects(
-        &self,
-        data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<BareSubjectData<T>, T> {
+impl GenColloscopeTranslator {
+    fn build_bare_subjects(data: &GenColloscopeData) -> BareSubjectData {
         use crate::gen::colloscope::{BalancingRequirements, GroupsDesc, Subject};
 
         let mut output = BareSubjectData {
@@ -380,17 +379,16 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             output.subject_list.push(new_subject);
         }
 
-        Ok(output)
+        output
     }
 
-    fn add_slots_to_subjects_and_build_slot_id_map(
-        &self,
-        data: &GenColloscopeData<T>,
+    fn add_slots_to_subjects_and_build_slot_id_map<T: Manager>(
+        data: &GenColloscopeData,
         subjects: &mut crate::gen::colloscope::SubjectList,
-        subject_reverse_data: &mut Vec<GenColloCacheSubject<T::SubjectId, T::TeacherId>>,
-        subject_id_map: &BTreeMap<T::SubjectId, usize>,
+        subject_reverse_data: &mut Vec<GenColloCacheSubject<SubjectHandle, TeacherHandle>>,
+        subject_id_map: &BTreeMap<SubjectHandle, usize>,
     ) -> GenColloscopeResult<
-        BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
+        BTreeMap<TimeSlotHandle, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
         T,
     > {
         use crate::gen::colloscope::{SlotRef, SlotStart, SlotWithTeacher};
@@ -462,10 +460,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         Ok(slot_id_map)
     }
 
-    fn default_empty_groups_count(
-        &self,
-        subject: &crate::gen::colloscope::Subject,
-    ) -> Option<usize> {
+    fn default_empty_groups_count(subject: &crate::gen::colloscope::Subject) -> Option<usize> {
         let min_group_size = subject.students_per_group.start().get();
         let max_group_size = subject.students_per_group.end().get();
 
@@ -481,13 +476,12 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         }
     }
 
-    fn build_default_empty_groups(
-        &self,
+    fn build_default_empty_groups<T: Manager>(
         subject: &mut crate::gen::colloscope::Subject,
     ) -> GenColloscopeResult<(), T> {
         use crate::gen::colloscope::GroupDesc;
 
-        let Some(group_count) = self.default_empty_groups_count(subject) else {
+        let Some(group_count) = Self::default_empty_groups_count(subject) else {
             let student_count = subject.groups.not_assigned.len();
 
             return Err(GenColloscopeError::InconsistentGroupSizeConstraints(
@@ -507,12 +501,11 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         Ok(())
     }
 
-    fn migrate_students_to_groups(
-        &self,
+    fn migrate_students_to_groups<T: Manager>(
         subject: &mut crate::gen::colloscope::Subject,
         rev_groups: &mut Vec<String>,
-        group_list: &GroupList<T::StudentId>,
-        student_id_map: &BTreeMap<T::StudentId, usize>,
+        group_list: &GroupList<StudentHandle>,
+        student_id_map: &BTreeMap<StudentHandle, usize>,
     ) -> GenColloscopeResult<(), T> {
         use crate::gen::colloscope::GroupDesc;
         let mut prefilled_groups: Vec<_> = group_list
@@ -555,13 +548,12 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         Ok(())
     }
 
-    fn add_groups_to_subjects(
-        &self,
-        data: &GenColloscopeData<T>,
+    fn add_groups_to_subjects<T: Manager>(
+        data: &GenColloscopeData,
         subjects: &mut crate::gen::colloscope::SubjectList,
-        subject_reverse_data: &mut Vec<GenColloCacheSubject<T::SubjectId, T::TeacherId>>,
-        subject_id_map: &BTreeMap<T::SubjectId, usize>,
-        student_id_map: &BTreeMap<T::StudentId, usize>,
+        subject_reverse_data: &mut Vec<GenColloCacheSubject<SubjectHandle, TeacherHandle>>,
+        subject_id_map: &BTreeMap<SubjectHandle, usize>,
+        student_id_map: &BTreeMap<StudentHandle, usize>,
     ) -> GenColloscopeResult<(), T> {
         for (&subject_id, &subject_index) in subject_id_map {
             let subject = subjects
@@ -599,7 +591,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
 
                     rev_subject.group_list_name = group_list.name.clone();
 
-                    self.migrate_students_to_groups(
+                    Self::migrate_students_to_groups::<T>(
                         subject,
                         &mut rev_subject.groups,
                         group_list,
@@ -607,7 +599,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
                     )?;
                 }
                 None => {
-                    self.build_default_empty_groups(subject)?;
+                    Self::build_default_empty_groups::<T>(subject)?;
 
                     rev_subject.group_list_name = data
                         .subjects
@@ -629,12 +621,11 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         Ok(())
     }
 
-    fn build_subject_data(
-        &self,
-        data: &GenColloscopeData<T>,
-        student_id_map: &BTreeMap<T::StudentId, usize>,
-    ) -> GenColloscopeResult<SubjectData<T>, T> {
-        let mut bare_subject_data = self.build_bare_subjects(data)?;
+    fn build_subject_data<T: Manager>(
+        data: &GenColloscopeData,
+        student_id_map: &BTreeMap<StudentHandle, usize>,
+    ) -> GenColloscopeResult<SubjectData, T> {
+        let mut bare_subject_data = Self::build_bare_subjects(data);
 
         let subject_id_reverse_map: BTreeMap<_, _> = bare_subject_data
             .id_map
@@ -675,14 +666,14 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             })
             .collect::<GenColloscopeResult<_, T>>()?;
 
-        let slot_id_map = self.add_slots_to_subjects_and_build_slot_id_map(
+        let slot_id_map = Self::add_slots_to_subjects_and_build_slot_id_map::<T>(
             data,
             &mut bare_subject_data.subject_list,
             &mut subject_reverse_data,
             &bare_subject_data.id_map,
         )?;
 
-        self.add_groups_to_subjects(
+        Self::add_groups_to_subjects::<T>(
             data,
             &mut bare_subject_data.subject_list,
             &mut subject_reverse_data,
@@ -699,18 +690,17 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
 }
 
 #[derive(Clone, Debug)]
-struct SlotGroupingData<T: Storage> {
+struct SlotGroupingData {
     slot_grouping_list: crate::gen::colloscope::SlotGroupingList,
-    id_map: BTreeMap<T::GroupingId, BTreeMap<Week, usize>>,
+    id_map: BTreeMap<GroupingHandle, BTreeMap<Week, usize>>,
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_slot_grouping_data(
-        &self,
-        data: &GenColloscopeData<T>,
+impl GenColloscopeTranslator {
+    fn build_slot_grouping_data<T: Manager>(
+        data: &GenColloscopeData,
         week_count: NonZeroU32,
-        slot_id_map: &BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
-    ) -> GenColloscopeResult<SlotGroupingData<T>, T> {
+        slot_id_map: &BTreeMap<TimeSlotHandle, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
+    ) -> GenColloscopeResult<SlotGroupingData, T> {
         use crate::gen::colloscope::SlotGrouping;
 
         let mut output = SlotGroupingData {
@@ -750,12 +740,11 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     }
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_grouping_incompats(
-        &self,
-        data: &GenColloscopeData<T>,
+impl GenColloscopeTranslator {
+    fn build_grouping_incompats<T: Manager>(
+        data: &GenColloscopeData,
         week_count: NonZeroU32,
-        grouping_id_map: &BTreeMap<T::GroupingId, BTreeMap<Week, usize>>,
+        grouping_id_map: &BTreeMap<GroupingHandle, BTreeMap<Week, usize>>,
     ) -> GenColloscopeResult<crate::gen::colloscope::SlotGroupingIncompatSet, T> {
         use crate::gen::colloscope::SlotGroupingIncompat;
 
@@ -792,20 +781,27 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     }
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    async fn build_cache(
-        &self,
-    ) -> GenColloscopeResult<GenColloscopeCache<T::StudentId, T::SubjectId, T::TeacherId>, T> {
-        let data = self.extract_data().await?;
+impl GenColloscopeTranslator {
+    async fn build_data_cache<T: Manager>(
+        manager: &mut T,
+    ) -> GenColloscopeResult<GenColloscopeCache<StudentHandle, SubjectHandle, TeacherHandle>, T>
+    {
+        let data = Self::extract_data(manager).await?;
 
-        let general = self.build_general_data(&data)?;
-        let incompatibility_data = self.build_incompatibility_data(&data, general.week_count)?;
-        let student_data = self.build_student_data(&data, &incompatibility_data.id_map)?;
-        let subject_data = self.build_subject_data(&data, &student_data.id_map)?;
-        let slot_grouping_data =
-            self.build_slot_grouping_data(&data, general.week_count, &subject_data.slot_id_map)?;
-        let grouping_incompats =
-            self.build_grouping_incompats(&data, general.week_count, &slot_grouping_data.id_map)?;
+        let general = Self::build_general_data(&data);
+        let incompatibility_data = Self::build_incompatibility_data(&data, general.week_count);
+        let student_data = Self::build_student_data(&data, &incompatibility_data.id_map);
+        let subject_data = Self::build_subject_data::<T>(&data, &student_data.id_map)?;
+        let slot_grouping_data = Self::build_slot_grouping_data::<T>(
+            &data,
+            general.week_count,
+            &subject_data.slot_id_map,
+        )?;
+        let grouping_incompats = Self::build_grouping_incompats::<T>(
+            &data,
+            general.week_count,
+            &slot_grouping_data.id_map,
+        )?;
 
         let validated_data = crate::gen::colloscope::ValidatedData::new(
             general,
@@ -841,50 +837,29 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             validated_data,
         })
     }
-
-    async fn get_cache(
-        &self,
-    ) -> GenColloscopeResult<GenColloscopeCache<T::StudentId, T::SubjectId, T::TeacherId>, T> {
-        let mut data_cache = self.data_cache.borrow_mut();
-
-        match data_cache.as_ref() {
-            Some(cache) => Ok(cache.clone()),
-            None => {
-                let new_data = self.build_cache().await?;
-                *data_cache = Some(new_data.clone());
-                Ok(new_data)
-            }
-        }
-    }
 }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    pub async fn build_validated_data(
-        &self,
-    ) -> GenColloscopeResult<crate::gen::colloscope::ValidatedData, T> {
-        let data_cache = self.get_cache().await?;
-
-        Ok(data_cache.validated_data)
+impl GenColloscopeTranslator {
+    pub fn get_validated_data(&self) -> crate::gen::colloscope::ValidatedData {
+        self.data_cache.validated_data.clone()
     }
-}
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    pub async fn translate_colloscope(
+    pub fn translate_colloscope(
         &self,
         colloscope: &crate::gen::colloscope::Colloscope,
         name: &str,
-    ) -> GenColloscopeResult<Colloscope<T::TeacherId, T::SubjectId, T::StudentId>, T> {
-        let data_cache = self.get_cache().await?;
-
+    ) -> Result<Colloscope<TeacherHandle, SubjectHandle, StudentHandle>, TranslateColloscopeError>
+    {
         let subjects = colloscope
             .subjects
             .iter()
             .enumerate()
             .map(|(i, subject)| {
-                let subject_data = data_cache
+                let subject_data = self
+                    .data_cache
                     .subjects
                     .get(i)
-                    .ok_or(GenColloscopeError::BadColloscope)?;
+                    .ok_or(TranslateColloscopeError::BadColloscope)?;
 
                 let group_list = ColloscopeGroupList {
                     name: subject_data.group_list_name.clone(),
@@ -898,16 +873,17 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
                                 .iter()
                                 .copied()
                                 .map(|student| {
-                                    let student_id = *data_cache
+                                    let student_id = *self
+                                        .data_cache
                                         .student_ids
                                         .get(student)
-                                        .ok_or(GenColloscopeError::BadColloscope)?;
+                                        .ok_or(TranslateColloscopeError::BadColloscope)?;
 
                                     Ok((student_id, j))
                                 })
                                 .collect::<Vec<_>>()
                         })
-                        .collect::<GenColloscopeResult<_, T>>()?,
+                        .collect::<Result<_, TranslateColloscopeError>>()?,
                 };
 
                 let time_slots = subject_data
@@ -925,14 +901,14 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
                                     let groups: &BTreeSet<usize> = subject
                                         .slots
                                         .get(slot_num)
-                                        .ok_or(GenColloscopeError::BadColloscope)?;
+                                        .ok_or(TranslateColloscopeError::BadColloscope)?;
 
                                     Ok((week, groups.clone()))
                                 })
-                                .collect::<GenColloscopeResult<_, T>>()?,
+                                .collect::<Result<_, TranslateColloscopeError>>()?,
                         })
                     })
-                    .collect::<GenColloscopeResult<_, T>>()?;
+                    .collect::<Result<_, TranslateColloscopeError>>()?;
 
                 Ok((
                     subject_data.id,
@@ -942,7 +918,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
                     },
                 ))
             })
-            .collect::<GenColloscopeResult<_, T>>()?;
+            .collect::<Result<_, TranslateColloscopeError>>()?;
 
         let output = Colloscope {
             name: String::from(name),
