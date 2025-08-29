@@ -22,5 +22,6 @@ rayon = "1.10"
 coin_cbc = { version = "0.1.8", default-features = false }
 highs = "1.6"
 trait-variant = "0.1.2"
+gag = "1.0.0"
 
 [features]
