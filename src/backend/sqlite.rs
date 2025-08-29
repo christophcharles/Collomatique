@@ -591,32 +591,23 @@ impl Storage for Store {
     unsafe fn incompats_add_unchecked(
         &mut self,
         incompat: &Incompat<Self::WeekPatternId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            Self::IncompatId,
-            CrossError<Self::InternalError, Self::WeekPatternId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<Self::IncompatId, Self::InternalError>>
+           + Send {
         incompats::add(&self.pool, incompat)
     }
     unsafe fn incompats_remove_unchecked(
         &mut self,
         index: Self::IncompatId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::IncompatId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         incompats::remove(&self.pool, index)
     }
     unsafe fn incompats_update_unchecked(
         &mut self,
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         incompats::update(&self.pool, index, incompat)
     }
 
