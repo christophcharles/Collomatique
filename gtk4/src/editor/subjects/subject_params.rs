@@ -11,6 +11,15 @@ pub struct Dialog {
     hidden: bool,
     params: collomatique_state_colloscopes::SubjectParameters,
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    periodicity_panel: PeriodicityPanel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeriodicityPanel {
+    OnceForEveryBlockOfWeeks,
+    ExactlyPeriodic,
+    AmountInYear,
+    OnceForEveryArbitraryBlock,
 }
 
 #[derive(Debug)]
@@ -29,11 +38,63 @@ pub enum DialogInput {
     UpdateStudentsPerGroupMaximum(NonZeroU32),
     UpdateGroupsPerInterrogationMinimum(NonZeroU32),
     UpdateGroupsPerInterrogationMaximum(NonZeroU32),
+    UpdatePeriodicityType(PeriodicityPanel),
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::SubjectParameters),
+}
+
+impl Dialog {
+    fn generate_periodicity_type_model() -> gtk::StringList {
+        gtk::StringList::new(&[
+            "Programme glissant",
+            "Par blocs de semaines",
+            "Colles à l'année",
+            "Par blocs (arbitraires)",
+        ])
+    }
+
+    fn periocity_selected_to_enum(selected: u32) -> PeriodicityPanel {
+        match selected {
+            0 => PeriodicityPanel::ExactlyPeriodic,
+            1 => PeriodicityPanel::OnceForEveryBlockOfWeeks,
+            2 => PeriodicityPanel::AmountInYear,
+            3 => PeriodicityPanel::OnceForEveryArbitraryBlock,
+            _ => panic!("Invalid selection for periodicity type"),
+        }
+    }
+
+    fn periodicity_enum_to_selected(panel: PeriodicityPanel) -> u32 {
+        match panel {
+            PeriodicityPanel::ExactlyPeriodic => 0,
+            PeriodicityPanel::OnceForEveryBlockOfWeeks => 1,
+            PeriodicityPanel::AmountInYear => 2,
+            PeriodicityPanel::OnceForEveryArbitraryBlock => 3,
+        }
+    }
+
+    fn periodicity_panel_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> PeriodicityPanel {
+        use collomatique_state_colloscopes::SubjectPeriodicity;
+        match &params.periodicity {
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year: _,
+                minimum_week_separation: _,
+            } => PeriodicityPanel::AmountInYear,
+            SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks: _,
+            } => PeriodicityPanel::ExactlyPeriodic,
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block: _ } => {
+                PeriodicityPanel::OnceForEveryBlockOfWeeks
+            }
+            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks: _ } => {
+                PeriodicityPanel::OnceForEveryArbitraryBlock
+            }
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -234,14 +295,24 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Périodicité des colles de la matière"),
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[name(periodicity_type_entry)]
                             adw::ComboRow {
                                 set_title: "Type de périodicité",
-                                set_model: Some(&gtk::StringList::new(&["Programme glissant", "Par blocs de semaines", "Colles à l'année", "Par blocs (arbitraires)"])),
+                                set_model: Some(&Self::generate_periodicity_type_model()),
+                                #[track(model.periodicity_panel != Self::periocity_selected_to_enum(periodicity_type_entry.selected()))]
+                                set_selected: Self::periodicity_enum_to_selected(model.periodicity_panel),
+                                connect_selected_notify[sender] => move |widget| {
+                                    let selected = widget.selected() as u32;
+                                    let periodicity_type = Dialog::periocity_selected_to_enum(selected);
+                                    sender.input(DialogInput::UpdatePeriodicityType(periodicity_type));
+                                },
                             },
                         },
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.periodicity_panel == PeriodicityPanel::ExactlyPeriodic,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Périodicité (en semaines)",
@@ -262,6 +333,8 @@ impl SimpleComponent for Dialog {
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryBlockOfWeeks,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Taille des blocs (en semaines)",
@@ -282,6 +355,8 @@ impl SimpleComponent for Dialog {
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.periodicity_panel == PeriodicityPanel::AmountInYear,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Colles dans l'année",
@@ -317,6 +392,8 @@ impl SimpleComponent for Dialog {
                         },
                         gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
+                            #[watch]
+                            set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock,
                             adw::PreferencesGroup {
                                 set_margin_all: 5,
                                 set_hexpand: true,
@@ -409,6 +486,8 @@ impl SimpleComponent for Dialog {
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock,
                             adw::ButtonRow {
                                 set_hexpand: true,
                                 set_title: "Ajouter un bloc",
@@ -430,6 +509,7 @@ impl SimpleComponent for Dialog {
             hidden: true,
             params: collomatique_state_colloscopes::SubjectParameters::default(),
             global_first_week: None,
+            periodicity_panel: PeriodicityPanel::ExactlyPeriodic,
         };
 
         let widgets = view_output!();
@@ -441,6 +521,7 @@ impl SimpleComponent for Dialog {
         match msg {
             DialogInput::Show(global_first_week, params) => {
                 self.hidden = false;
+                self.periodicity_panel = Self::periodicity_panel_from_params(&params);
                 self.params = params;
                 self.global_first_week = global_first_week;
             }
@@ -502,6 +583,12 @@ impl SimpleComponent for Dialog {
                 let old_min = self.params.groups_per_interrogation.start().clone();
                 assert!(old_min <= new_max);
                 self.params.groups_per_interrogation = old_min..=new_max;
+            }
+            DialogInput::UpdatePeriodicityType(new_periodicity_type) => {
+                if self.periodicity_panel == new_periodicity_type {
+                    return;
+                }
+                self.periodicity_panel = new_periodicity_type;
             }
         }
     }
