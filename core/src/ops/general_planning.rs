@@ -30,6 +30,8 @@ pub enum GeneralPlanningUpdateError {
 pub enum UpdatePeriodWeekCountError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    #[error("Subject {0:?} implies a minimum total number of weeks of {1}")]
+    SubjectImpliesMinimumWeekCount(collomatique_state_colloscopes::SubjectId, usize),
 }
 
 #[derive(Debug, Error)]
@@ -159,14 +161,27 @@ impl GeneralPlanningUpdateOp {
 
                 desc.resize(*week_count, desc.last().copied().unwrap_or(true));
 
-                let result = data
+                let result = match data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                         ),
                         self.get_desc(),
-                    )
-                    .expect("Period id should be valid at this point");
+                    ) {
+                        Ok(r) => r,
+                        Err(collomatique_state_colloscopes::Error::Period(e)) => match e {
+                            collomatique_state_colloscopes::PeriodError::InvalidPeriodId(_) => panic!(
+                                "Period Id {:?} should be valid at this point but InvalidPeriodId received", *period_id
+                            ),
+                            collomatique_state_colloscopes::PeriodError::SubjectImpliesMinimumWeekCount(s_id, wc) => {
+                                Err(UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(s_id, wc))?
+                            }
+                            _ => panic!("Unexpected error for UpdatePeriodWeekCount! {:?}", e),
+                        }
+                        Err(e) => {
+                            panic!("Unexpected error for UpdatePeriodWeekCount! {:?}", e);
+                        }
+                    };
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
                 }
