@@ -188,10 +188,7 @@ pub enum Message {
     ExitValidated(window::Id),
 }
 
-fn close_warning_task(state: &GuiState, message_if_yes: GuiMessage) -> Task<GuiMessage> {
-    let GuiState::Editor(editor_state) = state else {
-        panic!("Received editor message while not in editor state");
-    };
+fn close_warning_task(editor_state: &State, message_if_yes: GuiMessage) -> Task<GuiMessage> {
     if editor_state.is_modified() {
         Task::done(
             super::dialogs::Message::YesNoAlertDialog(
@@ -222,28 +219,22 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             editor_state.panel = new_panel;
             Task::none()
         }
-        Message::NewClicked => close_warning_task(state, GuiMessage::OpenNewFile),
-        Message::OpenClicked => close_warning_task(state, GuiMessage::OpenExistingFile),
-        Message::SaveClicked => {
-            let GuiState::Editor(editor_state) = state else {
-                panic!("Received editor message while not in editor state");
-            };
-
-            match &editor_state.path {
-                Some(file) => Task::done(Message::SaveToFile(file.clone()).into()),
-                None => Task::done(
-                    super::dialogs::Message::FileChooserDialog(
-                        "Enregistrer le colloscope".into(),
-                        true,
-                        std::sync::Arc::new(|path| match path {
-                            Some(file) => Message::SaveToFile(file).into(),
-                            None => GuiMessage::Ignore,
-                        }),
-                    )
-                    .into(),
-                ),
-            }
-        }
+        Message::NewClicked => close_warning_task(editor_state, GuiMessage::OpenNewFile),
+        Message::OpenClicked => close_warning_task(editor_state, GuiMessage::OpenExistingFile),
+        Message::SaveClicked => match &editor_state.path {
+            Some(file) => Task::done(Message::SaveToFile(file.clone()).into()),
+            None => Task::done(
+                super::dialogs::Message::FileChooserDialog(
+                    "Enregistrer le colloscope".into(),
+                    true,
+                    std::sync::Arc::new(|path| match path {
+                        Some(file) => Message::SaveToFile(file).into(),
+                        None => GuiMessage::Ignore,
+                    }),
+                )
+                .into(),
+            ),
+        },
         Message::SaveAsClicked => Task::done(
             super::dialogs::Message::FileChooserDialog(
                 "Enregistrer le colloscope sous...".into(),
@@ -350,8 +341,10 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
                 }
             }
         }
-        Message::CloseClicked => close_warning_task(state, GuiMessage::GoToWelcomeScreen),
-        Message::ExitRequest(id) => close_warning_task(state, Message::ExitValidated(id).into()),
+        Message::CloseClicked => close_warning_task(editor_state, GuiMessage::GoToWelcomeScreen),
+        Message::ExitRequest(id) => {
+            close_warning_task(editor_state, Message::ExitValidated(id).into())
+        }
         Message::ExitValidated(id) => window::close(id),
     }
 }
