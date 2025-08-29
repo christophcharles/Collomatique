@@ -917,7 +917,7 @@ async fn main() -> Result<()> {
     let storage = connect_db(args.create, args.db.as_path()).await?;
 
     use collomatique::backend::Storage;
-    println!("{:?}", storage.week_pattern_get_all().await?);
+    println!("{:?}", storage.week_patterns_get_all().await?);
 
     /*let pool = storage.get_pool();
 

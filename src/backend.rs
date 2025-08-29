@@ -26,18 +26,18 @@ pub trait Storage {
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
-    async fn week_pattern_get_all(
+    async fn week_patterns_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<Self::WeekPatternId, WeekPattern>, Self::InternalError>;
-    async fn week_pattern_get(
+    async fn week_patterns_get(
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<WeekPattern, IdError<Self::InternalError, Self::WeekPatternId>>;
-    async fn week_pattern_add(
+    async fn week_patterns_add(
         &self,
         pattern: WeekPattern,
     ) -> std::result::Result<Self::WeekPatternId, Self::InternalError>;
-    async fn week_pattern_remove(
+    async fn week_patterns_remove(
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;

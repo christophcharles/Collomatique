@@ -19,7 +19,7 @@ async fn week_pattern_add_one(pool: sqlx::SqlitePool) {
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
     let _id = store
-        .week_pattern_add(WeekPattern {
+        .week_patterns_add(WeekPattern {
             name: String::from("Impaires"),
             weeks,
         })
@@ -96,7 +96,7 @@ async fn week_pattern_add_multiple(pool: sqlx::SqlitePool) {
     let weeks = (0..20).into_iter().map(|x| Week(x)).collect();
 
     let _id = store
-        .week_pattern_add(WeekPattern {
+        .week_patterns_add(WeekPattern {
             name: String::from("Toutes"),
             weeks,
         })
@@ -106,7 +106,7 @@ async fn week_pattern_add_multiple(pool: sqlx::SqlitePool) {
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
     let _id = store
-        .week_pattern_add(WeekPattern {
+        .week_patterns_add(WeekPattern {
             name: String::from("Impaires"),
             weeks,
         })
@@ -121,7 +121,7 @@ async fn week_pattern_add_multiple(pool: sqlx::SqlitePool) {
         .collect();
 
     let _id = store
-        .week_pattern_add(WeekPattern {
+        .week_patterns_add(WeekPattern {
             name: String::from("Paires"),
             weeks,
         })
@@ -335,7 +335,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     ).execute(&store.pool).await.unwrap();
 
     let pattern = store
-        .week_pattern_get(super::super::week_patterns::Id(2))
+        .week_patterns_get(super::super::week_patterns::Id(2))
         .await
         .unwrap();
 
@@ -360,7 +360,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    let result = store.week_pattern_get_all().await.unwrap();
+    let result = store.week_patterns_get_all().await.unwrap();
 
     let expected_result = BTreeMap::from([
         (
@@ -414,11 +414,11 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     ).execute(&store.pool).await.unwrap();
 
     store
-        .week_pattern_remove(super::super::week_patterns::Id(2))
+        .week_patterns_remove(super::super::week_patterns::Id(2))
         .await
         .unwrap();
 
-    let result = store.week_pattern_get_all().await.unwrap();
+    let result = store.week_patterns_get_all().await.unwrap();
 
     let expected_result = BTreeMap::from([
         (
@@ -465,12 +465,12 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     ).execute(&store.pool).await.unwrap();
 
     store
-        .week_pattern_remove(super::super::week_patterns::Id(2))
+        .week_patterns_remove(super::super::week_patterns::Id(2))
         .await
         .unwrap();
 
     let id = store
-        .week_pattern_add(WeekPattern {
+        .week_patterns_add(WeekPattern {
             name: String::from("Impaires"),
             weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
         })
@@ -479,7 +479,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
     assert_eq!(id, super::super::week_patterns::Id(4));
 
-    let result = store.week_pattern_get_all().await.unwrap();
+    let result = store.week_patterns_get_all().await.unwrap();
 
     let expected_result = BTreeMap::from([
         (
