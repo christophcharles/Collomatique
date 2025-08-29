@@ -56,4 +56,28 @@ impl<'a> MatRepr<'a> {
             eq_constants,
         }
     }
+
+    pub fn config_repr<'b>(&'b self, config: &Config) -> ConfigRepr<'a,'b> {
+        let p = self.problem.variables.len();
+
+        let mut values = Array1::zeros(p);
+
+        for (i,var) in self.problem.variables.iter().enumerate() {
+            if config.get(var) {
+                values[i] = 1;
+            }
+        }
+
+        ConfigRepr {
+            mat_repr: self,
+            values,
+        }
+    }
 }
+
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct ConfigRepr<'a, 'b: 'a> {
+    mat_repr: &'b MatRepr<'a>,
+    values: Array1<i32>,
+}
+
