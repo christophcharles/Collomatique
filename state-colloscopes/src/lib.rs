@@ -214,6 +214,10 @@ pub enum SubjectError {
         "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed or updated"
     )]
     SubjectStillHasNonTrivialAssignments(PeriodId, SubjectId),
+
+    /// Some teachers still are associated to the subject
+    #[error("teacher id ({0:?}) is associated to the subject id {1:?}")]
+    SubjectStillHasAssociatedTeachers(TeacherId, SubjectId),
 }
 
 /// Errors for teacher operations
@@ -232,6 +236,10 @@ pub enum TeacherError {
     /// A subject id is invalid
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(SubjectId),
+
+    /// The selected subject does not have interrogations
+    #[error("Subject id ({0:?}) corresponds to a subject without interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
 }
 
 /// Errors for assignment operations
@@ -602,11 +610,14 @@ impl Data {
     /// Checks that a subject is valid
     fn validate_teacher_internal(
         teacher: &teachers::Teacher,
-        subject_ids: &BTreeSet<SubjectId>,
+        subjects: &subjects::Subjects,
     ) -> Result<(), TeacherError> {
         for subject_id in &teacher.subjects {
-            if !subject_ids.contains(subject_id) {
+            let Some(subject) = subjects.find_subject(*subject_id) else {
                 return Err(TeacherError::InvalidSubjectId(*subject_id));
+            };
+            if subject.parameters.interrogation_parameters.is_none() {
+                return Err(TeacherError::SubjectHasNoInterrogation(*subject_id));
             }
         }
 
@@ -617,17 +628,15 @@ impl Data {
     ///
     /// used to check a teacher before commiting a teacher op
     fn validate_teacher(&self, teacher: &teachers::Teacher) -> Result<(), TeacherError> {
-        let subject_ids = self.build_subject_ids();
-
-        Self::validate_teacher_internal(teacher, &subject_ids)
+        Self::validate_teacher_internal(teacher, &self.inner_data.subjects)
     }
 
     /// USED INTERNALLY
     ///
     /// checks all the invariants in subject data
-    fn check_teachers_data_consistency(&self, subject_ids: &BTreeSet<SubjectId>) {
+    fn check_teachers_data_consistency(&self) {
         for (_teacher_id, teacher) in &self.inner_data.teachers.teacher_map {
-            Self::validate_teacher_internal(teacher, subject_ids).unwrap();
+            Self::validate_teacher_internal(teacher, &self.inner_data.subjects).unwrap();
         }
     }
 
@@ -720,28 +729,14 @@ impl Data {
 
     /// USED INTERNALLY
     ///
-    /// Build the set of SubjectIds
-    ///
-    /// This is useful to check that references are valid
-    fn build_subject_ids(&self) -> BTreeSet<SubjectId> {
-        let mut ids = BTreeSet::new();
-        for (id, _) in &self.inner_data.subjects.ordered_subject_list {
-            ids.insert(*id);
-        }
-        ids
-    }
-
-    /// USED INTERNALLY
-    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
         let period_ids = self.build_period_ids();
-        let subject_ids = self.build_subject_ids();
 
         self.check_subjects_data_consistency(&period_ids);
-        self.check_teachers_data_consistency(&subject_ids);
+        self.check_teachers_data_consistency();
         self.check_students_data_consistency(&period_ids);
         self.check_assignments_data_consistency(&period_ids);
     }
@@ -797,12 +792,7 @@ impl Data {
         if !subjects.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
-        let subject_ids: std::collections::BTreeSet<_> = subjects
-            .ordered_subject_list
-            .iter()
-            .map(|(id, _d)| *id)
-            .collect();
-        if !teachers.validate_all(&subject_ids) {
+        if !teachers.validate_all(&subjects) {
             return Err(tools::IdError::InvalidId.into());
         }
         if !students.validate_all(&period_ids) {
@@ -1213,6 +1203,21 @@ impl Data {
                 let old_params = self.inner_data.subjects.ordered_subject_list[position]
                     .1
                     .clone();
+
+                if old_params.parameters.interrogation_parameters.is_some()
+                    && new_params.parameters.interrogation_parameters.is_none()
+                {
+                    // The new subject does not have interrogations, let's check that no teacher has been assigned to it
+                    for (teacher_id, teacher) in &self.inner_data.teachers.teacher_map {
+                        if teacher.subjects.contains(id) {
+                            return Err(SubjectError::SubjectStillHasAssociatedTeachers(
+                                *teacher_id,
+                                *id,
+                            ));
+                        }
+                    }
+                }
+
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
                     // If the period was excluded before, there is no structure to check
                     // and if the period is not excluded now, the structure will be fine anyway

@@ -82,10 +82,10 @@ impl TeachersExternalData {
     /// In practice, this means checking that the ids for subjects are valid,
     ///
     /// **Beware**, this does not check the validity of the ids for the teachers!
-    pub fn validate_all(&self, subject_ids: &BTreeSet<u64>) -> bool {
+    pub fn validate_all(&self, subjects: &super::subjects::SubjectsExternalData) -> bool {
         self.teacher_map
             .iter()
-            .all(|(_id, data)| data.validate(subject_ids))
+            .all(|(_id, data)| data.validate(subjects))
     }
 }
 
@@ -108,8 +108,13 @@ impl TeacherExternalData {
     /// Checks the validity of a [TeacherExternalData].
     ///
     /// In practice, this means checking that the ids for subjects are valid
-    pub fn validate(&self, subject_ids: &BTreeSet<u64>) -> bool {
-        if !self.subjects.iter().all(|x| subject_ids.contains(x)) {
+    pub fn validate(&self, subjects: &super::subjects::SubjectsExternalData) -> bool {
+        if !self.subjects.iter().all(|x| {
+            let Some(subject) = subjects.find_subject(*x) else {
+                return false;
+            };
+            subject.parameters.interrogation_parameters.is_some()
+        }) {
             return false;
         }
         true

@@ -308,6 +308,20 @@ impl SubjectsExternalData {
             .iter()
             .all(|(_id, data)| data.validate(period_ids))
     }
+
+    /// Finds the position of a subject by id
+    pub fn find_subject_position(&self, id: u64) -> Option<usize> {
+        self.ordered_subject_list
+            .iter()
+            .position(|(current_id, _desc)| *current_id == id)
+    }
+
+    /// Finds a subject by id
+    pub fn find_subject(&self, id: u64) -> Option<&SubjectExternalData> {
+        let pos = self.find_subject_position(id)?;
+
+        Some(&self.ordered_subject_list[pos].1)
+    }
 }
 
 /// Description of one subject but unchecked
