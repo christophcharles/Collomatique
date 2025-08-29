@@ -7,10 +7,10 @@ pub mod update;
 use crate::backend;
 use history::{
     AnnotatedGroupListsOperation, AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation,
-    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedStudentsOperation,
-    AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation, AnnotatedTeachersOperation,
-    AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation, ModificationHistory,
-    ReversibleOperation,
+    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedRegisterStudentOperation,
+    AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation,
+    AnnotatedTeachersOperation, AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation,
+    ModificationHistory, ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
@@ -35,6 +35,7 @@ pub enum Operation {
     TimeSlots(TimeSlotsOperation),
     Groupings(GroupingsOperation),
     GroupingIncompats(GroupingIncompatsOperation),
+    RegisterStudent(RegisterStudentOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,6 +115,12 @@ pub enum GroupingIncompatsOperation {
         GroupingIncompatHandle,
         backend::GroupingIncompat<GroupingHandle>,
     ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RegisterStudentOperation {
+    InSubjectGroup(StudentHandle, SubjectGroupHandle, Option<SubjectHandle>),
+    InIncompat(StudentHandle, IncompatHandle, bool),
 }
 
 #[derive(Debug)]
