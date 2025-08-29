@@ -152,6 +152,18 @@ pub trait Manager: private::ManagerInternal {
         self.get_modification_history().can_redo()
     }
 
+    /// Returns the last operation in history but does not reverse it
+    ///
+    /// Similarly to [Manager::undo], this returns the last operation in
+    /// history (if it exists). However, it does not reverse it: the app state
+    /// is not changed. You can use [Manager::get_undo_name] if you want the
+    /// name of the operation.
+    fn get_last_op(
+        &self,
+    ) -> Option<AggregatedOp<<Self::Data as InMemoryData>::AnnotatedOperation>> {
+        self.get_modification_history().get_last_op()
+    }
+
     /// Undo previous operation in history
     ///
     /// If no more operation can be undone, fails.
