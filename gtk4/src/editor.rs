@@ -5,6 +5,9 @@ use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 use std::path::PathBuf;
 
+use collomatique_state::AppState;
+use collomatique_state_colloscopes::Data;
+
 #[derive(Debug)]
 pub enum EditorInput {
     NewFile {
@@ -16,7 +19,7 @@ pub enum EditorInput {
 
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
-    data: collomatique_state_colloscopes::Data,
+    data: AppState<Data>,
     dirty: bool,
 }
 
@@ -153,7 +156,7 @@ impl SimpleComponent for EditorPanel {
     ) -> ComponentParts<Self> {
         let model = EditorPanel {
             file_name: None,
-            data: collomatique_state_colloscopes::Data::new(),
+            data: AppState::new(Data::new()),
             dirty: true,
         };
         let widgets = view_output!();
@@ -213,7 +216,7 @@ impl SimpleComponent for EditorPanel {
                 dirty,
             } => {
                 self.file_name = file_name;
-                self.data = data;
+                self.data = AppState::new(data);
                 self.dirty = dirty;
             }
         }
