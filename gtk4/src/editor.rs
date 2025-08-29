@@ -149,13 +149,16 @@ impl Component for EditorPanel {
                         },
                     },
                     #[wrap(Some)]
-                    #[name(main_stack)]
-                    set_content = &gtk::Stack {
-                        set_hexpand: true,
-                        add_titled: (&gtk::Label::new(Some("Test1 - content")), Some("test1"), &"Test1"),
-                        add_titled: (&gtk::Label::new(Some("Test2 - content")), Some("test2"), &"Test2"),
-                        add_titled: (&gtk::Label::new(Some("Test3 - content")), Some("test3"), &"Test3"),
-                        set_transition_type: gtk::StackTransitionType::SlideUpDown,
+                    #[name(toast_overlay)]
+                    set_content = &adw::ToastOverlay {
+                        #[name(main_stack)]
+                        gtk::Stack {
+                            set_hexpand: true,
+                            add_titled: (&gtk::Label::new(Some("Test1 - content")), Some("test1"), &"Test1"),
+                            add_titled: (&gtk::Label::new(Some("Test2 - content")), Some("test2"), &"Test2"),
+                            add_titled: (&gtk::Label::new(Some("Test3 - content")), Some("test3"), &"Test3"),
+                            set_transition_type: gtk::StackTransitionType::SlideUpDown,
+                        }
                     },
                 },
             },
