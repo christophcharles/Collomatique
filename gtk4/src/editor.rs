@@ -1,5 +1,6 @@
 use adw::prelude::NavigationPageExt;
 use gtk::prelude::{ButtonExt, WidgetExt};
+use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::component::{AsyncComponentParts, AsyncComponentSender, SimpleAsyncComponent};
 use relm4::{adw, gtk};
 use std::path::PathBuf;
@@ -28,6 +29,16 @@ impl EditorPanel {
     }
 }
 
+relm4::new_action_group!(EditorActionGroup, "editor");
+
+relm4::new_stateless_action!(NewAction, EditorActionGroup, "new");
+relm4::new_stateless_action!(OpenAction, EditorActionGroup, "open");
+relm4::new_stateless_action!(SaveAction, EditorActionGroup, "save");
+relm4::new_stateless_action!(SaveAsAction, EditorActionGroup, "save_as");
+relm4::new_stateless_action!(UndoAction, EditorActionGroup, "undo");
+relm4::new_stateless_action!(RedoAction, EditorActionGroup, "redo");
+relm4::new_stateless_action!(AboutAction, EditorActionGroup, "about");
+
 #[relm4::component(async, pub)]
 impl SimpleAsyncComponent for EditorPanel {
     type Input = EditorInput;
@@ -36,7 +47,7 @@ impl SimpleAsyncComponent for EditorPanel {
 
     view! {
         #[root]
-        adw::NavigationSplitView {
+        nav_view = adw::NavigationSplitView {
             set_hexpand: true,
             set_vexpand: true,
             #[wrap(Some)]
@@ -51,8 +62,9 @@ impl SimpleAsyncComponent for EditorPanel {
                             #[watch]
                             set_subtitle: &model.generate_subtitle(),
                         },
-                        pack_end = &gtk::Button {
+                        pack_end = &gtk::MenuButton {
                             set_icon_name: "open-menu-symbolic",
+                            set_popover: Some(&gtk::PopoverMenu::from_model(Some(&main_menu))),
                         },
                     },
                     #[wrap(Some)]
@@ -104,6 +116,26 @@ impl SimpleAsyncComponent for EditorPanel {
         }
     }
 
+    menu! {
+        main_menu: {
+            section! {
+                "Nouveau" => NewAction,
+                "Ouvrir" => OpenAction,
+            },
+            section! {
+                "Annuler" => UndoAction,
+                "Rétablir" => RedoAction,
+            },
+            section! {
+                "Enregistrer" => SaveAction,
+                "Enregistrer sous" => SaveAsAction,
+            },
+            section! {
+                "À propos" => AboutAction
+            }
+        }
+    }
+
     async fn init(
         params: Self::Init,
         root: Self::Root,
@@ -118,6 +150,64 @@ impl SimpleAsyncComponent for EditorPanel {
             },
         };
         let widgets = view_output!();
+
+        let app = relm4::main_application();
+        app.set_accelerators_for_action::<NewAction>(&["<primary>N"]);
+        app.set_accelerators_for_action::<OpenAction>(&["<primary>O"]);
+        app.set_accelerators_for_action::<SaveAction>(&["<primary>S"]);
+        app.set_accelerators_for_action::<UndoAction>(&["<primary>Z"]);
+        app.set_accelerators_for_action::<RedoAction>(&["<shift><primary>Z"]);
+
+        let new_action: RelmAction<NewAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let open_action: RelmAction<OpenAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let save_action: RelmAction<SaveAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let save_as_action: RelmAction<SaveAsAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let undo_action: RelmAction<UndoAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let redo_action: RelmAction<RedoAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let about_action: RelmAction<AboutAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+
+        let mut group = RelmActionGroup::<EditorActionGroup>::new();
+        group.add_action(new_action);
+        group.add_action(open_action);
+        group.add_action(save_action.clone());
+        group.add_action(save_as_action);
+        group.add_action(undo_action.clone());
+        group.add_action(redo_action.clone());
+        group.add_action(about_action);
+        group.register_for_widget(&widgets.nav_view);
+
+        save_action.set_enabled(false);
+        undo_action.set_enabled(false);
+        redo_action.set_enabled(false);
+
         AsyncComponentParts { model, widgets }
     }
 
