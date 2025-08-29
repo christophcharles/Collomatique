@@ -5,6 +5,7 @@ fn trivial_validated_data() {
     let general = GeneralData {
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = SubjectList::new();
@@ -41,6 +42,7 @@ fn simple_validated_data() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![Subject {
@@ -134,6 +136,7 @@ fn invalid_students_per_interrogation() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![Subject {
@@ -175,6 +178,7 @@ fn subject_slot_overlaps_next_day() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![Subject {
@@ -213,6 +217,7 @@ fn incompatibility_slot_overlaps_next_day() {
     let general = GeneralData {
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
     let subjects = SubjectList::new();
     let incompatibilities = vec![Incompatibility {
@@ -246,6 +251,7 @@ fn invalid_teacher_number() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![Subject {
@@ -284,6 +290,7 @@ fn invalid_subject_number() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![Subject {
@@ -325,6 +332,7 @@ fn invalid_incompatibility_number() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = SubjectList::new();
@@ -363,6 +371,7 @@ fn slot_ref_has_invalid_subject() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![
@@ -436,6 +445,7 @@ fn slot_ref_has_invalid_interrogation() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![
@@ -509,6 +519,7 @@ fn slot_ref_has_invalid_slot() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![
@@ -582,6 +593,7 @@ fn grouping_incompact_invalid_ref() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![
@@ -652,6 +664,7 @@ fn count_student_specializations() {
     let general = GeneralData {
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
     };
 
     let subjects = vec![
