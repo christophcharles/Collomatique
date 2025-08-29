@@ -3,7 +3,7 @@ use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, Controller, SimpleComponent};
+use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use std::path::PathBuf;
 
 #[allow(dead_code)]
@@ -51,43 +51,12 @@ pub struct AppActions {
     undo_action: RelmAction<UndoAction>,
     redo_action: RelmAction<RedoAction>,
 }
-
-mod about {
-    use std::sync::atomic::AtomicBool;
-
-    pub struct AboutInfo {
-        need_present: AtomicBool,
-    }
-
-    impl AboutInfo {
-        pub fn new() -> Self {
-            AboutInfo {
-                need_present: AtomicBool::new(false),
-            }
-        }
-
-        pub fn present(&mut self) {
-            self.need_present
-                .store(true, std::sync::atomic::Ordering::Release);
-        }
-
-        pub fn updated(&self) {
-            self.need_present
-                .store(false, std::sync::atomic::Ordering::Release);
-        }
-
-        pub fn need_update(&self) -> bool {
-            self.need_present.load(std::sync::atomic::Ordering::Acquire)
-        }
-    }
-}
-
 pub struct AppModel {
     controllers: AppControllers,
     actions: AppActions,
     state: GlobalState,
     next_warn_msg: Option<AppInput>,
-    about_info: about::AboutInfo,
+    update_about: Option<()>,
 }
 
 impl AppModel {
@@ -138,10 +107,11 @@ relm4::new_stateless_action!(CloseAction, AppActionGroup, "close");
 relm4::new_stateless_action!(AboutAction, AppActionGroup, "about");
 
 #[relm4::component(pub)]
-impl SimpleComponent for AppModel {
+impl Component for AppModel {
     type Input = AppInput;
     type Output = ();
     type Init = AppInit;
+    type CommandOutput = ();
 
     view! {
         #[root]
@@ -323,14 +293,12 @@ impl SimpleComponent for AppModel {
             redo_action,
         };
 
-        let about_info = about::AboutInfo::new();
-
         let model = AppModel {
             controllers,
             state,
             next_warn_msg: None,
             actions,
-            about_info,
+            update_about: None,
         };
         let widgets = view_output!();
 
@@ -346,7 +314,7 @@ impl SimpleComponent for AppModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
@@ -525,7 +493,7 @@ impl SimpleComponent for AppModel {
                     .unwrap();
             }
             AppInput::RequestAbout => {
-                self.about_info.present();
+                self.update_about = Some(());
             }
             AppInput::UpdateActions => {
                 self.actions
@@ -541,10 +509,23 @@ impl SimpleComponent for AppModel {
         }
     }
 
-    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if self.about_info.need_update() {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update(message, sender.clone(), root);
+        self.update_about_dialog(widgets);
+        self.update_view(widgets, sender);
+    }
+}
+
+impl AppModel {
+    fn update_about_dialog(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if let Some(_) = self.update_about.take() {
             widgets.about_dialog.present(Some(&widgets.root_window));
-            self.about_info.updated();
         }
     }
 }
