@@ -44,6 +44,7 @@ CREATE TABLE "colloscopes" (
     "name"	TEXT NOT NULL,
     PRIMARY KEY("colloscope_id" AUTOINCREMENT)
 );
+INSERT INTO "colloscopes" ( "name" ) VALUES ( "Colloscope_1" );
 
 CREATE TABLE "course_incompats" (
 	"course_incompat_id"	INTEGER NOT NULL,
