@@ -113,7 +113,8 @@ pub trait SimpleBaseProblem: Send + Sync {
 /// If your problem can be expressed this way, the [crate::ProblemConstraints::extra_structure_variables],
 /// [crate::ProblemConstraints::extra_structure_constraints] and
 /// [crate::ProblemConstraints::reconstruct_extra_structure_variables] will be implemented automagically.
-pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
+pub trait SimpleProblemConstraints: Send + Sync {
+    type Problem: BaseProblem;
     /// Type to represent the structure variables specific to this problem extension.
     ///
     /// The structure variables do not provide any new information and can entirely
@@ -134,7 +135,7 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
     type GeneralConstraintDesc: UsableData + 'static;
 
     /// Checks if the extension is compatible with the given problem
-    fn is_fit_for_problem(&self, desc: &T) -> bool;
+    fn is_fit_for_problem(&self, desc: &Self::Problem) -> bool;
 
     /// Definition of the aggregated variables specific to this constraint set.
     ///
@@ -151,13 +152,13 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
     /// Doing otherwise will lead to failed assertion in rebuilding the structure variables.
     fn extra_aggregated_variables(
         &self,
-        desc: &T,
+        desc: &Self::Problem,
     ) -> Vec<
         Box<
             dyn crate::tools::AggregatedVariable<
                 crate::generics::ExtraVariable<
-                    T::MainVariable,
-                    T::StructureVariable,
+                    <Self::Problem as BaseProblem>::MainVariable,
+                    <Self::Problem as BaseProblem>::StructureVariable,
                     Self::StructureVariable,
                 >,
             >,
@@ -169,9 +170,15 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
     /// See [crate::ProblemConstraints] for the full discussion.
     fn general_constraints(
         &self,
-        desc: &T,
+        desc: &Self::Problem,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Constraint<
+            ExtraVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
         Self::GeneralConstraintDesc,
     )>;
 
@@ -184,9 +191,14 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
     /// See [crate::ProblemConstraints] for the full discussion.
     fn objective(
         &self,
-        _desc: &T,
-    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
-    {
+        _desc: &Self::Problem,
+    ) -> Objective<
+        ExtraVariable<
+            <Self::Problem as BaseProblem>::MainVariable,
+            <Self::Problem as BaseProblem>::StructureVariable,
+            Self::StructureVariable,
+        >,
+    > {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
 }
@@ -269,21 +281,25 @@ impl<T: SimpleBaseProblem> crate::BaseProblem for T {
     }
 }
 
-impl<T: BaseProblem, C: SimpleProblemConstraints<T>> crate::ProblemConstraints<T> for C {
-    type StructureVariable = <Self as SimpleProblemConstraints<T>>::StructureVariable;
+impl<T: SimpleProblemConstraints> crate::ProblemConstraints for T {
+    type Problem = <Self as SimpleProblemConstraints>::Problem;
+    type StructureVariable = <Self as SimpleProblemConstraints>::StructureVariable;
     type StructureConstraintDesc = AggregatedVariableConstraintDesc<
         crate::generics::ExtraVariable<
-            T::MainVariable,
-            T::StructureVariable,
+            <Self::Problem as BaseProblem>::MainVariable,
+            <Self::Problem as BaseProblem>::StructureVariable,
             Self::StructureVariable,
         >,
     >;
-    type GeneralConstraintDesc = <Self as SimpleProblemConstraints<T>>::GeneralConstraintDesc;
+    type GeneralConstraintDesc = T::GeneralConstraintDesc;
 
-    fn is_fit_for_problem(&self, desc: &T) -> bool {
-        <Self as SimpleProblemConstraints<T>>::is_fit_for_problem(self, desc)
+    fn is_fit_for_problem(&self, desc: &Self::Problem) -> bool {
+        <Self as SimpleProblemConstraints>::is_fit_for_problem(self, desc)
     }
-    fn extra_structure_variables(&self, desc: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+    fn extra_structure_variables(
+        &self,
+        desc: &Self::Problem,
+    ) -> BTreeMap<Self::StructureVariable, Variable> {
         let mut output = BTreeMap::new();
 
         for aggregated_var in self.extra_aggregated_variables(desc) {
@@ -303,9 +319,15 @@ impl<T: BaseProblem, C: SimpleProblemConstraints<T>> crate::ProblemConstraints<T
     }
     fn extra_structure_constraints(
         &self,
-        desc: &T,
+        desc: &Self::Problem,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Constraint<
+            ExtraVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
         Self::StructureConstraintDesc,
     )> {
         let mut constraints = vec![];
@@ -318,24 +340,40 @@ impl<T: BaseProblem, C: SimpleProblemConstraints<T>> crate::ProblemConstraints<T
     }
     fn general_constraints(
         &self,
-        desc: &T,
+        desc: &Self::Problem,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Constraint<
+            ExtraVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
         Self::GeneralConstraintDesc,
     )> {
-        <Self as SimpleProblemConstraints<T>>::general_constraints(self, desc)
+        <Self as SimpleProblemConstraints>::general_constraints(self, desc)
     }
     fn objective(
         &self,
-        desc: &T,
-    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
-    {
-        <Self as SimpleProblemConstraints<T>>::objective(self, desc)
+        desc: &Self::Problem,
+    ) -> Objective<
+        ExtraVariable<
+            <Self::Problem as BaseProblem>::MainVariable,
+            <Self::Problem as BaseProblem>::StructureVariable,
+            Self::StructureVariable,
+        >,
+    > {
+        <Self as SimpleProblemConstraints>::objective(self, desc)
     }
     fn reconstruct_extra_structure_variables(
         &self,
-        desc: &T,
-        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+        desc: &Self::Problem,
+        config: &ConfigData<
+            BaseVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+            >,
+        >,
     ) -> ConfigData<Self::StructureVariable> {
         let mut temp_config = config.transmute(|x| match x {
             BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
