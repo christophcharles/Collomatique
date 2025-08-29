@@ -1,4 +1,4 @@
-//! Tests for the construction of (general) constraints
+//! Tests for the construction of single (general) constraints
 
 use super::*;
 

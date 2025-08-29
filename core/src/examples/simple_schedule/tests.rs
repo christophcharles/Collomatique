@@ -1,4 +1,5 @@
 use super::*;
 
-mod constraints;
 mod partial_solution;
+mod single_constraints;
+mod variables;
