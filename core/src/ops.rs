@@ -2,8 +2,16 @@
 //!
 //! This modules defines all the operations (that means atomic modification)
 //! we can do on the data
+//!
+//! The main type is [Op] which defines all possible modification operations
+//! that can be done on the data.
+//!
+//! The submodule [history] defines relevant types for maintaining a
+//! modification history.
 
 use super::*;
+
+pub mod history;
 
 /// Operation enumeration
 ///
