@@ -44,8 +44,8 @@ pub enum Error {
     SubjectWithTooFewGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has too many groups to satisfy the low bound on the range {1:?}")]
     SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
-    #[error("Subject {0} has a larger periodicity than the number of weeks {1}. A full period is needed for the algorithm to work")]
-    SubjectWithPeriodicityTooBig(u32, u32),
+    #[error("Subject {0} has a larger periodicity {1} than the number of weeks {2}. A full period is needed for the algorithm to work")]
+    SubjectWithPeriodicityTooBig(usize, u32, u32),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error("Incompatibility {0} references an invalid incompatibility group ({1})")]
@@ -398,6 +398,7 @@ impl ValidatedData {
         for (i, subject) in subjects.iter().enumerate() {
             if subject.period.get() > general.week_count.get() {
                 return Err(Error::SubjectWithPeriodicityTooBig(
+                    i,
                     subject.period.get(),
                     general.week_count.get(),
                 ));
