@@ -1408,6 +1408,11 @@ impl Data {
         &self.inner_data.incompats
     }
 
+    /// Get the group lists
+    pub fn get_group_lists(&self) -> &group_lists::GroupLists {
+        &self.inner_data.group_lists
+    }
+
     /// Used internally
     ///
     /// Apply student operations
