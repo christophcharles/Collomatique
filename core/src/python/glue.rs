@@ -3,11 +3,14 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use crate::rpc::{
+    cmd_msg::MsgStudentId,
     error_msg::{
-        AddNewSubjectError, AddNewTeacherError, CutPeriodError, DeletePeriodError,
-        DeleteSubjectError, DeleteTeacherError, GeneralPlanningError, MergeWithPreviousPeriodError,
-        MoveDownError, MoveUpError, SubjectsError, TeachersError, UpdatePeriodStatusError,
-        UpdatePeriodWeekCountError, UpdateSubjectError, UpdateTeacherError, UpdateWeekStatusError,
+        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, CutPeriodError,
+        DeletePeriodError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
+        GeneralPlanningError, MergeWithPreviousPeriodError, MoveDownError, MoveUpError,
+        StudentsError, SubjectsError, TeachersError, UpdatePeriodStatusError,
+        UpdatePeriodWeekCountError, UpdateStudentError, UpdateSubjectError, UpdateTeacherError,
+        UpdateWeekStatusError,
     },
     ErrorMsg, ResultMsg,
 };
@@ -22,6 +25,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<subjects::SubjectParameters>()?;
     m.add_class::<subjects::SubjectPeriodicity>()?;
     m.add_class::<teachers::Teacher>()?;
+    m.add_class::<students::Student>()?;
     m.add_class::<time::NaiveMondayDate>()?;
     m.add_class::<time::NaiveDate>()?;
 
@@ -57,6 +61,8 @@ use subjects::{Subject, SubjectId};
 mod teachers;
 mod time;
 use teachers::{Teacher, TeacherId};
+mod students;
+use students::{Student, StudentId};
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
@@ -531,6 +537,86 @@ impl Session {
             .teacher_map
             .iter()
             .map(|(id, data)| (MsgTeacherId::from(*id).into(), data.clone().into()))
+            .collect()
+    }
+
+    fn students_add(self_: PyRef<'_, Self>, student: students::Student) -> PyResult<StudentId> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Students(
+                    crate::rpc::cmd_msg::StudentsCmdMsg::AddNewStudent(student.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::StudentId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::Students(StudentsError::AddNewStudent(e))) => match e {
+                AddNewStudentError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn students_update(
+        self_: PyRef<'_, Self>,
+        id: StudentId,
+        new_student: students::Student,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Students(
+                    crate::rpc::cmd_msg::StudentsCmdMsg::UpdateStudent(
+                        id.into(),
+                        new_student.into(),
+                    ),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Students(StudentsError::UpdateStudent(e))) => match e {
+                UpdateStudentError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+                UpdateStudentError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn students_delete(self_: PyRef<'_, Self>, id: StudentId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Students(
+                    crate::rpc::cmd_msg::StudentsCmdMsg::DeleteStudent(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Students(StudentsError::DeleteStudent(e))) => match e {
+                DeleteStudentError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn students_get_list(self_: PyRef<'_, Self>) -> BTreeMap<StudentId, Student> {
+        self_
+            .token
+            .get_data()
+            .get_students()
+            .student_map
+            .iter()
+            .map(|(id, data)| (MsgStudentId::from(*id).into(), data.clone().into()))
             .collect()
     }
 }
