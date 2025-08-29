@@ -79,6 +79,8 @@ pub enum UpdateError<IntError: std::error::Error> {
     GroupingIncompatRemoved(GroupingIncompatHandle),
     #[error("Grouping incompat references a bad grouping (probably removed) of id {0:?}")]
     GroupingIncompatBadGrouping(GroupingHandle),
+    #[error("Cannot register student: Subject {1:?} is not in subject group {0:?}")]
+    RegisterStudentBadSubject(SubjectGroupHandle, SubjectHandle),
 }
 
 #[derive(Debug, Error)]
@@ -2911,6 +2913,102 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_register_student_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedRegisterStudentOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedRegisterStudentOperation::InSubjectGroup(
+                student_handle,
+                subject_group_handle,
+                subject_handle,
+            ) => {
+                let student_id = manager
+                    .get_handle_managers()
+                    .students
+                    .get_id(*student_handle)
+                    .ok_or(UpdateError::StudentRemoved(*student_handle))?;
+
+                let subject_group_id = manager
+                    .get_handle_managers()
+                    .subject_groups
+                    .get_id(*subject_group_handle)
+                    .ok_or(UpdateError::SubjectGroupRemoved(*subject_group_handle))?;
+
+                let subject_id = subject_handle
+                    .map(|x| {
+                        manager
+                            .get_handle_managers()
+                            .subjects
+                            .get_id(x)
+                            .ok_or(UpdateError::SubjectRemoved(x))
+                    })
+                    .transpose()?;
+
+                manager
+                    .get_backend_logic_mut()
+                    .subject_group_for_student_set(student_id, subject_group_id, subject_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CrossId3Error::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CrossId3Error::InvalidId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CrossId3Error::InvalidId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CrossId3Error::InvalidId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CrossId3Error::InvalidCrossId(_id) => {
+                            UpdateError::RegisterStudentBadSubject(
+                                *subject_group_handle,
+                                subject_handle
+                                    .expect("To be a problem, the subject should be Some(...)"),
+                            )
+                        }
+                    })?;
+
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedRegisterStudentOperation::InIncompat(
+                student_handle,
+                incompat_handle,
+                enabled,
+            ) => {
+                let student_id = manager
+                    .get_handle_managers()
+                    .students
+                    .get_id(*student_handle)
+                    .ok_or(UpdateError::StudentRemoved(*student_handle))?;
+
+                let incompat_id = manager
+                    .get_handle_managers()
+                    .incompats
+                    .get_id(*incompat_handle)
+                    .ok_or(UpdateError::IncompatRemoved(*incompat_handle))?;
+
+                manager
+                    .get_backend_logic_mut()
+                    .incompat_for_student_set(student_id, incompat_id, *enabled)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Id2Error::InternalError(int_err) => UpdateError::Internal(int_err),
+                        backend::Id2Error::InvalidId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Id2Error::InvalidId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -2929,7 +3027,9 @@ pub(super) mod private {
             AnnotatedOperation::GroupingIncompats(op) => {
                 update_grouping_incompats_state(manager, op).await
             }
-            AnnotatedOperation::RegisterStudent(_op) => todo!(),
+            AnnotatedOperation::RegisterStudent(op) => {
+                update_register_student_state(manager, op).await
+            }
         }
     }
 
