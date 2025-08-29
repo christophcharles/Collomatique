@@ -1,7 +1,7 @@
 #[test]
 fn test_sa() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::{Config, ProblemBuilder};
+    use crate::ilp::ProblemBuilder;
 
     // We test on a simple scheduling problem.
     //
@@ -34,59 +34,68 @@ fn test_sa() {
     // We add a cost function: putting y on the first course of the second week costs "1.0".
     // So, the prefered solution should be : ["x12", "y11", "y22", "x21"]
 
-    let x11 = Expr::var("x11");
-    let x12 = Expr::var("x12");
-    let x21 = Expr::var("x21");
-    let x22 = Expr::var("x22");
+    let x11 = Expr::<String>::var("x11");
+    let x12 = Expr::<String>::var("x12");
+    let x21 = Expr::<String>::var("x21");
+    let x22 = Expr::<String>::var("x22");
 
-    let y11 = Expr::var("y11");
-    let y12 = Expr::var("y12");
-    let y21 = Expr::var("y21");
-    let y22 = Expr::var("y22");
+    let y11 = Expr::<String>::var("y11");
+    let y12 = Expr::<String>::var("y12");
+    let y21 = Expr::<String>::var("y21");
+    let y22 = Expr::<String>::var("y22");
 
-    let one = Expr::constant(1);
+    let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::new()
+        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_variables(["y11", "y12", "y21", "y22"])
         // Both class should not attend a course at the same time
-        .add((&x11 + &y11).leq(&one))
-        .add((&x12 + &y12).leq(&one))
-        .add((&x21 + &y21).leq(&one))
-        .add((&x22 + &y22).leq(&one))
+        .add_constraint((&x11 + &y11).leq(&one))
+        .add_constraint((&x12 + &y12).leq(&one))
+        .add_constraint((&x21 + &y21).leq(&one))
+        .add_constraint((&x22 + &y22).leq(&one))
         // Each class should not attend more than one course at a given time
-        .add((&x11 + &x21).leq(&one))
-        .add((&x12 + &x22).leq(&one))
-        .add((&y11 + &y21).leq(&one))
-        .add((&y12 + &y22).leq(&one))
+        .add_constraint((&x11 + &x21).leq(&one))
+        .add_constraint((&x12 + &x22).leq(&one))
+        .add_constraint((&y11 + &y21).leq(&one))
+        .add_constraint((&y12 + &y22).leq(&one))
         // Each class must complete each course exactly once
-        .add((&x11 + &x12).eq(&one))
-        .add((&x21 + &x22).eq(&one))
-        .add((&y11 + &y12).eq(&one))
-        .add((&y21 + &y22).eq(&one))
+        .add_constraint((&x11 + &x12).eq(&one))
+        .add_constraint((&x21 + &x22).eq(&one))
+        .add_constraint((&y11 + &y12).eq(&one))
+        .add_constraint((&y21 + &y22).eq(&one))
         // eval func
-        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1.0 } else { 0.0 }))
-        .build();
+        .eval_fn(crate::debuggable!(|x| if x.get("y12").unwrap() {
+            1000.0
+        } else {
+            0.0
+        }))
+        .build()
+        .unwrap();
 
-    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
-    let mut sa_optimizer = super::Optimizer::new(&pb, dijkstra_solver);
+    let mut sa_optimizer = super::Optimizer::new(&pb);
 
-    let config = Config::from_iter(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
+    let config = pb.config_from(["x11", "y12", "y21"]).unwrap(); // We choose a starting closer to the "bad" (high cost) solution
     sa_optimizer.set_init_config(config);
-    sa_optimizer.set_max_iter(1); // There are only two solutions so only one iteration should even be enough to find the optimal one
 
     let mut random_gen = crate::ilp::random::DefaultRndGen::new();
-    let solution = sa_optimizer.optimize(&mut random_gen);
+    let solver = crate::ilp::solvers::a_star::Solver::new();
+    let solution = sa_optimizer.iterate(solver, &mut random_gen).best_in(2);
+    // There are only two solutions so only two iterations should even be enough to find the optimal one
 
     assert_eq!(
-        Config::from(solution.expect("Solution found")),
-        Config::from_iter(["x12", "y11", "y22", "x21"])
+        solution.expect("Solution found").0.inner().clone(),
+        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap()
     );
 
-    let config = Config::from_iter(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
+    let config = pb.config_from(["x12", "y11", "y22"]).unwrap(); // We choose a starting closer to the "good" (low cost) solution
     sa_optimizer.set_init_config(config);
-    let solution = sa_optimizer.optimize(&mut random_gen);
+
+    let solver = crate::ilp::solvers::a_star::Solver::new();
+    let solution = sa_optimizer.iterate(solver, &mut random_gen).best_in(2);
 
     assert_eq!(
-        Config::from(solution.expect("Solution found")),
-        Config::from_iter(["x12", "y11", "y22", "x21"])
+        solution.expect("Solution found").0.inner().clone(),
+        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap()
     );
 }

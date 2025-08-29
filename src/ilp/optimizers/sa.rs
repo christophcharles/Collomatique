@@ -1,90 +1,126 @@
 #[cfg(test)]
 mod tests;
 
+use crate::ilp::dbg::Debuggable;
+use crate::ilp::linexpr::VariableName;
 use crate::ilp::random::RandomGen;
 use crate::ilp::solvers::FeasabilitySolver;
 use crate::ilp::{Config, FeasableConfig, Problem};
 
-#[derive(Debug, Clone)]
-pub struct Optimizer<'a, S: FeasabilitySolver> {
-    problem: &'a Problem,
-    init_config: Config,
-    solver: S,
-    max_iter: u32,
+pub type TemperatureFn = Debuggable<dyn Fn(usize) -> f64>;
+
+impl Default for TemperatureFn {
+    fn default() -> Self {
+        crate::debuggable!(|k: usize| 1000000. / (k as f64))
+    }
 }
 
-impl<'a, S: FeasabilitySolver> Optimizer<'a, S> {
-    pub fn new(problem: &'a Problem, solver: S) -> Self {
-        let init_config = Config::new();
+#[derive(Debug, Clone)]
+pub struct Optimizer<'a, V: VariableName> {
+    problem: &'a Problem<V>,
+    init_config: Config<'a, V>,
+    temp_profile: TemperatureFn,
+}
+
+impl<'a, V: VariableName> Optimizer<'a, V> {
+    pub fn new(problem: &'a Problem<V>) -> Self {
+        let init_config = problem.default_config();
 
         Optimizer {
             problem,
             init_config,
-            solver,
-            max_iter: 10,
+            temp_profile: TemperatureFn::default(),
         }
     }
 
-    pub fn set_init_config(&mut self, init_config: Config) {
+    pub fn set_init_config(&mut self, init_config: Config<'a, V>) {
         self.init_config = init_config;
     }
 
-    pub fn set_max_iter(&mut self, max_iter: u32) {
-        self.max_iter = max_iter;
+    pub fn set_temp_profile(&mut self, temp_profile: TemperatureFn) {
+        self.temp_profile = temp_profile;
     }
 
-    pub fn optimize<R: RandomGen>(&self, random_gen: &mut R) -> Option<FeasableConfig> {
-        use std::collections::BTreeSet;
-
-        let mut config = self.solver.restore_feasability(&self.init_config)?;
-
-        let eval_fn = match &self.problem.eval_fn {
-            Some(e) => e,
-            None => {
-                return Some(config);
-            }
-        };
-        let mut config_cost = eval_fn(&config);
-
-        let mut lowest_config = config.clone();
-        let mut lowest_cost = config_cost;
-
-        for k in 0..self.max_iter {
-            let temp = self.temp_profile(k);
-
-            let neighbour_candidate = self
-                .problem
-                .random_neighbour(&Config::from(&config), random_gen);
-            let exclude_list = BTreeSet::from([&config]);
-            let neighbour = match self
-                .solver
-                .restore_feasability_exclude(&neighbour_candidate, &exclude_list)
-            {
-                Some(n) => n,
-                None => return Some(config), // No other feasable solution? We found the optimal one!
-            };
-
-            let neighbour_cost = eval_fn(&neighbour);
-
-            if neighbour_cost < lowest_cost {
-                lowest_cost = neighbour_cost;
-                lowest_config = neighbour.clone();
-            }
-
-            let acceptance = (-(neighbour_cost - config_cost) / temp).exp();
-
-            if acceptance > random_gen.random() {
-                config = neighbour;
-                config_cost = neighbour_cost;
-            }
+    pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver<V>>(
+        &'b self,
+        solver: S,
+        random_gen: &'c mut R,
+    ) -> OptimizerIterator<'a, 'b, 'c, V, R, S> {
+        OptimizerIterator {
+            optimizer: self,
+            random_gen,
+            solver,
+            previous_config: None,
+            current_config: self.init_config.clone(),
+            k: 0,
+            temp_profile: self.temp_profile.clone(),
         }
-
-        Some(lowest_config)
     }
 }
 
-impl<'a, S: FeasabilitySolver> Optimizer<'a, S> {
-    fn temp_profile(&self, k: u32) -> f64 {
-        1000.0 * ((self.max_iter - k) as f64) / (self.max_iter as f64)
+use std::rc::Rc;
+
+#[derive(Debug)]
+pub struct OptimizerIterator<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>>
+{
+    optimizer: &'b Optimizer<'a, V>,
+    solver: S,
+    random_gen: &'c mut R,
+
+    previous_config: Option<(Rc<FeasableConfig<'a, V>>, f64)>,
+    current_config: Config<'a, V>,
+
+    k: usize,
+    temp_profile: TemperatureFn,
+}
+
+impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Iterator
+    for OptimizerIterator<'b, 'a, 'c, V, R, S>
+{
+    type Item = (Rc<FeasableConfig<'a, V>>, f64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        use std::collections::BTreeSet;
+        let exclude_list = match &self.previous_config {
+            Some((c, _)) => BTreeSet::from([c.as_ref()]),
+            None => BTreeSet::new(),
+        };
+
+        // If we can't restore then the iterator stops
+        // So "None" should be propagated upwards
+        let config = Rc::new(
+            self.solver
+                .restore_feasability_exclude(&self.current_config, &exclude_list)?,
+        );
+
+        let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
+
+        let acceptance = match self.previous_config {
+            Some((_, old_cost)) => {
+                let temp = (self.temp_profile)(self.k);
+                (-(config_cost - old_cost) / temp).exp()
+            }
+            None => 1.0,
+        };
+        self.k += 1;
+
+        if let Some(neighbour) = config.as_ref().inner().random_neighbour(self.random_gen) {
+            self.current_config = neighbour;
+            if acceptance >= self.random_gen.random() {
+                self.previous_config = Some((config, config_cost));
+            }
+            self.previous_config.clone()
+        } else {
+            Some((config, config_cost))
+        }
+    }
+}
+
+impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>>
+    OptimizerIterator<'b, 'a, 'c, V, R, S>
+{
+    pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a, V>>, f64)> {
+        self.take(max_iter)
+            .min_by(|x, y| x.1.partial_cmp(&y.1).expect("Non NaN"))
     }
 }
