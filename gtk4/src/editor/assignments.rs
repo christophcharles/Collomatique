@@ -44,7 +44,7 @@ impl Component for Assignments {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
-                set_spacing: 5,
+                set_spacing: 10,
             }
         }
     }
@@ -101,15 +101,44 @@ impl Assignments {
                     .subjects
                     .ordered_subject_list
                     .iter()
-                    .cloned()
                     .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(id))
+                    .cloned()
                     .collect();
+
+                let mut filtered_students: Vec<_> = self
+                    .students
+                    .student_map
+                    .iter()
+                    .filter_map(|(student_id, student)| {
+                        if !student.excluded_periods.contains(id) {
+                            Some((student_id.clone(), student.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                filtered_students.sort_by(|a, b| {
+                    let surname_cmp = a.1.desc.surname.cmp(&b.1.desc.surname);
+                    if surname_cmp != std::cmp::Ordering::Equal {
+                        return surname_cmp;
+                    }
+
+                    let firstname_cmp = a.1.desc.firstname.cmp(&b.1.desc.firstname);
+                    if firstname_cmp != std::cmp::Ordering::Equal {
+                        return firstname_cmp;
+                    }
+
+                    let id_cmp = a.0.cmp(&b.0);
+                    id_cmp
+                });
 
                 Some(assignments_display::PeriodEntryData {
                     global_first_week: self.periods.first_week.clone(),
                     first_week_num: current_first_week,
                     week_count: desc.len(),
                     filtered_subjects,
+                    filtered_students,
                     period_assignments: self
                         .assignments
                         .period_map
