@@ -768,6 +768,32 @@ impl SubjectsUpdateOp {
                                 .expect("No error should be possible at this point");
                             assert!(result.is_none());
                         }
+
+                        let subject_map = data
+                            .get_data()
+                            .get_group_lists()
+                            .subjects_associations
+                            .get(period_id)
+                            .expect("Period id should be valid at this point");
+
+                        if subject_map.contains_key(subject_id) {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::GroupList(
+                                        collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                            *period_id,
+                                            *subject_id,
+                                            None,
+                                        ),
+                                    ),
+                                    "Enlever l'association à une liste de groupe pour la matière à modifier"
+                                        .into(),
+                                )
+                                .expect("All data should be valid at this point");
+                            if result.is_some() {
+                                panic!("Unexpected result! {:?}", result);
+                            }
+                        }
                     }
                     subject.excluded_periods.insert(*period_id);
                 }
