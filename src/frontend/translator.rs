@@ -189,6 +189,7 @@ impl GenColloscopeTranslator {
             week_count: data.general_data.week_count,
             interrogations_per_week: data.general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: data.general_data.max_interrogations_per_day,
+            periodicity_cuts: BTreeSet::new(),
         }
     }
 }
