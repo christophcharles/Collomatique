@@ -799,6 +799,32 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
+    fn build_group_on_week_selection_variables(&self) -> BTreeSet<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .flat_map(|(i, subject)| {
+                subject.balancing_requirements.iter().flat_map(move |br| {
+                    let week_selections = br.object.extract_week_selections();
+
+                    week_selections
+                        .into_iter()
+                        .enumerate()
+                        .flat_map(move |(j, _ws)| {
+                            subject.groups.prefilled_groups.iter().enumerate().map(
+                                move |(k, _group)| Variable::GroupOnWeekSelection {
+                                    subject: i,
+                                    week_selection: j,
+                                    group: k,
+                                },
+                            )
+                        })
+                })
+            })
+            .collect()
+    }
+
     fn build_dynamic_group_assignment_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
@@ -2229,6 +2255,8 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_incompat_group_for_student_variables())
             .expect("Should not have duplicates")
+            .add_variables(self.build_group_on_week_selection_variables())
+            .expect("Should not have duplicates")
             .add_constraints(self.build_interrogations_per_week_optimizer())
             .expect("Variables should be declared")
             .add_constraints(self.build_max_interrogations_per_day_optimizer())
@@ -2248,6 +2276,8 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_use_grouping_variables())
             .expect("Should not have duplicates")
             .add_variables(self.build_incompat_group_for_student_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_group_on_week_selection_variables())
             .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
