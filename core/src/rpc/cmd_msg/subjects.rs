@@ -90,6 +90,7 @@ impl From<SubjectParametersMsg> for collomatique_state_colloscopes::SubjectParam
 pub enum SubjectPeriodicityMsg {
     OnceForEveryBlockOfWeeks {
         weeks_per_block: NonZeroU32,
+        minimum_week_separation: NonZeroU32,
     },
     ExactlyPeriodic {
         periodicity_in_weeks: NonZeroU32,
@@ -98,27 +99,29 @@ pub enum SubjectPeriodicityMsg {
         interrogation_count_in_year: std::ops::RangeInclusive<u32>,
         minimum_week_separation: u32,
     },
-    OnceForEveryArbitraryBlock {
+    AmountForEveryArbitraryBlock {
         blocks: Vec<SubjectWeekBlock>,
+        minimum_week_separation: u32,
     },
 }
 
-use std::num::NonZeroUsize;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectWeekBlock {
-    pub delay: usize,
-    pub size: NonZeroUsize,
+    pub delay: u32,
+    pub size: NonZeroU32,
+    pub interrogation_count: std::ops::RangeInclusive<u32>,
 }
 
 impl From<SubjectPeriodicityMsg> for collomatique_state_colloscopes::SubjectPeriodicity {
     fn from(value: SubjectPeriodicityMsg) -> Self {
         match value {
-            SubjectPeriodicityMsg::OnceForEveryBlockOfWeeks { weeks_per_block } => {
-                collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                    weeks_per_block,
-                }
-            }
+            SubjectPeriodicityMsg::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
             SubjectPeriodicityMsg::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
@@ -131,11 +134,13 @@ impl From<SubjectPeriodicityMsg> for collomatique_state_colloscopes::SubjectPeri
                 interrogation_count_in_year,
                 minimum_week_separation,
             },
-            SubjectPeriodicityMsg::OnceForEveryArbitraryBlock { blocks } => {
-                collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                    blocks: blocks.into_iter().map(|b| b.into()).collect(),
-                }
-            }
+            SubjectPeriodicityMsg::AmountForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
+            },
         }
     }
 }
@@ -145,6 +150,7 @@ impl From<SubjectWeekBlock> for collomatique_state_colloscopes::subjects::WeekBl
         collomatique_state_colloscopes::subjects::WeekBlock {
             delay_in_weeks: value.delay,
             size_in_weeks: value.size,
+            interrogation_count_in_block: value.interrogation_count,
         }
     }
 }

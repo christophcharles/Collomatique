@@ -5,7 +5,7 @@
 use super::*;
 
 use std::collections::BTreeSet;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 
 /// JSON desc of subjects
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +84,7 @@ impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParamete
 pub enum SubjectPeriodicity {
     OnceForEveryBlockOfWeeks {
         weeks_per_block: NonZeroU32,
+        minimum_week_separation: NonZeroU32,
     },
     ExactlyPeriodic {
         periodicity_in_weeks: NonZeroU32,
@@ -93,6 +94,7 @@ pub enum SubjectPeriodicity {
         minimum_week_separation: u32,
     },
     OnceForEveryArbitraryBlock {
+        minimum_week_separation: u32,
         blocks: Vec<WeekBlock>,
     },
 }
@@ -102,7 +104,11 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
         match value {
             collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block,
-            } => SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block },
+                minimum_week_separation,
+            } => SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
             collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => SubjectPeriodicity::ExactlyPeriodic {
@@ -115,9 +121,11 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
                 interrogation_count_in_year,
                 minimum_week_separation,
             },
-            collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+            collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 blocks,
+                minimum_week_separation,
             } => SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                minimum_week_separation,
                 blocks: blocks.into_iter().map(|b| b.into()).collect(),
             },
         }
@@ -127,11 +135,13 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
 impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodicity {
     fn from(value: SubjectPeriodicity) -> Self {
         match value {
-            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block } => {
-                collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                    weeks_per_block,
-                }
-            }
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                minimum_week_separation,
+                weeks_per_block,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
@@ -144,19 +154,22 @@ impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodi
                 interrogation_count_in_year,
                 minimum_week_separation,
             },
-            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => {
-                collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                    blocks: blocks.into_iter().map(|b| b.into()).collect(),
-                }
-            }
+            SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks,
+            } => collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
+            },
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekBlock {
-    pub delay: usize,
-    pub size: NonZeroUsize,
+    pub delay: u32,
+    pub size: NonZeroU32,
+    pub interrogation_count: std::ops::RangeInclusive<u32>,
 }
 
 impl From<collomatique_state_colloscopes::subjects::WeekBlock> for WeekBlock {
@@ -164,6 +177,7 @@ impl From<collomatique_state_colloscopes::subjects::WeekBlock> for WeekBlock {
         WeekBlock {
             delay: value.delay_in_weeks,
             size: value.size_in_weeks,
+            interrogation_count: value.interrogation_count_in_block,
         }
     }
 }
@@ -173,6 +187,7 @@ impl From<WeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
         collomatique_state_colloscopes::subjects::WeekBlock {
             delay_in_weeks: value.delay,
             size_in_weeks: value.size,
+            interrogation_count_in_block: value.interrogation_count,
         }
     }
 }

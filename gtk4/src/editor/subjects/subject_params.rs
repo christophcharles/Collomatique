@@ -8,7 +8,7 @@ use relm4::FactorySender;
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 
 pub struct Dialog {
     hidden: bool,
@@ -17,10 +17,20 @@ pub struct Dialog {
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     periodicity_panel: PeriodicityPanel,
     exactly_periodic_params: NonZeroU32,
-    once_for_every_block_of_weeks_params: NonZeroU32,
+    once_for_every_block_of_weeks_params: OnceForEveryBlockOfWeeksParams,
     amount_in_year_params: AmountInYearParams,
-    once_for_every_arbitrary_block_params: Vec<collomatique_state_colloscopes::subjects::WeekBlock>,
+    amount_for_every_arbitrary_block_params: AmountForEveryArbitraryBlockParams,
     blocks: FactoryVecDeque<Block>,
+}
+
+pub struct OnceForEveryBlockOfWeeksParams {
+    minimum_week_separation: NonZeroU32,
+    block_size_in_weeks: NonZeroU32,
+}
+
+pub struct AmountForEveryArbitraryBlockParams {
+    minimum_week_separation: u32,
+    blocks: Vec<collomatique_state_colloscopes::subjects::WeekBlock>,
 }
 
 pub struct AmountInYearParams {
@@ -59,8 +69,8 @@ pub enum DialogInput {
     UpdateAmountInYearCountMaximum(u32),
     UpdateAmountInYearWeekSeparation(u32),
     AddArbitraryBlock,
-    UpdateEmptyWeeksBeforeBlock(usize, usize),
-    UpdateDurationInWeeksOfGivenBlock(usize, NonZeroUsize),
+    UpdateEmptyWeeksBeforeBlock(usize, u32),
+    UpdateDurationInWeeksOfGivenBlock(usize, NonZeroU32),
     DeleteBlock(usize),
 }
 
@@ -110,12 +120,14 @@ impl Dialog {
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks: _,
             } => PeriodicityPanel::ExactlyPeriodic,
-            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block: _ } => {
-                PeriodicityPanel::OnceForEveryBlockOfWeeks
-            }
-            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks: _ } => {
-                PeriodicityPanel::OnceForEveryArbitraryBlock
-            }
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block: _,
+                minimum_week_separation: _,
+            } => PeriodicityPanel::OnceForEveryBlockOfWeeks,
+            SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks: _,
+                minimum_week_separation: _,
+            } => PeriodicityPanel::OnceForEveryArbitraryBlock,
         }
     }
 
@@ -127,8 +139,36 @@ impl Dialog {
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => *periodicity_in_weeks,
-            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block } => *weeks_per_block,
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation: _,
+            } => *weeks_per_block,
             _ => NonZeroU32::new(2).unwrap(),
+        }
+    }
+
+    fn once_for_every_block_of_weeks_params_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> OnceForEveryBlockOfWeeksParams {
+        use collomatique_state_colloscopes::SubjectPeriodicity;
+        match &params.periodicity {
+            SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            } => OnceForEveryBlockOfWeeksParams {
+                minimum_week_separation: NonZeroU32::new(1).unwrap(),
+                block_size_in_weeks: *periodicity_in_weeks,
+            },
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            } => OnceForEveryBlockOfWeeksParams {
+                minimum_week_separation: *minimum_week_separation,
+                block_size_in_weeks: *weeks_per_block,
+            },
+            _ => OnceForEveryBlockOfWeeksParams {
+                minimum_week_separation: NonZeroU32::new(1).unwrap(),
+                block_size_in_weeks: NonZeroU32::new(2).unwrap(),
+            },
         }
     }
 
@@ -151,21 +191,32 @@ impl Dialog {
         }
     }
 
-    fn once_for_every_arbitrary_block_params_from_params(
+    fn amount_for_every_arbitrary_block_params_from_params(
         params: &collomatique_state_colloscopes::SubjectParameters,
-    ) -> Vec<collomatique_state_colloscopes::subjects::WeekBlock> {
+    ) -> AmountForEveryArbitraryBlockParams {
         use collomatique_state_colloscopes::SubjectPeriodicity;
+
         match &params.periodicity {
-            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => blocks.clone(),
-            _ => vec![],
+            SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation,
+            } => AmountForEveryArbitraryBlockParams {
+                blocks: blocks.clone(),
+                minimum_week_separation: *minimum_week_separation,
+            },
+            _ => AmountForEveryArbitraryBlockParams {
+                blocks: vec![],
+                minimum_week_separation: 0,
+            },
         }
     }
 
     fn synchronize_block_factory(&mut self) {
         let params: Vec<_> = self
-            .once_for_every_arbitrary_block_params
+            .amount_for_every_arbitrary_block_params
+            .blocks
             .iter()
-            .scan(0usize, |first_available_week, block_params| {
+            .scan(0u32, |first_available_week, block_params| {
                 let new_block = BlockData {
                     global_first_week: self.global_first_week.clone(),
                     first_available_week: *first_available_week,
@@ -433,7 +484,7 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.once_for_every_block_of_weeks_params.get() as f64,
+                                set_value: model.once_for_every_block_of_weeks_params.block_size_in_weeks.get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let periodicity_u32 = widget.value() as u32;
                                     let periodicity = NonZeroU32::new(periodicity_u32).unwrap();
@@ -514,7 +565,7 @@ impl SimpleComponent for Dialog {
                             set_orientation: gtk::Orientation::Vertical,
                             #[watch]
                             set_visible: (model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock) &&
-                                (!model.once_for_every_arbitrary_block_params.is_empty()),
+                                (!model.amount_for_every_arbitrary_block_params.blocks.is_empty()),
                         },
                         adw::PreferencesGroup {
                             set_margin_all: 5,
@@ -562,10 +613,11 @@ impl SimpleComponent for Dialog {
             global_first_week: None,
             periodicity_panel: Self::periodicity_panel_from_params(&params),
             exactly_periodic_params: Self::periodicity_from_params(&params),
-            once_for_every_block_of_weeks_params: Self::periodicity_from_params(&params),
+            once_for_every_block_of_weeks_params:
+                Self::once_for_every_block_of_weeks_params_from_params(&params),
             amount_in_year_params: Self::amount_in_year_params_from_params(&params),
-            once_for_every_arbitrary_block_params:
-                Self::once_for_every_arbitrary_block_params_from_params(&params),
+            amount_for_every_arbitrary_block_params:
+                Self::amount_for_every_arbitrary_block_params_from_params(&params),
             blocks,
         };
 
@@ -585,10 +637,11 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.periodicity_panel = Self::periodicity_panel_from_params(&params);
                 self.exactly_periodic_params = Self::periodicity_from_params(&params);
-                self.once_for_every_block_of_weeks_params = Self::periodicity_from_params(&params);
+                self.once_for_every_block_of_weeks_params =
+                    Self::once_for_every_block_of_weeks_params_from_params(&params);
                 self.amount_in_year_params = Self::amount_in_year_params_from_params(&params);
-                self.once_for_every_arbitrary_block_params =
-                    Self::once_for_every_arbitrary_block_params_from_params(&params);
+                self.amount_for_every_arbitrary_block_params =
+                    Self::amount_for_every_arbitrary_block_params_from_params(&params);
                 self.params = params;
                 self.global_first_week = global_first_week;
                 self.synchronize_block_factory();
@@ -606,7 +659,8 @@ impl SimpleComponent for Dialog {
                     }
                     PeriodicityPanel::OnceForEveryBlockOfWeeks => {
                         collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                            weeks_per_block: self.once_for_every_block_of_weeks_params,
+                            weeks_per_block: self.once_for_every_block_of_weeks_params.block_size_in_weeks,
+                            minimum_week_separation: self.once_for_every_block_of_weeks_params.minimum_week_separation,
                         }
                     }
                     PeriodicityPanel::AmountInYear => {
@@ -616,8 +670,9 @@ impl SimpleComponent for Dialog {
                         }
                     }
                     PeriodicityPanel::OnceForEveryArbitraryBlock => {
-                        collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                            blocks: self.once_for_every_arbitrary_block_params.clone(),
+                        collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                            minimum_week_separation: self.amount_for_every_arbitrary_block_params.minimum_week_separation,
+                            blocks: self.amount_for_every_arbitrary_block_params.blocks.clone(),
                         }
                     }
                 };
@@ -688,10 +743,15 @@ impl SimpleComponent for Dialog {
                 self.exactly_periodic_params = new_periodicity;
             }
             DialogInput::UpdateOnceEveryBlockOfWeeksParams(new_periodicity) => {
-                if self.once_for_every_block_of_weeks_params == new_periodicity {
+                if self
+                    .once_for_every_block_of_weeks_params
+                    .block_size_in_weeks
+                    == new_periodicity
+                {
                     return;
                 }
-                self.once_for_every_block_of_weeks_params = new_periodicity;
+                self.once_for_every_block_of_weeks_params
+                    .block_size_in_weeks = new_periodicity;
             }
             DialogInput::UpdateAmountInYearCountMinimum(new_min) => {
                 if *self
@@ -724,24 +784,29 @@ impl SimpleComponent for Dialog {
                 self.amount_in_year_params.minimum_week_separation = new_sep;
             }
             DialogInput::AddArbitraryBlock => {
-                self.once_for_every_arbitrary_block_params.push(
+                self.amount_for_every_arbitrary_block_params.blocks.push(
                     collomatique_state_colloscopes::subjects::WeekBlock {
                         delay_in_weeks: 0,
-                        size_in_weeks: NonZeroUsize::new(1).unwrap(),
+                        size_in_weeks: NonZeroU32::new(1).unwrap(),
+                        interrogation_count_in_block: 1..=1,
                     },
                 );
                 self.synchronize_block_factory();
             }
             DialogInput::UpdateEmptyWeeksBeforeBlock(block_num, new_count) => {
-                self.once_for_every_arbitrary_block_params[block_num].delay_in_weeks = new_count;
+                self.amount_for_every_arbitrary_block_params.blocks[block_num].delay_in_weeks =
+                    new_count;
                 self.synchronize_block_factory();
             }
             DialogInput::UpdateDurationInWeeksOfGivenBlock(block_num, new_duration) => {
-                self.once_for_every_arbitrary_block_params[block_num].size_in_weeks = new_duration;
+                self.amount_for_every_arbitrary_block_params.blocks[block_num].size_in_weeks =
+                    new_duration;
                 self.synchronize_block_factory();
             }
             DialogInput::DeleteBlock(block_num) => {
-                self.once_for_every_arbitrary_block_params.remove(block_num);
+                self.amount_for_every_arbitrary_block_params
+                    .blocks
+                    .remove(block_num);
                 self.synchronize_block_factory();
             }
         }
@@ -759,7 +824,7 @@ impl SimpleComponent for Dialog {
 #[derive(Debug, Clone)]
 pub struct BlockData {
     pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
-    pub first_available_week: usize,
+    pub first_available_week: u32,
     pub block_params: collomatique_state_colloscopes::subjects::WeekBlock,
 }
 
@@ -775,21 +840,22 @@ pub enum BlockInput {
     UpdateData(BlockData),
 
     DeleteBlock,
-    UpdateEmptyWeeks(usize),
-    UpdateDurationInWeeks(NonZeroUsize),
+    UpdateEmptyWeeks(u32),
+    UpdateDurationInWeeks(NonZeroU32),
 }
 
 #[derive(Debug)]
 pub enum BlockOutput {
-    UpdateEmptyWeeks(usize, usize),
-    UpdateDurationInWeeks(usize, NonZeroUsize),
+    UpdateEmptyWeeks(usize, u32),
+    UpdateDurationInWeeks(usize, NonZeroU32),
     DeleteBlock(usize),
 }
 
 impl Block {
     fn generate_title_text(&self) -> String {
-        let week_count = self.data.block_params.size_in_weeks.get();
-        let first_week_num = self.data.first_available_week + self.data.block_params.delay_in_weeks;
+        let week_count = self.data.block_params.size_in_weeks.get() as usize;
+        let first_week_num =
+            (self.data.first_available_week + self.data.block_params.delay_in_weeks) as usize;
 
         super::super::generate_week_succession_title(
             "Bloc",
@@ -832,7 +898,7 @@ impl FactoryComponent for Block {
                 #[wrap(Some)]
                 set_adjustment = &gtk::Adjustment {
                     set_lower: 0.,
-                    set_upper: usize::MAX as f64,
+                    set_upper: u32::MAX as f64,
                     set_step_increment: 1.,
                     set_page_increment: 5.,
                 },
@@ -842,9 +908,9 @@ impl FactoryComponent for Block {
                 #[track(self.should_redraw)]
                 set_value: self.data.block_params.delay_in_weeks as f64,
                 connect_value_notify[sender] => move |widget| {
-                    let value_usize = widget.value() as usize;
+                    let value_u32 = widget.value() as u32;
                     sender.input(
-                        BlockInput::UpdateEmptyWeeks(value_usize)
+                        BlockInput::UpdateEmptyWeeks(value_u32)
                     );
                 },
             },
@@ -854,7 +920,7 @@ impl FactoryComponent for Block {
                 #[wrap(Some)]
                 set_adjustment = &gtk::Adjustment {
                     set_lower: 1.,
-                    set_upper: usize::MAX as f64,
+                    set_upper: u32::MAX as f64,
                     set_step_increment: 1.,
                     set_page_increment: 5.,
                 },
@@ -864,8 +930,8 @@ impl FactoryComponent for Block {
                 #[track(self.should_redraw)]
                 set_value: self.data.block_params.size_in_weeks.get() as f64,
                 connect_value_notify[sender] => move |widget| {
-                    let value_usize = widget.value() as usize;
-                    let value = NonZeroUsize::new(value_usize).unwrap();
+                    let value_u32 = widget.value() as u32;
+                    let value = NonZeroU32::new(value_u32).unwrap();
                     sender.input(
                         BlockInput::UpdateDurationInWeeks(value)
                     );
