@@ -20,6 +20,7 @@ impl Default for EvalFn {
 pub struct ProblemBuilder {
     constraints: Vec<linexpr::Constraint>,
     eval_fn: EvalFn,
+    variables: BTreeSet<String>,
 }
 
 impl ProblemBuilder {
@@ -37,8 +38,19 @@ impl ProblemBuilder {
         self
     }
 
+    pub fn add_variable<T: Into<String>>(mut self, var: T) -> Self {
+        self.variables.insert(var.into());
+        self
+    }
+
+    pub fn add_variables<T: Into<BTreeSet<String>>>(mut self, vars: T) -> Self {
+        let mut temp = vars.into();
+        self.variables.append(&mut temp);
+        self
+    }
+
     pub fn build(mut self) -> Problem {
-        let mut variables = BTreeSet::new();
+        let mut variables = self.variables;
 
         for c in self.constraints.iter_mut() {
             c.clean();
