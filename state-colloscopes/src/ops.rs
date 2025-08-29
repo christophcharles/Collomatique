@@ -156,6 +156,24 @@ pub enum IncompatOp {
     Update(IncompatId, incompats::Incompatibility),
 }
 
+/// Group list operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// group lists we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupListOp {
+    /// Add a group list
+    Add(group_lists::GroupListParameters),
+    /// Remove an existing group list
+    Remove(GroupListId),
+    /// Update a group list
+    Update(GroupListId, group_lists::GroupListParameters),
+    /// Change pre-fill for a group list
+    PreFill(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    /// Assign a group list to a subject
+    AssignToSubject(SubjectId, Option<GroupListId>),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
