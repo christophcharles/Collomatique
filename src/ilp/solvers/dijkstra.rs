@@ -17,21 +17,23 @@ use super::{FeasabilitySolver, VariableName};
 use std::collections::BTreeSet;
 
 impl<V: VariableName> FeasabilitySolver<V> for Solver {
-    fn restore_feasability_exclude<'a>(
+    fn restore_feasability_with_origin<'a>(
         &self,
         config: &Config<'a, V>,
-        exclude_list: &BTreeSet<&FeasableConfig<'a, V>>,
+        origin: Option<&FeasableConfig<'a, V>>,
     ) -> Option<FeasableConfig<'a, V>> {
         use std::collections::VecDeque;
 
-        let exclude_configs: BTreeSet<Config<'a, V>> =
-            exclude_list.iter().map(|x| x.inner().clone()).collect();
-        let mut explored_configs = exclude_configs.clone();
+        let forbidden_config = origin.map(|x| x.inner().clone());
+        let mut explored_configs: BTreeSet<Config<'_, V>> =
+            forbidden_config.iter().cloned().collect();
         let mut config_queue = VecDeque::new();
         config_queue.push_back(config.clone());
 
         while let Some(candidate) = config_queue.pop_front() {
-            if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
+            if candidate.is_feasable()
+                && !forbidden_config.as_ref().is_some_and(|x| *x == candidate)
+            {
                 return Some(unsafe { candidate.into_feasable_unchecked() });
             } else {
                 config_queue.extend(
