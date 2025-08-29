@@ -21,16 +21,24 @@ pub struct List {
 /// JSON desc of a single group list
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupList {
-    pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
-    pub group_count: std::ops::RangeInclusive<u32>,
-    pub excluded_students: BTreeSet<u64>,
+    pub params: GroupListParameters,
     #[serde(with = "serde_with::rust::maps_duplicate_key_is_error")]
     pub prefilled_groups: BTreeMap<u64, u32>,
 }
 
-impl From<&collomatique_state_colloscopes::group_lists::GroupList> for GroupList {
-    fn from(value: &collomatique_state_colloscopes::group_lists::GroupList) -> Self {
-        GroupList {
+/// JSON desc of a single group list parameters
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupListParameters {
+    pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
+    pub group_count: std::ops::RangeInclusive<u32>,
+    pub excluded_students: BTreeSet<u64>,
+}
+
+impl From<&collomatique_state_colloscopes::group_lists::GroupListParameters>
+    for GroupListParameters
+{
+    fn from(value: &collomatique_state_colloscopes::group_lists::GroupListParameters) -> Self {
+        GroupListParameters {
             students_per_group: value.students_per_group.clone(),
             group_count: value.group_count.clone(),
             excluded_students: value
@@ -38,6 +46,26 @@ impl From<&collomatique_state_colloscopes::group_lists::GroupList> for GroupList
                 .iter()
                 .map(|id| id.inner())
                 .collect(),
+        }
+    }
+}
+
+impl From<GroupListParameters>
+    for collomatique_state_colloscopes::group_lists::GroupListParametersExternalData
+{
+    fn from(value: GroupListParameters) -> Self {
+        collomatique_state_colloscopes::group_lists::GroupListParametersExternalData {
+            students_per_group: value.students_per_group,
+            group_count: value.group_count,
+            excluded_students: value.excluded_students,
+        }
+    }
+}
+
+impl From<&collomatique_state_colloscopes::group_lists::GroupList> for GroupList {
+    fn from(value: &collomatique_state_colloscopes::group_lists::GroupList) -> Self {
+        GroupList {
+            params: (&value.params).into(),
             prefilled_groups: value
                 .prefilled_groups
                 .iter()
@@ -50,9 +78,7 @@ impl From<&collomatique_state_colloscopes::group_lists::GroupList> for GroupList
 impl From<GroupList> for collomatique_state_colloscopes::group_lists::GroupListExternalData {
     fn from(value: GroupList) -> Self {
         collomatique_state_colloscopes::group_lists::GroupListExternalData {
-            students_per_group: value.students_per_group,
-            group_count: value.group_count,
-            excluded_students: value.excluded_students,
+            params: value.params.into(),
             prefilled_groups: value.prefilled_groups,
         }
     }
