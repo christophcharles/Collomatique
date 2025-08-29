@@ -148,6 +148,18 @@ impl<'a> ConfigRepr<'a> {
         true
     }
 
+    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfigRepr<'a> {
+        FeasableConfigRepr(self)
+    }
+
+    pub fn into_feasable(self) -> Option<FeasableConfigRepr<'a>> {
+        if !self.is_feasable() {
+            return None;
+        }
+
+        Some(unsafe { self.into_feasable_unchecked() })
+    }
+
     pub fn neighbours(&self) -> Vec<ConfigRepr<'a>> {
         let mut output = vec![];
 
@@ -160,5 +172,18 @@ impl<'a> ConfigRepr<'a> {
         }
 
         output
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FeasableConfigRepr<'a>(ConfigRepr<'a>);
+
+impl<'a> FeasableConfigRepr<'a> {
+    pub fn into_inner(self) -> ConfigRepr<'a> {
+        self.0
+    }
+
+    pub fn inner(&self) -> &ConfigRepr<'a> {
+        &self.0
     }
 }
