@@ -227,12 +227,78 @@ impl<
     }
 }
 
+/// Extra constraints for a given [BaseConstraints].
+/// 
+/// Sometimes a generic problem might have possible extensions.
+/// For a scheduling problem for instance, we might have a generic
+/// problem of distributing courses to different students.
+/// But there can be extra constraints. For instance a student might not
+/// be available on mondays because of personnal reasons.
+/// This is an extension of the *constraints* of the problem.
+/// 
+/// The form of the solution itself does not but the set of possible
+/// solutions is reduced due to some extra constraints.
+/// 
+/// Sometimes these extra constraints are so prevalent that they
+/// might as well be represented as part of the main problem. But
+/// often, these are exceptional cases and we should not burden the user
+/// into describing constraints he does not need.
+/// 
+/// For exceptional cases like this, we can define extra structures
+/// implementing the current trait [ExtraConstraints].
+/// 
+/// Such a trait does not define any new main variables (described by [BaseConstraints::MainVariable]).
+/// Indeed, the space of possible solutions does not change.
+/// However, we might need extra constraints and, to express them linearly,
+/// extra structure variables. These extra structure variables will be described by
+/// [ExtraConstraints::StructureVariable].
+/// 
+/// The corresponding structure constraints will be given by [ExtraConstraints::extra_structure_constraints]
+/// and the structure variables can be rebuilt programmatically using [ExtraConstraints::reconstruct_extra_structure_variables].
+/// 
+/// The additionnal constraints will be given by [ExtraConstraints::extra_general_constraints].
+/// 
+/// It is also possible to add an objective with [ExtraConstraints::extra_objective].
+/// 
+/// Because the space of solutions does not change, there is no equivalent to [BaseConstraints::configuration_to_partial_solution]
+/// and [BaseConstraints::partial_solution_to_configuration] in [ExtraConstraints].
 pub trait ExtraConstraints<T: BaseConstraints> {
+    /// Type to represent the structure variables specific to this problem extension.
+    /// 
+    /// The structure variables do not provide any new information and can entirely
+    /// be rebuild from the main variables (represented by [BaseConstraints::MainVariable]).
+    /// They only have a practical utility and help representing the problem as an ILP problem.
+    /// 
+    /// See [ExtraConstraints] and [BaseConstraints] for the full discussion.
     type StructureVariable: UsableData;
+
+    /// Type to represent the description of the extra structure constraints
+    /// 
+    /// Structure constraints define the structure variables ([ExtraConstraints::StructureVariable])
+    /// from the main variables ([BaseConstraints::MainVariable]) and possibly the already
+    /// existing structure constraints from the main problem ([BaseConstraints::StructureVariable]).
+    /// 
+    /// See [ExtraConstraints] and [BaseConstraints] for the full discussion.
     type StructureConstraintDesc: UsableData;
+
+    /// Type to represent the description of general constraints for the extension.
+    /// 
+    /// Genral constraints actually define the extension to the problem using main variables
+    /// ([BaseConstraints::MainVariable]), structure variables ([BaseConstraints::StructureVariable])
+    /// from the original problem but also extra structure variables ([ExtraConstraints::StructureVariable])
+    /// from the problem extension.
+    /// 
+    /// See [ExtraConstraints] for the full discussion.
     type GeneralConstraintDesc: UsableData;
 
+    /// Definition of the structure variables for the problem extension.
+    /// 
+    /// See [ExtraConstraints] for the full discussion.
     fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable>;
+
+    /// Definition of the structure constraints for the problem extension.
+    /// 
+    /// See [ExtraConstraints] for the full discussion.
     fn extra_structure_constraints(
         &self,
         base: &T,
@@ -241,6 +307,9 @@ pub trait ExtraConstraints<T: BaseConstraints> {
         Self::StructureConstraintDesc,
     )>;
 
+    /// Definition of the general constraints for the problem extension.
+    /// 
+    /// See [ExtraConstraints] for the full discussion.
     fn extra_general_constraints(
         &self,
         base: &T,
@@ -249,11 +318,33 @@ pub trait ExtraConstraints<T: BaseConstraints> {
         Self::GeneralConstraintDesc,
     )>;
 
+    /// Definition of a linear objective for the problem extension.
+    /// 
+    /// This objective will be added (with a weight) to the overall objective.
+    /// By default, you do not have to implement this function and it returns
+    /// a trivial objective.
+    /// 
+    /// See [ExtraConstraints] for the full discussion.
     fn extra_objective(
         &self,
         base: &T,
-    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>;
+    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>> {
+        Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
+    }
 
+    /// Reconstructs as many extra structure variables as possible from the main variables and generic structure variables.
+    /// 
+    /// A value should only be given if it can indeed be fixed. If the solution is complete (meaning
+    /// all main variables have a fixed value) then all extra structure variables should have a value too
+    /// and it should uniquely be fixed by the main variables.
+    /// 
+    /// Here we only want to build the structure variables specific to the problem extension ([ExtraConstraints::StructureVariable]).
+    /// The structure variable for the generic problem are already handled by [BaseConstraints::reconstruct_structure_variables].
+    /// 
+    /// As a convenience, it is possible to use the structure variables from the generic problem ([BaseConstraints::StructureVariable])
+    /// to rebuild the extra structure variables.
+    /// 
+    /// See [ExtraConstraints] for the full discussion.
     fn reconstruct_extra_structure_variables(
         &self,
         base: &T,
