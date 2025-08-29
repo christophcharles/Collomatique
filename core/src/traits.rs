@@ -327,7 +327,7 @@ pub trait ExtraConstraints<T: BaseConstraints> {
     /// See [ExtraConstraints] for the full discussion.
     fn extra_objective(
         &self,
-        base: &T,
+        _base: &T,
     ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>> {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
