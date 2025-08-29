@@ -367,9 +367,14 @@ impl GenColloscopeTranslator {
                 period: subject.period,
                 period_is_strict: subject.period_is_strict,
                 is_tutorial: subject.is_tutorial,
-                balancing_requirements: BalancingRequirements {
-                    teachers: subject.balancing_requirements.teachers,
-                    timeslots: subject.balancing_requirements.timeslots,
+                balancing_requirements: match (
+                    subject.balancing_requirements.timeslots,
+                    subject.balancing_requirements.teachers,
+                ) {
+                    (false, false) => BalancingRequirements::None,
+                    (true, false) => BalancingRequirements::Timeslots,
+                    (false, true) => BalancingRequirements::Teachers,
+                    (true, true) => BalancingRequirements::TeachersAndTimeslots,
                 },
                 duration: subject.duration,
                 slots: vec![],
