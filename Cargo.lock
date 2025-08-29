@@ -816,19 +816,6 @@ name = "collomatique-core"
 version = "0.1.0"
 
 [[package]]
-name = "collomatique-ilp"
-version = "0.1.0"
-dependencies = [
- "coin_cbc",
- "gag",
- "good_lp",
- "ndarray 0.15.6",
- "ordered-float",
- "sprs",
- "thiserror",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2234,6 +2221,19 @@ checksum = "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "ilp"
+version = "0.1.0"
+dependencies = [
+ "coin_cbc",
+ "gag",
+ "good_lp",
+ "ndarray 0.15.6",
+ "ordered-float",
+ "sprs",
+ "thiserror",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-//! The collomatique-ilp crate contains the code of collomatique
+//! The ilp crate contains the code of collomatique
 //! pertaining to representing Integer Linear Programming problems
 //! pertinent for the collomatique algorithm.
 //!
@@ -89,7 +89,7 @@
 //! value having gorup X in course 1 on week 1 rather than not.
 //!
 //! ```
-//! # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
+//! # use ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
 //! let x11 = LinExpr::<String>::var("x11"); // Group X has course 1 on week 1
 //! let x12 = LinExpr::<String>::var("x12"); // Group X has course 1 on week 2
 //! let x21 = LinExpr::<String>::var("x21"); // Group X has course 2 on week 1
@@ -142,7 +142,7 @@
 //!     .unwrap();
 //!
 //! // Now pb represents our ILP problem. We can solve it using a solver
-//! # use collomatique_ilp::solvers;
+//! # use ilp::solvers;
 //! let solver = solvers::coin_cbc::CbcSolver::new();
 //!
 //! use solvers::Solver;
@@ -312,7 +312,7 @@ impl Variable {
     /// [Variable::min] and [Variable::max].
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::integer();
     /// assert_eq!(var_desc.is_integer(), true);
     /// ```
@@ -333,7 +333,7 @@ impl Variable {
     /// So this functions is just a helper function.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::binary();
     /// assert_eq!(var_desc, Variable::integer().min(0.0).max(1.0));
     /// ```
@@ -353,7 +353,7 @@ impl Variable {
     /// So this functions is just a helper function.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::uinteger();
     /// assert_eq!(var_desc, Variable::integer().min(0.0));
     /// ```
@@ -371,7 +371,7 @@ impl Variable {
     /// [Variable::min] and [Variable::max].
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::continuous();
     /// assert_eq!(var_desc.is_integer(), false);
     /// ```
@@ -389,7 +389,7 @@ impl Variable {
     /// and then [Variable::min].
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::non_negative();
     /// assert_eq!(var_desc, Variable::continuous().min(0.0));
     /// ```
@@ -407,7 +407,7 @@ impl Variable {
     /// and then [Variable::max].
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::non_positive();
     /// assert_eq!(var_desc, Variable::continuous().max(0.0));
     /// ```
@@ -422,7 +422,7 @@ impl Variable {
     /// Sets a minimum bound for a variable.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::continuous().min(0.0);
     /// // var_desc describes a positive continuous variable.
     ///
@@ -432,7 +432,7 @@ impl Variable {
     /// This function can be chained with [Variable::max] to set
     /// a range of possible values.
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::continuous().min(0.0).max(42.0);
     /// // var_desc describes a variable that takes its values in [0,42].
     ///
@@ -447,7 +447,7 @@ impl Variable {
     /// Sets a minimum bound for a variable.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::continuous().max(0.0);
     /// // var_desc describes a negative continuous variable.
     ///
@@ -457,7 +457,7 @@ impl Variable {
     /// This function can be chained with [Variable::min] to set
     /// a range of possible values.
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let var_desc = Variable::continuous().max(0.0).min(-1.0);
     /// // var_desc describes a variable that takes its values in [-1,0].
     ///
@@ -474,7 +474,7 @@ impl Variable {
     /// Non-integer variables are continuous.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let continuous_var = Variable::continuous();
     /// let integer_var = Variable::integer();
     ///
@@ -488,7 +488,7 @@ impl Variable {
     /// Returns the minimum bound of the variable.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let desc_var = Variable::continuous().min(0.0);
     ///
     /// assert_eq!(desc_var.get_min(), Some(0.0));
@@ -496,7 +496,7 @@ impl Variable {
     ///
     /// If no minimum bound was set, returns None.
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let desc_var = Variable::continuous();
     ///
     /// assert_eq!(desc_var.get_min(), None);
@@ -508,7 +508,7 @@ impl Variable {
     /// Returns the maximum bound of the variable.
     ///
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let desc_var = Variable::continuous().max(42.0);
     ///
     /// assert_eq!(desc_var.get_max(), Some(42.0));
@@ -516,7 +516,7 @@ impl Variable {
     ///
     /// If no maximum bound was set, returns None.
     /// ```
-    /// # use collomatique_ilp::Variable;
+    /// # use ilp::Variable;
     /// let desc_var = Variable::continuous();
     ///
     /// assert_eq!(desc_var.get_max(), None);
@@ -598,7 +598,7 @@ impl std::fmt::Display for ObjectiveSense {
 /// value having gorup X in course 1 on week 1 rather than not.
 ///
 /// ```
-/// # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
+/// # use ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
 /// let x11 = LinExpr::<String>::var("x11"); // Group X has course 1 on week 1
 /// let x12 = LinExpr::<String>::var("x12"); // Group X has course 1 on week 2
 /// let x21 = LinExpr::<String>::var("x21"); // Group X has course 2 on week 1
@@ -675,7 +675,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// Returns a new ProblemBuilder corresponding to an empty ILP problem.
     ///
     /// ```
-    /// # use collomatique_ilp::ProblemBuilder;
+    /// # use ilp::ProblemBuilder;
     /// let problem_builder = ProblemBuilder::<String,String>::new();
     ///
     /// let problem = problem_builder.build().unwrap();
@@ -716,7 +716,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// If the variable is already declared, its description is simply overwritten.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable};
+    /// # use ilp::{ProblemBuilder, Variable};
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variable("A", Variable::binary())
     ///     .build()
@@ -741,7 +741,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// If a variable is already declared, its description is simply overwritten.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable};
+    /// # use ilp::{ProblemBuilder, Variable};
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variables([
     ///         ("A", Variable::binary()),
@@ -775,7 +775,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// used to add constraints. It takes a constraint (represented with [linexpr::Constraint])
     /// and a description of this constraint (with the generic type C).
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr};
+    /// # use ilp::{ProblemBuilder, Variable, linexpr::LinExpr};
     /// let a = LinExpr::var("A");
     /// let b = LinExpr::var("B");
     ///
@@ -808,7 +808,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// and descriptions of these constraint (with the generic type C).
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr};
+    /// # use ilp::{ProblemBuilder, Variable, linexpr::LinExpr};
     /// let a = LinExpr::var("A");
     /// let b = LinExpr::var("B");
     /// let c = LinExpr::var("C");
@@ -862,7 +862,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// Be careful, all variables must be declared.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
+    /// # use ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
@@ -925,7 +925,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// If some variable is not declared, it returns an error.
     /// ```should_panic
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
+    /// # use ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
@@ -941,7 +941,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// Otherwise, it returns the constructed problem.
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
+    /// # use ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
