@@ -9,6 +9,11 @@ pub enum AssignmentsUpdateOp {
         bool,
     ),
     DuplicatePreviousPeriod(collomatique_state_colloscopes::PeriodId),
+    AssignAll(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::SubjectId,
+        bool,
+    ),
 }
 
 #[derive(Debug, Error)]
@@ -17,6 +22,8 @@ pub enum AssignmentsUpdateError {
     Assign(#[from] AssignError),
     #[error(transparent)]
     DuplicatePreviousPeriod(#[from] DuplicatePreviousPeriodError),
+    #[error(transparent)]
+    AssignAll(#[from] AssignAllError),
 }
 
 #[derive(Debug, Error)]
@@ -49,6 +56,24 @@ pub enum AssignError {
 }
 
 #[derive(Debug, Error)]
+pub enum AssignAllError {
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+
+    /// Subject does not run on given period
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    SubjectDoesNotRunOnPeriod(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
+}
+
+#[derive(Debug, Error)]
 pub enum DuplicatePreviousPeriodError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
@@ -71,6 +96,13 @@ impl AssignmentsUpdateOp {
             }
             AssignmentsUpdateOp::DuplicatePreviousPeriod(_) => {
                 "Dupliquer les inscriptions d'un période".into()
+            }
+            AssignmentsUpdateOp::AssignAll(_, _, status) => {
+                if *status {
+                    "Inscrire tous les élèves à une matière".into()
+                } else {
+                    "Désinscrire tous les élèves d'une matière".into()
+                }
             }
         }
     }
@@ -189,6 +221,58 @@ impl AssignmentsUpdateOp {
                             )
                             .expect("All data should be valid at this point");
                     }
+                }
+
+                *data = session.commit(self.get_desc());
+
+                Ok(())
+            }
+            Self::AssignAll(period_id, subject_id, status) => {
+                if data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .is_none()
+                {
+                    return Err(AssignAllError::InvalidPeriodId(period_id.clone()).into());
+                };
+
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return Err(AssignAllError::InvalidSubjectId(*subject_id).into());
+                };
+
+                if subject.excluded_periods.contains(period_id) {
+                    return Err(
+                        AssignAllError::SubjectDoesNotRunOnPeriod(*subject_id, *period_id).into(),
+                    );
+                }
+
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::Assignment(
+                                collomatique_state_colloscopes::AssignmentOp::Assign(
+                                    *period_id,
+                                    *student_id,
+                                    *subject_id,
+                                    *status,
+                                ),
+                            ),
+                            if *status {
+                                "Inscription d'un élève".into()
+                            } else {
+                                "Désinscription d'un élève".into()
+                            },
+                        )
+                        .expect("All data should be valid at this point");
+
+                    assert!(result.is_none());
                 }
 
                 *data = session.commit(self.get_desc());
