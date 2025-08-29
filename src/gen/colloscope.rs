@@ -970,7 +970,7 @@ impl<'a> IlpTranslator<'a> {
         lhs.leq(&Expr::constant(max_i32))
     }
 
-    fn build_students_per_group_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_students_per_group_count_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
@@ -1045,7 +1045,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .add_constraints(self.build_one_interrogation_per_period_contraints())
-            .add_constraints(self.build_students_per_group_constraints())
+            .add_constraints(self.build_students_per_group_count_constraints())
             .add_constraints(self.build_dynamic_groups_constraints())
     }
 
