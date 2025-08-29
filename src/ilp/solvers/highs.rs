@@ -107,6 +107,12 @@ impl Solver {
                         let col = highs_problem.add_integer_column(col_factor, 0..=1);
                         (var.clone(), col)
                     }
+                    VariableType::Integer(range) => {
+                        // Ignore dist mininization for integers variables
+
+                        let col = highs_problem.add_integer_column(0., range.clone());
+                        (var.clone(), col)
+                    }
                 }
             })
             .collect();
@@ -162,8 +168,20 @@ impl Solver {
             })
             .collect();
 
+        let i32_vars: BTreeMap<_, _> = problem
+            .get_variables()
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (var, var_type))| {
+                let VariableType::Integer(_range) = var_type else {
+                    return None;
+                };
+                Some((var.clone(), columns[i] as i32))
+            })
+            .collect();
+
         let config = problem
-            .config_from(bool_vars)
+            .config_from(bool_vars, i32_vars)
             .expect("Variables should be valid");
         Some(
             config

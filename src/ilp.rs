@@ -21,6 +21,8 @@ pub enum Error<V: VariableName> {
     InvalidVariable(V),
     #[error("Variable {0} does not have the right type")]
     InvalidVariableType(V),
+    #[error("Value is out of range")]
+    OutOfRange,
 }
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
@@ -33,9 +35,10 @@ impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VariableType {
     Bool,
+    Integer(std::ops::RangeInclusive<i32>),
 }
 
 pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
@@ -244,23 +247,28 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     }
 
     pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
-        let bool_vars = self.variables.iter().filter_map(|(var, var_type)| {
-            if *var_type != VariableType::Bool {
-                return None;
-            }
-
-            Some((var.clone(), false))
-        });
-        self.config_from(bool_vars)
+        self.config_from_bools::<V, _>([])
             .expect("Valid variables as no variables are used")
     }
 
-    pub fn config_from<'a, U, T: IntoIterator<Item = (U, bool)>>(
+    pub fn config_from_bools<'a, U, I>(&'a self, bool_vars: I) -> Result<Config<'a, V, P>, V>
+    where
+        U: Into<V>,
+        I: IntoIterator<Item = (U, bool)>,
+    {
+        self.config_from::<_, V, _, _>(bool_vars, [])
+    }
+
+    pub fn config_from<'a, U, W, I1, I2>(
         &'a self,
-        bool_vars: T,
+        bool_vars: I1,
+        i32_vars: I2,
     ) -> Result<Config<'a, V, P>, V>
     where
         U: Into<V>,
+        W: Into<V>,
+        I1: IntoIterator<Item = (U, bool)>,
+        I2: IntoIterator<Item = (W, i32)>,
     {
         let mut vars_repr = BTreeMap::new();
 
@@ -280,6 +288,28 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
                 .copied()
                 .expect("Variable should exist as it is in variables map");
             vars_repr.insert(num, if value { 1 } else { 0 });
+        }
+
+        for (var, value) in i32_vars {
+            let v = var.into();
+            let var_type = match self.variables.get(&v) {
+                Some(t) => t.clone(),
+                None => return Err(Error::InvalidVariable(v.clone())),
+            };
+            let VariableType::Integer(range) = var_type else {
+                return Err(Error::InvalidVariableType(v.clone()));
+            };
+
+            if !range.contains(&value) {
+                return Err(Error::OutOfRange);
+            }
+
+            let num = self
+                .variables_lookup
+                .get(&v)
+                .copied()
+                .expect("Variable should exist as it is in variables map");
+            vars_repr.insert(num, value);
         }
 
         Ok(Config {
@@ -399,6 +429,79 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
             .expect("Variable should exist since it is in variables map");
         unsafe {
             self.cfg_repr.set_unchecked(*i, if val { 1 } else { 0 });
+        }
+        self.invalidate_precomputation(*i);
+        Ok(())
+    }
+
+    pub fn get_i32<'b, T>(&self, var: &'b T) -> Result<i32, V>
+    where
+        V: std::borrow::Borrow<T>,
+        T: Ord + ?Sized,
+        &'b T: Into<V>,
+    {
+        let var_type = match self.problem.variables.get(var) {
+            Some(t) => t.clone(),
+            None => return Err(Error::InvalidVariable(var.into())),
+        };
+
+        let VariableType::Integer(_range) = var_type else {
+            return Err(Error::InvalidVariableType(var.into()));
+        };
+
+        let i = self
+            .problem
+            .variables_lookup
+            .get(var)
+            .expect("Variable should exist since it is in variables map");
+        Ok(unsafe { self.cfg_repr.get_unchecked(*i) })
+    }
+
+    pub fn get_i32_vars(&self) -> BTreeMap<V, i32> {
+        let mut output = BTreeMap::new();
+        for (var, i) in &self.problem.variables_lookup {
+            let var_type = self
+                .problem
+                .variables
+                .get(var)
+                .expect("Variable should exist since it is in variables_lookup")
+                .clone();
+            let VariableType::Integer(_range) = var_type else {
+                continue;
+            };
+
+            let value = unsafe { self.cfg_repr.get_unchecked(*i) };
+            output.insert(var.clone(), value);
+        }
+        output
+    }
+
+    pub fn set_i32<'b, T>(&mut self, var: &'b T, val: i32) -> Result<(), V>
+    where
+        V: std::borrow::Borrow<T>,
+        T: Ord + ?Sized,
+        &'b T: Into<V>,
+    {
+        let var_type = match self.problem.variables.get(var) {
+            Some(t) => t.clone(),
+            None => return Err(Error::InvalidVariable(var.into())),
+        };
+
+        let VariableType::Integer(range) = var_type else {
+            return Err(Error::InvalidVariableType(var.into()));
+        };
+
+        if !range.contains(&val) {
+            return Err(Error::OutOfRange);
+        }
+
+        let i = self
+            .problem
+            .variables_lookup
+            .get(var)
+            .expect("Variable should exist since it is in variables map");
+        unsafe {
+            self.cfg_repr.set_unchecked(*i, val);
         }
         self.invalidate_precomputation(*i);
         Ok(())

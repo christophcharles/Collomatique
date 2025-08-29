@@ -2859,6 +2859,7 @@ impl<'a> IlpTranslator<'a> {
             self.problem_builder_hard()
                 .eval_fn(crate::debuggable!(move |x| {
                     let bool_vars = x.get_bool_vars();
+                    let i32_vars = x.get_i32_vars();
 
                     let mut manual_costs = 0.;
                     for (var, &value) in &bool_vars {
@@ -2877,7 +2878,7 @@ impl<'a> IlpTranslator<'a> {
                     }
 
                     let soft_config = soft_problem
-                        .config_from(bool_vars)
+                        .config_from(bool_vars, i32_vars)
                         .expect("Variables should match");
                     // If some constraints are inequalities, this will still measure the difference to equality
                     let sq2_cost = soft_config.compute_lhs_sq_norm2();

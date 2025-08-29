@@ -8,7 +8,7 @@ fn test_config_from_iterator() {
         .build();
 
     let config = pb
-        .config_from([("x", true), ("y", true), ("z", true)])
+        .config_from_bools([("x", true), ("y", true), ("z", true)])
         .unwrap();
 
     assert_eq!(config.get_bool("x"), Ok(true));
@@ -29,7 +29,7 @@ fn invalid_variable_in_config() {
         .unwrap()
         .build();
 
-    let config = pb.config_from([("x", true), ("y", true), ("w", true)]);
+    let config = pb.config_from_bools([("x", true), ("y", true), ("w", true)]);
 
     assert_eq!(
         config.err(),
@@ -64,30 +64,30 @@ fn test_is_feasable() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from([("a", true)]).unwrap();
-    let config_2 = pb.config_from([("b", true)]).unwrap();
-    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
-    let config_4 = pb.config_from([("c", true)]).unwrap();
-    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
-    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
+    let config_1 = pb.config_from_bools([("a", true)]).unwrap();
+    let config_2 = pb.config_from_bools([("b", true)]).unwrap();
+    let config_3 = pb.config_from_bools([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from_bools([("c", true)]).unwrap();
+    let config_5 = pb.config_from_bools([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from_bools([("b", true), ("c", true)]).unwrap();
     let config_7 = pb
-        .config_from([("a", true), ("b", true), ("c", true)])
+        .config_from_bools([("a", true), ("b", true), ("c", true)])
         .unwrap();
-    let config_8 = pb.config_from([("d", true)]).unwrap();
-    let config_9 = pb.config_from([("a", true), ("d", true)]).unwrap();
-    let config_a = pb.config_from([("b", true), ("d", true)]).unwrap();
+    let config_8 = pb.config_from_bools([("d", true)]).unwrap();
+    let config_9 = pb.config_from_bools([("a", true), ("d", true)]).unwrap();
+    let config_a = pb.config_from_bools([("b", true), ("d", true)]).unwrap();
     let config_b = pb
-        .config_from([("a", true), ("b", true), ("d", true)])
+        .config_from_bools([("a", true), ("b", true), ("d", true)])
         .unwrap();
-    let config_c = pb.config_from([("c", true), ("d", true)]).unwrap();
+    let config_c = pb.config_from_bools([("c", true), ("d", true)]).unwrap();
     let config_d = pb
-        .config_from([("a", true), ("c", true), ("d", true)])
+        .config_from_bools([("a", true), ("c", true), ("d", true)])
         .unwrap();
     let config_e = pb
-        .config_from([("b", true), ("c", true), ("d", true)])
+        .config_from_bools([("b", true), ("c", true), ("d", true)])
         .unwrap();
     let config_f = pb
-        .config_from([("a", true), ("b", true), ("c", true), ("d", true)])
+        .config_from_bools([("a", true), ("b", true), ("c", true), ("d", true)])
         .unwrap();
 
     assert_eq!(config_0.is_feasable(), false);
@@ -116,9 +116,9 @@ fn test_is_feasable_no_constraint() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from([("a", true)]).unwrap();
-    let config_2 = pb.config_from([("b", true)]).unwrap();
-    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_1 = pb.config_from_bools([("a", true)]).unwrap();
+    let config_2 = pb.config_from_bools([("b", true)]).unwrap();
+    let config_3 = pb.config_from_bools([("a", true), ("b", true)]).unwrap();
 
     assert_eq!(config_0.is_feasable(), true);
     assert_eq!(config_1.is_feasable(), true);

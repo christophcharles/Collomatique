@@ -86,9 +86,9 @@ fn coin_cbc() {
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+        pb.config_from_bools([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
             .unwrap(),
-        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+        pb.config_from_bools([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
             .unwrap(),
     ]);
 
@@ -174,7 +174,7 @@ fn coin_cbc_2() {
         .unwrap()
         .build();
     let config = pb
-        .config_from([("y21", true), ("y22", true), ("x11", true)])
+        .config_from_bools([("y21", true), ("y22", true), ("x11", true)])
         .unwrap();
 
     let solver = super::Solver::new();
@@ -185,9 +185,9 @@ fn coin_cbc_2() {
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+        pb.config_from_bools([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
             .unwrap(),
-        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+        pb.config_from_bools([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
             .unwrap(),
     ]);
 
@@ -218,7 +218,7 @@ fn coin_cbc_impossible() {
         ])
         .unwrap()
         .build();
-    let config = pb.config_from([("x11", true)]).unwrap();
+    let config = pb.config_from_bools([("x11", true)]).unwrap();
 
     let solver = super::Solver::new();
 
