@@ -114,14 +114,15 @@ CREATE TABLE "subjects" (
 	"subject_group_id"	INTEGER NOT NULL,
 	"duration"	INTEGER NOT NULL,
 	"course_incompat_id"	INTEGER,
-	"min_students_per_slot"	INTEGER NOT NULL,
-	"max_students_per_slot"	INTEGER NOT NULL,
+	"min_students_per_group"	INTEGER NOT NULL,
+	"max_students_per_group"	INTEGER NOT NULL,
 	"period"	INTEGER NOT NULL,
 	"period_is_strict"	INTEGER NOT NULL,
 	"is_tutorial"	INTEGER NOT NULL,
+	"max_groups_per_slot"	INTEGER NOT NULL,
+	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
 	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
-	PRIMARY KEY("subject_id" AUTOINCREMENT),
-	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id")
+	PRIMARY KEY("subject_id" AUTOINCREMENT)
 );
 
 CREATE TABLE "groupings" (
@@ -428,11 +429,12 @@ WHERE course_incompat_id IS NOT NULL
 struct SubjectRecord {
     id: i64,
     duration: i64,
-    min_students_per_slot: i64,
-    max_students_per_slot: i64,
+    min_students_per_group: i64,
+    max_students_per_group: i64,
     period: i64,
     period_is_strict: i64,
     is_tutorial: i64,
+    max_groups_per_slot: i64,
 }
 
 fn generate_bare_subjects(
@@ -455,19 +457,24 @@ fn generate_bare_subjects(
             use collomatique::gen::colloscope::{GroupsDesc, Subject};
             use std::num::{NonZeroU32, NonZeroUsize};
 
-            let min = usize::try_from(x.min_students_per_slot)
-                .expect("Valid usize for minimum students per slot");
-            let max = usize::try_from(x.max_students_per_slot)
-                .expect("Valid usize for maximum students per slot");
+            let min = usize::try_from(x.min_students_per_group)
+                .expect("Valid usize for minimum students per group");
+            let max = usize::try_from(x.max_students_per_group)
+                .expect("Valid usize for maximum students per group");
 
-            let non_zero_min = NonZeroUsize::new(min).expect("Non zero minimum students per slot");
-            let non_zero_max = NonZeroUsize::new(max).expect("Non zero maximum students per slot");
+            let non_zero_min = NonZeroUsize::new(min).expect("Non zero minimum students per group");
+            let non_zero_max = NonZeroUsize::new(max).expect("Non zero maximum students per group");
 
             let students_per_slot = non_zero_min..=non_zero_max;
 
+            let max_groups_per_slot_usize = usize::try_from(x.max_groups_per_slot)
+                .expect("Valid usize for maximum groups per slot");
+            let max_groups_per_slot = NonZeroUsize::new(max_groups_per_slot_usize)
+                .expect("Non zero maximum groups per slot");
+
             Subject {
                 students_per_group: students_per_slot,
-                max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+                max_groups_per_slot,
                 period: NonZeroU32::new(
                     u32::try_from(x.period).expect("Valid u32 for subject period"),
                 )
@@ -766,7 +773,7 @@ async fn generate_subjects(
     collo_id: i64,
 ) -> Result<SubjectsData> {
     let subject_data = sqlx::query_as!(SubjectRecord, "
-SELECT subject_id AS id, duration, min_students_per_slot, max_students_per_slot, period, period_is_strict, is_tutorial
+SELECT subject_id AS id, duration, min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot
 FROM subjects
         ")
         .fetch_all(db_conn)
