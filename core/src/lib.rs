@@ -184,8 +184,10 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
 
     fn reconstruct_structure_variables(
         &self,
-        config: &ConfigData<Self::MainVariable>,
+        config: &CompleteSolution<Self::Solution>,
     ) -> Option<ConfigData<Self::StructureVariable>> {
+        let config_data = self.solution_to_configuration(config.inner());
+
         let structure_constraints = self.structure_constraints();
         let structure_variables = self
             .structure_variables()
@@ -193,7 +195,7 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
             .map(|(v_name, v_desc)| (BaseVariable::Structure(v_name), v_desc))
             .collect();
         let main_values = ConfigData::new().set_iter(
-            config
+            config_data
                 .get_values()
                 .into_iter()
                 .map(|(var, value)| (BaseVariable::Main(var), value)),
