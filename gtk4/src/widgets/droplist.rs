@@ -136,6 +136,7 @@ impl Component for Widget {
                 if Some(selected) == self.currently_selected {
                     return;
                 }
+                self.currently_selected = Some(selected);
                 let selected_usize = selected as usize;
                 sender
                     .output(WidgetOutput::SelectionChanged(selected_usize))
