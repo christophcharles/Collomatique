@@ -318,13 +318,18 @@ WHERE incompat_group_id IN
     .await
     .map_err(Error::from)?;
 
-    let rows_affected = sqlx::query!("DELETE FROM incompats WHERE incompat_id = ?", incompat_id)
+    let count = sqlx::query!("DELETE FROM incompats WHERE incompat_id = ?", incompat_id)
         .execute(&mut *conn)
         .await
         .map_err(Error::from)?
         .rows_affected();
 
-    if rows_affected != 1 {
+    if count > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple incompats with id {:?}",
+            index
+        ))));
+    } else if count == 0 {
         return Err(IdError::InvalidId(index));
     }
 

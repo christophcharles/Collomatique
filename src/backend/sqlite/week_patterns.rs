@@ -126,13 +126,23 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
     .await
     .map_err(Error::from)?;
 
-    let _ = sqlx::query!(
+    let count = sqlx::query!(
         "DELETE FROM week_patterns WHERE week_pattern_id = ?",
         week_pattern_id
     )
     .execute(&mut *conn)
     .await
-    .map_err(Error::from)?;
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if count > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple week_patterns with id {:?}",
+            index
+        ))));
+    } else if count == 0 {
+        return Err(IdError::InvalidId(index));
+    }
 
     Ok(())
 }

@@ -69,7 +69,12 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
         .map_err(Error::from)?
         .rows_affected();
 
-    if count == 0 {
+    if count > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple teachers with id {:?}",
+            index
+        ))));
+    } else if count == 0 {
         return Err(IdError::InvalidId(index));
     }
 
