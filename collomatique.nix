@@ -8,7 +8,6 @@
     gdk-pixbuf,
     glib,
     gtk4,
-    vte-gtk4,
     wayland,
     libadwaita,
     adwaita-icon-theme,
@@ -36,7 +35,6 @@ rustPlatform.buildRustPackage rec {
         gdk-pixbuf
         glib
         gtk4
-        vte-gtk4
         libadwaita
         wayland
         adwaita-icon-theme
