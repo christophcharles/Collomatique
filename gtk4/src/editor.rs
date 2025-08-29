@@ -16,6 +16,7 @@ use crate::tools;
 
 mod check_script;
 mod general_planning;
+mod run_script;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -32,6 +33,7 @@ pub enum EditorInput {
     RedoClicked,
     UpdateOp(EditorUpdateOp),
     RunScriptClicked,
+    RunScript(PathBuf, String),
 }
 
 #[derive(Debug)]
@@ -86,6 +88,7 @@ pub struct EditorPanel {
 
     general_planning: Controller<general_planning::GeneralPlanning>,
     check_script_dialog: Controller<check_script::Dialog>,
+    run_script_dialog: Controller<run_script::Dialog>,
 }
 
 impl EditorPanel {
@@ -315,7 +318,16 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(EditorUpdateOp::GeneralPlanning(op))
             });
 
-        let check_script_dialog = check_script::Dialog::builder()
+        let check_script_dialog =
+            check_script::Dialog::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    check_script::DialogOutput::Run(path, script) => {
+                        EditorInput::RunScript(path, script)
+                    }
+                });
+
+        let run_script_dialog = run_script::Dialog::builder()
             .launch(())
             .forward(sender.input_sender(), |_| EditorInput::Ignore);
 
@@ -336,6 +348,7 @@ impl Component for EditorPanel {
             show_particular_panel: None,
             general_planning,
             check_script_dialog,
+            run_script_dialog,
         };
         let widgets = view_output!();
 
@@ -452,6 +465,12 @@ impl Component for EditorPanel {
                         None => EditorCommandOutput::ScriptNotChosen,
                     }
                 });
+            }
+            EditorInput::RunScript(path, script) => {
+                self.run_script_dialog
+                    .sender()
+                    .send(run_script::DialogInput::Run(path, script))
+                    .unwrap();
             }
         }
     }
