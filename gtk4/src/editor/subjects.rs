@@ -1,10 +1,13 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+};
 
 use collomatique_core::ops::SubjectsUpdateOp;
 
+mod subject_params;
 mod subjects_display;
 
 #[derive(Debug)]
@@ -20,12 +23,24 @@ pub enum SubjectsInput {
     MoveUpSubjectClicked(collomatique_state_colloscopes::SubjectId),
     MoveDownSubjectClicked(collomatique_state_colloscopes::SubjectId),
     PeriodStatusUpdated(collomatique_state_colloscopes::SubjectId, usize, bool),
+
+    SubjectParamsSelected(collomatique_state_colloscopes::SubjectParameters),
+}
+
+#[derive(Debug)]
+enum SubjectParamsSelectionReason {
+    New,
+    Edit(collomatique_state_colloscopes::SubjectId),
 }
 
 pub struct Subjects {
     periods: collomatique_state_colloscopes::periods::Periods,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     subjects_list: FactoryVecDeque<subjects_display::Entry>,
+
+    subject_params_selection_reason: SubjectParamsSelectionReason,
+
+    subject_params_dialog: Controller<subject_params::Dialog>,
 }
 
 #[relm4::component(pub)]
@@ -72,6 +87,15 @@ impl Component for Subjects {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let subject_params_dialog =
+            subject_params::Dialog::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    subject_params::DialogOutput::Accepted(params) => {
+                        SubjectsInput::SubjectParamsSelected(params)
+                    }
+                });
+
         let subjects_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -96,6 +120,8 @@ impl Component for Subjects {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             subjects_list,
+            subject_params_selection_reason: SubjectParamsSelectionReason::New,
+            subject_params_dialog,
         };
         let subjects_box = model.subjects_list.widget();
         let widgets = view_output!();
@@ -131,8 +157,25 @@ impl Component for Subjects {
                     |data| subjects_display::EntryInput::UpdateData(data),
                 );
             }
-            SubjectsInput::AddSubjectClicked => {}
-            SubjectsInput::EditSubjectClicked(_id) => {}
+            SubjectsInput::AddSubjectClicked => {
+                self.subject_params_selection_reason = SubjectParamsSelectionReason::New;
+                self.subject_params_dialog
+                    .sender()
+                    .send(subject_params::DialogInput::Show(
+                        collomatique_state_colloscopes::SubjectParameters::default(),
+                    ))
+                    .unwrap();
+            }
+            SubjectsInput::EditSubjectClicked(id) => {
+                self.subject_params_selection_reason = SubjectParamsSelectionReason::Edit(id);
+                let current_subject = self.subjects.find_subject(id).expect("valid position");
+                self.subject_params_dialog
+                    .sender()
+                    .send(subject_params::DialogInput::Show(
+                        current_subject.parameters.clone(),
+                    ))
+                    .unwrap();
+            }
             SubjectsInput::DeleteSubjectClicked(id) => {
                 sender.output(SubjectsUpdateOp::DeleteSubject(id)).unwrap();
             }
@@ -149,6 +192,18 @@ impl Component for Subjects {
                         self.periods.ordered_period_list[period_num].0,
                         status,
                     ))
+                    .unwrap();
+            }
+            SubjectsInput::SubjectParamsSelected(params) => {
+                sender
+                    .output(match self.subject_params_selection_reason {
+                        SubjectParamsSelectionReason::New => {
+                            SubjectsUpdateOp::AddNewSubject(params)
+                        }
+                        SubjectParamsSelectionReason::Edit(id) => {
+                            SubjectsUpdateOp::UpdateSubject(id, params)
+                        }
+                    })
                     .unwrap();
             }
         }
