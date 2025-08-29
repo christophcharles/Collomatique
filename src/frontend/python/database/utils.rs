@@ -1,3 +1,5 @@
+use pyo3::exceptions::PyIOError;
+
 use super::*;
 
 fn test_part_uppercase(part: &str) -> bool {
@@ -99,4 +101,37 @@ pub fn extract_name_parts(name: String, firstname_first: bool) -> (String, Strin
         None => extract_name_parts_no_hint(&name, firstname_first),
         Some(hint) => extract_name_parts_with_hint(&parts, firstname_first, hint),
     }
+}
+
+#[pyfunction]
+#[pyo3(signature = (filename, has_headers = false, delimiter = String::from(";")))]
+pub fn load_csv(
+    filename: String,
+    has_headers: bool,
+    delimiter: String,
+) -> PyResult<super::csv_file::CsvFile> {
+    let path = PathBuf::from(&filename);
+
+    use crate::frontend::csv::{Content, Error, Params};
+    let csv_content = Content::from_csv_file(&path).map_err(|e| match e {
+        Error::CSV(csv_error) => PyIOError::new_err(csv_error.to_string()),
+        Error::IO(io_error) => PyIOError::new_err(io_error.to_string()),
+    })?;
+
+    let delimiter_bytes = delimiter.as_bytes();
+    if delimiter_bytes.len() != 1 {
+        return Err(PyValueError::new_err("delimiter must have a single byte"));
+    };
+
+    let params = Params {
+        has_headers,
+        delimiter: delimiter_bytes[0],
+    };
+
+    let csv_extract = csv_content.extract(&params).map_err(|e| match e {
+        Error::CSV(csv_error) => PyIOError::new_err(csv_error.to_string()),
+        Error::IO(io_error) => PyIOError::new_err(io_error.to_string()),
+    })?;
+
+    Ok(super::csv_file::CsvFile::from_extract(csv_extract))
 }
