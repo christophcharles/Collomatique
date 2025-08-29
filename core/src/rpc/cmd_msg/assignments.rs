@@ -6,6 +6,7 @@ use super::*;
 pub enum AssignmentsCmdMsg {
     Assign(MsgPeriodId, MsgStudentId, MsgSubjectId, bool),
     DuplicatePreviousPeriod(MsgPeriodId),
+    AssignAll(MsgPeriodId, MsgSubjectId, bool),
 }
 
 impl AssignmentsCmdMsg {
@@ -35,6 +36,15 @@ impl AssignmentsCmdMsg {
                     .into());
                 };
                 AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id)
+            }
+            AssignmentsCmdMsg::AssignAll(period_id, subject_id, status) => {
+                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                    return Err(error_msg::AssignAllError::InvalidPeriodId(period_id).into());
+                };
+                let Some(subject_id) = data.validate_subject_id(subject_id.0) else {
+                    return Err(error_msg::AssignAllError::InvalidSubjectId(subject_id).into());
+                };
+                AssignmentsUpdateOp::AssignAll(period_id, subject_id, status)
             }
         })
     }

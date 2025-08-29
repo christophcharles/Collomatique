@@ -5,9 +5,9 @@ use pyo3::prelude::*;
 use crate::rpc::{
     cmd_msg::{ExtensionDesc, MsgStudentId, OpenFileDialogMsg},
     error_msg::{
-        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignError, AssignmentsError,
-        CutPeriodError, DeletePeriodError, DeleteStudentError, DeleteSubjectError,
-        DeleteTeacherError, DuplicatePreviousPeriodError, GeneralPlanningError,
+        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
+        AssignmentsError, CutPeriodError, DeletePeriodError, DeleteStudentError,
+        DeleteSubjectError, DeleteTeacherError, DuplicatePreviousPeriodError, GeneralPlanningError,
         MergeWithPreviousPeriodError, MoveDownError, MoveUpError, StudentsError, SubjectsError,
         TeachersError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateStudentError,
         UpdateSubjectError, UpdateTeacherError, UpdateWeekStatusError,
@@ -777,6 +777,41 @@ impl Session {
                 DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(id) => Err(
                     PyValueError::new_err(format!("Period id {:?} is the first period", id)),
                 ),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn assignments_set_all(
+        self_: PyRef<'_, Self>,
+        period_id: PeriodId,
+        subject_id: SubjectId,
+        status: bool,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::Assignments(crate::rpc::cmd_msg::AssignmentsCmdMsg::AssignAll(
+                period_id.into(),
+                subject_id.into(),
+                status,
+            )),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Assignments(AssignmentsError::AssignAll(e))) => match e {
+                AssignAllError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                AssignAllError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                AssignAllError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Subject {:?} does not run on period {:?}",
+                        subject_id, period_id
+                    )))
+                }
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
