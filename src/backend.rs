@@ -606,7 +606,7 @@ pub trait Storage: Send + Sync {
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<
-        Self::IncompatId,
+        (),
         CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,
     > {
         async move {
@@ -618,8 +618,8 @@ pub trait Storage: Send + Sync {
             match data_status {
                 DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
                 DataStatusWithId::Ok => {
-                    let id = unsafe { self.incompats_add_unchecked(incompat) }.await?;
-                    Ok(id)
+                    unsafe { self.incompats_update_unchecked(index, incompat) }.await?;
+                    Ok(())
                 }
             }
         }
