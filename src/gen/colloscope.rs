@@ -483,12 +483,34 @@ pub struct Student {
 pub type StudentList = Vec<Student>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CostsAdjustements {
+    pub max_interrogations_per_day_for_single_student: i32,
+    pub max_interrogations_per_day_for_all_students: i32,
+    pub interrogations_per_week_range_for_single_student: i32,
+    pub interrogations_per_week_range_for_all_students: i32,
+    pub balancing: i32,
+}
+
+impl Default for CostsAdjustements {
+    fn default() -> Self {
+        CostsAdjustements {
+            max_interrogations_per_day_for_single_student: 1,
+            max_interrogations_per_day_for_all_students: 1,
+            interrogations_per_week_range_for_single_student: 1,
+            interrogations_per_week_range_for_all_students: 1,
+            balancing: 1,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneralData {
     pub teacher_count: usize,
     pub week_count: NonZeroU32,
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
     pub periodicity_cuts: BTreeSet<NonZeroU32>,
+    pub costs_adjustements: CostsAdjustements,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2824,11 +2846,31 @@ impl<'a> IlpTranslator<'a> {
     }
 
     fn build_objective_terms(&self) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
-        const STUDENT_PER_DAY_COST: f64 = 1.0;
-        const STUDENT_PER_WEEK_COST: f64 = 1.0;
-        const GLOBAL_PER_DAY_COST: f64 = 1.0;
-        const GLOBAL_PER_WEEK_COST: f64 = 1.0;
-        const BALANCING_COST: f64 = 1.0;
+        let student_per_day_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustements
+                .max_interrogations_per_day_for_single_student,
+        );
+        let student_per_week_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustements
+                .interrogations_per_week_range_for_single_student,
+        );
+        let global_per_day_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustements
+                .max_interrogations_per_day_for_all_students,
+        );
+        let global_per_week_cost = f64::from(
+            self.data
+                .general
+                .costs_adjustements
+                .interrogations_per_week_range_for_all_students,
+        );
+        let balancing_cost = f64::from(self.data.general.costs_adjustements.balancing);
 
         let student_count_f64 = self.data.students.len() as f64;
 
@@ -2836,12 +2878,12 @@ impl<'a> IlpTranslator<'a> {
 
         // Number of interrogations per day
         let interrogations_per_day_objective_terms =
-            self.build_interrogations_per_day_objective_terms(STUDENT_PER_DAY_COST);
+            self.build_interrogations_per_day_objective_terms(student_per_day_cost);
         output.extend(interrogations_per_day_objective_terms.clone());
 
         // Global number of interrogations per day
         output.push(crate::ilp::ObjectiveTerm {
-            coef: GLOBAL_PER_DAY_COST * student_count_f64,
+            coef: global_per_day_cost * student_count_f64,
             exprs: interrogations_per_day_objective_terms
                 .into_iter()
                 .flat_map(|obj_term| obj_term.exprs)
@@ -2850,7 +2892,7 @@ impl<'a> IlpTranslator<'a> {
 
         // Stable number of interrogations per week
         let upper_bound_interrogations_per_week_objective_terms =
-            self.build_upper_bound_interrogations_per_week_objective_terms(STUDENT_PER_WEEK_COST);
+            self.build_upper_bound_interrogations_per_week_objective_terms(student_per_week_cost);
         output.extend(upper_bound_interrogations_per_week_objective_terms.clone());
 
         let lower_bound_interrogations_per_week_objective_terms: Vec<_> =
@@ -2865,7 +2907,7 @@ impl<'a> IlpTranslator<'a> {
 
         // Global stable number of interrogations per week
         output.push(crate::ilp::ObjectiveTerm {
-            coef: GLOBAL_PER_WEEK_COST * student_count_f64,
+            coef: global_per_week_cost * student_count_f64,
             exprs: upper_bound_interrogations_per_week_objective_terms
                 .into_iter()
                 .flat_map(|obj_term| obj_term.exprs)
@@ -2873,7 +2915,7 @@ impl<'a> IlpTranslator<'a> {
         });
 
         output.push(crate::ilp::ObjectiveTerm {
-            coef: GLOBAL_PER_WEEK_COST * student_count_f64,
+            coef: global_per_week_cost * student_count_f64,
             exprs: lower_bound_interrogations_per_week_objective_terms
                 .into_iter()
                 .flat_map(|obj_term| obj_term.exprs)
@@ -2898,7 +2940,7 @@ impl<'a> IlpTranslator<'a> {
             };
 
             let obj_term = crate::ilp::ObjectiveTerm {
-                coef: BALANCING_COST,
+                coef: balancing_cost,
                 exprs,
             };
 
