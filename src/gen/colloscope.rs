@@ -357,18 +357,18 @@ impl ValidatedData {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Variable {
-    FixedGroup {
+    GroupInSlot {
         subject: usize,
         slot: usize,
         group: usize,
     },
-    DynamicGroup {
+    DynamicGroupAssignment {
         subject: usize,
         slot: usize,
         group: usize,
         student: usize,
     },
-    InGroup {
+    StudentInGroup {
         subject: usize,
         student: usize,
         group: usize,
@@ -383,27 +383,27 @@ pub enum Variable {
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Variable::FixedGroup {
+            Variable::GroupInSlot {
                 subject,
                 slot,
                 group,
-            } => write!(f, "F_{}_{}_{}", *subject, *slot, *group),
-            Variable::DynamicGroup {
+            } => write!(f, "GiS_{}_{}_{}", *subject, *slot, *group),
+            Variable::DynamicGroupAssignment {
                 subject,
                 slot,
                 group,
                 student,
-            } => write!(f, "D_{}_{}_{}_{}", *subject, *slot, *group, *student),
-            Variable::InGroup {
+            } => write!(f, "DGA_{}_{}_{}_{}", *subject, *slot, *group, *student),
+            Variable::StudentInGroup {
                 subject,
                 student,
                 group,
-            } => write!(f, "G_{}_{}_{}", *subject, *student, *group),
+            } => write!(f, "SiG_{}_{}_{}", *subject, *student, *group),
             Variable::ExactPeriodicity {
                 subject,
                 student,
                 week_modulo,
-            } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
+            } => write!(f, "EP_{}_{}_{}", *subject, *student, *week_modulo),
         }
     }
 }
@@ -426,7 +426,7 @@ impl<'a> IlpTranslator<'a> {
         !group.can_be_extended || (group.students.len() == subject.students_per_slot.end().get())
     }
 
-    fn build_fixed_group_variables(&self) -> BTreeSet<Variable> {
+    fn build_group_in_slot_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -437,28 +437,19 @@ impl<'a> IlpTranslator<'a> {
                     .iter()
                     .enumerate()
                     .flat_map(move |(j, _slot)| {
-                        subject
-                            .groups
-                            .assigned_to_group
-                            .iter()
-                            .enumerate()
-                            .filter_map(move |(k, group)| {
-                                if !Self::is_group_fixed(group, subject) {
-                                    return None;
-                                }
-
-                                Some(Variable::FixedGroup {
-                                    subject: i,
-                                    slot: j,
-                                    group: k,
-                                })
-                            })
+                        subject.groups.assigned_to_group.iter().enumerate().map(
+                            move |(k, _group)| Variable::GroupInSlot {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                            },
+                        )
                     })
             })
             .collect()
     }
 
-    fn build_dynamic_group_variables(&self) -> BTreeSet<Variable> {
+    fn build_dynamic_group_assignment_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -480,7 +471,7 @@ impl<'a> IlpTranslator<'a> {
                                         return None;
                                     }
 
-                                    Some(Variable::DynamicGroup {
+                                    Some(Variable::DynamicGroupAssignment {
                                         subject: i,
                                         slot: j,
                                         group: k,
@@ -493,7 +484,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_in_group_variables(&self) -> BTreeSet<Variable> {
+    fn build_student_in_group_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -510,7 +501,7 @@ impl<'a> IlpTranslator<'a> {
                                 return None;
                             }
 
-                            Some(Variable::InGroup {
+                            Some(Variable::StudentInGroup {
                                 subject: i,
                                 student: *j,
                                 group: k,
@@ -549,9 +540,9 @@ impl<'a> IlpTranslator<'a> {
 
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
-            .add_variables(self.build_fixed_group_variables())
-            .add_variables(self.build_dynamic_group_variables())
-            .add_variables(self.build_in_group_variables())
+            .add_variables(self.build_group_in_slot_variables())
+            .add_variables(self.build_dynamic_group_assignment_variables())
+            .add_variables(self.build_student_in_group_variables())
             .add_variables(self.build_exact_periodicity_variables())
     }
 
