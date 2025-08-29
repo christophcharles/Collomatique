@@ -506,7 +506,7 @@ where
 {
     problem: &'a Problem<V, T, P>,
     internal_solution: T::Solution,
-    ilp_solution: collomatique_ilp::Config<'a, VariableName<V>, InternalId, P>,
+    ilp_config: collomatique_ilp::Config<'a, VariableName<V>, InternalId, P>,
 }
 
 impl<'a, V, T, P> Solution<'a, V, T, P>
@@ -550,14 +550,38 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
     T: BaseConstraints<VariableName = V>,
 {
+    fn feasable_config_into_config_data(
+        &self,
+        feasable_config: &collomatique_ilp::FeasableConfig<'_, VariableName<V>, InternalId, P>,
+    ) -> ConfigData<V> {
+        let mut config_data = ConfigData::new();
+
+        for (var, value) in feasable_config.get_values() {
+            if let VariableName::Base(v_name) = var {
+                config_data = config_data.set(v_name, value);
+            }
+        }
+
+        config_data
+    }
+
     pub fn solve<
         'a,
         S: collomatique_ilp::solvers::Solver<VariableName<T::VariableName>, InternalId, P>,
     >(
         &'a self,
-        _solver: &S,
+        solver: &S,
     ) -> Option<Solution<'a, V, T, P>> {
-        todo!()
+        let feasable_config = solver.solve(&self.ilp_problem)?;
+        let internal_solution = self
+            .base
+            .configuration_to_solution(&self.feasable_config_into_config_data(&feasable_config));
+
+        Some(Solution {
+            problem: self,
+            internal_solution,
+            ilp_config: feasable_config.into_inner(),
+        })
     }
 
     pub fn solve_with_time_limit<
@@ -569,9 +593,22 @@ where
         >,
     >(
         &'a self,
-        _solver: &S,
-        _time_limit_in_seconds: u32,
+        solver: &S,
+        time_limit_in_seconds: u32,
     ) -> Option<TimeLimitSolution<'a, V, T, P>> {
-        todo!()
+        let time_limit_sol =
+            solver.solve_with_time_limit(&self.ilp_problem, time_limit_in_seconds)?;
+        let internal_solution = self.base.configuration_to_solution(
+            &self.feasable_config_into_config_data(&time_limit_sol.config),
+        );
+
+        Some(TimeLimitSolution {
+            solution: Solution {
+                problem: self,
+                internal_solution,
+                ilp_config: time_limit_sol.config.into_inner(),
+            },
+            time_limit_reached: time_limit_sol.time_limit_reached,
+        })
     }
 }
