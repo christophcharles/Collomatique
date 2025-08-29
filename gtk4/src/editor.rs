@@ -4,6 +4,7 @@ use gtk::prelude::{ButtonExt, WidgetExt};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 
 use collomatique_state::AppState;
@@ -38,30 +39,45 @@ pub enum EditorCommandOutput {
     SaveFailed(PathBuf, String),
 }
 
+const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(5);
+
 mod toast {
-    use std::sync::atomic::AtomicBool;
+    use std::{num::NonZeroU32, sync::atomic::AtomicBool};
 
     pub struct ToastInfo {
         need_update: AtomicBool,
-        text: String,
+        text: Option<String>,
+        timeout: Option<NonZeroU32>,
     }
 
     impl ToastInfo {
         pub fn new() -> Self {
             ToastInfo {
                 need_update: AtomicBool::new(false),
-                text: String::new(),
+                text: None,
+                timeout: None,
             }
         }
 
-        pub fn new_toast(&mut self, text: String) {
+        pub fn new_toast(&mut self, text: String, timeout: Option<NonZeroU32>) {
             self.need_update
                 .store(true, std::sync::atomic::Ordering::Release);
-            self.text = text;
+            self.text = Some(text);
+            self.timeout = timeout;
         }
 
-        pub fn get_toast(&self) -> &str {
-            &self.text
+        pub fn dismiss_toast(&mut self) {
+            self.need_update
+                .store(true, std::sync::atomic::Ordering::Release);
+            self.text = None;
+        }
+
+        pub fn get_toast(&self) -> Option<&str> {
+            self.text.as_ref().map(|x| x.as_str())
+        }
+
+        pub fn get_timeout(&self) -> Option<&NonZeroU32> {
+            self.timeout.as_ref()
         }
 
         pub fn updated(&self) {
@@ -293,10 +309,10 @@ impl Component for EditorPanel {
                 let data_copy = self.data.get_data().clone();
                 self.dirty = false;
                 self.file_name = Some(path.clone());
-                self.toast_info.new_toast(format!(
-                    "Enregistrement en cours de {}...",
-                    path.to_string_lossy()
-                ));
+                self.toast_info.new_toast(
+                    format!("Enregistrement en cours de {}...", path.to_string_lossy(),),
+                    None,
+                );
                 sender.oneshot_command(async move {
                     match collomatique_storage::save_data_to_file(&data_copy, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
@@ -328,13 +344,16 @@ impl Component for EditorPanel {
     ) {
         match message {
             EditorCommandOutput::SaveSuccessful(path) => {
-                self.toast_info
-                    .new_toast(format!("{} enregistré", path.to_string_lossy()));
+                self.toast_info.new_toast(
+                    format!("{} enregistré", path.to_string_lossy()),
+                    DEFAULT_TOAST_TIMEOUT,
+                );
             }
             EditorCommandOutput::SaveFailed(path, error) => {
                 if Some(&path) != self.file_name.as_ref() {
                     return;
                 }
+                self.toast_info.dismiss_toast();
                 self.dirty = true;
                 sender.output(EditorOutput::UpdateActions).unwrap();
                 sender.output(EditorOutput::SaveError(path, error)).unwrap();
@@ -345,9 +364,14 @@ impl Component for EditorPanel {
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         if self.toast_info.need_update() {
             widgets.toast_overlay.dismiss_all();
-            widgets
-                .toast_overlay
-                .add_toast(adw::Toast::new(self.toast_info.get_toast()));
+            if let Some(text) = self.toast_info.get_toast() {
+                let new_toast = adw::Toast::new(text);
+                new_toast.set_timeout(match self.toast_info.get_timeout() {
+                    Some(t) => t.get(),
+                    None => 0,
+                });
+                widgets.toast_overlay.add_toast(new_toast);
+            }
             self.toast_info.updated();
         }
     }
