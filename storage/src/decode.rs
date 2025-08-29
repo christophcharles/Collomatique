@@ -45,6 +45,8 @@ pub enum DecodeError {
     SubjectsDecodedBeforePeriods,
     #[error("Assignments were decoded before periods")]
     AssignmentsDecodedBeforePeriods,
+    #[error("Week patterns were already decoded from a previous block")]
+    WeekPatternsAlreadyDecoded,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
@@ -154,6 +156,7 @@ struct PreData {
     teachers: collomatique_state_colloscopes::teachers::TeachersExternalData,
     students: collomatique_state_colloscopes::students::StudentsExternalData,
     assignments: collomatique_state_colloscopes::assignments::AssignmentsExternalData,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatternsExternalData,
 }
 
 mod assignment_map;
@@ -161,6 +164,7 @@ mod period_list;
 mod student_list;
 mod subject_list;
 mod teacher_list;
+mod week_pattern_list;
 
 fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
     let mut pre_data = PreData::default();
@@ -186,6 +190,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::AssignmentMap(assignment_map) => {
                 assignment_map::decode_entry(assignment_map, &mut pre_data)?;
             }
+            ValidEntry::WeekPatternList(week_pattern_list) => {
+                week_pattern_list::decode_entry(week_pattern_list, &mut pre_data)?;
+            }
         }
     }
 
@@ -195,6 +202,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         pre_data.teachers,
         pre_data.students,
         pre_data.assignments,
+        pre_data.week_patterns,
     )?;
     Ok(data)
 }
@@ -207,6 +215,7 @@ pub enum EntryTag {
     SubjectList,
     TeacherList,
     AssignmentMap,
+    WeekPatternList,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -217,6 +226,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::SubjectList(_) => EntryTag::SubjectList,
             ValidEntry::TeacherList(_) => EntryTag::TeacherList,
             ValidEntry::AssignmentMap(_) => EntryTag::AssignmentMap,
+            ValidEntry::WeekPatternList(_) => EntryTag::WeekPatternList,
         }
     }
 }

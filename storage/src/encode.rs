@@ -77,6 +77,18 @@ fn generate_assignment_map(data: &Data) -> assignment_map::Map {
     }
 }
 
+fn generate_week_pattern_list(data: &Data) -> week_pattern_list::List {
+    let orig_week_patterns = data.get_week_patterns();
+
+    week_pattern_list::List {
+        week_pattern_map: orig_week_patterns
+            .week_pattern_map
+            .iter()
+            .map(|(id, week_pattern)| (id.inner(), week_pattern.into()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
@@ -84,6 +96,7 @@ pub fn encode(data: &Data) -> JsonData {
     let teacher_list_entry = ValidEntry::TeacherList(generate_teacher_list(data));
     let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
     let assignment_map_entry = ValidEntry::AssignmentMap(generate_assignment_map(data));
+    let week_pattern_list_entry = ValidEntry::WeekPatternList(generate_week_pattern_list(data));
 
     JsonData {
         header,
@@ -93,6 +106,7 @@ pub fn encode(data: &Data) -> JsonData {
             teacher_list_entry,
             student_list_entry,
             assignment_map_entry,
+            week_pattern_list_entry,
         ]
         .into_iter()
         .map(|x| Entry {

@@ -195,6 +195,7 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp::Assignment(_) => {
                 Some(PanelNumbers::Assignments)
             }
+            collomatique_state_colloscopes::AnnotatedOp::WeekPattern(_) => None,
         }
     }
 

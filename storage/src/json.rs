@@ -100,6 +100,7 @@ pub mod period_list;
 pub mod student_list;
 pub mod subject_list;
 pub mod teacher_list;
+pub mod week_pattern_list;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
@@ -130,6 +131,7 @@ pub enum ValidEntry {
     SubjectList(subject_list::List),
     TeacherList(teacher_list::List),
     AssignmentMap(assignment_map::Map),
+    WeekPatternList(week_pattern_list::List),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
@@ -142,6 +144,7 @@ impl ValidEntry {
             ValidEntry::SubjectList(_) => 1,
             ValidEntry::TeacherList(_) => 1,
             ValidEntry::AssignmentMap(_) => 1,
+            ValidEntry::WeekPatternList(_) => 1,
         }
     }
 
@@ -152,6 +155,7 @@ impl ValidEntry {
             ValidEntry::SubjectList(_) => true,
             ValidEntry::TeacherList(_) => true,
             ValidEntry::AssignmentMap(_) => true,
+            ValidEntry::WeekPatternList(_) => true,
         }
     }
 }
