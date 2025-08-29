@@ -118,9 +118,10 @@ CREATE TABLE "subjects" (
 	"max_students_per_slot"	INTEGER NOT NULL,
 	"period"	INTEGER NOT NULL,
 	"period_is_strict"	INTEGER NOT NULL,
-	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
+	"is_tutorial"	INTEGER NOT NULL,
+	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
 	PRIMARY KEY("subject_id" AUTOINCREMENT),
-    FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id")
+	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id")
 );
 
 CREATE TABLE "groupings" (
