@@ -46,6 +46,8 @@ pub enum PeriodEntryInput {
     ),
     CopyPreviousPeriod,
     SubjectDropdownChanged(Option<usize>),
+    AssignAll,
+    UnassignAll,
 }
 
 #[derive(Debug, Clone)]
@@ -123,12 +125,14 @@ impl FactoryComponent for PeriodEntry {
                 set_visible: !self.data.filtered_students.is_empty() && !self.data.filtered_subjects.is_empty(),
                 append = &gtk::Button {
                     set_label: "Inscrire",
+                    connect_clicked => PeriodEntryInput::AssignAll,
                 },
                 append = &gtk::Label {
                     set_label: "ou",
                 },
                 append = &gtk::Button {
                     set_label: "désinscrire",
+                    connect_clicked => PeriodEntryInput::UnassignAll,
                 },
                 append = &gtk::Label {
                     set_label: "tous les élèves en :",
@@ -234,6 +238,8 @@ impl FactoryComponent for PeriodEntry {
             PeriodEntryInput::SubjectDropdownChanged(num) => {
                 self.current_subject = num.map(|x| self.data.filtered_subjects[x].0.clone());
             }
+            PeriodEntryInput::AssignAll => {}
+            PeriodEntryInput::UnassignAll => {}
         }
     }
 }

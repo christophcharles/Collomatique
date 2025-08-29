@@ -6,6 +6,7 @@ use super::*;
 pub enum AssignmentsError {
     Assign(AssignError),
     DuplicatePreviousPeriod(DuplicatePreviousPeriodError),
+    AssignAll(AssignAllError),
 }
 
 impl std::fmt::Display for AssignmentsError {
@@ -13,6 +14,7 @@ impl std::fmt::Display for AssignmentsError {
         match self {
             AssignmentsError::Assign(e) => e.fmt(f),
             AssignmentsError::DuplicatePreviousPeriod(e) => e.fmt(f),
+            AssignmentsError::AssignAll(e) => e.fmt(f),
         }
     }
 }
@@ -25,6 +27,7 @@ impl From<crate::ops::AssignmentsUpdateError> for AssignmentsError {
             AssignmentsUpdateError::DuplicatePreviousPeriod(e) => {
                 AssignmentsError::DuplicatePreviousPeriod(e.into())
             }
+            AssignmentsUpdateError::AssignAll(e) => AssignmentsError::AssignAll(e.into()),
         }
     }
 }
@@ -38,6 +41,12 @@ impl From<AssignError> for AssignmentsError {
 impl From<DuplicatePreviousPeriodError> for AssignmentsError {
     fn from(value: DuplicatePreviousPeriodError) -> Self {
         AssignmentsError::DuplicatePreviousPeriod(value)
+    }
+}
+
+impl From<AssignAllError> for AssignmentsError {
+    fn from(value: AssignAllError) -> Self {
+        AssignmentsError::AssignAll(value)
     }
 }
 
@@ -95,6 +104,49 @@ impl From<crate::ops::AssignError> for AssignError {
             }
             crate::ops::AssignError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
                 AssignError::SubjectDoesNotRunOnPeriod(subject_id.into(), period_id.into())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssignAllError {
+    InvalidPeriodId(MsgPeriodId),
+    InvalidSubjectId(MsgSubjectId),
+    SubjectDoesNotRunOnPeriod(MsgSubjectId, MsgPeriodId),
+}
+
+impl std::fmt::Display for AssignAllError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AssignAllError::InvalidPeriodId(id) => {
+                write!(f, "L'identifiant {} ne correspond à aucune période", id.0)
+            }
+            AssignAllError::InvalidSubjectId(id) => {
+                write!(f, "L'identifiant {} ne correspond à aucune matière", id.0)
+            }
+            AssignAllError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                write!(
+                    f,
+                    "La matière {} n'est pas dispensée sur la période {}",
+                    subject_id.0, period_id.0
+                )
+            }
+        }
+    }
+}
+
+impl From<crate::ops::AssignAllError> for AssignAllError {
+    fn from(value: crate::ops::AssignAllError) -> Self {
+        match value {
+            crate::ops::AssignAllError::InvalidPeriodId(id) => {
+                AssignAllError::InvalidPeriodId(id.into())
+            }
+            crate::ops::AssignAllError::InvalidSubjectId(id) => {
+                AssignAllError::InvalidSubjectId(id.into())
+            }
+            crate::ops::AssignAllError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                AssignAllError::SubjectDoesNotRunOnPeriod(subject_id.into(), period_id.into())
             }
         }
     }
