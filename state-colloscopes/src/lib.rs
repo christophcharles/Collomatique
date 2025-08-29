@@ -547,6 +547,12 @@ impl Data {
         for (id, _) in &self.inner_data.week_patterns.week_pattern_map {
             assert!(ids_so_far.insert(id.inner()));
         }
+
+        for (_subject_id, subject_slots) in &self.inner_data.slots.subject_map {
+            for (id, _) in &subject_slots.ordered_slots {
+                assert!(ids_so_far.insert(id.inner()));
+            }
+        }
     }
 
     /// USED INTERNALLY
