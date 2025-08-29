@@ -1723,6 +1723,11 @@ impl<'a> IlpTranslator<'a> {
         for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
             let mut output = group.students.clone();
 
+            if Self::is_group_fixed(group, subject) {
+                groups.push(output);
+                continue;
+            }
+
             for student in subject.groups.not_assigned.iter().copied() {
                 if config
                     .get(&Variable::StudentInGroup {
@@ -1736,7 +1741,7 @@ impl<'a> IlpTranslator<'a> {
                 }
             }
 
-            groups.push(output)
+            groups.push(output);
         }
 
         let mut slots = Vec::with_capacity(subject.slots.len());
