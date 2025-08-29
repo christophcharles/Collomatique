@@ -190,6 +190,12 @@ pub enum WeekPatternDependancy<IncompatId: OrdId, TimeSlotId: OrdId> {
     TimeSlot(TimeSlotId),
 }
 
+#[derive(Error, Debug)]
+pub enum SubjectGroupDependancy<SubjectId: OrdId, StudentId: OrdId> {
+    Subject(SubjectId),
+    Student(StudentId),
+}
+
 use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
@@ -434,12 +440,77 @@ pub trait Storage: Send + Sync {
     async unsafe fn subject_groups_remove_unchecked(
         &mut self,
         index: Self::SubjectGroupId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async fn subject_groups_update(
         &mut self,
         index: Self::SubjectGroupId,
         subject_group: &SubjectGroup,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
+    async fn subject_groups_can_remove(
+        &mut self,
+        index: Self::SubjectGroupId,
+    ) -> std::result::Result<
+        Vec<SubjectGroupDependancy<Self::SubjectId, Self::StudentId>>,
+        IdError<Self::InternalError, Self::SubjectGroupId>,
+    > {
+        async move {
+            let subject_groups = self.subject_groups_get_all().await?;
+
+            if !subject_groups.contains_key(&index) {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let subjects = self.subjects_get_all().await?;
+            for (subject_id, subject) in subjects {
+                if subject.subject_group_id == index {
+                    dependancies.push(SubjectGroupDependancy::Subject(subject_id));
+                }
+            }
+
+            let students = self.students_get_all().await?;
+            for (student_id, _student) in students {
+                let subject_for_student = self.subject_group_for_student_get(student_id, index)
+                    .await
+                    .map_err(
+                        |e| match e {
+                            Id2Error::InternalError(int_err) => IdError::InternalError(int_err),
+                            Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid as it was returned from students_get_all", id1),
+                            Id2Error::InvalidId2(id2) => panic!("Subject group id {:?} should be valid as it was tested valid a few instructions ago", id2),
+                        }
+                    )?;
+                if subject_for_student.is_some() {
+                    dependancies.push(SubjectGroupDependancy::Student(student_id));
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn subject_groups_remove(
+        &mut self,
+        index: Self::SubjectGroupId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            Self::InternalError,
+            Self::SubjectGroupId,
+            Vec<SubjectGroupDependancy<Self::SubjectId, Self::StudentId>>,
+        >,
+    > {
+        async move {
+            let dependancies = self
+                .subject_groups_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.subject_groups_remove_unchecked(index) }.await?;
+            Ok(())
+        }
+    }
 
     async fn incompats_get_all(
         &self,
