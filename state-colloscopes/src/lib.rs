@@ -1168,14 +1168,20 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// checks all the invariants in assignments data
-    fn check_group_lists_data_consistency(&self, subject_ids: &BTreeSet<SubjectId>) {
+    fn check_group_lists_data_consistency(&self) {
         for (subject_id, group_list_id) in &self.inner_data.group_lists.subjects_associations {
             assert!(self
                 .inner_data
                 .group_lists
                 .group_list_map
                 .contains_key(group_list_id));
-            assert!(subject_ids.contains(subject_id));
+            let subject = self
+                .inner_data
+                .subjects
+                .find_subject(*subject_id)
+                .expect("Subject ID should be valid in subject/group_list associations");
+
+            assert!(subject.parameters.interrogation_parameters.is_some());
         }
         for (_group_list_id, group_list) in &self.inner_data.group_lists.group_list_map {
             Self::validate_group_list_internal(group_list, &self.inner_data.students).unwrap();
@@ -1239,7 +1245,7 @@ impl Data {
         self.check_assignments_data_consistency(&period_ids);
         self.check_slots_data_consistency(&week_pattern_ids);
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
-        self.check_group_lists_data_consistency(&subject_ids);
+        self.check_group_lists_data_consistency();
     }
 }
 
@@ -1333,7 +1339,7 @@ impl Data {
         if !incompats.validate_all(&subject_ids, &week_pattern_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
-        if !group_lists.validate_all(&subject_ids, &student_ids) {
+        if !group_lists.validate_all(&subjects, &student_ids) {
             return Err(FromDataError::InconsistentGroupLists);
         }
 

@@ -116,12 +116,24 @@ pub struct GroupListsExternalData {
 
 impl GroupListsExternalData {
     /// Checks the validity [GroupListsExternalData]
-    pub fn validate_all(&self, subject_ids: &BTreeSet<u64>, student_ids: &BTreeSet<u64>) -> bool {
+    pub fn validate_all(
+        &self,
+        subjects: &super::SubjectsExternalData,
+        student_ids: &BTreeSet<u64>,
+    ) -> bool {
         if !self
             .subjects_associations
             .iter()
             .all(|(subject_id, group_list_id)| {
-                subject_ids.contains(subject_id) && self.group_list_map.contains_key(group_list_id)
+                let Some(subject) = subjects.find_subject(*subject_id) else {
+                    return false;
+                };
+
+                if subject.parameters.interrogation_parameters.is_none() {
+                    return false;
+                }
+
+                self.group_list_map.contains_key(group_list_id)
             })
         {
             return false;
