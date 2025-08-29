@@ -1468,6 +1468,60 @@ impl<V: UsableData> ConfigData<V> {
 
     /// Transmutes variables
     ///
+    /// Works like [Self::transmute] but consumes the ConfigData
+    /// 
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::ConfigData;
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let config_data = ConfigData::new()
+    ///     .set(V1::A, 1.0)
+    ///     .set(V1::B, 0.0)
+    ///     .set(V1::C, 0.5);
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let config_data_transmute = config_data.into_transmuted(|v| match v {
+    ///     V1::A => V2::A,
+    ///     V1::B => V2::B,
+    ///     V1::C => V2::C,
+    /// });
+    ///
+    /// let expected_result = ConfigData::new()
+    ///     .set(V2::A, 1.0)
+    ///     .set(V2::B, 0.0)
+    ///     .set(V2::C, 0.5);
+    /// assert_eq!(config_data_transmute, expected_result);
+    /// ```
+    pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, mut f: F) -> ConfigData<U> {
+        let mut new_values = BTreeMap::new();
+
+        for (var, value) in self.values {
+            new_values.insert(f(var), value);
+        }
+
+        ConfigData { values: new_values }
+    }
+
+    /// Transmutes variables
+    ///
     /// Similarly to [linexpr::LinExpr::try_transmute] and [linexpr::Constraint::try_transmute]
     /// this functions produces a new [ConfigData] containing exactly the same data
     /// but using a larger set of variables.
