@@ -107,6 +107,12 @@ impl From<GroupListsError> for ErrorMsg {
     }
 }
 
+impl From<RulesError> for ErrorMsg {
+    fn from(value: RulesError) -> Self {
+        ErrorMsg::Rules(value)
+    }
+}
+
 impl std::fmt::Display for ErrorMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
