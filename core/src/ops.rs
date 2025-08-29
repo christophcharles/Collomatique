@@ -30,6 +30,8 @@ pub mod week_patterns;
 pub use week_patterns::*;
 pub mod slots;
 pub use slots::*;
+pub mod incompatibilities;
+pub use incompatibilities::*;
 
 pub type Desc = (OpCategory, String);
 
@@ -43,6 +45,7 @@ pub enum OpCategory {
     Assignments,
     WeekPatterns,
     Slots,
+    Incompatibilities,
 }
 
 #[derive(Debug)]
@@ -54,6 +57,7 @@ pub enum UpdateOp {
     Assignments(AssignmentsUpdateOp),
     WeekPatterns(WeekPatternsUpdateOp),
     Slots(SlotsUpdateOp),
+    Incompatibilities(IncompatibilitiesUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -72,6 +76,8 @@ pub enum UpdateError {
     WeekPatterns(#[from] WeekPatternsUpdateError),
     #[error(transparent)]
     Slots(#[from] SlotsUpdateError),
+    #[error(transparent)]
+    Incompatibilities(#[from] IncompatibilitiesUpdateError),
 }
 
 #[derive(Debug)]
@@ -83,6 +89,7 @@ pub enum UpdateWarning {
     Assignments(AssignmentsUpdateWarning),
     WeekPatterns(WeekPatternsUpdateWarning),
     Slots(SlotsUpdateWarning),
+    Incompatibilities(IncompatibilitiesUpdateWarning),
 }
 
 impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
@@ -127,6 +134,12 @@ impl From<SlotsUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<IncompatibilitiesUpdateWarning> for UpdateWarning {
+    fn from(value: IncompatibilitiesUpdateWarning) -> Self {
+        UpdateWarning::Incompatibilities(value)
+    }
+}
+
 impl UpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
@@ -140,6 +153,7 @@ impl UpdateWarning {
             UpdateWarning::Assignments(w) => w.build_desc(data),
             UpdateWarning::WeekPatterns(w) => w.build_desc(data),
             UpdateWarning::Slots(w) => w.build_desc(data),
+            UpdateWarning::Incompatibilities(w) => w.build_desc(data),
         }
     }
 
@@ -164,6 +178,9 @@ impl UpdateOp {
                 (OpCategory::WeekPatterns, week_pattern_op.get_desc())
             }
             UpdateOp::Slots(slot_op) => (OpCategory::Slots, slot_op.get_desc()),
+            UpdateOp::Incompatibilities(incompat_op) => {
+                (OpCategory::Incompatibilities, incompat_op.get_desc())
+            }
         }
     }
 
@@ -191,6 +208,9 @@ impl UpdateOp {
                 UpdateWarning::from_iter(week_pattern_op.get_warnings(data))
             }
             UpdateOp::Slots(slot_op) => UpdateWarning::from_iter(slot_op.get_warnings(data)),
+            UpdateOp::Incompatibilities(incompat_op) => {
+                UpdateWarning::from_iter(incompat_op.get_warnings(data))
+            }
         }
     }
 
@@ -225,6 +245,10 @@ impl UpdateOp {
             }
             UpdateOp::Slots(slot_op) => {
                 let result = slot_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Incompatibilities(incompat_op) => {
+                let result = incompat_op.apply(data)?;
                 Ok(result.map(|x| x.into()))
             }
         }
