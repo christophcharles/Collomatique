@@ -31,11 +31,39 @@ pub enum Error {
 /// Result type with error type set to [Error]
 type Result<T> = std::result::Result<T, Error>;
 
-/// Description of a student
+/// Description of a person with contacts
+///
+/// This type is used to describe both students and teachers.
+/// Each student and teacher has its own card with name and contacts.
+/// There are not used for the colloscope solving process
+/// but can help produce a nice colloscope output with contact info.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Student {
+pub struct PersonWithContacts {
+    /// Surname of the person
+    ///
+    /// Though this field can be an empty string,
+    /// it is considered mandatory internally
     pub surname: String,
+
+    /// Firstname of the person
+    ///
+    /// Though this field can be an empty string,
+    /// it is considered mandatory internally
     pub firstname: String,
+
+    /// Person's telephone number
+    ///
+    /// This field is optional: this reflects the
+    /// fact that some persons might not want to share
+    /// their personal info or only some of it.
+    pub tel: Option<String>,
+
+    /// Person's email
+    ///
+    /// This field is optional: this reflects the
+    /// fact that some persons might not want to share
+    /// their personal info or only some of it.
+    pub email: Option<String>,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -54,7 +82,7 @@ pub struct Student {
 #[derive(Debug)]
 pub struct Data {
     id_issuer: IdIssuer,
-    student_list: BTreeMap<StudentId, Student>,
+    student_list: BTreeMap<StudentId, PersonWithContacts>,
 }
 
 impl Data {
@@ -71,7 +99,7 @@ impl Data {
     ///
     /// This will check the consistency of the lists
     /// and will also do some internal checks, so this might fail.
-    pub fn from_lists(student_list: BTreeMap<StudentId, Student>) -> Result<Data> {
+    pub fn from_lists(student_list: BTreeMap<StudentId, PersonWithContacts>) -> Result<Data> {
         let student_ids = student_list.keys();
         Ok(Data {
             id_issuer: IdIssuer::new(student_ids)?,
@@ -80,7 +108,7 @@ impl Data {
     }
 
     /// Get the student list
-    pub fn get_student_list(&self) -> &BTreeMap<StudentId, Student> {
+    pub fn get_student_list(&self) -> &BTreeMap<StudentId, PersonWithContacts> {
         &self.student_list
     }
 
