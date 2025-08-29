@@ -335,8 +335,8 @@ pub enum PythonCommand {
     },
 }
 
-use crate::json::json;
 use crate::frontend::state::{AppSession, AppState};
+use crate::json::json;
 
 fn is_colloscope_name_used(
     colloscopes: &std::collections::BTreeMap<
@@ -811,8 +811,8 @@ fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::json::WeekPattern;
     use crate::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
+    use crate::json::WeekPattern;
 
     match command {
         WeekPatternCommand::Create {
@@ -1142,8 +1142,8 @@ fn colloscope_command(
     command: ColloscopeCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::json::Colloscope;
     use crate::frontend::state::{ColloscopesOperation, Manager, Operation, UpdateError};
+    use crate::json::Colloscope;
 
     match command {
         ColloscopeCommand::Remove {

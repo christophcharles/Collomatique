@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use collomatique::json::{json, Logic};
 use collomatique::frontend::shell::CliCommand;
 use collomatique::frontend::state::{AppState, Manager};
+use collomatique::json::{json, Logic};
 
 #[derive(Debug, Parser)]
 #[clap(disable_help_flag = true)]

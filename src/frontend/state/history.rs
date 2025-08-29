@@ -50,15 +50,9 @@ pub enum AnnotatedSubjectGroupsOperation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedIncompatsOperation {
-    Create(
-        handles::IncompatHandle,
-        json::Incompat<WeekPatternHandle>,
-    ),
+    Create(handles::IncompatHandle, json::Incompat<WeekPatternHandle>),
     Remove(handles::IncompatHandle),
-    Update(
-        handles::IncompatHandle,
-        json::Incompat<WeekPatternHandle>,
-    ),
+    Update(handles::IncompatHandle, json::Incompat<WeekPatternHandle>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -26,9 +26,7 @@ pub enum UpdateError<IntError: std::error::Error> {
     #[error("Student corresponding to handle {0:?} was previously removed")]
     StudentRemoved(StudentHandle),
     #[error("Cannot remove student: it is referenced by the database")]
-    StudentDependanciesRemaining(
-        Vec<json::StudentDependancy<GroupListHandle, ColloscopeHandle>>,
-    ),
+    StudentDependanciesRemaining(Vec<json::StudentDependancy<GroupListHandle, ColloscopeHandle>>),
     #[error("Subject group corresponding to handle {0:?} was previously removed")]
     SubjectGroupRemoved(SubjectGroupHandle),
     #[error("Cannot remove subject group: it is referenced by the database")]
@@ -337,10 +335,7 @@ pub trait Manager: ManagerInternal {
     fn subjects_get_all(
         &mut self,
     ) -> std::result::Result<
-        BTreeMap<
-            SubjectHandle,
-            json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
-        >,
+        BTreeMap<SubjectHandle, json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>>,
         <Self::InternalStorage as json::Storage>::InternalError,
     >;
     fn subjects_get(
@@ -374,10 +369,7 @@ pub trait Manager: ManagerInternal {
     fn time_slots_get_all(
         &mut self,
     ) -> Result<
-        BTreeMap<
-            TimeSlotHandle,
-            json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
-        >,
+        BTreeMap<TimeSlotHandle, json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>>,
         <Self::InternalStorage as json::Storage>::InternalError,
     >;
     fn time_slots_get(
@@ -475,10 +467,7 @@ pub trait Manager: ManagerInternal {
     fn colloscopes_get_all(
         &mut self,
     ) -> Result<
-        BTreeMap<
-            ColloscopeHandle,
-            json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
-        >,
+        BTreeMap<ColloscopeHandle, json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>>,
         <Self::InternalStorage as json::Storage>::InternalError,
     >;
     fn colloscopes_get(
@@ -522,10 +511,8 @@ pub trait Manager: ManagerInternal {
     ) -> Result<ReturnHandle, UpdateError<<Self::InternalStorage as json::Storage>::InternalError>>;
     fn can_undo(&self) -> bool;
     fn can_redo(&self) -> bool;
-    fn undo(&mut self)
-        -> Result<(), UndoError<<Self::Storage as json::Storage>::InternalError>>;
-    fn redo(&mut self)
-        -> Result<(), RedoError<<Self::Storage as json::Storage>::InternalError>>;
+    fn undo(&mut self) -> Result<(), UndoError<<Self::Storage as json::Storage>::InternalError>>;
+    fn redo(&mut self) -> Result<(), RedoError<<Self::Storage as json::Storage>::InternalError>>;
     fn get_aggregated_history(&self) -> AggregatedOperations;
 }
 
@@ -1068,9 +1055,7 @@ impl<T: ManagerInternal> Manager for T {
             json::DataStatusWithIdAndInvalidState::InvalidData => {
                 json::DataStatusWithIdAndInvalidState::Ok
             }
-            json::DataStatusWithIdAndInvalidState::Ok => {
-                json::DataStatusWithIdAndInvalidState::Ok
-            }
+            json::DataStatusWithIdAndInvalidState::Ok => json::DataStatusWithIdAndInvalidState::Ok,
         };
 
         Ok(status)
@@ -1136,10 +1121,7 @@ impl<T: ManagerInternal> Manager for T {
     fn subjects_get_all(
         &mut self,
     ) -> std::result::Result<
-        BTreeMap<
-            SubjectHandle,
-            json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
-        >,
+        BTreeMap<SubjectHandle, json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>>,
         <Self::Storage as json::Storage>::InternalError,
     > {
         let subjects_backend = self.get_backend_logic().subjects_get_all()?;
@@ -1277,10 +1259,7 @@ impl<T: ManagerInternal> Manager for T {
     fn time_slots_get_all(
         &mut self,
     ) -> Result<
-        BTreeMap<
-            TimeSlotHandle,
-            json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
-        >,
+        BTreeMap<TimeSlotHandle, json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>>,
         <Self::Storage as json::Storage>::InternalError,
     > {
         let time_slots_backend = self.get_backend_logic().time_slots_get_all()?;
@@ -1591,9 +1570,7 @@ impl<T: ManagerInternal> Manager for T {
             .get_backend_logic()
             .subject_group_for_student_get(student_id, subject_group_id)
             .map_err(|e| match e {
-                json::Id2Error::InternalError(int_err) => {
-                    json::Id2Error::InternalError(int_err)
-                }
+                json::Id2Error::InternalError(int_err) => json::Id2Error::InternalError(int_err),
                 json::Id2Error::InvalidId1(_) => {
                     panic!("StudentId was taken from a handle manager and thus should be valid")
                 }
@@ -1635,9 +1612,7 @@ impl<T: ManagerInternal> Manager for T {
             .get_backend_logic()
             .incompat_for_student_get(student_id, incompat_id)
             .map_err(|e| match e {
-                json::Id2Error::InternalError(int_err) => {
-                    json::Id2Error::InternalError(int_err)
-                }
+                json::Id2Error::InternalError(int_err) => json::Id2Error::InternalError(int_err),
                 json::Id2Error::InvalidId1(_) => {
                     panic!("StudentId was taken from a handle manager and thus should be valid")
                 }
@@ -1678,10 +1653,7 @@ impl<T: ManagerInternal> Manager for T {
     fn colloscopes_get_all(
         &mut self,
     ) -> Result<
-        BTreeMap<
-            ColloscopeHandle,
-            json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
-        >,
+        BTreeMap<ColloscopeHandle, json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>>,
         <Self::Storage as json::Storage>::InternalError,
     > {
         let colloscopes_backend = self.get_backend_logic().colloscopes_get_all()?;
@@ -1845,9 +1817,7 @@ impl<T: ManagerInternal> Manager for T {
         self.get_history().can_redo()
     }
 
-    fn undo(
-        &mut self,
-    ) -> Result<(), UndoError<<Self::Storage as json::Storage>::InternalError>> {
+    fn undo(&mut self) -> Result<(), UndoError<<Self::Storage as json::Storage>::InternalError>> {
         match self.get_history_mut().undo() {
             Some(aggregated_ops) => {
                 private::update_internal_state_with_aggregated(self, &aggregated_ops).map_err(
@@ -1862,9 +1832,7 @@ impl<T: ManagerInternal> Manager for T {
         }
     }
 
-    fn redo(
-        &mut self,
-    ) -> Result<(), RedoError<<Self::Storage as json::Storage>::InternalError>> {
+    fn redo(&mut self) -> Result<(), RedoError<<Self::Storage as json::Storage>::InternalError>> {
         match self.get_history_mut().redo() {
             Some(aggregated_ops) => {
                 private::update_internal_state_with_aggregated(self, &aggregated_ops).map_err(
@@ -2103,9 +2071,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .teachers_update(teacher_id, teacher)
                     .map_err(|e| match e {
-                        json::IdError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
+                        json::IdError::InternalError(int_error) => UpdateError::Internal(int_error),
                         json::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2188,9 +2154,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .students_update(student_id, student)
                     .map_err(|e| match e {
-                        json::IdError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
+                        json::IdError::InternalError(int_error) => UpdateError::Internal(int_error),
                         json::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2273,9 +2237,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .subject_groups_update(student_id, subject_group)
                     .map_err(|e| match e {
-                        json::IdError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
+                        json::IdError::InternalError(int_error) => UpdateError::Internal(int_error),
                         json::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2307,9 +2269,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .incompats_add(&incompat_backend)
                     .map_err(|e| match e {
-                        json::CrossError::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::CrossError::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::CrossError::InvalidCrossId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2544,9 +2504,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .subjects_add(&subject_backend)
                     .map_err(|e| match e {
-                        json::Cross3Error::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::Cross3Error::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::Cross3Error::InvalidCrossId1(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2702,9 +2660,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .time_slots_add(&time_slot_backend)
                     .map_err(|e| match e {
-                        json::Cross3Error::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::Cross3Error::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::Cross3Error::InvalidCrossId1(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2851,9 +2807,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .groupings_add(&grouping_backend)
                     .map_err(|e| match e {
-                        json::CrossError::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::CrossError::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::CrossError::InvalidCrossId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -2965,9 +2919,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .grouping_incompats_add(&grouping_incompat_backend)
                     .map_err(|e| match e {
-                        json::CrossError::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::CrossError::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::CrossError::InvalidCrossId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -3169,9 +3121,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .colloscopes_add(&colloscope_backend)
                     .map_err(|e| match e {
-                        json::Cross3Error::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::Cross3Error::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::Cross3Error::InvalidCrossId1(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -3287,9 +3237,7 @@ pub(super) mod private {
                     .get_backend_logic_mut()
                     .slot_selections_add(&slot_selection_backend)
                     .map_err(|e| match e {
-                        json::Cross2Error::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
+                        json::Cross2Error::InternalError(int_err) => UpdateError::Internal(int_err),
                         json::Cross2Error::InvalidCrossId1(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
@@ -3637,10 +3585,8 @@ pub(super) mod private {
     pub fn build_backward_incompats_op<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedIncompatsOperation,
-    ) -> Result<
-        AnnotatedIncompatsOperation,
-        RevError<<T::Storage as json::Storage>::InternalError>,
-    > {
+    ) -> Result<AnnotatedIncompatsOperation, RevError<<T::Storage as json::Storage>::InternalError>>
+    {
         let backward = match op {
             AnnotatedIncompatsOperation::Create(handle, _incompat) => {
                 AnnotatedIncompatsOperation::Remove(*handle)
@@ -3692,10 +3638,8 @@ pub(super) mod private {
     pub fn build_backward_group_lists_op<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedGroupListsOperation,
-    ) -> Result<
-        AnnotatedGroupListsOperation,
-        RevError<<T::Storage as json::Storage>::InternalError>,
-    > {
+    ) -> Result<AnnotatedGroupListsOperation, RevError<<T::Storage as json::Storage>::InternalError>>
+    {
         let backward = match op {
             AnnotatedGroupListsOperation::Create(handle, _group_list) => {
                 AnnotatedGroupListsOperation::Remove(*handle)
@@ -3800,10 +3744,8 @@ pub(super) mod private {
     pub fn build_backward_time_slots_op<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedTimeSlotsOperation,
-    ) -> Result<
-        AnnotatedTimeSlotsOperation,
-        RevError<<T::Storage as json::Storage>::InternalError>,
-    > {
+    ) -> Result<AnnotatedTimeSlotsOperation, RevError<<T::Storage as json::Storage>::InternalError>>
+    {
         let backward = match op {
             AnnotatedTimeSlotsOperation::Create(handle, _time_slot) => {
                 AnnotatedTimeSlotsOperation::Remove(*handle)
@@ -3855,10 +3797,8 @@ pub(super) mod private {
     pub fn build_backward_groupings_op<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedGroupingsOperation,
-    ) -> Result<
-        AnnotatedGroupingsOperation,
-        RevError<<T::Storage as json::Storage>::InternalError>,
-    > {
+    ) -> Result<AnnotatedGroupingsOperation, RevError<<T::Storage as json::Storage>::InternalError>>
+    {
         let backward = match op {
             AnnotatedGroupingsOperation::Create(handle, _grouping) => {
                 AnnotatedGroupingsOperation::Remove(*handle)
@@ -4056,10 +3996,8 @@ pub(super) mod private {
     pub fn build_backward_colloscopes_op<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedColloscopesOperation,
-    ) -> Result<
-        AnnotatedColloscopesOperation,
-        RevError<<T::Storage as json::Storage>::InternalError>,
-    > {
+    ) -> Result<AnnotatedColloscopesOperation, RevError<<T::Storage as json::Storage>::InternalError>>
+    {
         let backward = match op {
             AnnotatedColloscopesOperation::Create(handle, _colloscope) => {
                 AnnotatedColloscopesOperation::Remove(*handle)
@@ -4172,8 +4110,7 @@ pub(super) mod private {
     pub fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
-    ) -> Result<ReversibleOperation, RevError<<T::Storage as json::Storage>::InternalError>>
-    {
+    ) -> Result<ReversibleOperation, RevError<<T::Storage as json::Storage>::InternalError>> {
         let forward = AnnotatedOperation::annotate(op, manager.get_handle_managers_mut());
         let backward = match &forward {
             AnnotatedOperation::GeneralData(_data) => {
@@ -4253,8 +4190,7 @@ pub(super) mod private {
     pub fn convert_incompat_from_handles<T: json::Storage>(
         incompat: json::Incompat<WeekPatternHandle>,
         handle_managers: &handles::ManagerCollection<T>,
-    ) -> Result<json::Incompat<T::WeekPatternId>, json::DataStatusWithId<WeekPatternHandle>>
-    {
+    ) -> Result<json::Incompat<T::WeekPatternId>, json::DataStatusWithId<WeekPatternHandle>> {
         Ok(json::Incompat {
             name: incompat.name,
             max_count: incompat.max_count,
@@ -4303,10 +4239,8 @@ pub(super) mod private {
     pub fn convert_group_list_from_handles<T: json::Storage>(
         group_list: json::GroupList<StudentHandle>,
         handle_managers: &handles::ManagerCollection<T>,
-    ) -> Result<
-        json::GroupList<T::StudentId>,
-        json::DataStatusWithIdAndInvalidState<StudentHandle>,
-    > {
+    ) -> Result<json::GroupList<T::StudentId>, json::DataStatusWithIdAndInvalidState<StudentHandle>>
+    {
         Ok(json::GroupList {
             name: group_list.name,
             groups: group_list.groups,
@@ -4420,15 +4354,11 @@ pub(super) mod private {
             subject_id: handle_managers
                 .subjects
                 .get_id(time_slot.subject_id)
-                .ok_or(json::DataStatusWithId3::BadCrossId1(
-                    time_slot.subject_id,
-                ))?,
+                .ok_or(json::DataStatusWithId3::BadCrossId1(time_slot.subject_id))?,
             teacher_id: handle_managers
                 .teachers
                 .get_id(time_slot.teacher_id)
-                .ok_or(json::DataStatusWithId3::BadCrossId2(
-                    time_slot.teacher_id,
-                ))?,
+                .ok_or(json::DataStatusWithId3::BadCrossId2(time_slot.teacher_id))?,
             start: time_slot.start,
             week_pattern_id: handle_managers
                 .week_patterns
@@ -4491,8 +4421,7 @@ pub(super) mod private {
     pub fn convert_grouping_incompat_from_handles<T: json::Storage>(
         grouping_incompat: json::GroupingIncompat<GroupingHandle>,
         handle_managers: &handles::ManagerCollection<T>,
-    ) -> Result<json::GroupingIncompat<T::GroupingId>, json::DataStatusWithId<GroupingHandle>>
-    {
+    ) -> Result<json::GroupingIncompat<T::GroupingId>, json::DataStatusWithId<GroupingHandle>> {
         Ok(json::GroupingIncompat {
             max_count: grouping_incompat.max_count,
             groupings: grouping_incompat
@@ -4573,9 +4502,7 @@ pub(super) mod private {
                         teacher_id: handle_managers
                             .teachers
                             .get_id(time_slot.teacher_id)
-                            .ok_or(json::DataStatusWithId2::BadCrossId1(
-                                time_slot.teacher_id,
-                            ))?,
+                            .ok_or(json::DataStatusWithId2::BadCrossId1(time_slot.teacher_id))?,
                         start: time_slot.start,
                         room: time_slot.room,
                         group_assignments: time_slot.group_assignments,

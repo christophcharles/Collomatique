@@ -998,9 +998,9 @@ impl Database {
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use crate::json::{self, Id2Error, IdError};
 use crate::frontend::state::update::ReturnHandle;
 use crate::frontend::state::{self, Operation, RedoError, UndoError, UpdateError};
+use crate::json::{self, Id2Error, IdError};
 
 #[derive(Debug, Clone)]
 pub enum Command {
