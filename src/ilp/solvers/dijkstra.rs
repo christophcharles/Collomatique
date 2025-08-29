@@ -1,42 +1,37 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::ndtools::ConfigRepr;
-use crate::ilp::{Config, FeasableConfig, Problem};
+use crate::ilp::ndtools::{ConfigRepr, FeasableConfigRepr};
 
-#[derive(Debug, Clone)]
-pub struct Solver<'a> {
-    problem: &'a Problem,
-}
+#[derive(Debug, Clone, Default)]
+pub struct Solver {}
 
-impl<'a> Solver<'a> {
-    pub fn new(problem: &'a Problem) -> Self {
-        Solver { problem }
+impl Solver {
+    pub fn new() -> Self {
+        Solver {}
     }
 }
 
 use super::FeasabilitySolver;
 use std::collections::BTreeSet;
 
-impl<'a> FeasabilitySolver<'a> for Solver<'a> {
-    fn restore_feasability_exclude(
+impl FeasabilitySolver for Solver {
+    fn restore_feasability_exclude<'a>(
         &self,
-        config: &Config<'a>,
-        exclude_list: &BTreeSet<&FeasableConfig>,
-    ) -> Option<FeasableConfig<'a>> {
-        let config_repr = self.problem.mat_repr.config(config);
-
+        config: &ConfigRepr<'a>,
+        exclude_list: &BTreeSet<&FeasableConfigRepr<'a>>,
+    ) -> Option<FeasableConfigRepr<'a>> {
         use std::collections::VecDeque;
 
-        let exclude_configs: BTreeSet<ConfigRepr<'_>> =
-            exclude_list.iter().map(|x| x.inner().repr()).collect();
+        let exclude_configs: BTreeSet<ConfigRepr<'a>> =
+            exclude_list.iter().map(|x| x.inner().clone()).collect();
         let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();
-        config_queue.push_back(config_repr);
+        config_queue.push_back(config.clone());
 
         while let Some(candidate) = config_queue.pop_front() {
             if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
-                return Some(unsafe { Config::from(candidate).into_feasable_unchecked() });
+                return Some(unsafe { candidate.into_feasable_unchecked() });
             } else {
                 config_queue.extend(
                     candidate
@@ -44,7 +39,7 @@ impl<'a> FeasabilitySolver<'a> for Solver<'a> {
                         .into_iter()
                         .filter(|x| !explored_configs.contains(x)),
                 );
-                explored_configs.insert(candidate);
+                explored_configs.insert(candidate.clone());
             }
         }
 

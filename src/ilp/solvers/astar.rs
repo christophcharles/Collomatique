@@ -1,25 +1,22 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::ndtools::ConfigRepr;
-use crate::ilp::{Config, FeasableConfig, Problem};
+use crate::ilp::ndtools::{ConfigRepr, FeasableConfigRepr};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone)]
-pub struct Solver<'a> {
-    problem: &'a Problem,
-}
+#[derive(Debug, Clone, Default)]
+pub struct Solver {}
 
-impl<'a> Solver<'a> {
-    pub fn new(problem: &'a Problem) -> Self {
-        Solver { problem }
+impl Solver {
+    pub fn new() -> Self {
+        Solver {}
     }
 
     fn distance_heuristic(&self, _config: &ConfigRepr) -> f32 {
         0.
     }
 
-    fn min_f_score(
+    fn min_f_score<'a>(
         open_nodes: &mut BTreeSet<ConfigRepr<'a>>,
         f_scores: &BTreeMap<ConfigRepr<'a>, f32>,
     ) -> Option<ConfigRepr<'a>> {
@@ -41,27 +38,26 @@ impl<'a> Solver<'a> {
 
 use super::FeasabilitySolver;
 
-impl<'a> FeasabilitySolver<'a> for Solver<'a> {
-    fn restore_feasability_exclude(
+impl FeasabilitySolver for Solver {
+    fn restore_feasability_exclude<'a>(
         &self,
-        config: &Config<'a>,
-        exclude_list: &BTreeSet<&FeasableConfig>,
-    ) -> Option<FeasableConfig<'a>> {
-        let config_repr = self.problem.mat_repr.config(config);
+        config: &ConfigRepr<'a>,
+        exclude_list: &BTreeSet<&FeasableConfigRepr<'a>>,
+    ) -> Option<FeasableConfigRepr<'a>> {
         let init_g_score = 0.0f32;
-        let init_f_score = init_g_score + self.distance_heuristic(&config_repr);
+        let init_f_score = init_g_score + self.distance_heuristic(config);
 
         let exclude_configs: BTreeSet<ConfigRepr<'_>> =
-            exclude_list.iter().map(|x| x.inner().repr()).collect();
+            exclude_list.iter().map(|x| x.inner().clone()).collect();
 
-        let mut g_scores = BTreeMap::from([(config_repr.clone(), init_g_score)]);
-        let mut f_scores = BTreeMap::from([(config_repr.clone(), init_f_score)]);
+        let mut g_scores = BTreeMap::from([(config.clone(), init_g_score)]);
+        let mut f_scores = BTreeMap::from([(config.clone(), init_f_score)]);
 
-        let mut open_nodes = BTreeSet::from([config_repr]);
+        let mut open_nodes = BTreeSet::from([config.clone()]);
 
         while let Some(candidate) = Self::min_f_score(&mut open_nodes, &f_scores) {
             if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
-                return Some(unsafe { Config::from(candidate).into_feasable_unchecked() });
+                return Some(unsafe { candidate.into_feasable_unchecked() });
             } else {
                 let candidate_g_score = g_scores
                     .get(&candidate)
