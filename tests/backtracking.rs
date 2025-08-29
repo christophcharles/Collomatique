@@ -10,6 +10,7 @@ fn restricted_interrogations_per_week() {
         teacher_count: 5,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: Some(2..3),
+        max_interrogations_per_day: None,
     };
 
     let subjects = vec![
