@@ -17,8 +17,8 @@ use update::private::ManagerInternal;
 
 pub use handles::{
     ColloscopeHandle, GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle,
-    StudentHandle, SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle,
-    WeekPatternHandle,
+    SlotSelectionHandle, StudentHandle, SubjectGroupHandle, SubjectHandle, TeacherHandle,
+    TimeSlotHandle, WeekPatternHandle,
 };
 pub use update::{Manager, UpdateError};
 

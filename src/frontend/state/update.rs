@@ -59,7 +59,14 @@ pub enum UpdateError<IntError: std::error::Error> {
     SubjectBadGroupList(GroupListHandle),
     #[error("Cannot remove subject: it is referenced by the database")]
     SubjectDependanciesRemaining(
-        Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
+        Vec<
+            backend::SubjectDependancy<
+                TimeSlotHandle,
+                StudentHandle,
+                ColloscopeHandle,
+                SlotSelectionHandle,
+            >,
+        >,
     ),
     #[error("Cannot update subject: a student is still registerd")]
     SubjectWithStudentRegistered(StudentHandle),
@@ -72,7 +79,11 @@ pub enum UpdateError<IntError: std::error::Error> {
     #[error("Time slot references a bad week pattern (probably removed) of id {0:?}")]
     TimeSlotBadWeekPattern(WeekPatternHandle),
     #[error("Cannot remove time slot: it is referenced by the database")]
-    TimeSlotDependanciesRemaining(Vec<GroupingHandle>),
+    TimeSlotDependanciesRemaining(
+        Vec<backend::TimeSlotDependancy<GroupingHandle, SlotSelectionHandle>>,
+    ),
+    #[error("Cannot change subject for time slot: it is referenced by a slot selection")]
+    TimeSlotInSlotSelection(SlotSelectionHandle),
     #[error("Grouping corresponding to handle {0:?} was previously removed")]
     GroupingRemoved(GroupingHandle),
     #[error("Grouping references a bad time slot (probably removed) of id {0:?}")]
@@ -339,7 +350,14 @@ pub trait Manager: ManagerInternal {
         &mut self,
         handle: SubjectHandle,
     ) -> Result<
-        Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
+        Vec<
+            backend::SubjectDependancy<
+                TimeSlotHandle,
+                StudentHandle,
+                ColloscopeHandle,
+                SlotSelectionHandle,
+            >,
+        >,
         IdError<<Self::InternalStorage as backend::Storage>::InternalError, SubjectHandle>,
     >;
     async fn time_slots_get_all(
@@ -369,7 +387,7 @@ pub trait Manager: ManagerInternal {
         &mut self,
         handle: TimeSlotHandle,
     ) -> Result<
-        Vec<GroupingHandle>,
+        Vec<backend::TimeSlotDependancy<GroupingHandle, SlotSelectionHandle>>,
         IdError<<Self::InternalStorage as backend::Storage>::InternalError, TimeSlotHandle>,
     >;
     async fn groupings_get_all(
@@ -1282,7 +1300,14 @@ impl<T: ManagerInternal> Manager for T {
         handle: SubjectHandle,
     ) -> impl core::future::Future<
         Output = Result<
-            Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
+            Vec<
+                backend::SubjectDependancy<
+                    TimeSlotHandle,
+                    StudentHandle,
+                    ColloscopeHandle,
+                    SlotSelectionHandle,
+                >,
+            >,
             IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
         >,
     > + Send {
@@ -1305,6 +1330,7 @@ impl<T: ManagerInternal> Manager for T {
             let time_slot_handle_manager = &mut handle_managers.time_slots;
             let student_handle_manager = &mut handle_managers.students;
             let colloscope_handle_manager = &mut handle_managers.colloscopes;
+            let slot_selection_handle_manager = &mut handle_managers.slot_selections;
 
             let subject_deps = subject_deps_backend
                 .into_iter()
@@ -1320,6 +1346,11 @@ impl<T: ManagerInternal> Manager for T {
                     backend::SubjectDependancy::Colloscope(id) => {
                         backend::SubjectDependancy::Colloscope(
                             colloscope_handle_manager.get_handle(id),
+                        )
+                    }
+                    backend::SubjectDependancy::SlotSelection(id) => {
+                        backend::SubjectDependancy::SlotSelection(
+                            slot_selection_handle_manager.get_handle(id),
                         )
                     }
                 })
@@ -1435,7 +1466,7 @@ impl<T: ManagerInternal> Manager for T {
         handle: TimeSlotHandle,
     ) -> impl core::future::Future<
         Output = Result<
-            Vec<GroupingHandle>,
+            Vec<backend::TimeSlotDependancy<GroupingHandle, SlotSelectionHandle>>,
             IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
         >,
     > + Send {
@@ -1456,10 +1487,22 @@ impl<T: ManagerInternal> Manager for T {
 
             let handle_managers = &mut self.get_handle_managers_mut();
             let grouping_handle_manager = &mut handle_managers.groupings;
+            let slot_selection_handle_manager = &mut handle_managers.slot_selections;
 
             let time_slot_deps = time_slot_deps_backend
                 .into_iter()
-                .map(|dep| grouping_handle_manager.get_handle(dep))
+                .map(|dep| match dep {
+                    backend::TimeSlotDependancy::Grouping(id) => {
+                        backend::TimeSlotDependancy::Grouping(
+                            grouping_handle_manager.get_handle(id),
+                        )
+                    }
+                    backend::TimeSlotDependancy::SlotSelection(id) => {
+                        backend::TimeSlotDependancy::SlotSelection(
+                            slot_selection_handle_manager.get_handle(id),
+                        )
+                    }
+                })
                 .collect();
 
             Ok(time_slot_deps)
@@ -2698,6 +2741,14 @@ pub(super) mod private {
                                                 .get_handle(id),
                                         )
                                     }
+                                    SubjectDependancy::SlotSelection(id) => {
+                                        SubjectDependancy::SlotSelection(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .slot_selections
+                                                .get_handle(id),
+                                        )
+                                    }
                                 })
                                 .collect();
                             UpdateError::SubjectDependanciesRemaining(new_dependancies)
@@ -2836,8 +2887,23 @@ pub(super) mod private {
                         backend::CheckedIdError::CheckFailed(dependancies) => {
                             let new_dependancies = dependancies
                                 .into_iter()
-                                .map(|dep| {
-                                    manager.get_handle_managers_mut().groupings.get_handle(dep)
+                                .map(|dep| match dep {
+                                    backend::TimeSlotDependancy::Grouping(id) => {
+                                        backend::TimeSlotDependancy::Grouping(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .groupings
+                                                .get_handle(id),
+                                        )
+                                    }
+                                    backend::TimeSlotDependancy::SlotSelection(id) => {
+                                        backend::TimeSlotDependancy::SlotSelection(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .slot_selections
+                                                .get_handle(id),
+                                        )
+                                    }
                                 })
                                 .collect();
                             UpdateError::TimeSlotDependanciesRemaining(new_dependancies)
@@ -2880,20 +2946,28 @@ pub(super) mod private {
                     .time_slots_update(time_slot_id, &time_slot_backend)
                     .await
                     .map_err(|e| match e {
-                        backend::Cross3IdError::InternalError(int_error) => {
+                        backend::Cross3IdWithDepError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
                         }
-                        backend::Cross3IdError::InvalidCrossId1(id) => {
+                        backend::Cross3IdWithDepError::InvalidCrossId1(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
-                        backend::Cross3IdError::InvalidCrossId2(id) => {
+                        backend::Cross3IdWithDepError::InvalidCrossId2(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
-                        backend::Cross3IdError::InvalidCrossId3(id) => {
+                        backend::Cross3IdWithDepError::InvalidCrossId3(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
-                        backend::Cross3IdError::InvalidId(id) => {
+                        backend::Cross3IdWithDepError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdWithDepError::BlockingDependancy(id) => {
+                            UpdateError::TimeSlotInSlotSelection(
+                                manager
+                                    .get_handle_managers_mut()
+                                    .slot_selections
+                                    .get_handle(id),
+                            )
                         }
                     })?;
                 Ok(ReturnHandle::NoHandle)
