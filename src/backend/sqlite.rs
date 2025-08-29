@@ -311,12 +311,14 @@ impl Store {
 
 use super::*;
 
+mod subject_groups;
 mod teachers;
 mod week_patterns;
 
 impl Storage for Store {
     type WeekPatternId = week_patterns::Id;
     type TeacherId = teachers::Id;
+    type SubjectGroupId = subject_groups::Id;
 
     type InternalError = Error;
 
@@ -405,5 +407,52 @@ impl Storage for Store {
         Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
     > + Send {
         teachers::update(&self.pool, index, teacher)
+    }
+
+    fn subject_groups_get(
+        &self,
+        index: Self::SubjectGroupId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            SubjectGroup,
+            IdError<Self::InternalError, Self::SubjectGroupId>,
+        >,
+    > + Send {
+        subject_groups::get(&self.pool, index)
+    }
+    fn subject_groups_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::SubjectGroupId, SubjectGroup>,
+            Self::InternalError,
+        >,
+    > + Send {
+        subject_groups::get_all(&self.pool)
+    }
+    fn subject_groups_add(
+        &self,
+        subject_group: SubjectGroup,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::SubjectGroupId, Self::InternalError>,
+    > + Send {
+        subject_groups::add(&self.pool, subject_group)
+    }
+    fn subject_groups_remove(
+        &self,
+        index: Self::SubjectGroupId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>,
+    > + Send {
+        subject_groups::remove(&self.pool, index)
+    }
+    fn subject_groups_update(
+        &self,
+        index: Self::SubjectGroupId,
+        subject_group: SubjectGroup,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>,
+    > + Send {
+        subject_groups::update(&self.pool, index, subject_group)
     }
 }
