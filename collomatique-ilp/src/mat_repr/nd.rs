@@ -16,7 +16,7 @@ use super::{ConfigRepr, ProblemRepr};
 use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable};
 
 use ndarray::{Array1, Array2};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
 mod tests;
@@ -166,12 +166,12 @@ pub struct NdConfig<'a, V: UsableData> {
 }
 
 impl<'a, V: UsableData> ConfigRepr<'a, V> for NdConfig<'a, V> {
-    fn unsatisfied_constraints(&self) -> Vec<usize> {
+    fn unsatisfied_constraints(&self) -> BTreeSet<usize> {
         let column = self.pb_repr.mat.dot(&self.values) + &self.pb_repr.constants;
 
         assert_eq!(column.len(), self.pb_repr.constraint_symbols.len());
 
-        let mut result = Vec::new();
+        let mut result = BTreeSet::new();
         for i in 0..column.len() {
             let symb = self.pb_repr.constraint_symbols[i];
             let v = column[i];
@@ -179,12 +179,12 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for NdConfig<'a, V> {
             match symb {
                 EqSymbol::Equals => {
                     if v != 0.0 {
-                        result.push(i);
+                        result.insert(i);
                     }
                 }
                 EqSymbol::LessThan => {
                     if v > 0.0 {
-                        result.push(i);
+                        result.insert(i);
                     }
                 }
             }

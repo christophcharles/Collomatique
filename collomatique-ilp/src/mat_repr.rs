@@ -16,7 +16,7 @@ pub mod nd;
 
 use super::{Constraint, UsableData, Variable};
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Matrix representation of a problem
 ///
@@ -67,7 +67,7 @@ pub trait ConfigRepr<'a, V: UsableData>:
     /// for its parent [ProblemRepr].
     ///
     /// The list can be empty if all the constraints are satisfied.
-    fn unsatisfied_constraints(&self) -> Vec<usize>;
+    fn unsatisfied_constraints(&self) -> BTreeSet<usize>;
 
     /// Returns true if the configuration is feasable.
     ///
