@@ -246,8 +246,20 @@ impl Solver {
             })
             .collect();
 
+        let i32_vars: BTreeMap<_, _> = cols
+            .iter()
+            .filter_map(|(v, col)| {
+                let var_type = var_types.get(v).expect("Variable should be declared");
+                let VariableType::Integer(_range) = var_type else {
+                    return None;
+                };
+
+                Some((v.clone(), sol.col(*col) as i32))
+            })
+            .collect();
+
         let config = problem
-            .config_from_bools(bool_vars)
+            .config_from(bool_vars, i32_vars)
             .expect("Variables should be valid");
         Some(
             config
