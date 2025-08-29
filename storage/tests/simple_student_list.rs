@@ -138,3 +138,44 @@ fn encode_and_redecode_simple_student_list() {
     assert_eq!(data, orig_data);
     assert_eq!(caveats, expected_caveats);
 }
+
+#[test]
+fn duplicate_id_should_fail() {
+    let content = r#"{
+    "header": {
+        "file_type": "Collomatique",
+        "produced_with_version": {
+            "major": 0,
+            "minor": 1,
+            "patch": 0
+        },
+        "file_content": "Colloscope"
+    },
+    "entries": [
+        {
+            "minimum_spec_version": 1,
+            "needed_entry": true,
+            "content": {
+                "StudentList": {
+                    "map": {
+                        "0": {
+                            "firstname": "Mathieu",
+                            "surname": "DURAND",
+                            "telephone": null,
+                            "email": "mathieu.durand@monfai.fr"
+                        },
+                        "0": {
+                            "firstname": "Christelle",
+                            "surname": "DUPONT",
+                            "telephone": "06 06 06 06 06",
+                            "email": null
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}"#;
+
+    assert!(deserialize_data(&content).is_err());
+}
