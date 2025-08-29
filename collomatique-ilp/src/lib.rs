@@ -767,7 +767,7 @@ pub struct Problem<V: UsableData, C: UsableData> {
 impl<V: UsableData, C: UsableData> Problem<V, C> {
     /// Transforms the problem back into a [ProblemBuilder].
     ///
-    /// This is useful when you have a problem that works tha
+    /// This is useful when you have a problem that works that
     /// you want to change a bit (maybe add a constraint or a variable).
     pub fn into_builder(self) -> ProblemBuilder<V, C> {
         ProblemBuilder {
@@ -781,7 +781,7 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
     /// Returns the constraints of the problem.
     ///
     /// The constraints are returned as a list of tuples.
-    /// The first element of the tuple is the algebraic constraint.
+    /// The first element of the tuple is the algebraic constraint (described by a [linexpr::Constraint]).
     /// The second element is a description of the constraint (given at
     /// building time).
     pub fn get_constraints(&self) -> &[(Constraint<V>, C)] {
@@ -796,12 +796,16 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         &self.variables
     }
 
-    /// Returns the objective function of the problem
+    /// Returns the objective function of the problem.
+    /// 
+    /// The objective function is a simple linear expression described a struct of type [linexpr::LinExpr].
     pub fn get_objective_function(&self) -> &LinExpr<V> {
         &self.objective_func
     }
 
     /// Returns the sense of the obejctive function (is it maximized or minimized).
+    /// 
+    /// See [ObjectiveSense].
     pub fn get_objective_sense(&self) -> ObjectiveSense {
         self.objective_sense
     }
