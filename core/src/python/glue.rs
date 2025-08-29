@@ -2,8 +2,10 @@ use pyo3::prelude::*;
 
 use crate::rpc::{
     error_msg::{
-        CutPeriodError, DeletePeriodError, GeneralPlanningError, MergeWithPreviousPeriodError,
-        UpdatePeriodWeekCountError, UpdateWeekStatusError,
+        AddNewSubjectError, CutPeriodError, DeletePeriodError, DeleteSubjectError,
+        GeneralPlanningError, MergeWithPreviousPeriodError, MoveDownError, MoveUpError,
+        SubjectsError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSubjectError,
+        UpdateWeekStatusError,
     },
     ErrorMsg, ResultMsg,
 };
@@ -46,7 +48,7 @@ pub struct Session {
 mod general_planning;
 use general_planning::{Period, PeriodId};
 mod subjects;
-use subjects::Subject;
+use subjects::{Subject, SubjectId};
 mod time;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId};
@@ -234,6 +236,161 @@ impl Session {
                 weeks_status: data.clone(),
             })
             .collect()
+    }
+
+    fn subjects_add(
+        self_: PyRef<'_, Self>,
+        subject_params: subjects::SubjectParameters,
+    ) -> PyResult<SubjectId> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
+                    crate::rpc::cmd_msg::SubjectsCmdMsg::AddNewSubject(subject_params.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::SubjectId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::AddNewSubject(e))) => match e {
+                AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
+                    PyValueError::new_err("groups per interrogation range cannot be empty"),
+                ),
+                AddNewSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
+                    "students per group range cannot be empty",
+                )),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn subjects_update(
+        self_: PyRef<'_, Self>,
+        id: SubjectId,
+        new_subject_params: subjects::SubjectParameters,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
+                    crate::rpc::cmd_msg::SubjectsCmdMsg::UpdateSubject(
+                        id.into(),
+                        new_subject_params.into(),
+                    ),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::UpdateSubject(e))) => match e {
+                UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
+                    PyValueError::new_err("groups per interrogation range cannot be empty"),
+                ),
+                UpdateSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
+                    "students per group range cannot be empty",
+                )),
+                UpdateSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn subjects_delete(self_: PyRef<'_, Self>, id: SubjectId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
+                    crate::rpc::cmd_msg::SubjectsCmdMsg::DeleteSubject(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::DeleteSubject(e))) => match e {
+                DeleteSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn subjects_move_up(self_: PyRef<'_, Self>, id: SubjectId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
+                    crate::rpc::cmd_msg::SubjectsCmdMsg::MoveUp(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::MoveUp(e))) => match e {
+                MoveUpError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                MoveUpError::NoUpperPosition => {
+                    Err(PyValueError::new_err("The subject is already the first"))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn subjects_move_down(self_: PyRef<'_, Self>, id: SubjectId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
+                    crate::rpc::cmd_msg::SubjectsCmdMsg::MoveDown(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::MoveDown(e))) => match e {
+                MoveDownError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                MoveDownError::NoLowerPosition => {
+                    Err(PyValueError::new_err("The subject is already the last"))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn subjects_update_period_statis(
+        self_: PyRef<'_, Self>,
+        subject_id: SubjectId,
+        period_id: PeriodId,
+        new_status: bool,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
+                    crate::rpc::cmd_msg::SubjectsCmdMsg::UpdatePeriodStatus(
+                        subject_id.into(),
+                        period_id.into(),
+                        new_status,
+                    ),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::UpdatePeriodStatus(e))) => match e {
+                UpdatePeriodStatusError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                    format!("Invalid subject id {:?}", id),
+                )),
+                UpdatePeriodStatusError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
     }
 
     fn subjects_get_list(self_: PyRef<'_, Self>) -> Vec<subjects::Subject> {

@@ -99,6 +99,21 @@ impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParamete
     }
 }
 
+impl From<SubjectParameters> for crate::rpc::cmd_msg::subjects::SubjectParametersMsg {
+    fn from(value: SubjectParameters) -> Self {
+        use crate::rpc::cmd_msg::subjects::SubjectParametersMsg;
+        SubjectParametersMsg {
+            name: value.name,
+            students_per_group: value.students_per_group_min..=value.students_per_group_max,
+            groups_per_interrogation: value.groups_per_interrogation_min
+                ..=value.groups_per_interrogation_max,
+            duration: value.duration,
+            take_duration_into_account: value.take_duration_into_account,
+            periodicity: value.periodicity.into(),
+        }
+    }
+}
+
 #[pymethods]
 impl SubjectParameters {
     #[new]
@@ -179,6 +194,36 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
     }
 }
 
+impl From<SubjectPeriodicity> for crate::rpc::cmd_msg::subjects::SubjectPeriodicityMsg {
+    fn from(value: SubjectPeriodicity) -> Self {
+        use crate::rpc::cmd_msg::subjects::SubjectPeriodicityMsg;
+        match value {
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block } => {
+                SubjectPeriodicityMsg::OnceForEveryBlockOfWeeks { weeks_per_block }
+            }
+            SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            } => SubjectPeriodicityMsg::ExactlyPeriodic {
+                periodicity_in_weeks,
+            },
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year_min,
+                interrogation_count_in_year_max,
+                minimum_week_separation,
+            } => Self::AmountInYear {
+                interrogation_count_in_year: interrogation_count_in_year_min
+                    ..=interrogation_count_in_year_max,
+                minimum_week_separation,
+            },
+            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => {
+                SubjectPeriodicityMsg::OnceForEveryArbitraryBlock {
+                    blocks: blocks.into_iter().map(|b| b.into()).collect(),
+                }
+            }
+        }
+    }
+}
+
 #[pymethods]
 impl SubjectPeriodicity {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
@@ -192,6 +237,16 @@ impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBl
         SubjectWeekBlock {
             delay_in_weeks: value.delay_in_weeks,
             size_in_weeks: value.size_in_weeks,
+        }
+    }
+}
+
+impl From<SubjectWeekBlock> for crate::rpc::cmd_msg::subjects::SubjectWeekBlock {
+    fn from(value: SubjectWeekBlock) -> Self {
+        use crate::rpc::cmd_msg::subjects::SubjectWeekBlock;
+        SubjectWeekBlock {
+            delay: value.delay_in_weeks,
+            size: value.size_in_weeks,
         }
     }
 }
