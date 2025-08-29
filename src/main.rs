@@ -178,27 +178,8 @@ CREATE TABLE "group_lists" (
 	"group_list_id"	INTEGER NOT NULL,
 	"colloscope_id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
-	PRIMARY KEY("group_list_id" AUTOINCREMENT),
-	FOREIGN KEY("colloscope_id") REFERENCES "colloscopes"("colloscope_id")
-);
-
-CREATE TABLE "group_list_items" (
-	"group_list_id"	INTEGER NOT NULL,
-	"group_id"	INTEGER NOT NULL,
-	"name"	TEXT NOT NULL,
-	"extendable"	INTEGER NOT NULL,
-	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
-	PRIMARY KEY("group_id","group_list_id")
-);
-
-CREATE TABLE "group_list_item_items" (
-	"group_list_id"	INTEGER NOT NULL,
-	"group_id"	INTEGER NOT NULL,
-	"student_id"	INTEGER NOT NULL,
-	UNIQUE("group_list_id","student_id"),
-	PRIMARY KEY("student_id","group_list_id","group_id"),
-	FOREIGN KEY("group_list_id","group_id") REFERENCES "group_list_items"("group_list_id","group_id"),
-	FOREIGN KEY("student_id") REFERENCES "students"("student_id")
+	FOREIGN KEY("colloscope_id") REFERENCES "colloscopes"("colloscope_id"),
+	PRIMARY KEY("group_list_id" AUTOINCREMENT)
 );
 
 CREATE TABLE "group_list_subjects" (
@@ -207,6 +188,32 @@ CREATE TABLE "group_list_subjects" (
 	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
 	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
 	PRIMARY KEY("subject_id","group_list_id")
+);
+
+CREATE TABLE "groups" (
+	"group_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	"extendable"	INTEGER NOT NULL,
+	UNIQUE("group_id"),
+	PRIMARY KEY("group_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "group_list_items" (
+	"group_list_id"	INTEGER NOT NULL,
+	"group_id"	INTEGER NOT NULL,
+	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	FOREIGN KEY("group_id") REFERENCES "groups"("group_id"),
+	PRIMARY KEY("group_list_id","group_id")
+);
+
+CREATE TABLE "group_items" (
+	"group_list_id"	INTEGER NOT NULL,
+	"group_id"	INTEGER NOT NULL,
+	"student_id"	INTEGER NOT NULL,
+	UNIQUE("group_list_id","student_id"),
+	FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
+	PRIMARY KEY("student_id","group_list_id","group_id"),
+	FOREIGN KEY ("group_list_id", "group_id") REFERENCES group_list_items("group_list_id", "group_id")
 );"#,
     )
     .bind(serde_json::to_string(&GeneralDataDb {
@@ -478,6 +485,7 @@ fn generate_bare_subjects(
     (subjects, id_map)
 }
 
+#[derive(Clone, Debug)]
 struct SlotRecord {
     id: i64,
     subject_id: i64,
@@ -487,6 +495,7 @@ struct SlotRecord {
     week: i64,
 }
 
+#[derive(Clone, Debug)]
 struct TeacherRecord {
     id: i64,
 }
@@ -549,11 +558,13 @@ fn add_slots_to_subjects(
     Ok(slot_map)
 }
 
+#[derive(Clone, Debug)]
 struct StudentSubjectRecord {
     student_id: i64,
     subject_id: i64,
 }
 
+#[derive(Clone, Debug)]
 struct GroupInfo {
     students: std::collections::BTreeSet<usize>,
     is_extendable: bool,
@@ -576,7 +587,40 @@ fn add_students_to_subjects(
             .insert(student_index);
     }
 
-    for subject in subjects.iter_mut() {
+    for (subject_id, group_info) in group_infos {
+        let subject_index = student_id_map[&subject_id];
+
+        for x in group_info {
+            use std::collections::BTreeSet;
+            let mut group = collomatique::gen::colloscope::GroupDesc {
+                students: BTreeSet::new(),
+                can_be_extended: x.is_extendable,
+            };
+
+            for student in &x.students {
+                // Ignore students that are not assigned to the subject
+                if !subjects[subject_index]
+                    .groups
+                    .not_assigned
+                    .contains(student)
+                {
+                    continue;
+                }
+
+                subjects[subject_index].groups.not_assigned.remove(student);
+                group.students.insert(*student);
+            }
+
+            // The new group might be empty after ignoring students
+            // If not extensible, we should remove it entirely
+            if group.students.is_empty() && !group.can_be_extended {
+                continue;
+            }
+            subjects[subject_index].groups.prefilled_groups.push(group);
+        }
+    }
+
+    /*for subject in subjects.iter_mut() {
         if subject.groups.not_assigned.len() < subject.students_per_slot.start().get() {
             return Err(anyhow!("Not enough students to assign into groups"));
         }
@@ -607,11 +651,94 @@ fn add_students_to_subjects(
                 can_be_extended: true,
             });
         }
-    }
+    }*/
 
     Ok(())
 }
 
+#[derive(Clone, Debug)]
+struct StudentInGroupRecord {
+    subject_id: i64,
+    group_id: i64,
+    student_id: i64,
+}
+
+#[derive(Clone, Debug)]
+struct GroupRecord {
+    subject_id: Option<i64>,
+    group_id: i64,
+    extendable: i64,
+}
+
+fn construct_group_info(
+    students_in_group_data: &[StudentInGroupRecord],
+    groups_data: &[GroupRecord],
+    student_id_map: &std::collections::BTreeMap<i64, usize>,
+) -> Result<std::collections::BTreeMap<i64, Vec<GroupInfo>>> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut temp_group_infos: BTreeMap<i64, BTreeMap<i64, _>> = BTreeMap::new();
+
+    for group_record in groups_data {
+        match temp_group_infos.get_mut(
+            &group_record.subject_id.expect(
+                "Why this is an option is beyond me, but if this fails, you have the reason",
+            ),
+        ) {
+            Some(map) => {
+                map.insert(
+                    group_record.group_id,
+                    GroupInfo {
+                        students: BTreeSet::new(),
+                        is_extendable: group_record.extendable == 1,
+                    },
+                );
+            }
+            None => {
+                temp_group_infos.insert(
+                    group_record.subject_id.expect("Why this is an option is beyond me, but if this fails, you have the reason"),
+                    BTreeMap::from([
+                        (
+                            group_record.group_id,
+                            GroupInfo {
+                                students: BTreeSet::new(),
+                                is_extendable: group_record.extendable == 1,
+                            }
+                        )
+                    ])
+                );
+            }
+        }
+    }
+
+    for student_in_group_record in students_in_group_data {
+        let subject_info = temp_group_infos
+            .get_mut(&student_in_group_record.subject_id)
+            .ok_or(anyhow!("Non existent subject referenced for student"))?;
+
+        let group_info = subject_info
+            .get_mut(&student_in_group_record.group_id)
+            .ok_or(anyhow!("Non existent group referenced for student"))?;
+
+        group_info
+            .students
+            .insert(student_id_map[&student_in_group_record.student_id]);
+    }
+
+    Ok(temp_group_infos
+        .into_iter()
+        .map(|(subject, subject_info)| {
+            (
+                subject,
+                subject_info
+                    .into_iter()
+                    .map(|(_group_id, group_info)| group_info)
+                    .collect(),
+            )
+        })
+        .collect())
+}
+
+#[derive(Clone, Debug)]
 struct SubjectsData {
     list: collomatique::gen::colloscope::SubjectList,
     slot_map: std::collections::BTreeMap<
@@ -642,6 +769,31 @@ FROM time_slots NATURAL JOIN weeks"
         "SELECT student_id, subject_id FROM student_subjects"
     )
     .fetch_all(db_conn);
+    let students_in_group_req = sqlx::query_as!(
+        StudentInGroupRecord,
+        "
+SELECT subject_id, group_id, student_id
+FROM group_list_subjects 
+JOIN group_lists ON group_list_subjects.group_list_id = group_lists.group_list_id
+JOIN group_items ON group_lists.group_list_id = group_items.group_list_id
+WHERE colloscope_id = ?;
+        ",
+        collo_id
+    )
+    .fetch_all(db_conn);
+    let groups_data_req = sqlx::query_as!(
+        GroupRecord,
+        "
+SELECT subject_id, group_list_items.group_id, extendable
+FROM group_list_subjects
+JOIN group_list_items ON group_list_subjects.group_list_id = group_list_items.group_list_id
+JOIN groups ON group_list_items.group_id = groups.group_id
+JOIN group_lists On group_lists.group_list_id = group_list_subjects.group_list_id
+WHERE colloscope_id = ?;
+        ",
+        collo_id
+    )
+    .fetch_all(db_conn);
 
     let (mut list, subject_id_map) = generate_bare_subjects(&subject_data[..]);
 
@@ -654,8 +806,13 @@ FROM time_slots NATURAL JOIN weeks"
         &subject_id_map,
     )?;
 
-    use std::collections::BTreeMap;
-    let group_infos = BTreeMap::new();
+    let students_in_group_data = students_in_group_req.await?;
+    let groups_data = groups_data_req.await?;
+    let group_infos = construct_group_info(
+        &students_in_group_data[..],
+        &groups_data[..],
+        student_id_map,
+    )?;
 
     let student_subjects_data = student_subjects_req.await?;
     add_students_to_subjects(
@@ -794,6 +951,7 @@ async fn main() -> Result<()> {
 
     sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
     sa_optimizer.set_max_steps(Some(1000));
+    sa_optimizer.set_init_max_steps(Some(100000));
 
     use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
     let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
