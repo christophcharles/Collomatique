@@ -1012,6 +1012,22 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
         }
     }
 
+    /// Creates a [ProblemBuilder] from the problem.
+    ///
+    /// This is useful when you have a problem that works that
+    /// you want to change a bit (maybe add a constraint or a variable).
+    ///
+    /// This functions works like [Problem::into_builder] but does not
+    /// consume the problem.
+    pub fn builder(&self) -> ProblemBuilder<V, C, P> {
+        ProblemBuilder {
+            constraints: self.constraints.clone(),
+            variables: self.variables.clone(),
+            objective: self.objective.clone(),
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
+
     /// Returns the constraints of the problem.
     ///
     /// The constraints are returned as a list of tuples.
@@ -1036,6 +1052,67 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// together with an optimization direction (of type [ObjectiveSense]).
     pub fn get_objective(&self) -> &Objective<V> {
         &self.objective
+    }
+
+    /// Try to blame a partial solution
+    ///
+    /// A partial solution only has some variables defined and for which
+    /// some values are still unknown.
+    ///
+    /// Even for such a partial solution, some constraints might already be known
+    /// not to be satisfied (or not possibly be satisfied). The simplest case is when
+    /// all the variables that appear in the constraints are defined and the constraint
+    /// can simply be checked.
+    ///
+    /// This function checks precisely this for each constraint of the problem and returns
+    /// a list of problematic constraints.
+    ///
+    /// The partial solution is represented by a [ConfigData]. Some variables can be
+    /// undefined, that's part of the representation. Some extra variables (not defined
+    /// in the problem) can also be given values, they will just be ignored.
+    /// There is also no check on the values of the variables (so you can put a half-integer
+    /// value on an integer variable, this won't be checked).
+    ///
+    /// Here is an example:
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ConfigData};
+    /// let a = LinExpr::<String>::var("A");
+    /// let b = LinExpr::<String>::var("B");
+    /// let c = LinExpr::<String>::var("C");
+    ///
+    /// let constraint1 = (&a + &b).leq(&LinExpr::constant(1.));
+    /// let constraint2 = (&b + &c).geq(&LinExpr::constant(2.));
+    ///
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variable("A", Variable::binary())
+    ///     .set_variable("B", Variable::binary())
+    ///     .set_variable("C", Variable::binary())
+    ///     .add_constraint(constraint1, "A + B <= 1")
+    ///     .add_constraint(constraint2.clone(), "B + C >= 2")
+    ///     .build()
+    ///     .expect("No undeclared variables");
+    ///
+    /// let config_data = ConfigData::<String>::new()
+    ///     .set("B", 0.0);
+    ///
+    /// let list = problem.partial_blame(&config_data);
+    ///
+    /// // The second constraint cannot be satisfied because C is binary
+    /// assert_eq!(list, vec![(constraint2, String::from("B + C >= 2"))]);
+    /// ```
+    pub fn partial_blame(&self, config_data: &ConfigData<V>) -> Vec<(Constraint<V>, C)> {
+        let values = config_data.get_values();
+        let mut output = vec![];
+
+        for (constraint, desc) in &self.constraints {
+            let reduced = constraint.reduce(&values);
+
+            if !reduced.range_check(&self.variables) {
+                output.push((constraint.clone(), desc.clone()));
+            }
+        }
+
+        output
     }
 }
 
