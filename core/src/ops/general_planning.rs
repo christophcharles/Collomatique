@@ -185,12 +185,35 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                let result = data
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        let mut new_subject = subject.clone();
+                        new_subject.excluded_periods.remove(period_id);
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Subject(
+                                    collomatique_state_colloscopes::SubjectOp::Update(
+                                        *subject_id,
+                                        new_subject,
+                                    ),
+                                ),
+                                "Enlever une référence à la période à effacer".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
                         ),
-                        self.get_desc(),
+                        "Suppression effective de la période".into(),
                     )
                     .map_err(|e| match e {
                         collomatique_state_colloscopes::Error::Period(period_e) => match period_e {
@@ -204,6 +227,8 @@ impl GeneralPlanningUpdateOp {
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
                 }
+
+                *data = session.commit(self.get_desc());
                 Ok(None)
             }
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
@@ -232,7 +257,7 @@ impl GeneralPlanningUpdateOp {
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                         ),
-                        "Racourcir une période".into(),
+                        "Raccourcir une période".into(),
                     )
                     .expect("At this point, period id should be valid");
                 if result.is_some() {
@@ -252,6 +277,27 @@ impl GeneralPlanningUpdateOp {
                     Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => id,
                     _ => panic!("Unexpected result! {:?}", result),
                 };
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        let mut new_subject = subject.clone();
+                        new_subject.excluded_periods.insert(new_id.clone());
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Subject(
+                                    collomatique_state_colloscopes::SubjectOp::Update(
+                                        *subject_id,
+                                        new_subject,
+                                    ),
+                                ),
+                                "Dupliquer l'état de la période découpée sur un sujet".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
 
                 *data = session.commit(self.get_desc());
                 Ok(Some(new_id))
@@ -292,6 +338,28 @@ impl GeneralPlanningUpdateOp {
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
                 }
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        let mut new_subject = subject.clone();
+                        new_subject.excluded_periods.remove(period_id);
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Subject(
+                                    collomatique_state_colloscopes::SubjectOp::Update(
+                                        *subject_id,
+                                        new_subject,
+                                    ),
+                                ),
+                                "Enlever une référence à la période à effacer".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
                 let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
