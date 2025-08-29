@@ -104,6 +104,7 @@ impl<H: heuristics::Heuristic> Solver<H> {
     }
 }
 
+#[derive(Debug, Clone)]
 enum NextStep<V: VariableName> {
     StepInto(Vec<V>),
     Backtrack,

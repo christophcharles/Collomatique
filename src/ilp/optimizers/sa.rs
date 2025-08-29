@@ -93,13 +93,23 @@ impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Ite
             None => None,
         };
 
-        // If we can't restore then the iterator stops
+        // First the first step, if we can't restore then the iterator stops
         // So "None" should be propagated upwards
-        let config = Rc::new(self.solver.restore_feasability_with_origin_and_max_steps(
+        //
+        // But if we are on a step after that, we might have chosen a bad current_config
+        // So we must try again with a "better" neighbour on next try.
+        let sol = match self.solver.restore_feasability_with_origin_and_max_steps(
             &self.current_config,
             origin,
             self.max_steps,
-        )?);
+        ) {
+            Some(s) => s,
+            None => match &self.previous_config {
+                Some((c, _)) => c.as_ref().clone(),
+                None => return None,
+            },
+        };
+        let config = Rc::new(sol);
 
         let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
 
