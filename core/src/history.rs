@@ -4,9 +4,9 @@
 //! and functions to maintain a modification history.
 //!
 //! There are several parts to this:
-//! - first, though modification operations are defined in [Op],
+//! - first, though modification operations are defined in [crate::InMemoryData::OriginalOperation],
 //!   they are not *complete* which means they are not *reproducible*.
-//!   For instance, when adding a new student the [StudentId] is not set.
+//!   For instance, when adding a new student the id is not set.
 //!   So doing it once, then canceling it, then redoing it again would
 //!   lead to a different id being issued.
 //!
@@ -17,7 +17,7 @@
 //!
 //!   They are several ways out of this. The way that was chosen here
 //!   is to actually issue an id at the moment of the operation creation
-//!   and complete the operation into an [AnnotatedOp] that contains
+//!   and complete the operation into an [crate::InMemoryData::AnnotatedOperation] that contains
 //!   all the information about the operation.
 //!
 //!   So when we first create the student, before doing any modification,
@@ -30,7 +30,7 @@
 //!   This, of course, has a drawback: it leads to a new failure mode. It is
 //!   possible to try to add a student with an existing id.
 //!
-//! - second, now that we have [AnnotatedOp] that gives a *complete* description
+//! - second, now that we have [crate::InMemoryData::AnnotatedOperation] that gives a *complete* description
 //!   of the result of an operation, we need to make it *reversible*.
 //!
 //!   A [ReversibleOp] is an operation that contains the action that must be done
@@ -42,14 +42,14 @@
 //!   For instance, a 'remove student operation' though its effects are clear do not
 //!   contain the necessary information to reverse it. This information depends on the
 //!   actual student description at the moment of removal.
-//!   A [ReversibleOp] therefore depends on a particular [Data] at a certain point in
+//!   A [ReversibleOp] therefore depends on a particular [crate::InMemoryData] at a certain point in
 //!   time.
 //!
-//!   The type is defined here but it is actually build with [Data::apply]. When an
-//!   operation is applied to [Data], the state of [Data] *at that moment* can be read
-//!   and the corresponding reverse operation can be built. So if [Data::apply] is
-//!   successful, it returns the corresponding [ReversibleOp] that can be store in
-//!   the modification history.
+//!   The type is defined here but it is actually build with [crate::InMemoryData::build_rev_with_current_state]. When an
+//!   operation is applied to [crate::InMemoryData], the state of [crate::InMemoryData] *at that moment* can be read
+//!   and the corresponding reverse operation can be built. So before applying the operation
+//!   we will call [crate::InMemoryData::build_rev_with_current_state] and build the corresponding
+//!   [ReversibleOp] that can be store in the modification history.
 //!
 //! - third, this module defines [ModificationHistory] which actually contains and
 //!   stores the modification history. Apart from the last point that will discuss
@@ -61,7 +61,7 @@
 //!
 //! - fourth, we define [AggregatedOp]. This type is useful to have
 //!   *larger* atomatic operations. Let's say for instance that we want to remove
-//!   *all* students. No atomatic operation on the [Data] is defined for this.
+//!   *all* students. No atomatic operation on the [crate::InMemoryData] is defined for this.
 //!   But, we can actually aggregate the operations together and make it a unique
 //!   operation in history.
 //!
@@ -88,70 +88,9 @@
 //!   but rather a list of [AggregatedOp].
 //!
 
-use super::*;
 use std::collections::VecDeque;
 
-/// Annotated operation
-///
-/// Compared to [Op], this is a annotated operation,
-/// meaning the operation has been annotated to contain
-/// all the necessary data to make it *reproducible*.
-///
-/// See [super::history] for a complete discussion of the problem.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnnotatedOp {
-    /// Operation on the student list
-    Student(AnnotatedStudentOp),
-}
-
-/// Student annotated operation enumeration
-///
-/// Compared to [StudentOp], this is a annotated operation,
-/// meaning the operation has been annotated to contain
-/// all the necessary data to make it *reproducible*.
-///
-/// See [super::history] for a complete discussion of the problem.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnnotatedStudentOp {
-    /// Add a new student (with fixed id)
-    Add(StudentId, PersonWithContacts),
-    /// Remove an existing student identified through its id
-    Remove(StudentId),
-    /// Update the data on an existing student
-    Update(StudentId, PersonWithContacts),
-}
-
-impl AnnotatedOp {
-    /// Annotate an operation
-    ///
-    /// Takes a partial description of an operation of type [Op]
-    /// and annotates it to make it reproducible.
-    ///
-    /// This might lead to the creation of new unique ids
-    /// through an [IdIssuer].
-    pub fn annotate(op: Op, id_issuer: &IdIssuer) -> AnnotatedOp {
-        match op {
-            Op::Student(student_op) => {
-                AnnotatedOp::Student(AnnotatedStudentOp::annotate(student_op, id_issuer))
-            }
-        }
-    }
-}
-
-impl AnnotatedStudentOp {
-    /// Used internally
-    ///
-    /// Annotates the subcategory of operations [StudentOp].
-    fn annotate(student_op: StudentOp, id_issuer: &IdIssuer) -> AnnotatedStudentOp {
-        match student_op {
-            StudentOp::Add(student) => AnnotatedStudentOp::Add(id_issuer.get_student_id(), student),
-            StudentOp::Remove(student_id) => AnnotatedStudentOp::Remove(student_id),
-            StudentOp::Update(student_id, student) => {
-                AnnotatedStudentOp::Update(student_id, student)
-            }
-        }
-    }
-}
+use crate::Operation;
 
 /// Reversible operation
 ///
@@ -159,19 +98,19 @@ impl AnnotatedStudentOp {
 /// as well as the reverse operation.
 ///
 /// Be careful, this description is necesserally linked
-/// to a state of [Data] at a precise moment at which
+/// to a state of [crate::InMemoryData] at a precise moment at which
 /// the operation was applied.
 ///
 /// See [super::history] for a full discussion.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReversibleOp {
+pub struct ReversibleOp<T: Operation> {
     /// Forward operation
-    pub(crate) forward: AnnotatedOp,
+    pub(crate) forward: T,
     /// Backward (or reversed) operation
-    pub(crate) backward: AnnotatedOp,
+    pub(crate) backward: T,
 }
 
-impl ReversibleOp {
+impl<T: Operation> ReversibleOp<T> {
     /// Returns the reversed operation
     ///
     /// Because the operation is *reversible*
@@ -199,14 +138,14 @@ impl ReversibleOp {
     /// Returns the primitive forward operation
     ///
     /// This returns a reference to the original op.
-    pub fn inner(&self) -> &AnnotatedOp {
+    pub fn inner(&self) -> &T {
         &self.forward
     }
 
     /// Returns the primitive forward operation
     ///
     /// This consumes the [ReversibleOp].
-    pub fn into_inner(self) -> AnnotatedOp {
+    pub fn into_inner(self) -> T {
         self.forward
     }
 }
@@ -218,17 +157,17 @@ impl ReversibleOp {
 /// only one slot in the modification history.
 ///
 /// Because it contains [ReversibleOp], an [AggregatedOp]
-/// similarly is linked to a specific state of the [Data].
+/// similarly is linked to a specific state of the [crate::InMemoryData].
 ///
 /// See [super::history] for the full discussion.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AggregatedOp(Vec<ReversibleOp>);
+pub struct AggregatedOp<T: Operation>(Vec<ReversibleOp<T>>);
 
-impl AggregatedOp {
+impl<T: Operation> AggregatedOp<T> {
     /// Builds an aggregated operation from a list of reversible ops
     ///
     /// Normally, you should never have to build an aggregated op manually.
-    pub fn new(ops: Vec<ReversibleOp>) -> Self {
+    pub(crate) fn new(ops: Vec<ReversibleOp<T>>) -> Self {
         AggregatedOp(ops)
     }
 
@@ -244,7 +183,7 @@ impl AggregatedOp {
     }
 
     /// Returns the list of [ReversibleOp] in the [AggregatedOp].
-    pub fn inner(&self) -> &Vec<ReversibleOp> {
+    pub fn inner(&self) -> &Vec<ReversibleOp<T>> {
         &self.0
     }
 }
@@ -258,9 +197,9 @@ impl AggregatedOp {
 /// It can optionnaly manage a finite size history and forget
 /// operations that are deemed too old.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct ModificationHistory {
+pub struct ModificationHistory<T: Operation> {
     /// Actual history of operations
-    history: VecDeque<AggregatedOp>,
+    history: VecDeque<AggregatedOp<T>>,
 
     /// Points to the place of the next operation to store in history
     history_pointer: usize,
@@ -278,7 +217,7 @@ pub struct ModificationHistory {
     max_history_size: Option<usize>,
 }
 
-impl ModificationHistory {
+impl<T: Operation> ModificationHistory<T> {
     /// Used internally
     ///
     /// Truncate the history if it has become too big.
@@ -303,7 +242,7 @@ impl ModificationHistory {
     }
 }
 
-impl ModificationHistory {
+impl<T: Operation> ModificationHistory<T> {
     /// Creates a new modification history with default parameters
     ///
     /// By default, [ModificationHistory] maintains a potentially
@@ -348,7 +287,7 @@ impl ModificationHistory {
     /// if some operation was cancelled and remained in history
     /// to be able to apply them, they will be discarded and this branch
     /// of history is lost.
-    pub fn store(&mut self, aggregated_ops: AggregatedOp) {
+    pub fn store(&mut self, aggregated_ops: AggregatedOp<T>) {
         self.history.truncate(self.history_pointer);
 
         self.history_pointer += 1;
@@ -377,7 +316,7 @@ impl ModificationHistory {
     ///
     /// It can fail and returns `None` if no operation to be cancelled
     /// is found in history.
-    pub fn undo(&mut self) -> Option<AggregatedOp> {
+    pub fn undo(&mut self) -> Option<AggregatedOp<T>> {
         if !self.can_undo() {
             return None;
         }
@@ -401,7 +340,7 @@ impl ModificationHistory {
     ///
     /// It can fail and returns `None` if no operation to be redone
     /// is found in history.
-    pub fn redo(&mut self) -> Option<AggregatedOp> {
+    pub fn redo(&mut self) -> Option<AggregatedOp<T>> {
         if !self.can_redo() {
             return None;
         }
@@ -425,7 +364,7 @@ impl ModificationHistory {
     /// main one. If the script fails, this allows cancellation of its operations.
     /// If the script succeeds, we can aggregate its operation into a single one and move it to
     /// the main history.
-    pub fn build_aggregated_ops(&self) -> AggregatedOp {
+    pub fn build_aggregated_ops(&self) -> AggregatedOp<T> {
         AggregatedOp::new(
             self.history
                 .iter()
