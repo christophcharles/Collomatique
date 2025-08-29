@@ -457,7 +457,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
 
     pub fn random_neighbour<T: random::RandomGen>(
         &self,
-        random_gen: &mut T,
+        random_gen: &T,
     ) -> Option<Config<'a, V, P>> {
         if self.problem.variables.is_empty() {
             return None;

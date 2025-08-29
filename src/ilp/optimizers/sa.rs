@@ -54,11 +54,11 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
         self.init_max_steps = init_max_steps;
     }
 
-    pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver<V, P>>(
+    pub fn iterate<'b, R: RandomGen, S: FeasabilitySolver<V, P>>(
         &'b self,
         solver: S,
-        random_gen: &'c mut R,
-    ) -> OptimizerIterator<'a, 'b, 'c, V, P, R, S> {
+        random_gen: R,
+    ) -> OptimizerIterator<'a, 'b, V, P, R, S> {
         OptimizerIterator {
             optimizer: self,
             random_gen,
@@ -79,7 +79,6 @@ use std::rc::Rc;
 pub struct OptimizerIterator<
     'b,
     'a: 'b,
-    'c,
     V: VariableName,
     P: ProblemRepr<V>,
     R: RandomGen,
@@ -87,7 +86,7 @@ pub struct OptimizerIterator<
 > {
     optimizer: &'b Optimizer<'a, V, P>,
     solver: S,
-    random_gen: &'c mut R,
+    random_gen: R,
 
     previous_config: Option<(Rc<FeasableConfig<'a, V, P>>, f64)>,
     current_config: Config<'a, V, P>,
@@ -106,7 +105,7 @@ impl<
         P: ProblemRepr<V>,
         R: RandomGen,
         S: FeasabilitySolver<V, P>,
-    > Iterator for OptimizerIterator<'b, 'a, 'c, V, P, R, S>
+    > Iterator for OptimizerIterator<'b, 'a, V, P, R, S>
 {
     type Item = (Rc<FeasableConfig<'a, V, P>>, f64);
 
@@ -146,7 +145,7 @@ impl<
         };
         self.k += 1;
 
-        if let Some(neighbour) = config.as_ref().inner().random_neighbour(self.random_gen) {
+        if let Some(neighbour) = config.as_ref().inner().random_neighbour(&self.random_gen) {
             self.current_config = neighbour;
             if acceptance >= self.random_gen.random() {
                 self.previous_config = Some((config, config_cost));
@@ -158,15 +157,8 @@ impl<
     }
 }
 
-impl<
-        'b,
-        'a: 'b,
-        'c,
-        V: VariableName,
-        P: ProblemRepr<V>,
-        R: RandomGen,
-        S: FeasabilitySolver<V, P>,
-    > OptimizerIterator<'b, 'a, 'c, V, P, R, S>
+impl<'b, 'a: 'b, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<V, P>>
+    OptimizerIterator<'b, 'a, V, P, R, S>
 {
     pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a, V, P>>, f64)> {
         self.take(max_iter)

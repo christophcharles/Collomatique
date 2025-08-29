@@ -1030,9 +1030,9 @@ async fn main() -> Result<()> {
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
     let max_steps = None;
     let retries = 20;
-    let mut incremental_initializer =
+    let incremental_initializer =
         ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
     for i in 1.. {
         println!("Attempt n°{}...", i);
@@ -1047,7 +1047,7 @@ async fn main() -> Result<()> {
         sa_optimizer.set_init_max_steps(None);
 
         let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-        let iterator = sa_optimizer.iterate(solver, &mut random_gen);
+        let iterator = sa_optimizer.iterate(solver, random_gen.clone());
 
         for (i, (sol, cost)) in iterator.enumerate() {
             println!(
