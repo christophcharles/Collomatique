@@ -4342,6 +4342,7 @@ pub(super) mod private {
                 .week_patterns
                 .get_handle(time_slot.week_pattern_id),
             room: time_slot.room,
+            cost: time_slot.cost,
         }
     }
 
@@ -4373,6 +4374,7 @@ pub(super) mod private {
                     time_slot.week_pattern_id,
                 ))?,
             room: time_slot.room,
+            cost: time_slot.cost,
         })
     }
 
