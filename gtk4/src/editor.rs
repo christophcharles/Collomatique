@@ -239,6 +239,7 @@ impl EditorPanel {
 
     fn op_cat_to_panel_number(op: &collomatique_core::ops::OpCategory) -> Option<PanelNumbers> {
         match op {
+            collomatique_core::ops::OpCategory::None => None,
             collomatique_core::ops::OpCategory::GeneralPlanning => {
                 Some(PanelNumbers::GeneralPlanning)
             }

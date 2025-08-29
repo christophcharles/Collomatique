@@ -318,7 +318,7 @@ impl Component for Dialog {
                     .expect("there should be some current state to accept");
                 let last_op_cat = match app_session.get_undo_name() {
                     Some((cat, _desc)) => cat.clone(),
-                    None => collomatique_core::ops::OpCategory::GeneralPlanning,
+                    None => collomatique_core::ops::OpCategory::None,
                 };
                 sender
                     .output(DialogOutput::NewData(app_session.commit((
