@@ -140,6 +140,13 @@ impl EditorPanel {
                 self.data.get_data().get_periods().clone(),
             ))
             .unwrap();
+        self.subjects
+            .sender()
+            .send(subjects::SubjectsInput::Update(
+                self.data.get_data().get_periods().clone(),
+                self.data.get_data().get_subjects().clone(),
+            ))
+            .unwrap();
     }
 
     fn inner_op_to_panel_number(
@@ -634,6 +641,57 @@ impl EditorPanel {
                     widgets.toast_overlay.add_toast(new_toast);
                 }
                 ToastInfo::Dismiss => {} // Nothing else to do
+            }
+        }
+    }
+}
+
+fn generate_period_title(
+    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    index: usize,
+    first_week_num: usize,
+    week_count: usize,
+) -> String {
+    if week_count == 0 {
+        return format!("Période {} (vide)", index);
+    }
+
+    let start_week = first_week_num + 1;
+    let end_week = first_week_num + week_count;
+
+    match global_first_week {
+        Some(global_start_date) => {
+            let start_date = global_start_date
+                .inner()
+                .checked_add_days(chrono::Days::new(7 * (first_week_num as u64)))
+                .expect("Valid start date");
+            let end_date = start_date
+                .checked_add_days(chrono::Days::new(7 * (week_count as u64) - 1))
+                .expect("Valid end date");
+            if start_week != end_week {
+                format!(
+                    "Période {} du {} au {} (semaines {} à {})",
+                    index,
+                    start_date.format("%d/%m/%Y").to_string(),
+                    end_date.format("%d/%m/%Y").to_string(),
+                    start_week,
+                    end_week,
+                )
+            } else {
+                format!(
+                    "Période {} du {} au {} (semaine {})",
+                    index,
+                    start_date.format("%d/%m/%Y").to_string(),
+                    end_date.format("%d/%m/%Y").to_string(),
+                    start_week,
+                )
+            }
+        }
+        None => {
+            if start_week != end_week {
+                format!("Période {} (semaines {} à {})", index, start_week, end_week,)
+            } else {
+                format!("Période {} (semaine {})", index, start_week,)
             }
         }
     }
