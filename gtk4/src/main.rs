@@ -28,12 +28,11 @@ struct Args {
     gtk_options: Vec<String>,
 }
 
-fn main() {
+fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
     if args.rpc_engine {
-        collomatique_rpc::run_rpc_engine();
-        return;
+        return collomatique_rpc::run_rpc_engine();
     }
 
     let payload = collomatique_gtk4::AppInit {
@@ -48,4 +47,6 @@ fn main() {
     let app = RelmApp::new("fr.collomatique.gtk4").with_args(gtk_args);
     app.allow_multiple_instances(true);
     app.run::<AppModel>(payload);
+
+    Ok(())
 }
