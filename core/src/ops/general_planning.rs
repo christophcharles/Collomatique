@@ -239,13 +239,13 @@ impl GeneralPlanningUpdateOp {
                     return Err(DeletePeriodError::InvalidPeriodId(*period_id).into());
                 };
 
-                for (subject_id, excluded_students) in period_assignments.subject_exclusion_map {
-                    for student_id in excluded_students {
+                for (subject_id, assigned_students) in period_assignments.subject_map {
+                    for student_id in assigned_students {
                         let result = session
                             .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
                                     collomatique_state_colloscopes::AssignmentOp::Assign(
-                                        *period_id, student_id, subject_id, true,
+                                        *period_id, student_id, subject_id, false,
                                     ),
                                 ),
                                 "Valeur par défaut pour l'affectation d'un élève".into(),
@@ -360,13 +360,13 @@ impl GeneralPlanningUpdateOp {
                     .expect("Period id should be valid at this point")
                     .clone();
 
-                for (subject_id, excluded_students) in period_assignments.subject_exclusion_map {
-                    for student_id in excluded_students {
+                for (subject_id, assigned_students) in period_assignments.subject_map {
+                    for student_id in assigned_students {
                         let result = session
                             .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
                                     collomatique_state_colloscopes::AssignmentOp::Assign(
-                                        new_id, student_id, subject_id, false,
+                                        new_id, student_id, subject_id, true,
                                     ),
                                 ),
                                 "Dupliquer l'affectation d'un élève sur la période découpée".into(),
@@ -481,13 +481,13 @@ impl GeneralPlanningUpdateOp {
                     .expect("At this point, period_id should be valid")
                     .clone();
 
-                for (subject_id, excluded_students) in period_assignments.subject_exclusion_map {
-                    for student_id in excluded_students {
+                for (subject_id, assigned_students) in period_assignments.subject_map {
+                    for student_id in assigned_students {
                         let result = session
                             .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
                                     collomatique_state_colloscopes::AssignmentOp::Assign(
-                                        *period_id, student_id, subject_id, true,
+                                        *period_id, student_id, subject_id, false,
                                     ),
                                 ),
                                 "Valeur par défaut pour l'affectation d'un élève".into(),

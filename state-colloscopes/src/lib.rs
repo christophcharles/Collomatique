@@ -625,26 +625,27 @@ impl Data {
                 subject_count_for_period += 1;
 
                 let subject_assignments = period_assignments
-                    .subject_exclusion_map
+                    .subject_map
                     .get(subject_id)
-                    .expect(
-                        "All relevant subjects for the period should appear in the exclusion map",
-                    );
+                    .expect("All relevant subjects for the period should appear in the map");
 
                 for student_id in subject_assignments {
-                    let student = self.inner_data.students.student_map.get(student_id).expect(
-                        "Every student that appears in the exclusion map should be a valid id",
-                    );
+                    let student = self
+                        .inner_data
+                        .students
+                        .student_map
+                        .get(student_id)
+                        .expect("Every student that appears in the map should be a valid id");
 
                     if student.excluded_periods.contains(period_id) {
                         panic!(
-                            "Excluded student {:?} is not present for period {:?}",
+                            "Assigned student {:?} is not present for period {:?}",
                             student_id, period_id
                         );
                     }
                 }
             }
-            assert!(subject_count_for_period == period_assignments.subject_exclusion_map.len());
+            assert!(subject_count_for_period == period_assignments.subject_map.len());
         }
     }
 
@@ -824,9 +825,8 @@ impl Data {
                     if current_student.excluded_periods.contains(period_id) {
                         continue;
                     }
-                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
-                    {
-                        if excluded_students.contains(id) {
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(id) {
                             return Err(StudentError::StudentStillHasNonTrivialAssignments(
                                 *id,
                                 *subject_id,
@@ -852,9 +852,8 @@ impl Data {
                     {
                         continue;
                     }
-                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
-                    {
-                        if excluded_students.contains(id) {
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(id) {
                             return Err(StudentError::StudentStillHasNonTrivialAssignments(
                                 *id,
                                 *subject_id,
@@ -900,7 +899,7 @@ impl Data {
                 self.inner_data.assignments.period_map.insert(
                     *period_id,
                     assignments::PeriodAssignments {
-                        subject_exclusion_map: self
+                        subject_map: self
                             .inner_data
                             .subjects
                             .ordered_subject_list
@@ -932,7 +931,7 @@ impl Data {
                 self.inner_data.assignments.period_map.insert(
                     *period_id,
                     assignments::PeriodAssignments {
-                        subject_exclusion_map: self
+                        subject_map: self
                             .inner_data
                             .subjects
                             .ordered_subject_list
@@ -968,9 +967,8 @@ impl Data {
                 }
 
                 for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
-                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
-                    {
-                        if !excluded_students.is_empty() {
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if !assigned_students.is_empty() {
                             return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
                                 *period_id,
                                 *subject_id,
@@ -1044,7 +1042,7 @@ impl Data {
                         .expect("Every period should appear in assignments");
 
                     period_assignment
-                        .subject_exclusion_map
+                        .subject_map
                         .insert(*new_id, BTreeSet::new());
                 }
 
@@ -1096,12 +1094,12 @@ impl Data {
                         .get(period_id)
                         .expect("Every period should appear in assignments");
 
-                    let excluded_students = period_assignment
-                        .subject_exclusion_map
+                    let assigned_students = period_assignment
+                        .subject_map
                         .get(id)
                         .expect("Subject should appear in assignments for relevant periods");
 
-                    if !excluded_students.is_empty() {
+                    if !assigned_students.is_empty() {
                         return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
                             *period_id, *id,
                         ));
@@ -1125,7 +1123,7 @@ impl Data {
                         .get_mut(period_id)
                         .expect("Every period should appear in assignments");
 
-                    period_assignment.subject_exclusion_map.remove(id);
+                    period_assignment.subject_map.remove(id);
                 }
 
                 Ok(())
@@ -1155,12 +1153,12 @@ impl Data {
                         .get(period_id)
                         .expect("Every period should appear in assignments");
 
-                    let excluded_students = period_assignment
-                        .subject_exclusion_map
+                    let assigned_students = period_assignment
+                        .subject_map
                         .get(id)
                         .expect("Subject should appear in assignments for relevant periods");
 
-                    if !excluded_students.is_empty() {
+                    if !assigned_students.is_empty() {
                         return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
                             *period_id, *id,
                         ));
@@ -1186,9 +1184,7 @@ impl Data {
                             .get_mut(period_id)
                             .expect("Every period should appear in assignments");
 
-                        period_assignment
-                            .subject_exclusion_map
-                            .insert(*id, BTreeSet::new());
+                        period_assignment.subject_map.insert(*id, BTreeSet::new());
                     } else {
                         // The period was included but will now be excluded
                         let period_assignment = self
@@ -1198,7 +1194,7 @@ impl Data {
                             .get_mut(period_id)
                             .expect("Every period should appear in assignments");
 
-                        period_assignment.subject_exclusion_map.remove(id);
+                        period_assignment.subject_map.remove(id);
                     }
                 }
 
@@ -1274,8 +1270,7 @@ impl Data {
                     return Err(AssignmentError::InvalidSubjectId(*subject_id));
                 }
 
-                let Some(excluded_students) =
-                    period_assignments.subject_exclusion_map.get_mut(subject_id)
+                let Some(assigned_students) = period_assignments.subject_map.get_mut(subject_id)
                 else {
                     return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
                         *subject_id,
@@ -1296,9 +1291,9 @@ impl Data {
                 }
 
                 if *status {
-                    excluded_students.remove(student_id);
+                    assigned_students.insert(*student_id);
                 } else {
-                    excluded_students.insert(*student_id);
+                    assigned_students.remove(student_id);
                 }
 
                 Ok(())
@@ -1557,9 +1552,7 @@ impl Data {
                     return Err(AssignmentError::InvalidSubjectId(*subject_id));
                 }
 
-                let Some(excluded_students) =
-                    period_assignments.subject_exclusion_map.get(subject_id)
-                else {
+                let Some(assigned_students) = period_assignments.subject_map.get(subject_id) else {
                     return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
                         *subject_id,
                         *period_id,
@@ -1578,7 +1571,7 @@ impl Data {
                     ));
                 }
 
-                let previous_status = !excluded_students.contains(student_id);
+                let previous_status = assigned_students.contains(student_id);
 
                 Ok(AnnotatedAssignmentOp::Assign(
                     *period_id,

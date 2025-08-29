@@ -99,9 +99,8 @@ impl StudentsUpdateOp {
                         continue;
                     }
 
-                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
-                    {
-                        if excluded_students.contains(student_id) {
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(student_id) {
                             let result = session
                                 .apply(
                                     collomatique_state_colloscopes::Op::Assignment(
@@ -109,7 +108,7 @@ impl StudentsUpdateOp {
                                             *period_id,
                                             *student_id,
                                             *subject_id,
-                                            true,
+                                            false,
                                         ),
                                     ),
                                     "Restaurer l'état par défaut sur une affectation de l'élève"
@@ -162,9 +161,8 @@ impl StudentsUpdateOp {
 
                 for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
                 {
-                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
-                    {
-                        if excluded_students.contains(student_id) {
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(student_id) {
                             let result = session
                                 .apply(
                                     collomatique_state_colloscopes::Op::Assignment(
@@ -172,7 +170,7 @@ impl StudentsUpdateOp {
                                             *period_id,
                                             *student_id,
                                             *subject_id,
-                                            true,
+                                            false,
                                         ),
                                     ),
                                     "Restaurer l'état par défaut sur une affectation de l'élève"

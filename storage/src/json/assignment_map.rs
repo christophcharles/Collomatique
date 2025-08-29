@@ -25,20 +25,20 @@ pub struct PeriodAssignments {
 /// JSON desc of assignments for a specific subject on a given period
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectAssignments {
-    pub excluded_students: BTreeSet<u64>,
+    pub assigned_students: BTreeSet<u64>,
 }
 
 impl From<&collomatique_state_colloscopes::assignments::PeriodAssignments> for PeriodAssignments {
     fn from(value: &collomatique_state_colloscopes::assignments::PeriodAssignments) -> Self {
         PeriodAssignments {
             subject_map: value
-                .subject_exclusion_map
+                .subject_map
                 .iter()
-                .map(|(subject_id, excluded_students)| {
+                .map(|(subject_id, assigned_students)| {
                     (
                         subject_id.inner(),
                         SubjectAssignments {
-                            excluded_students: excluded_students
+                            assigned_students: assigned_students
                                 .iter()
                                 .map(|x| x.inner())
                                 .collect(),
@@ -55,11 +55,11 @@ impl From<PeriodAssignments>
 {
     fn from(value: PeriodAssignments) -> Self {
         collomatique_state_colloscopes::assignments::PeriodAssignmentsExternalData {
-            subject_exclusion_map: value
+            subject_map: value
                 .subject_map
                 .into_iter()
                 .map(|(subject_id, subject_assignments)| {
-                    (subject_id, subject_assignments.excluded_students)
+                    (subject_id, subject_assignments.assigned_students)
                 })
                 .collect(),
         }
