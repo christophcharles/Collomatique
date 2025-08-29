@@ -155,7 +155,7 @@ impl ObjectiveSense {
 /// This is because you usually do not want to reverse an objective optimization sense. In effect, this means that the coefficients
 /// are taken as their absolute values.
 ///
-/// If you still want to reverse an objective, you can by using [Objective::reverse].
+/// If you still want to reverse an objective, you can by using [Objective::reverse] or [Objective::reversed].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Objective<V: UsableData> {
     /// linear expression to optimize
@@ -184,6 +184,8 @@ impl<V: UsableData> Objective<V> {
     ///
     /// This keeps the same expression but reverses the sense of optimization.
     /// 
+    /// It is similar to [Objective::reverse] but builds a new objective.
+    /// 
     /// **Beware !** This is almost always *not* what you want to do.
     ///
     /// ```
@@ -198,9 +200,33 @@ impl<V: UsableData> Objective<V> {
     ///
     /// assert_eq!(obj.reverse(), expected_obj);
     /// ```
-    pub fn reverse(&self) -> Objective<V> {
+    pub fn reversed(&self) -> Objective<V> {
+        self.clone().reverse()
+    }
+
+    /// Returns the reversed objective.
+    /// 
+    /// This keeps the same expression but reverses the sense of optimization.
+    /// 
+    /// It is similar to [Objective::reversed] but consumes the objective.
+    /// 
+    /// **Beware !** This is almost always *not* what you want to do.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{LinExpr, Objective, ObjectiveSense};
+    /// let func = LinExpr::<String>::var("a") + 2.0*LinExpr::<String>::var("b");
+    /// let sense = ObjectiveSense::Maximize;
+    /// let obj = Objective::new(func, sense);
+    ///
+    /// let expected_func = LinExpr::<String>::var("a") + 2.0*LinExpr::<String>::var("b");
+    /// let expected_sense = ObjectiveSense::Minimize;
+    /// let expected_obj = Objective::new(expected_func, expected_sense);
+    ///
+    /// assert_eq!(obj.reversed(), expected_obj);
+    /// ```
+    pub fn reverse(self) -> Objective<V> {
         Objective {
-            func: self.func.clone(),
+            func: self.func,
             sense: self.sense.reverse(),
         }
     }
