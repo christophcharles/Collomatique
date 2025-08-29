@@ -8,22 +8,15 @@ pub fn decode_entry(
     student_list: json::student_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    for (id, student) in student_list.map {
-        if pre_data
-            .student_list
-            .insert(
-                id,
-                collomatique_state_colloscopes::PersonWithContact {
-                    firstname: student.firstname,
-                    surname: student.surname,
-                    tel: student.telephone,
-                    email: student.email,
-                },
-            )
-            .is_some()
-        {
+    assert!(pre_data.students.student_map.is_empty());
+
+    let mut ids = BTreeSet::new();
+    for (id, student) in student_list.student_map {
+        if !ids.insert(id) {
             return Err(DecodeError::DuplicatedID);
         }
+        pre_data.students.student_map.insert(id, student.into());
     }
+
     Ok(())
 }

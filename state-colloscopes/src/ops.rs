@@ -37,11 +37,11 @@ impl Operation for Op {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StudentOp {
     /// Add a new student
-    Add(PersonWithContact),
+    Add(students::Student),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, PersonWithContact),
+    Update(StudentId, students::Student),
 }
 
 /// Period operation enumeration
@@ -146,11 +146,11 @@ impl From<AnnotatedTeacherOp> for AnnotatedOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedStudentOp {
     /// Add a new student (with fixed id)
-    Add(StudentId, PersonWithContact),
+    Add(StudentId, students::Student),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, PersonWithContact),
+    Update(StudentId, students::Student),
 }
 
 /// Period annotated operation enumeration

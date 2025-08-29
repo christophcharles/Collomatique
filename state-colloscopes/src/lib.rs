@@ -6,7 +6,8 @@
 
 use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
 use teachers::{Teachers, TeachersExternalData};
 
@@ -19,6 +20,7 @@ use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTe
 pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
 pub mod periods;
+pub mod students;
 pub mod subjects;
 pub mod teachers;
 
@@ -69,10 +71,10 @@ pub struct PersonWithContact {
 /// of [Eq] and [PartialEq] for [Data] relies on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InnerData {
-    student_list: BTreeMap<StudentId, PersonWithContact>,
     periods: periods::Periods,
     subjects: subjects::Subjects,
     teachers: teachers::Teachers,
+    students: students::Students,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -116,6 +118,10 @@ pub enum StudentError {
     /// The student id already exists
     #[error("student id ({0:?}) already exists")]
     StudentIdAlreadyExists(StudentId),
+
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
 }
 
 /// Errors for periods operations
@@ -134,6 +140,10 @@ pub enum PeriodError {
     /// The period is referenced by a subject
     #[error("period id ({0:?}) is referenced by subject {1:?}")]
     PeriodIsReferencedBySubject(PeriodId, SubjectId),
+
+    /// The period is referenced by a student
+    #[error("period id ({0:?}) is referenced by student {1:?}")]
+    PeriodIsReferencedByStudent(PeriodId, StudentId),
 }
 
 /// Errors for subject operations
@@ -298,7 +308,12 @@ impl Data {
     pub fn validate_student_id(&self, id: u64) -> Option<StudentId> {
         let student_id = unsafe { StudentId::new(id) };
 
-        if !self.inner_data.student_list.contains_key(&student_id) {
+        if !self
+            .inner_data
+            .students
+            .student_map
+            .contains_key(&student_id)
+        {
             return None;
         }
 
@@ -350,6 +365,26 @@ impl Data {
             subjects: new_subjects,
         })
     }
+
+    /// Promotes a [students::StudentExternalData] to a [students::Student] if it is valid
+    pub fn promote_student(
+        &self,
+        student: students::StudentExternalData,
+    ) -> Result<students::Student, u64> {
+        let mut new_excluded_periods = BTreeSet::new();
+
+        for period_id in student.excluded_periods {
+            let Some(validated_id) = self.validate_period_id(period_id) else {
+                return Err(period_id);
+            };
+            new_excluded_periods.insert(validated_id);
+        }
+
+        Ok(students::Student {
+            desc: student.desc,
+            excluded_periods: new_excluded_periods,
+        })
+    }
 }
 
 impl Data {
@@ -369,7 +404,7 @@ impl Data {
             assert!(ids_so_far.insert(id.inner()));
         }
 
-        for (id, _) in &self.inner_data.student_list {
+        for (id, _) in &self.inner_data.students.student_map {
             assert!(ids_so_far.insert(id.inner()));
         }
 
@@ -477,6 +512,40 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks that a subject is valid
+    fn validate_student_internal(
+        student: &students::Student,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), StudentError> {
+        for period_id in &student.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(StudentError::InvalidPeriodId(*period_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    fn validate_student(&self, student: &students::Student) -> Result<(), StudentError> {
+        let period_ids = self.build_period_ids();
+
+        Self::validate_student_internal(student, &period_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in subject data
+    fn check_students_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+        for (_student_id, student) in &self.inner_data.students.student_map {
+            Self::validate_student_internal(student, period_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -512,6 +581,7 @@ impl Data {
 
         self.check_subjects_data_consistency(&period_ids);
         self.check_teachers_data_consistency(&subject_ids);
+        self.check_students_data_consistency(&period_ids);
     }
 }
 
@@ -521,12 +591,11 @@ impl Data {
     /// This [Data] is basically empty and corresponds to the
     /// state of a new file
     pub fn new() -> Data {
-        let student_list = BTreeMap::new();
         Self::from_data(
-            student_list,
             PeriodsExternalData::default(),
             SubjectsExternalData::default(),
             TeachersExternalData::default(),
+            StudentsExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -536,15 +605,15 @@ impl Data {
     /// This will check the consistency of the data
     /// and will also do some internal checks, so this might fail.
     pub fn from_data(
-        student_list: BTreeMap<u64, PersonWithContact>,
         periods: periods::PeriodsExternalData,
         subjects: subjects::SubjectsExternalData,
         teachers: teachers::TeachersExternalData,
+        students: students::StudentsExternalData,
     ) -> Result<Data, tools::IdError> {
-        let student_ids = student_list.keys().copied();
+        let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
-        let teacher_ids = teachers.teacher_map.iter().map(|(id, _d)| *id);
+        let teacher_ids = teachers.teacher_map.keys().copied();
         let id_issuer = IdIssuer::new(student_ids, period_ids, subject_ids, teacher_ids)?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
@@ -563,14 +632,12 @@ impl Data {
         if !teachers.validate_all(&subject_ids) {
             return Err(tools::IdError::InvalidId);
         }
+        if !students.validate_all(&period_ids) {
+            return Err(tools::IdError::InvalidId);
+        }
 
         // Ids have been validated
-        let student_list = unsafe {
-            student_list
-                .into_iter()
-                .map(|(key, value)| (StudentId::new(key), value))
-                .collect()
-        };
+        let students = unsafe { Students::from_external_data(students) };
         let periods = unsafe { Periods::from_external_data(periods) };
         let subjects = unsafe { Subjects::from_external_data(subjects) };
         let teachers = unsafe { Teachers::from_external_data(teachers) };
@@ -578,10 +645,10 @@ impl Data {
         let data = Data {
             id_issuer,
             inner_data: InnerData {
-                student_list,
                 periods,
                 subjects,
                 teachers,
+                students,
             },
         };
 
@@ -590,9 +657,9 @@ impl Data {
         Ok(data)
     }
 
-    /// Get the student list
-    pub fn get_student_list(&self) -> &BTreeMap<StudentId, PersonWithContact> {
-        &self.inner_data.student_list
+    /// Get the students
+    pub fn get_students(&self) -> &students::Students {
+        &self.inner_data.students
     }
 
     /// Get the subjects
@@ -618,28 +685,36 @@ impl Data {
         student_op: &AnnotatedStudentOp,
     ) -> std::result::Result<(), StudentError> {
         match student_op {
-            AnnotatedStudentOp::Add(student_id, student) => {
-                if self.inner_data.student_list.contains_key(student_id) {
-                    return Err(StudentError::StudentIdAlreadyExists(student_id.clone()));
+            AnnotatedStudentOp::Add(new_id, student) => {
+                if self.inner_data.students.student_map.get(new_id).is_some() {
+                    return Err(StudentError::StudentIdAlreadyExists(*new_id));
                 }
+                self.validate_student(student)?;
 
                 self.inner_data
-                    .student_list
-                    .insert(student_id.clone(), student.clone());
+                    .students
+                    .student_map
+                    .insert(*new_id, student.clone());
+
                 Ok(())
             }
-            AnnotatedStudentOp::Remove(student_id) => {
-                if self.inner_data.student_list.remove(&student_id).is_none() {
-                    return Err(StudentError::InvalidStudentId(student_id.clone()));
+            AnnotatedStudentOp::Remove(id) => {
+                if !self.inner_data.students.student_map.contains_key(id) {
+                    return Err(StudentError::InvalidStudentId(*id));
                 }
+
+                self.inner_data.students.student_map.remove(id);
+
                 Ok(())
             }
-            AnnotatedStudentOp::Update(student_id, student) => {
-                let Some(old_student) = self.inner_data.student_list.get_mut(&student_id) else {
-                    return Err(StudentError::InvalidStudentId(student_id.clone()));
+            AnnotatedStudentOp::Update(id, new_student) => {
+                self.validate_student(new_student)?;
+                let Some(current_student) = self.inner_data.students.student_map.get_mut(id) else {
+                    return Err(StudentError::InvalidStudentId(*id));
                 };
 
-                *old_student = student.clone();
+                *current_student = new_student.clone();
+
                 Ok(())
             }
         }
@@ -704,6 +779,15 @@ impl Data {
                         return Err(PeriodError::PeriodIsReferencedBySubject(
                             *period_id,
                             *subject_id,
+                        ));
+                    }
+                }
+
+                for (student_id, student) in &self.inner_data.students.student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedByStudent(
+                            *period_id,
+                            *student_id,
                         ));
                     }
                 }
@@ -867,14 +951,24 @@ impl Data {
     ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, _student) => {
-                if self.inner_data.student_list.contains_key(student_id) {
+                if self
+                    .inner_data
+                    .students
+                    .student_map
+                    .contains_key(student_id)
+                {
                     return Err(StudentError::StudentIdAlreadyExists(student_id.clone()));
                 }
 
                 Ok(AnnotatedStudentOp::Remove(student_id.clone()))
             }
             AnnotatedStudentOp::Remove(student_id) => {
-                let Some(old_student) = self.inner_data.student_list.get(&student_id).cloned()
+                let Some(old_student) = self
+                    .inner_data
+                    .students
+                    .student_map
+                    .get(&student_id)
+                    .cloned()
                 else {
                     return Err(StudentError::InvalidStudentId(student_id.clone()));
                 };
@@ -882,7 +976,12 @@ impl Data {
                 Ok(AnnotatedStudentOp::Add(student_id.clone(), old_student))
             }
             AnnotatedStudentOp::Update(student_id, _student) => {
-                let Some(old_student) = self.inner_data.student_list.get(&student_id).cloned()
+                let Some(old_student) = self
+                    .inner_data
+                    .students
+                    .student_map
+                    .get(&student_id)
+                    .cloned()
                 else {
                     return Err(StudentError::InvalidStudentId(student_id.clone()));
                 };
