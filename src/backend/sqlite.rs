@@ -53,11 +53,33 @@ use sqlx::migrate::MigrateDatabase;
 use std::num::NonZeroU32;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+struct CostsAdjustementsDb {
+    max_interrogations_per_day_for_single_student: i32,
+    max_interrogations_per_day_for_all_students: i32,
+    interrogations_per_week_range_for_single_student: i32,
+    interrogations_per_week_range_for_all_students: i32,
+    balancing: i32,
+}
+
+impl Default for CostsAdjustementsDb {
+    fn default() -> Self {
+        CostsAdjustementsDb {
+            max_interrogations_per_day_for_single_student: 1,
+            max_interrogations_per_day_for_all_students: 1,
+            interrogations_per_week_range_for_single_student: 1,
+            interrogations_per_week_range_for_all_students: 1,
+            balancing: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct GeneralDataDb {
     interrogations_per_week: Option<std::ops::Range<u32>>,
     max_interrogations_per_day: Option<NonZeroU32>,
     week_count: NonZeroU32,
     periodicity_cuts: BTreeSet<NonZeroU32>,
+    costs_adjustements: CostsAdjustementsDb,
 }
 
 impl Store {
@@ -339,6 +361,7 @@ CREATE TABLE "slot_group_items" (
             max_interrogations_per_day: None,
             week_count: NonZeroU32::new(30).unwrap(),
             periodicity_cuts: BTreeSet::new(),
+            costs_adjustements: CostsAdjustementsDb::default(),
         }).expect("should serialize to valid json"))
         .execute(pool)
         .await?;
@@ -424,6 +447,21 @@ impl Storage for Store {
             max_interrogations_per_day: general_data.max_interrogations_per_day.clone(),
             week_count: general_data.week_count,
             periodicity_cuts: general_data.periodicity_cuts.clone(),
+            costs_adjustements: CostsAdjustementsDb {
+                max_interrogations_per_day_for_single_student: general_data
+                    .costs_adjustements
+                    .max_interrogations_per_day_for_single_student,
+                max_interrogations_per_day_for_all_students: general_data
+                    .costs_adjustements
+                    .max_interrogations_per_day_for_all_students,
+                interrogations_per_week_range_for_single_student: general_data
+                    .costs_adjustements
+                    .interrogations_per_week_range_for_single_student,
+                interrogations_per_week_range_for_all_students: general_data
+                    .costs_adjustements
+                    .interrogations_per_week_range_for_all_students,
+                balancing: general_data.costs_adjustements.balancing,
+            },
         };
 
         let mut conn = self.pool.acquire().await.map_err(Error::from)?;
@@ -475,7 +513,21 @@ impl Storage for Store {
             max_interrogations_per_day: general_data_json.max_interrogations_per_day,
             week_count: general_data_json.week_count,
             periodicity_cuts: general_data_json.periodicity_cuts,
-            costs_adjustements: CostsAdjustements::default(),
+            costs_adjustements: CostsAdjustements {
+                max_interrogations_per_day_for_single_student: general_data_json
+                    .costs_adjustements
+                    .max_interrogations_per_day_for_single_student,
+                max_interrogations_per_day_for_all_students: general_data_json
+                    .costs_adjustements
+                    .max_interrogations_per_day_for_all_students,
+                interrogations_per_week_range_for_single_student: general_data_json
+                    .costs_adjustements
+                    .interrogations_per_week_range_for_single_student,
+                interrogations_per_week_range_for_all_students: general_data_json
+                    .costs_adjustements
+                    .interrogations_per_week_range_for_all_students,
+                balancing: general_data_json.costs_adjustements.balancing,
+            },
         };
 
         Ok(general_data)
