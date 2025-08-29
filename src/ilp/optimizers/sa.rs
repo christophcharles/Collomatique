@@ -14,7 +14,7 @@ pub type TemperatureFn = Debuggable<dyn Fn(usize) -> f64>;
 
 impl Default for TemperatureFn {
     fn default() -> Self {
-        crate::debuggable!(|k: usize| 1000000. / (k as f64))
+        crate::debuggable!(|k: usize| 1000. / (k as f64))
     }
 }
 
