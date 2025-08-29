@@ -1206,10 +1206,10 @@ pub enum BalancingConstraints {
     StrictWithCuts,
     StrictWithCutsAndOverall,
     Strict,
-    OptimizeAndNonConsecutive,
-    OverallAndNonConsecutive,
-    StrictWithCutsAndNonConsecutive,
-    StrictWithCutsAndOverallAndNonConsecutive,
+    OptimizeAndConsecutiveDifferentTeachers,
+    OverallAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndOverallAndConsecutiveDifferentTeachers,
 }
 
 impl std::fmt::Display for BalancingConstraints {
@@ -1223,12 +1223,14 @@ impl std::fmt::Display for BalancingConstraints {
                 BalancingConstraints::StrictWithCuts => "StrictWithCuts",
                 BalancingConstraints::StrictWithCutsAndOverall => "StrictWithCutsAndOverall",
                 BalancingConstraints::Strict => "Strict",
-                BalancingConstraints::OptimizeAndNonConsecutive => "OptimizeAndNonConsecutive",
-                BalancingConstraints::OverallAndNonConsecutive => "OverallAndNonConsecutive",
-                BalancingConstraints::StrictWithCutsAndNonConsecutive =>
-                    "StrictWithCutsAndNonConsecutive",
-                BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive =>
-                    "StrictWithCutsAndOverallAndNonConsecutive",
+                BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers =>
+                    "OptimizeAndConsecutiveDifferentTeachers",
+                BalancingConstraints::OverallAndConsecutiveDifferentTeachers =>
+                    "OverallAndConsecutiveDifferentTeachers",
+                BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers =>
+                    "StrictWithCutsAndConsecutiveDifferentTeachers",
+                BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers =>
+                    "StrictWithCutsAndOverallAndConsecutiveDifferentTeachers",
             }
         )
     }
@@ -1252,13 +1254,17 @@ impl From<&crate::backend::BalancingConstraints> for BalancingConstraints {
             BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
             BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
             BC::Strict => BalancingConstraints::Strict,
-            BC::OptimizeAndNonConsecutive => BalancingConstraints::OptimizeAndNonConsecutive,
-            BC::OverallAndNonConsecutive => BalancingConstraints::OverallAndNonConsecutive,
-            BC::StrictWithCutsAndNonConsecutive => {
-                BalancingConstraints::StrictWithCutsAndNonConsecutive
+            BC::OptimizeAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers
             }
-            BC::StrictWithCutsAndOverallAndNonConsecutive => {
-                BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive
+            BC::OverallAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::OverallAndConsecutiveDifferentTeachers
+            }
+            BC::StrictWithCutsAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers
+            }
+            BC::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
+                BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers
             }
         }
     }
@@ -1279,13 +1285,17 @@ impl From<&BalancingConstraints> for crate::backend::BalancingConstraints {
             BalancingConstraints::StrictWithCuts => BC::StrictWithCuts,
             BalancingConstraints::StrictWithCutsAndOverall => BC::StrictWithCutsAndOverall,
             BalancingConstraints::Strict => BC::Strict,
-            BalancingConstraints::OptimizeAndNonConsecutive => BC::OptimizeAndNonConsecutive,
-            BalancingConstraints::OverallAndNonConsecutive => BC::OverallAndNonConsecutive,
-            BalancingConstraints::StrictWithCutsAndNonConsecutive => {
-                BC::StrictWithCutsAndNonConsecutive
+            BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers => {
+                BC::OptimizeAndConsecutiveDifferentTeachers
             }
-            BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive => {
-                BC::StrictWithCutsAndOverallAndNonConsecutive
+            BalancingConstraints::OverallAndConsecutiveDifferentTeachers => {
+                BC::OverallAndConsecutiveDifferentTeachers
+            }
+            BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers => {
+                BC::StrictWithCutsAndConsecutiveDifferentTeachers
+            }
+            BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
+                BC::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers
             }
         }
     }
