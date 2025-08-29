@@ -469,6 +469,20 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
         Self::default()
     }
 
+    /// Converts to a different matrix representation
+    /// 
+    /// To simplify default traits, the builder is associated to a matrix representation.
+    /// This functions allows converting the builder to another representation.
+    pub fn convert_repr<P2: ProblemRepr<V>>(self) -> ProblemBuilder<V, C, P2> {
+        ProblemBuilder {
+            constraints: self.constraints,
+            variables: self.variables,
+            objective_func: self.objective_func,
+            objective_sense: self.objective_sense,
+            _phantom_data: std::marker::PhantomData,
+        }
+    }
+
     /// Sets the definition of a variable and declares it at the same time.
     ///
     /// This is the primary function (along with [ProblemBuilder::set_variables])
@@ -1241,10 +1255,15 @@ pub struct FeasableConfig<'a, V: UsableData, C: UsableData, P: ProblemRepr<V> = 
 );
 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> FeasableConfig<'a, V, C, P> {
+    /// Turns a [FeasableConfig] back into a [Config].
     pub fn into_inner(self) -> Config<'a, V, C, P> {
         self.0
     }
 
+    /// Gives a reference to the inner [Config].
+    /// 
+    /// This is normally not needed as [FeasableConfig]
+    /// implements [std::ops::Deref].
     pub fn inner(&self) -> &Config<'a, V, C, P> {
         &self.0
     }
