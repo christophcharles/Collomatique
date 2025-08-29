@@ -20,12 +20,12 @@ impl<'a> Solver<'a> {
 use super::FeasabilitySolver;
 use std::collections::BTreeSet;
 
-impl<'a> FeasabilitySolver for Solver<'a> {
+impl<'a> FeasabilitySolver<'a> for Solver<'a> {
     fn restore_feasability_exclude(
         &self,
         config: &Config,
         exclude_list: &BTreeSet<&FeasableConfig>,
-    ) -> Option<FeasableConfig> {
+    ) -> Option<FeasableConfig<'a>> {
         let config_repr = self.mat_repr.config(config);
 
         use std::collections::VecDeque;
