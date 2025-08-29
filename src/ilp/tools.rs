@@ -57,7 +57,7 @@ impl<'a> MatRepr<'a> {
         }
     }
 
-    pub fn config_repr<'b>(&'b self, config: &Config) -> ConfigRepr<'a,'b> {
+    pub fn config<'b>(&'b self, config: &Config) -> ConfigRepr<'a,'b> {
         let p = self.problem.variables.len();
 
         let mut values = Array1::zeros(p);
