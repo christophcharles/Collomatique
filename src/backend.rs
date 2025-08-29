@@ -1056,15 +1056,73 @@ pub trait Storage: Send + Sync {
     async unsafe fn time_slots_add_unchecked(
         &mut self,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
-    ) -> std::result::Result<
-        Self::TimeSlotId,
-        Cross3Error<Self::InternalError, Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
-    >;
+    ) -> std::result::Result<Self::TimeSlotId, Self::InternalError>;
     async unsafe fn time_slots_remove_unchecked(
         &mut self,
         index: Self::TimeSlotId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>;
     async unsafe fn time_slots_update_unchecked(
+        &mut self,
+        index: Self::TimeSlotId,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn time_slots_check_id(
+        &self,
+        index: Self::TimeSlotId,
+    ) -> std::result::Result<bool, Self::InternalError> {
+        async move {
+            let time_slots = self.time_slots_get_all().await?;
+
+            Ok(time_slots.contains_key(&index))
+        }
+    }
+    async fn time_slots_check_data(
+        &self,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> std::result::Result<
+        DataStatusWithId3<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+        Self::InternalError,
+    > {
+        async move {
+            let subjects = self.subjects_get_all().await?;
+            if !subjects.contains_key(&time_slot.subject_id) {
+                return Ok(DataStatusWithId3::BadCrossId1(time_slot.subject_id));
+            }
+
+            let teachers = self.teachers_get_all().await?;
+            if !teachers.contains_key(&time_slot.teacher_id) {
+                return Ok(DataStatusWithId3::BadCrossId2(time_slot.teacher_id));
+            }
+
+            let week_patterns = self.week_patterns_get_all().await?;
+            if !week_patterns.contains_key(&time_slot.week_pattern_id) {
+                return Ok(DataStatusWithId3::BadCrossId3(time_slot.week_pattern_id));
+            }
+
+            Ok(DataStatusWithId3::Ok)
+        }
+    }
+    async fn time_slots_add(
+        &mut self,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> std::result::Result<
+        Self::TimeSlotId,
+        Cross3Error<Self::InternalError, Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    > {
+        async move {
+            let data_status = self.time_slots_check_data(time_slot).await?;
+            match data_status {
+                DataStatusWithId3::BadCrossId1(id1) => Err(Cross3Error::InvalidCrossId1(id1)),
+                DataStatusWithId3::BadCrossId2(id2) => Err(Cross3Error::InvalidCrossId2(id2)),
+                DataStatusWithId3::BadCrossId3(id3) => Err(Cross3Error::InvalidCrossId3(id3)),
+                DataStatusWithId3::Ok => {
+                    let id = unsafe { self.time_slots_add_unchecked(time_slot) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
+    async fn time_slots_update(
         &mut self,
         index: Self::TimeSlotId,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
@@ -1077,7 +1135,24 @@ pub trait Storage: Send + Sync {
             Self::TeacherId,
             Self::WeekPatternId,
         >,
-    >;
+    > {
+        async move {
+            if !self.time_slots_check_id(index).await? {
+                return Err(Cross3IdError::InvalidId(index));
+            }
+
+            let data_status = self.time_slots_check_data(time_slot).await?;
+            match data_status {
+                DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
+                DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
+                DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+                DataStatusWithId3::Ok => {
+                    unsafe { self.time_slots_update_unchecked(index, time_slot) }.await?;
+                    Ok(())
+                }
+            }
+        }
+    }
 
     async fn groupings_get_all(
         &self,
