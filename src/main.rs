@@ -1019,7 +1019,22 @@ async fn main() -> Result<()> {
     let ilp_translator = data.ilp_translator();
 
     println!("Generating ILP problem...");
-    let problem = ilp_translator.problem();
+    let problem = ilp_translator
+        .problem_builder()
+        .eval_fn(collomatique::debuggable!(|x| {
+            if x.get(&collomatique::gen::colloscope::Variable::GroupInSlot {
+                subject: 0,
+                slot: 0,
+                group: 0,
+            })
+            .unwrap()
+            {
+                100.
+            } else {
+                0.
+            }
+        }))
+        .build();
 
     println!("{}", problem);
 
@@ -1037,19 +1052,23 @@ async fn main() -> Result<()> {
         ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
 
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-    let mut iterator = genetic_optimizer.iterate(initializer, solver)?;
+    let random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let iterator = genetic_optimizer.iterate(
+        initializer,
+        solver,
+        random_gen.clone(),
+        collomatique::ilp::optimizers::genetic::RandomCrossingPolicy::new(random_gen.clone()),
+        collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), 0.01),
+    )?;
 
-    let first_pop = iterator.next().unwrap();
-
-    let m = first_pop
-        .iter()
-        .max_by_key(|sol| ordered_float::OrderedFloat(sol.score))
-        .unwrap();
-    println!(
-        "solution: {:?}\nscore: {}",
-        ilp_translator.read_solution(&m.config),
-        m.score
-    );
+    for population in iterator {
+        let m = population.last().unwrap();
+        eprintln!(
+            "solution: {:?}\nscore: {}",
+            ilp_translator.read_solution(&m.config),
+            m.cost
+        );
+    }
 
     /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
