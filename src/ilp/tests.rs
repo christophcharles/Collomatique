@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_config_from_iterator() {
-    let pb = crate::ilp::ProblemBuilder::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_variables(["x", "y", "z", "t"])
         .unwrap()
         .build();
@@ -22,7 +22,7 @@ fn test_config_from_iterator() {
 
 #[test]
 fn invalid_variable_in_config() {
-    let pb = crate::ilp::ProblemBuilder::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_variables(["x", "y", "z", "t"])
         .unwrap()
         .build();
@@ -44,7 +44,7 @@ fn test_is_feasable() {
     let c = Expr::<String>::var("c");
     let d = Expr::<String>::var("d");
 
-    let pb = crate::ilp::ProblemBuilder::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_variable("a")
         .unwrap()
         .add_variable("b")
@@ -116,14 +116,17 @@ fn test_is_feasable_no_constraint() {
 
 #[test]
 fn problem_extra_variable() {
-    let pb = ProblemBuilder::new().add_variable("X").unwrap().build();
+    let pb = ProblemBuilder::<String>::new()
+        .add_variable("X")
+        .unwrap()
+        .build();
 
     assert_eq!(pb.variables, BTreeSet::from([String::from("X")]));
 }
 
 #[test]
 fn problem_extra_variables() {
-    let pb = ProblemBuilder::new()
+    let pb = ProblemBuilder::<String>::new()
         .add_variable("X")
         .unwrap()
         .add_variable("Y")
@@ -147,7 +150,7 @@ fn problem_extra_variables() {
 fn problem_undeclared_variable() {
     use crate::ilp::linexpr::Expr;
 
-    let res = ProblemBuilder::new()
+    let res = ProblemBuilder::<String>::new()
         .add_variable("X")
         .unwrap()
         .add_constraint((Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)));
@@ -175,7 +178,42 @@ fn problem_iterate_simplify() {
         BTreeMap::from([(String::from("X"), true), (String::from("Z"), false)]);
 
     assert_eq!(
-        ProblemBuilder::iterate_simplify(&constraints),
+        ProblemBuilder::<String>::iterate_simplify(&constraints),
         (simplified_constraints, trivialized_variables)
     );
+}
+
+#[test]
+fn problem_filter_variable() {
+    use crate::ilp::linexpr::Expr;
+
+    let pb1 = ProblemBuilder::<String>::new()
+        .add_variables(["X", "Y", "Z", "W"])
+        .unwrap()
+        .add_constants([("T", false), ("S", true)])
+        .unwrap()
+        .add_constraints([
+            (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
+            (Expr::var("X") + Expr::var("Z")).eq(&Expr::constant(1)),
+            (Expr::var("Y") + Expr::var("Z")).leq(&Expr::constant(1)),
+            (Expr::var("Y") + Expr::var("W")).leq(&Expr::constant(1)),
+            (Expr::var("Z") + Expr::var("W")).eq(&Expr::constant(1)),
+        ])
+        .unwrap()
+        .filter_variables(|v| (*v != String::from("Z")) && (*v != String::from("S")));
+
+    let pb2 = ProblemBuilder::<String>::new()
+        .add_variables(["X", "Y", "W"])
+        .unwrap()
+        .add_constants([("T", false)])
+        .unwrap()
+        .add_constraints([
+            (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
+            (Expr::var("Y") + Expr::var("W")).leq(&Expr::constant(1)),
+        ])
+        .unwrap();
+
+    assert_eq!(pb1.constraints, pb2.constraints);
+    assert_eq!(pb1.variables, pb2.variables);
+    assert_eq!(pb1.constants, pb2.constants);
 }

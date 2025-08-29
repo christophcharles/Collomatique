@@ -1,38 +1,38 @@
-pub trait RandomGen {
-    fn randbool(&mut self) -> bool;
-    fn random(&mut self) -> f64;
-    fn rand_in_range(&mut self, range: std::ops::Range<usize>) -> usize;
-    fn rand_elem<T: Clone>(&mut self, elems: &[T]) -> T {
+pub trait RandomGen: Clone + Send + Sync {
+    fn randbool(&self) -> bool;
+    fn random(&self) -> f64;
+    fn rand_in_range(&self, range: std::ops::Range<usize>) -> usize;
+    fn rand_elem<T: Clone>(&self, elems: &[T]) -> T {
         let i = self.rand_in_range(0..elems.len());
         elems[i].clone()
     }
 }
 
-pub struct DefaultRndGen {
-    thread_rng: rand::rngs::ThreadRng,
-}
+#[derive(Clone, Debug, Default)]
+pub struct DefaultRndGen {}
 
 impl DefaultRndGen {
     pub fn new() -> Self {
-        DefaultRndGen {
-            thread_rng: rand::thread_rng(),
-        }
+        DefaultRndGen {}
     }
 }
 
 impl RandomGen for DefaultRndGen {
-    fn randbool(&mut self) -> bool {
+    fn randbool(&self) -> bool {
         use rand::Rng;
-        self.thread_rng.gen_bool(0.5)
+        let mut thread_rng = rand::thread_rng();
+        thread_rng.gen_bool(0.5)
     }
 
-    fn random(&mut self) -> f64 {
+    fn random(&self) -> f64 {
         use rand::Rng;
-        self.thread_rng.gen::<f64>()
+        let mut thread_rng = rand::thread_rng();
+        thread_rng.gen::<f64>()
     }
 
-    fn rand_in_range(&mut self, range: std::ops::Range<usize>) -> usize {
+    fn rand_in_range(&self, range: std::ops::Range<usize>) -> usize {
         use rand::Rng;
-        self.thread_rng.gen_range(range)
+        let mut thread_rng = rand::thread_rng();
+        thread_rng.gen_range(range)
     }
 }
