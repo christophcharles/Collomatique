@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::tools::{ConfigRepr, MatRepr};
+use crate::ilp::ndtools::{ConfigRepr, MatRepr};
 use crate::ilp::{Config, FeasableConfig, Problem};
 
 #[derive(Debug, Clone)]
