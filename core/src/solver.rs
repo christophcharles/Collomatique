@@ -527,6 +527,151 @@ where
     >,
 }
 
+/// Represents a partial solution
+///
+/// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
+/// This type will be used in the rest of the program. However, this representation usually lacks
+/// some information to properly test the solution.
+///
+/// This is the decoration provided here: all the necessary variables are correctly reconstructed
+/// and stored using [BaseConstraints::reconstruct_structure_variables] and [ExtraConstraints::reconstruct_extra_structure_variables].
+///
+/// Such a decorated partial solution is constructued from a [BaseConstraints::PartialSolution]
+/// by calling [Problem::decorate_partial_solution].
+#[derive(Clone)]
+pub struct DecoratedPartialSolution<'a, M, S, T, P>
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+{
+    problem: &'a Problem<M, S, T, P>,
+    internal_solution: T::PartialSolution,
+    config_data: ConfigData<ExtraVariable<M, S, IdVariable>>,
+}
+
+impl<'a, M, S, T, P> DecoratedPartialSolution<'a, M, S, T, P>
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+{
+    /// Returns the inner solution
+    ///
+    /// This returns the [BaseConstraints::PartialSolution]
+    /// the rest of the program usually cares about.
+    pub fn inner(&self) -> &T::PartialSolution {
+        &self.internal_solution
+    }
+
+    /// Returns the inner solution
+    ///
+    /// This method works like [Self::inner] but consumes the [DecoratedSolution].
+    pub fn into_inner(self) -> T::PartialSolution {
+        self.internal_solution
+    }
+
+    /// Checks whether the solution is complete
+    ///
+    /// A partial solution is a solution for which all the variables have not been defined.
+    /// A complete solution is a solution for which all the variables have a defined value.
+    ///
+    /// This functions returns `true` if the partial solution actually has all its variables defined.
+    pub fn is_complete(&self) -> bool {
+        use std::collections::BTreeSet;
+
+        let defined_variables: BTreeSet<_> = self.config_data.get_variables().collect();
+        let problem_variables: BTreeSet<_> =
+            self.problem.ilp_problem.get_variables().keys().collect();
+
+        assert!(defined_variables.is_subset(&problem_variables));
+        defined_variables == problem_variables
+    }
+
+    /// Blame general constraints
+    ///
+    /// Returns a list of descriptions of general constraints that cannot be satisfied.
+    /// If no such constraints exist, an empty list is returned.
+    ///
+    /// Because the solution is potentially partial, it is not always possible
+    /// to check if all constraints are indeed satisfied or possibly satisfied.
+    ///
+    /// So the returned list can be empty and still the solution has no feasable extension.
+    pub fn partial_blame(&self) -> Vec<T::GeneralConstraintDesc> {
+        self.problem
+            .ilp_problem
+            .partial_blame(&self.config_data)
+            .iter()
+            .filter_map(|(_c, d)| self.problem.general_constraint_descs.get(d).cloned())
+            .collect()
+    }
+
+    /// Blame general constraints for problem extension
+    ///
+    /// Returns a list of descriptions of general constraints from a problem extension that cannot be satisfied.
+    /// The problem extension to consider is given by the translator used.
+    ///
+    /// Because the solution is potentially partial, it is not always possible
+    /// to check if all constraints are indeed satisfied or possibly satisfied.
+    ///
+    /// If no such constraints exist, an empty list is returned.
+    pub fn partial_blame_extra<E: ExtraConstraints<T>>(
+        &self,
+        translator: &ExtraTranslator<T, E>,
+    ) -> Vec<E::GeneralConstraintDesc> {
+        self.problem
+            .ilp_problem
+            .partial_blame(&self.config_data)
+            .iter()
+            .filter_map(|(_c, d)| translator.general_c_map.get(d).cloned())
+            .collect()
+    }
+
+    /// Blame structure constraints
+    ///
+    /// Returns a list of descriptions of structure constraints that cannot be satisfied.
+    /// If no such constraints exist, an empty list is returned.
+    ///
+    /// Because the solution is potentially partial, it is not always possible
+    /// to check if all constraints are indeed satisfied or possibly satisfied.
+    ///
+    /// If no programming error is present in the reconstruction functions, this should
+    /// *always* return an empty list.
+    pub fn partial_check_structure(&self) -> Vec<T::StructureConstraintDesc> {
+        self.problem
+            .ilp_problem
+            .partial_blame(&self.config_data)
+            .iter()
+            .filter_map(|(_c, d)| self.problem.structure_constraint_descs.get(d).cloned())
+            .collect()
+    }
+
+    /// Blame structure constraints for problem extension
+    ///
+    /// Returns a list of descriptions of structure constraints from a problem extension that cannot be satisfied.
+    /// The problem extension to consider is given by the translator used.
+    ///
+    /// Because the solution is potentially partial, it is not always possible
+    /// to check if all constraints are indeed satisfied or possibly satisfied.
+    ///
+    /// If no such constraints exist, an empty list is returned.
+    /// If no programming error is present in the reconstruction functions, this should
+    /// *always* return an empty list.
+    pub fn partial_check_structure_extra<E: ExtraConstraints<T>>(
+        &self,
+        translator: &ExtraTranslator<T, E>,
+    ) -> Vec<E::StructureConstraintDesc> {
+        self.problem
+            .ilp_problem
+            .partial_blame(&self.config_data)
+            .iter()
+            .filter_map(|(_c, d)| translator.structure_c_map.get(d).cloned())
+            .collect()
+    }
+}
+
 /// Represents a (possibly non-feasable) solution
 ///
 /// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
