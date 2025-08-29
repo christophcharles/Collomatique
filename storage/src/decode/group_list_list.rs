@@ -11,9 +11,6 @@ pub fn decode_entry(
     if !pre_data.group_lists.group_list_map.is_empty() {
         return Err(DecodeError::GroupListsAlreadyDecoded);
     }
-    if !pre_data.group_lists.subjects_associations.is_empty() {
-        return Err(DecodeError::GroupListsAlreadyDecoded);
-    }
 
     let mut ids = BTreeSet::new();
 
@@ -28,7 +25,16 @@ pub fn decode_entry(
             .insert(group_list_id, pre_group_list);
     }
 
-    pre_data.group_lists.subjects_associations = group_lists.subjects_associations;
+    for (period_id, subject_map) in group_lists.subjects_associations {
+        let Some(pre_subject_map) = pre_data
+            .group_lists
+            .subjects_associations
+            .get_mut(&period_id)
+        else {
+            return Err(DecodeError::InvalidId);
+        };
+        *pre_subject_map = subject_map;
+    }
 
     Ok(())
 }

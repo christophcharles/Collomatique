@@ -1,4 +1,4 @@
-use crate::rpc::cmd_msg::{MsgGroupListId, MsgStudentId, MsgSubjectId};
+use crate::rpc::cmd_msg::{MsgGroupListId, MsgPeriodId, MsgStudentId, MsgSubjectId};
 
 use super::*;
 
@@ -252,7 +252,9 @@ impl From<crate::ops::PrefillGroupListError> for PrefillGroupListError {
 pub enum AssignGroupListToSubjectError {
     InvalidGroupListId(MsgGroupListId),
     InvalidSubjectId(MsgSubjectId),
+    InvalidPeriodId(MsgPeriodId),
     SubjectHasNoInterrogation(MsgSubjectId),
+    SubjectDoesNotRunOnPeriod(MsgSubjectId, MsgPeriodId),
 }
 
 impl std::fmt::Display for AssignGroupListToSubjectError {
@@ -268,11 +270,21 @@ impl std::fmt::Display for AssignGroupListToSubjectError {
             AssignGroupListToSubjectError::InvalidSubjectId(id) => {
                 write!(f, "L'identifiant {} ne correspond à aucune matière", id.0)
             }
+            AssignGroupListToSubjectError::InvalidPeriodId(id) => {
+                write!(f, "L'identifiant {} ne correspond à aucune période", id.0)
+            }
             AssignGroupListToSubjectError::SubjectHasNoInterrogation(id) => {
                 write!(
                     f,
                     "La matière {} n'a pas de colles et ne peut donc être associée à une liste de groupes",
                     id.0
+                )
+            }
+            AssignGroupListToSubjectError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                write!(
+                    f,
+                    "La matière {} n'a pas lieu pendant la période {}",
+                    subject_id.0, period_id.0,
                 )
             }
         }
@@ -291,6 +303,16 @@ impl From<crate::ops::AssignGroupListToSubjectError> for AssignGroupListToSubjec
             crate::ops::AssignGroupListToSubjectError::SubjectHasNoInterrogation(id) => {
                 AssignGroupListToSubjectError::SubjectHasNoInterrogation(id.into())
             }
+            crate::ops::AssignGroupListToSubjectError::InvalidPeriodId(id) => {
+                AssignGroupListToSubjectError::InvalidPeriodId(id.into())
+            }
+            crate::ops::AssignGroupListToSubjectError::SubjectDoesNotRunOnPeriod(
+                subject_id,
+                period_id,
+            ) => AssignGroupListToSubjectError::SubjectDoesNotRunOnPeriod(
+                subject_id.into(),
+                period_id.into(),
+            ),
         }
     }
 }

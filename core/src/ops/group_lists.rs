@@ -9,6 +9,7 @@ pub enum GroupListsUpdateWarning {
     LooseSubjectAssociation(
         collomatique_state_colloscopes::GroupListId,
         collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
     ),
 }
 
@@ -36,7 +37,7 @@ impl GroupListsUpdateWarning {
                     group_list.params.name, student.desc.firstname, student.desc.surname,
                 ))
             }
-            Self::LooseSubjectAssociation(group_list_id, subject_id) => {
+            Self::LooseSubjectAssociation(group_list_id, subject_id, period_id) => {
                 let Some(group_list) = data
                     .get_data()
                     .get_group_lists()
@@ -48,9 +49,16 @@ impl GroupListsUpdateWarning {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
                     return None;
                 };
+                let Some(period_num) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
                 Some(format!(
-                    "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\"",
-                    subject.parameters.name, group_list.params.name,
+                    "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
+                    subject.parameters.name, group_list.params.name, period_num+1
                 ))
             }
         }
@@ -70,6 +78,7 @@ pub enum GroupListsUpdateOp {
         collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups,
     ),
     AssignGroupListToSubject(
+        collomatique_state_colloscopes::PeriodId,
         collomatique_state_colloscopes::SubjectId,
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
@@ -136,8 +145,15 @@ pub enum AssignGroupListToSubjectError {
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    #[error("Period ID {0:?} is invalid")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
     #[error("Subject {0:?} has no interrogation and does not need a group list")]
     SubjectHasNoInterrogation(collomatique_state_colloscopes::SubjectId),
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    SubjectDoesNotRunOnPeriod(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GroupListsUpdateOp {
@@ -151,7 +167,11 @@ impl GroupListsUpdateOp {
             GroupListsUpdateOp::PrefillGroupList(_id, _prefilled_groups) => {
                 "Modifier le préremplissage d'une liste de groupes".into()
             }
-            GroupListsUpdateOp::AssignGroupListToSubject(_subject_id, group_list_id) => {
+            GroupListsUpdateOp::AssignGroupListToSubject(
+                _period_id,
+                _subject_id,
+                group_list_id,
+            ) => {
                 if group_list_id.is_some() {
                     "Affecter une liste de groupes à une matière".into()
                 } else {
@@ -193,21 +213,28 @@ impl GroupListsUpdateOp {
             GroupListsUpdateOp::DeleteGroupList(group_list_id) => {
                 let mut output = vec![];
 
-                for (subject_id, associated_id) in
+                for (period_id, subject_map) in
                     &data.get_data().get_group_lists().subjects_associations
                 {
-                    if *group_list_id == *associated_id {
-                        output.push(GroupListsUpdateWarning::LooseSubjectAssociation(
-                            *group_list_id,
-                            *subject_id,
-                        ));
+                    for (subject_id, associated_id) in subject_map {
+                        if *group_list_id == *associated_id {
+                            output.push(GroupListsUpdateWarning::LooseSubjectAssociation(
+                                *group_list_id,
+                                *subject_id,
+                                *period_id,
+                            ));
+                        }
                     }
                 }
 
                 output
             }
             GroupListsUpdateOp::PrefillGroupList(_id, _prefilled_groups) => vec![],
-            GroupListsUpdateOp::AssignGroupListToSubject(_subject_id, _group_list_id) => vec![],
+            GroupListsUpdateOp::AssignGroupListToSubject(
+                _period_id,
+                _subject_id,
+                _group_list_id,
+            ) => vec![],
         }
     }
 
@@ -345,22 +372,25 @@ impl GroupListsUpdateOp {
                     assert!(result.is_none());
                 }
 
-                for (subject_id, associated_id) in
+                for (period_id, subject_map) in
                     &data.get_data().get_group_lists().subjects_associations
                 {
-                    if *associated_id == *group_list_id {
-                        let result = session
-                            .apply(
-                                collomatique_state_colloscopes::Op::GroupList(
-                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
-                                        *subject_id,
-                                        None,
+                    for (subject_id, associated_id) in subject_map {
+                        if *associated_id == *group_list_id {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::GroupList(
+                                        collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                            *period_id,
+                                            *subject_id,
+                                            None,
+                                        ),
                                     ),
-                                ),
-                                "Désassociation de la liste de groupes d'une matière".into(),
-                            )
-                            .expect("All data should be valid at this point");
-                        assert!(result.is_none());
+                                    "Désassociation de la liste de groupes d'une matière".into(),
+                                )
+                                .expect("All data should be valid at this point");
+                            assert!(result.is_none());
+                        }
                     }
                 }
 
@@ -420,7 +450,7 @@ impl GroupListsUpdateOp {
 
                 Ok(None)
             }
-            Self::AssignGroupListToSubject(subject_id, group_list_id_opt) => {
+            Self::AssignGroupListToSubject(period_id, subject_id, group_list_id_opt) => {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
                     return Err(AssignGroupListToSubjectError::InvalidSubjectId(*subject_id).into());
                 };
@@ -430,6 +460,23 @@ impl GroupListsUpdateOp {
                         *subject_id,
                     )
                     .into());
+                }
+
+                if subject.excluded_periods.contains(period_id) {
+                    return Err(AssignGroupListToSubjectError::SubjectDoesNotRunOnPeriod(
+                        *subject_id,
+                        *period_id,
+                    )
+                    .into());
+                }
+
+                if !data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .contains_key(period_id)
+                {
+                    return Err(AssignGroupListToSubjectError::InvalidPeriodId(*period_id).into());
                 }
 
                 if let Some(group_list_id) = group_list_id_opt {
@@ -450,6 +497,7 @@ impl GroupListsUpdateOp {
                     .apply(
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                *period_id,
                                 *subject_id,
                                 *group_list_id_opt,
                             ),

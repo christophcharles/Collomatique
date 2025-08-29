@@ -247,8 +247,8 @@ pub enum SubjectError {
     SubjectStillHasAssociatedIncompats(SubjectId, IncompatId),
 
     /// The subject is associated to a group list
-    #[error("subject id ({0:?}) is associated to group list id {1:?}")]
-    SubjectStillHasAssociatedGroupList(SubjectId, GroupListId),
+    #[error("subject id ({0:?}) is associated to group list id {1:?} for period {2:?}")]
+    SubjectStillHasAssociatedGroupList(SubjectId, GroupListId, PeriodId),
 }
 
 /// Errors for teacher operations
@@ -421,6 +421,14 @@ pub enum GroupListError {
     /// subject does not have interrogations
     #[error("subject id ({0:?}) has no interrogations")]
     SubjectHasNoInterrogation(SubjectId),
+
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// Subject does not run on given period
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
 
     /// empty group count range
     #[error("group_count range is empty")]
@@ -1231,19 +1239,27 @@ impl Data {
     ///
     /// checks all the invariants in assignments data
     fn check_group_lists_data_consistency(&self) {
-        for (subject_id, group_list_id) in &self.inner_data.group_lists.subjects_associations {
-            assert!(self
-                .inner_data
-                .group_lists
-                .group_list_map
-                .contains_key(group_list_id));
-            let subject = self
-                .inner_data
-                .subjects
-                .find_subject(*subject_id)
-                .expect("Subject ID should be valid in subject/group_list associations");
+        if self.inner_data.group_lists.subjects_associations.len()
+            != self.inner_data.periods.ordered_period_list.len()
+        {
+            panic!("Invalid period count in subject associations for group lists");
+        }
+        for (period_id, subject_map) in &self.inner_data.group_lists.subjects_associations {
+            for (subject_id, group_list_id) in subject_map {
+                assert!(self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .contains_key(group_list_id));
+                let subject = self
+                    .inner_data
+                    .subjects
+                    .find_subject(*subject_id)
+                    .expect("Subject ID should be valid in subject/group_list associations");
 
-            assert!(subject.parameters.interrogation_parameters.is_some());
+                assert!(subject.parameters.interrogation_parameters.is_some());
+                assert!(!subject.excluded_periods.contains(period_id));
+            }
         }
         for (_group_list_id, group_list) in &self.inner_data.group_lists.group_list_map {
             Self::validate_group_list_internal(group_list, &self.inner_data.students).unwrap();
@@ -1401,7 +1417,7 @@ impl Data {
         if !incompats.validate_all(&subject_ids, &week_pattern_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
-        if !group_lists.validate_all(&subjects, &student_ids) {
+        if !group_lists.validate_all(&subjects, &student_ids, &period_ids) {
             return Err(FromDataError::InconsistentGroupLists);
         }
 
@@ -1788,13 +1804,14 @@ impl Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
-                if let Some(group_list_id) =
-                    self.inner_data.group_lists.subjects_associations.get(id)
-                {
-                    return Err(SubjectError::SubjectStillHasAssociatedGroupList(
-                        *id,
-                        *group_list_id,
-                    ));
+                for (period_id, subject_map) in &self.inner_data.group_lists.subjects_associations {
+                    if let Some(group_list_id) = subject_map.get(id) {
+                        return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                            *id,
+                            *group_list_id,
+                            *period_id,
+                        ));
+                    }
                 }
 
                 if let Some(subject_slots) = self.inner_data.slots.subject_map.get(id) {
@@ -1893,13 +1910,16 @@ impl Data {
                     }
 
                     // Also, we should not have a corresponding group list
-                    if let Some(group_list_id) =
-                        self.inner_data.group_lists.subjects_associations.get(id)
+                    for (period_id, subject_map) in
+                        &self.inner_data.group_lists.subjects_associations
                     {
-                        return Err(SubjectError::SubjectStillHasAssociatedGroupList(
-                            *id,
-                            *group_list_id,
-                        ));
+                        if let Some(group_list_id) = subject_map.get(id) {
+                            return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                                *id,
+                                *group_list_id,
+                                *period_id,
+                            ));
+                        }
                     }
 
                     // Let's also check that we don't have corresponding interrogations
@@ -2446,29 +2466,37 @@ impl Data {
 
                 Ok(())
             }
-            AnnotatedGroupListOp::AssignToSubject(subject_id, group_list_id) => {
+            AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {
                 let Some(subject) = self.inner_data.subjects.find_subject(*subject_id) else {
                     return Err(GroupListError::InvalidSubjectId(*subject_id));
                 };
                 if subject.parameters.interrogation_parameters.is_none() {
                     return Err(GroupListError::SubjectHasNoInterrogation(*subject_id));
                 }
+                if subject.excluded_periods.contains(period_id) {
+                    return Err(GroupListError::SubjectDoesNotRunOnPeriod(
+                        *subject_id,
+                        *period_id,
+                    ));
+                }
+                let Some(subject_map) = self
+                    .inner_data
+                    .group_lists
+                    .subjects_associations
+                    .get_mut(period_id)
+                else {
+                    return Err(GroupListError::InvalidPeriodId(*period_id));
+                };
 
                 match group_list_id {
                     Some(id) => {
                         if !self.inner_data.group_lists.group_list_map.contains_key(id) {
                             return Err(GroupListError::InvalidGroupListId(*id));
                         };
-                        self.inner_data
-                            .group_lists
-                            .subjects_associations
-                            .insert(*subject_id, *id);
+                        subject_map.insert(*subject_id, *id);
                     }
                     None => {
-                        self.inner_data
-                            .group_lists
-                            .subjects_associations
-                            .remove(subject_id);
+                        subject_map.remove(subject_id);
                     }
                 }
 
@@ -3006,15 +3034,19 @@ impl Data {
                     old_group_list.prefilled_groups.clone(),
                 ))
             }
-            AnnotatedGroupListOp::AssignToSubject(subject_id, _group_list_id) => {
-                let old_group_list_id = self
+            AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, _group_list_id) => {
+                let Some(subject_map) = self
                     .inner_data
                     .group_lists
                     .subjects_associations
-                    .get(subject_id)
-                    .cloned();
+                    .get(period_id)
+                else {
+                    return Err(GroupListError::InvalidPeriodId(*period_id));
+                };
+                let old_group_list_id = subject_map.get(subject_id).cloned();
                 Ok(AnnotatedGroupListOp::AssignToSubject(
-                    subject_id.clone(),
+                    *period_id,
+                    *subject_id,
                     old_group_list_id,
                 ))
             }

@@ -138,6 +138,7 @@ impl FileLoader {
             DecodeError::IllformedSlotInSubjectIncompatibilities => "Le fichier est mal formé et est probablement corrompu.\n(Incompatibilité horaire invalide)".into(),
             DecodeError::IllformedGroupList => "Le fichier est mal formé et est probablement corrompu.\n(Liste de groupes de colles invalide)".into(),
             DecodeError::GroupListsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de listes de groupes de colles)".into(),
+            DecodeError::GroupListsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc de listes de groupes avant le bloc des périodes)".into(),
         }
     }
 }

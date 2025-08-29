@@ -15,7 +15,7 @@ pub struct List {
     pub group_list_map: BTreeMap<u64, GroupList>,
     /// Associations between subjects and group lists
     #[serde(with = "serde_with::rust::maps_duplicate_key_is_error")]
-    pub subjects_associations: BTreeMap<u64, u64>,
+    pub subjects_associations: BTreeMap<u64, BTreeMap<u64, u64>>,
 }
 
 /// JSON desc of a single group list
