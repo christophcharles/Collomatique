@@ -545,6 +545,19 @@ impl Data {
         None
     }
 
+    /// Promotes an u64 to a [SlotId] if it is valid
+    pub fn validate_slot_id(&self, id: u64) -> Option<SlotId> {
+        for (_subject_id, subject_slots) in &self.inner_data.slots.subject_map {
+            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                if slot_id.inner() == id {
+                    return Some(*slot_id);
+                }
+            }
+        }
+
+        None
+    }
+
     /// Promotes a [teachers::TeacherExternalData] to a [teachers::Teacher] if it is valid
     pub fn promote_teacher(
         &self,
@@ -584,6 +597,42 @@ impl Data {
             excluded_periods: new_excluded_periods,
         })
     }
+
+    /// Promotes a [slots::SlotExternalData] to a [slots::Slot] if it is valid
+    pub fn promote_slot(
+        &self,
+        slot: slots::SlotExternalData,
+    ) -> Result<slots::Slot, PromoteSlotError> {
+        let teacher_id = self
+            .validate_teacher_id(slot.teacher_id)
+            .ok_or(PromoteSlotError::InvalidTeacherId(slot.teacher_id))?;
+        let week_pattern = match slot.week_pattern {
+            Some(id) => {
+                let week_pattern_id = self
+                    .validate_week_pattern_id(id)
+                    .ok_or(PromoteSlotError::InvalidWeekPatternId(id))?;
+                Some(week_pattern_id)
+            }
+            None => None,
+        };
+        let new_slot = slots::Slot {
+            teacher_id,
+            start_time: slot.start_time,
+            extra_info: slot.extra_info,
+            week_pattern,
+        };
+
+        Ok(new_slot)
+    }
+}
+
+/// Error type for [Data::promote_slot]
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum PromoteSlotError {
+    #[error("Teacher id {0:?} is invalid")]
+    InvalidTeacherId(u64),
+    #[error("WeekPattern id {0:?} is invalid")]
+    InvalidWeekPatternId(u64),
 }
 
 impl Data {
