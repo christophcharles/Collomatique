@@ -30,7 +30,7 @@
 pub mod colloscopes;
 pub mod time;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, ObjectiveSense, UsableData, Variable};
 
@@ -177,20 +177,27 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
     T: BaseConstraints<VariableName = V>,
 {
-    pub fn new(base: T) -> Self {
+    pub fn new(base: T) -> Option<Self> {
+        let orig_variables = base.variables();
+        let variable_set = orig_variables
+            .iter()
+            .map(|(v_name, _v_desc)| v_name.clone())
+            .collect::<BTreeSet<_>>();
+        let variables = orig_variables
+            .into_iter()
+            .map(|(v_name, v_desc)| (VariableName::Base(v_name), v_desc))
+            .collect();
+
         let original_objective_func = base.objective_func();
         let mut objective_func = LinExpr::constant(original_objective_func.get_constant());
         for (v, value) in original_objective_func.coefficients() {
+            if !variable_set.contains(v) {
+                return None;
+            }
             objective_func = objective_func + value * LinExpr::var(VariableName::Base(v.clone()));
         }
 
         let objective_sense = base.objective_sense();
-
-        let variables = base
-            .variables()
-            .into_iter()
-            .map(|(v_name, v_desc)| (VariableName::Base(v_name), v_desc))
-            .collect();
 
         let mut id_issuer = IdIssuer::new();
 
@@ -200,6 +207,10 @@ where
         for (orig_constraint, c_desc) in base.constraints() {
             let mut expr = LinExpr::constant(orig_constraint.get_constant());
             for (v, value) in orig_constraint.coefficients() {
+                if !variable_set.contains(v) {
+                    return None;
+                }
+
                 expr = expr + value * LinExpr::var(VariableName::Base(v.clone()));
             }
 
@@ -214,7 +225,7 @@ where
             constraint_descs.insert(desc_id, c_desc);
         }
 
-        ProblemBuilder {
+        Some(ProblemBuilder {
             base,
             id_issuer,
             phantom_p: std::marker::PhantomData,
@@ -223,7 +234,7 @@ where
             variables,
             constraint_descs,
             constraints,
-        }
+        })
     }
 
     fn scan_variables<U: UsableData>(
@@ -453,8 +464,19 @@ where
         Some(ConstraintsTranslator { c_map })
     }
 
-    pub fn build_problem(self) -> Problem<V, T, P> {
-        todo!()
+    pub fn build(self) -> Problem<V, T, P> {
+        let ilp_problem = collomatique_ilp::ProblemBuilder::new()
+            .set_variables(self.variables)
+            .add_constraints(self.constraints)
+            .set_objective_function(self.objective_func, self.objective_sense)
+            .build()
+            .expect("Variables good definition should have already been checked");
+
+        Problem {
+            ilp_problem,
+            base: self.base,
+            constraint_descs: self.constraint_descs,
+        }
     }
 }
 
@@ -472,6 +494,7 @@ where
 {
     ilp_problem: collomatique_ilp::Problem<VariableName<V>, InternalId, P>,
     base: T,
+    constraint_descs: BTreeMap<InternalId, T::ConstraintDesc>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
