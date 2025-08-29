@@ -59,7 +59,7 @@ WHERE id = 1
 
 #[sqlx::test]
 async fn general_data_set(pool: SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     store
         .general_data_set(&GeneralData {

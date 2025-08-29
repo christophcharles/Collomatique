@@ -254,7 +254,7 @@ struct IncompatGroupItemDb {
 
 #[sqlx::test]
 async fn incompats_add_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -372,7 +372,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
 #[sqlx::test]
 async fn incompats_add_multiple(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -573,7 +573,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
 #[sqlx::test]
 async fn incompats_remove_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -684,7 +684,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
 
 #[sqlx::test]
 async fn incompats_remove_then_add(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -877,7 +877,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
 
 #[sqlx::test]
 async fn incompats_update_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"

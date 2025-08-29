@@ -8,7 +8,7 @@ struct SubjectGroupDb {
 
 #[sqlx::test]
 async fn subject_groups_add_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _id = store
         .subject_groups_add(&SubjectGroup {
@@ -34,7 +34,7 @@ async fn subject_groups_add_one(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subject_groups_add_multiple(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _id = store
         .subject_groups_add(&SubjectGroup {
@@ -156,7 +156,7 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
 
 #[sqlx::test]
 async fn subject_groups_remove_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -199,7 +199,7 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
 
 #[sqlx::test]
 async fn subject_groups_remove_then_add(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -259,7 +259,7 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
 
 #[sqlx::test]
 async fn subject_groups_update(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
