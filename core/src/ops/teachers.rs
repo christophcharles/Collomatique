@@ -1,14 +1,27 @@
 use super::*;
 
 #[derive(Debug)]
-pub enum TeachersUpdateWarning {}
+pub enum TeachersUpdateWarning {
+    LooseInterrogationSlots(collomatique_state_colloscopes::TeacherId),
+}
 
 impl TeachersUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> String {
-        String::new()
+        match self {
+            TeachersUpdateWarning::LooseInterrogationSlots(teacher_id) => {
+                let Some(teacher) = data.get_data().get_teachers().teacher_map.get(teacher_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Pertes des créneaux de colle du colleur {} {}",
+                    teacher.desc.firstname, teacher.desc.surname,
+                )
+            }
+        }
     }
 }
 
@@ -63,9 +76,48 @@ impl TeachersUpdateOp {
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Vec<TeachersUpdateWarning> {
-        vec![]
+        match self {
+            Self::AddNewTeacher(_) => vec![],
+            Self::UpdateTeacher(teacher_id, teacher) => {
+                let mut output = vec![];
+
+                let mut loose_slot = false;
+                for (subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    if teacher.subjects.contains(subject_id) {
+                        continue;
+                    }
+                    for (_slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.teacher_id == *teacher_id {
+                            loose_slot = true;
+                        }
+                    }
+                }
+                if loose_slot {
+                    output.push(TeachersUpdateWarning::LooseInterrogationSlots(*teacher_id));
+                }
+
+                output
+            }
+            Self::DeleteTeacher(teacher_id) => {
+                let mut output = vec![];
+
+                let mut loose_slot = false;
+                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    for (_slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.teacher_id == *teacher_id {
+                            loose_slot = true;
+                        }
+                    }
+                }
+                if loose_slot {
+                    output.push(TeachersUpdateWarning::LooseInterrogationSlots(*teacher_id));
+                }
+
+                output
+            }
+        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
@@ -102,7 +154,29 @@ impl TeachersUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateTeacher(teacher_id, teacher) => {
-                let result = data
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    if teacher.subjects.contains(subject_id) {
+                        continue;
+                    }
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.teacher_id == *teacher_id {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Slot(
+                                        collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
+                                    ),
+                                    "Suppression d'un créneau pour le colleur".into(),
+                                )
+                                .expect("All data should be valid at this point");
+
+                            assert!(result.is_none());
+                        }
+                    }
+                }
+
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Update(
@@ -110,7 +184,7 @@ impl TeachersUpdateOp {
                                 teacher.clone(),
                             ),
                         ),
-                        self.get_desc(),
+                        "Mise à jour effective du colleur".into(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Teacher(te) = e {
@@ -133,10 +207,29 @@ impl TeachersUpdateOp {
 
                 assert!(result.is_none());
 
+                *data = session.commit(self.get_desc());
+
                 Ok(None)
             }
             Self::DeleteTeacher(teacher_id) => {
                 let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.teacher_id == *teacher_id {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Slot(
+                                        collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
+                                    ),
+                                    "Suppression d'un créneau pour le colleur".into(),
+                                )
+                                .expect("All data should be valid at this point");
+
+                            assert!(result.is_none());
+                        }
+                    }
+                }
 
                 let result = session
                     .apply(
