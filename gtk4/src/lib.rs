@@ -1,8 +1,18 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{adw, gtk, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use std::path::PathBuf;
+
+pub struct AppInit {
+    pub new: bool,
+    pub file_name: Option<PathBuf>,
+}
+
+struct FileDesc {
+    _file_name: Option<PathBuf>,
+}
 
 pub struct AppModel {
-    file_opened: bool,
+    current_file: Option<FileDesc>,
 }
 
 #[derive(Debug)]
@@ -17,7 +27,7 @@ pub struct AppWidgets {}
 impl SimpleComponent for AppModel {
     type Input = AppInput;
     type Output = ();
-    type Init = ();
+    type Init = AppInit;
 
     view! {
         #[root]
@@ -38,7 +48,7 @@ impl SimpleComponent for AppModel {
                     set_vexpand: true,
 
                     #[watch]
-                    set_visible: !model.file_opened,
+                    set_visible: model.current_file.is_none(),
 
                     gtk::Button::with_label("Commencer un nouveau colloscope") {
                         set_margin_all: 5,
@@ -56,11 +66,19 @@ impl SimpleComponent for AppModel {
     }
 
     fn init(
-        _params: Self::Init,
+        params: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = AppModel { file_opened: false };
+        let model = AppModel {
+            current_file: if params.new || params.file_name.is_some() {
+                Some(FileDesc {
+                    _file_name: params.file_name,
+                })
+            } else {
+                None
+            },
+        };
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -68,7 +86,7 @@ impl SimpleComponent for AppModel {
     fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
             AppInput::OpenNewColloscope => {
-                self.file_opened = true;
+                self.current_file = Some(FileDesc { _file_name: None });
             }
             AppInput::OpenExistingColloscope => {
                 // Ignore for now
