@@ -29,11 +29,11 @@ impl Operation for Op {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StudentOp {
     /// Add a new student
-    Add(PersonWithContacts),
+    Add(PersonWithContact),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, PersonWithContacts),
+    Update(StudentId, PersonWithContact),
 }
 
 /// Annotated operation
@@ -59,11 +59,11 @@ pub enum AnnotatedOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedStudentOp {
     /// Add a new student (with fixed id)
-    Add(StudentId, PersonWithContacts),
+    Add(StudentId, PersonWithContact),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, PersonWithContacts),
+    Update(StudentId, PersonWithContact),
 }
 
 impl Operation for AnnotatedOp {}
