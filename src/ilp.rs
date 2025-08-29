@@ -169,10 +169,17 @@ impl Problem {
             }
         }
 
-        Some(FeasableConfig {
+        Some(unsafe { self.into_feasable_unchecked(config) })
+    }
+
+    pub unsafe fn into_feasable_unchecked<'a, 'b>(
+        &'a self,
+        config: &'b Config,
+    ) -> FeasableConfig<'a> {
+        FeasableConfig {
             variables: config.variables.clone(),
             problem: self,
-        })
+        }
     }
 }
 

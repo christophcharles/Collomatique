@@ -40,11 +40,7 @@ impl<'a> FeasabilitySolver<'a> for Solver<'a> {
 
         while let Some(candidate) = config_queue.pop_front() {
             if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
-                return Some(
-                    self.problem
-                        .into_feasable(&candidate.into())
-                        .expect("Solution should be feasable"),
-                );
+                return Some(unsafe { self.problem.into_feasable_unchecked(&candidate.into()) });
             } else {
                 config_queue.extend(
                     candidate
