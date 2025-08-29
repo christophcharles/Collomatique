@@ -312,7 +312,7 @@ impl SimpleScheduleBase {
     ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
         let mut output = vec![];
 
-        for group in 0..self.week_count {
+        for group in 0..self.group_count {
             for course in 0..self.course_count {
                 output.push(self.generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(group, course));
             }
