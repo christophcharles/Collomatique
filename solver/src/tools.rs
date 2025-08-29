@@ -14,6 +14,9 @@
 //! defines a logical 'and' (using binary variables) and [OrVariable]
 //! which similarly defines a logical 'or'.
 
+#[cfg(test)]
+mod tests;
+
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, UsableData, Variable};
 use std::collections::BTreeSet;
 
