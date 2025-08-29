@@ -1,3 +1,5 @@
+use glib::object::ObjectExt;
+use glib::SignalHandlerId;
 use gtk::prelude::{BoxExt, CheckButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::gtk;
@@ -8,6 +10,7 @@ use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
+    pub period_id: collomatique_state_colloscopes::PeriodId,
     pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
     pub first_week_num: usize,
     pub week_count: usize,
@@ -34,6 +37,21 @@ pub struct PeriodEntry {
 #[derive(Debug, Clone)]
 pub enum PeriodEntryInput {
     UpdateData(PeriodEntryData),
+    UpdateStatus(
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::SubjectId,
+        bool,
+    ),
+}
+
+#[derive(Debug, Clone)]
+pub enum PeriodEntryOutput {
+    UpdateStatus(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::SubjectId,
+        bool,
+    ),
 }
 
 impl PeriodEntry {
@@ -54,7 +72,7 @@ impl PeriodEntry {
 impl FactoryComponent for PeriodEntry {
     type Init = PeriodEntryData;
     type Input = PeriodEntryInput;
-    type Output = ();
+    type Output = PeriodEntryOutput;
     type CommandOutput = ();
     type ParentWidget = gtk::Box;
 
@@ -75,7 +93,7 @@ impl FactoryComponent for PeriodEntry {
         },
     }
 
-    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+    fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
         let column_view = DynamicColumnView::new();
 
         let mut model = Self {
@@ -85,7 +103,7 @@ impl FactoryComponent for PeriodEntry {
         };
 
         model.rebuild_columns();
-        model.update_view_wrapper();
+        model.update_view_wrapper(sender);
 
         model
     }
@@ -103,7 +121,7 @@ impl FactoryComponent for PeriodEntry {
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             PeriodEntryInput::UpdateData(new_data) => {
                 let should_rebuild_columns =
@@ -112,7 +130,29 @@ impl FactoryComponent for PeriodEntry {
                 if should_rebuild_columns {
                     self.rebuild_columns();
                 }
-                self.update_view_wrapper();
+                self.update_view_wrapper(sender);
+            }
+            PeriodEntryInput::UpdateStatus(student_id, subject_id, new_status) => {
+                let current_status = self
+                    .data
+                    .period_assignments
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid at this point")
+                    .contains(&student_id);
+
+                if current_status == new_status {
+                    return;
+                }
+
+                sender
+                    .output(PeriodEntryOutput::UpdateStatus(
+                        self.data.period_id,
+                        student_id,
+                        subject_id,
+                        new_status,
+                    ))
+                    .unwrap();
             }
         }
     }
@@ -131,7 +171,7 @@ impl PeriodEntry {
         }
     }
 
-    fn update_view_wrapper(&mut self) {
+    fn update_view_wrapper(&mut self, sender: FactorySender<Self>) {
         self.column_view.clear();
         self.column_view
             .extend_from_iter(
@@ -139,6 +179,7 @@ impl PeriodEntry {
                     .filtered_students
                     .iter()
                     .map(|(student_id, student)| StudentItem {
+                        student_id: *student_id,
                         surname: student.desc.surname.clone(),
                         firstname: student.desc.firstname.clone(),
                         assigned_subjects: self
@@ -154,16 +195,21 @@ impl PeriodEntry {
                                 }
                             })
                             .collect(),
+                        sender: sender.clone(),
+                        handler_id: None,
                     }),
             );
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 struct StudentItem {
+    student_id: collomatique_state_colloscopes::StudentId,
     surname: String,
     firstname: String,
     assigned_subjects: BTreeSet<collomatique_state_colloscopes::SubjectId>,
+    sender: FactorySender<PeriodEntry>,
+    handler_id: Option<SignalHandlerId>,
 }
 
 #[derive(Debug, Clone)]
@@ -234,5 +280,20 @@ impl RelmColumn for SubjectColumn {
 
     fn bind(&self, item: &mut Self::Item, _: &mut Self::Widgets, root: &mut Self::Root) {
         root.set_active(item.assigned_subjects.contains(&self.subject_id));
+        let sender = item.sender.clone();
+        let student_id = item.student_id;
+        let subject_id = self.subject_id;
+        item.handler_id = Some(root.connect_active_notify(move |widget| {
+            let status = widget.is_active();
+            sender.input(PeriodEntryInput::UpdateStatus(
+                student_id, subject_id, status,
+            ));
+        }));
+    }
+
+    fn unbind(&self, item: &mut Self::Item, _widgets: &mut Self::Widgets, root: &mut Self::Root) {
+        if let Some(id) = item.handler_id.take() {
+            root.disconnect(id);
+        }
     }
 }

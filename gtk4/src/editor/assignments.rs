@@ -15,6 +15,12 @@ pub enum AssignmentsInput {
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::assignments::Assignments,
     ),
+    UpdateStatus(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::SubjectId,
+        bool,
+    ),
 }
 
 pub struct Assignments {
@@ -52,11 +58,18 @@ impl Component for Assignments {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let period_factory = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                assignments_display::PeriodEntryOutput::UpdateStatus(
+                    period_id,
+                    student_id,
+                    subject_id,
+                    new_status,
+                ) => AssignmentsInput::UpdateStatus(period_id, student_id, subject_id, new_status),
+            });
 
         let model = Assignments {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -73,7 +86,7 @@ impl Component for Assignments {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             AssignmentsInput::Update(new_periods, new_subjects, new_students, new_assignments) => {
                 self.periods = new_periods;
@@ -82,6 +95,13 @@ impl Component for Assignments {
                 self.assignments = new_assignments;
 
                 self.update_period_factory();
+            }
+            AssignmentsInput::UpdateStatus(period_id, student_id, subject_id, new_status) => {
+                sender
+                    .output(AssignmentsUpdateOp::Assign(
+                        period_id, student_id, subject_id, new_status,
+                    ))
+                    .unwrap();
             }
         }
     }
@@ -134,6 +154,7 @@ impl Assignments {
                 });
 
                 Some(assignments_display::PeriodEntryData {
+                    period_id: id.clone(),
                     global_first_week: self.periods.first_week.clone(),
                     first_week_num: current_first_week,
                     week_count: desc.len(),
