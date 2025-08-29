@@ -1,10 +1,15 @@
-use gtk::prelude::{GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::{adw, gtk, ComponentParts, ComponentSender, SimpleComponent};
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::{adw, gtk, ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
-pub struct AppModel {}
+pub struct AppModel {
+    file_opened: bool,
+}
 
 #[derive(Debug)]
-pub enum AppInput {}
+pub enum AppInput {
+    OpenNewColloscope,
+    OpenExistingColloscope,
+}
 
 pub struct AppWidgets {}
 
@@ -23,10 +28,29 @@ impl SimpleComponent for AppModel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 adw::HeaderBar::new(),
-                gtk::Label {
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_margin_all: 5,
+                    set_spacing: 5,
+                    set_halign: gtk::Align::Center,
+                    set_valign: gtk::Align::Center,
+                    set_hexpand: true,
                     set_vexpand: true,
-                    set_label: "Stub",
-                },
+
+                    #[watch]
+                    set_visible: !model.file_opened,
+
+                    gtk::Button::with_label("Commencer un nouveau colloscope") {
+                        set_margin_all: 5,
+                        add_css_class: "suggested-action",
+                        connect_clicked => AppInput::OpenNewColloscope,
+                    },
+                    gtk::Button::with_label("Ouvrir un colloscope existant") {
+                        set_margin_all: 5,
+                        add_css_class: "suggested-action",
+                        connect_clicked => AppInput::OpenExistingColloscope,
+                    },
+                }
             }
         }
     }
@@ -36,10 +60,19 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = AppModel {};
+        let model = AppModel { file_opened: false };
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, _message: Self::Input, _sender: ComponentSender<Self>) {}
+    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+        match message {
+            AppInput::OpenNewColloscope => {
+                self.file_opened = true;
+            }
+            AppInput::OpenExistingColloscope => {
+                // Ignore for now
+            }
+        }
+    }
 }
