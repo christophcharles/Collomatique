@@ -1,6 +1,6 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
-use relm4::gtk;
 use relm4::RelmWidgetExt;
+use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 
 pub struct WelcomePanel {}
@@ -19,26 +19,30 @@ impl SimpleComponent for WelcomePanel {
 
     view! {
         #[root]
-        gtk::Box {
-            set_orientation: gtk::Orientation::Vertical,
-            set_margin_all: 5,
-            set_spacing: 5,
-            set_halign: gtk::Align::Center,
-            set_valign: gtk::Align::Center,
-            set_hexpand: true,
-            set_vexpand: true,
+        adw::ToolbarView {
+            add_top_bar: &adw::HeaderBar::new(),
+            #[wrap(Some)]
+            set_content = &gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_margin_all: 5,
+                set_spacing: 5,
+                set_halign: gtk::Align::Center,
+                set_valign: gtk::Align::Center,
+                set_hexpand: true,
+                set_vexpand: true,
 
-            gtk::Button::with_label("Commencer un nouveau colloscope") {
-                set_margin_all: 5,
-                add_css_class: "suggested-action",
-                connect_clicked => WelcomeMessage::OpenNewColloscope,
+                gtk::Button::with_label("Commencer un nouveau colloscope") {
+                    set_margin_all: 5,
+                    add_css_class: "suggested-action",
+                    connect_clicked => WelcomeMessage::OpenNewColloscope,
+                },
+                gtk::Button::with_label("Ouvrir un colloscope existant") {
+                    set_margin_all: 5,
+                    add_css_class: "suggested-action",
+                    connect_clicked => WelcomeMessage::OpenExistingColloscope,
+                },
             },
-            gtk::Button::with_label("Ouvrir un colloscope existant") {
-                set_margin_all: 5,
-                add_css_class: "suggested-action",
-                connect_clicked => WelcomeMessage::OpenExistingColloscope,
-            },
-        }
+        },
     }
 
     fn init(

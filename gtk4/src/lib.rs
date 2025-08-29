@@ -1,4 +1,4 @@
-use gtk::prelude::{BoxExt, GtkWindowExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, GtkWindowExt, WidgetExt};
 use relm4::component::{
     AsyncComponent, AsyncComponentParts, AsyncComponentSender, AsyncController,
     SimpleAsyncComponent,
@@ -83,29 +83,25 @@ impl SimpleAsyncComponent for AppModel {
             #[watch]
             set_title: Some(&model.generate_title()),
             gtk::Box {
-                set_orientation: gtk::Orientation::Vertical,
-                adw::HeaderBar::new(),
+                set_hexpand: true,
+                set_vexpand: true,
+
                 gtk::Box {
                     set_hexpand: true,
                     set_vexpand: true,
+                    #[watch]
+                    set_visible: model.state.is_welcome_screen(),
 
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_vexpand: true,
-                        #[watch]
-                        set_visible: model.state.is_welcome_screen(),
+                    append: model.controllers.welcome.widget(),
+                },
+                gtk::Box {
+                    set_hexpand: true,
+                    set_vexpand: true,
+                    #[watch]
+                    set_visible: model.state.is_editor_screen(),
 
-                        append: model.controllers.welcome.widget(),
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_vexpand: true,
-                        #[watch]
-                        set_visible: model.state.is_editor_screen(),
-
-                        append: model.controllers.editor.widget(),
-                    },
-                }
+                    append: model.controllers.editor.widget(),
+                },
             }
         }
     }
