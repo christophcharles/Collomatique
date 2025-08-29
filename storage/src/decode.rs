@@ -127,6 +127,7 @@ pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeErr
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 struct PreData {
     student_list: BTreeMap<u64, collomatique_state_colloscopes::PersonWithContact>,
+    periods: collomatique_state_colloscopes::periods::PeriodsExternalData,
 }
 
 mod student_list;
@@ -146,7 +147,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         }
     }
 
-    let data = Data::from_lists(pre_data.student_list)?;
+    let data = Data::from_data(pre_data.student_list, pre_data.periods)?;
     Ok(data)
 }
 

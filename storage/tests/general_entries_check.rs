@@ -112,7 +112,7 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
             },
         ),
     ]);
-    let expected_data = collomatique_state_colloscopes::Data::from_lists(expected_student_list)
+    let expected_data = collomatique_state_colloscopes::Data::from_data(expected_student_list)
         .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);
 

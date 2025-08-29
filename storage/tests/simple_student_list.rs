@@ -97,7 +97,7 @@ fn decode_simple_student_list() {
             },
         ),
     ]);
-    let expected_data = collomatique_state_colloscopes::Data::from_lists(expected_student_list)
+    let expected_data = collomatique_state_colloscopes::Data::from_data(expected_student_list)
         .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::new();
 
@@ -127,7 +127,7 @@ fn encode_and_redecode_simple_student_list() {
             },
         ),
     ]);
-    let orig_data = collomatique_state_colloscopes::Data::from_lists(student_list)
+    let orig_data = collomatique_state_colloscopes::Data::from_data(student_list)
         .expect("Expected data should not have ID errors");
 
     let content = serialize_data(&orig_data);

@@ -384,7 +384,9 @@ dependencies = [
 name = "collomatique-state-colloscopes"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "collomatique-state",
+ "collomatique-time",
  "non-empty-string",
  "thiserror",
 ]
