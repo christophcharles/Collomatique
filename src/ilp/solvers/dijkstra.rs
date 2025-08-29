@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::ilp::tools::MatRepr;
 use crate::ilp::{Config, Problem};
 
