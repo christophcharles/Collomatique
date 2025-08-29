@@ -31,7 +31,7 @@ csv = "1.3.0"
 rust_xlsxwriter = "0.74.0"
 coin_cbc = { version = "0.1.8", optional = true }
 highs = { version = "1.6", optional = true }
-iced = "=0.13.0"
+iced = { version = "=0.13.0", features = ["tokio"] }
 rfd = "0.15"
 
 [features]
