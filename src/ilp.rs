@@ -51,8 +51,8 @@ impl ProblemBuilder {
         self
     }
 
-    pub fn add_variables<T: Into<BTreeSet<String>>>(mut self, vars: T) -> Self {
-        let mut temp = vars.into();
+    pub fn add_variables<U: Into<String>, T: IntoIterator<Item = U>>(mut self, vars: T) -> Self {
+        let mut temp = vars.into_iter().map(|x| x.into()).collect();
         self.variables.append(&mut temp);
         self
     }
