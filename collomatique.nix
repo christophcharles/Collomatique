@@ -1,6 +1,7 @@
 {
     rustPlatform,
     lib,
+    sqlite,
 }:
 rustPlatform.buildRustPackage {
     pname = "collomatique";
@@ -12,8 +13,12 @@ rustPlatform.buildRustPackage {
         lockFile = ./Cargo.lock;
     };
 
+    buildInputs = [
+        sqlite
+    ];
+
     meta = {
         description = "Automatic colloscope building program";
-        license = lib.licenses.agpl3;
+        license = lib.licenses.agpl3Plus;
     };
 }

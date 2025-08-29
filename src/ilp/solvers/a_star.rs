@@ -14,14 +14,14 @@ impl Solver {
         Solver {}
     }
 
-    fn distance_heuristic<V: VariableName>(&self, config: &Config<V>) -> f32 {
+    fn distance_heuristic<V: VariableName, P: ProblemRepr<V>>(&self, config: &Config<V, P>) -> f32 {
         config.max_distance_to_constraint()
     }
 
-    fn min_f_score<'a, V: VariableName>(
-        open_nodes: &mut BTreeSet<Config<'a, V>>,
-        f_scores: &BTreeMap<Config<'a, V>, f32>,
-    ) -> Option<Config<'a, V>> {
+    fn min_f_score<'a, V: VariableName, P: ProblemRepr<V>>(
+        open_nodes: &mut BTreeSet<Config<'a, V, P>>,
+        f_scores: &BTreeMap<Config<'a, V, P>, f32>,
+    ) -> Option<Config<'a, V, P>> {
         use ordered_float::OrderedFloat;
         let min_config = open_nodes
             .iter()
@@ -39,14 +39,15 @@ impl Solver {
 }
 
 use super::FeasabilitySolver;
+use crate::ilp::mat_repr::ProblemRepr;
 
-impl<V: VariableName> FeasabilitySolver<V> for Solver {
+impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
     fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
-        config: &Config<'a, V>,
-        origin: Option<&FeasableConfig<'a, V>>,
+        config: &Config<'a, V, P>,
+        origin: Option<&FeasableConfig<'a, V, P>>,
         mut max_steps: Option<usize>,
-    ) -> Option<FeasableConfig<'a, V>> {
+    ) -> Option<FeasableConfig<'a, V, P>> {
         let init_g_score = 0.0f32;
         let init_f_score = init_g_score + self.distance_heuristic(config);
 
