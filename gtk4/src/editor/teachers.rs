@@ -143,7 +143,7 @@ impl Component for Teachers {
             .launch(crate::widgets::droplist::WidgetParams {
                 initial_list: vec!["Toutes les matières".into(), "Aucune matière".into()],
                 initial_selected: Some(0),
-                enable_search: true,
+                enable_search: false,
                 width_request: 100,
             })
             .forward(sender.input_sender(), |msg| match msg {
