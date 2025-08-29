@@ -1,18 +1,13 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::RelmWidgetExt;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, WorkerController};
+use relm4::{Component, ComponentParts, ComponentSender};
 use std::path::PathBuf;
-
-mod file_loader;
 
 #[derive(Debug)]
 pub enum LoadingInput {
     Load(PathBuf),
     StopLoading,
-
-    Loaded(PathBuf, collomatique_state_colloscopes::Data),
-    Failed(PathBuf, String),
 }
 
 #[derive(Debug)]
@@ -21,9 +16,14 @@ pub enum LoadingOutput {
     Failed(PathBuf, String),
 }
 
+#[derive(Debug)]
+pub enum LoadingCmdOutput {
+    Loaded(PathBuf, collomatique_state_colloscopes::Data),
+    Failed(PathBuf, String),
+}
+
 pub struct LoadingPanel {
     path: Option<PathBuf>,
-    worker: Option<WorkerController<file_loader::FileLoader>>,
 }
 
 impl LoadingPanel {
@@ -40,7 +40,7 @@ impl Component for LoadingPanel {
     type Input = LoadingInput;
     type Output = LoadingOutput;
     type Init = ();
-    type CommandOutput = ();
+    type CommandOutput = LoadingCmdOutput;
 
     view! {
         #[root]
@@ -94,10 +94,7 @@ impl Component for LoadingPanel {
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = LoadingPanel {
-            path: None,
-            worker: None,
-        };
+        let model = LoadingPanel { path: None };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -110,39 +107,40 @@ impl Component for LoadingPanel {
                     return;
                 }
                 self.path = Some(path.clone());
-                let worker = file_loader::FileLoader::builder()
-                    .detach_worker(())
-                    .forward(sender.input_sender(), |x| match x {
-                        file_loader::FileLoadingOutput::Failed(path, error) => {
-                            LoadingInput::Failed(path, error)
-                        }
-                        file_loader::FileLoadingOutput::Loaded(path, data) => {
-                            LoadingInput::Loaded(path, data)
-                        }
-                    });
-                worker
-                    .sender()
-                    .send(file_loader::FileLoadingInput::Load(path))
-                    .unwrap();
-                self.worker = Some(worker);
+                sender.oneshot_command(async move {
+                    use std::time::Duration;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+
+                    let data = collomatique_state_colloscopes::Data::new();
+                    LoadingCmdOutput::Loaded(path, data)
+                });
             }
             LoadingInput::StopLoading => {
                 self.path = None;
-                self.worker = None;
             }
-            LoadingInput::Failed(path, error) => {
-                if Some(&path) != self.path.as_ref() {
-                    return;
-                }
-                self.path = None;
-                sender.output(LoadingOutput::Failed(path, error)).unwrap();
-            }
-            LoadingInput::Loaded(path, data) => {
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            LoadingCmdOutput::Loaded(path, data) => {
                 if Some(&path) != self.path.as_ref() {
                     return;
                 }
                 self.path = None;
                 sender.output(LoadingOutput::Loaded(path, data)).unwrap();
+            }
+            LoadingCmdOutput::Failed(path, error) => {
+                if Some(&path) != self.path.as_ref() {
+                    return;
+                }
+                self.path = None;
+                sender.output(LoadingOutput::Failed(path, error)).unwrap();
             }
         }
     }
