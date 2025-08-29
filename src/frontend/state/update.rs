@@ -35,6 +35,10 @@ pub enum UpdateError<IntError: std::error::Error> {
     ),
     #[error("Incompat corresponding to handle {0:?} was previously removed")]
     IncompatRemoved(IncompatHandle),
+    #[error("Incompat references a bad week pattern (probably removed) of id {0:?}")]
+    IncompatBadWeekPattern(WeekPatternHandle),
+    #[error("Cannot remove incompat: it is referenced by the database")]
+    IncompatDependanciesRemaining(Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>),
     #[error("Group list corresponding to handle {0:?} was previously removed")]
     GroupListRemoved(GroupListHandle),
     #[error("Subject corresponding to handle {0:?} was previously removed")]
@@ -1627,7 +1631,7 @@ impl<T: ManagerInternal> Manager for T {
 }
 
 pub(super) mod private {
-    use self::backend::SubjectGroupDependancy;
+    use self::backend::{DataStatusWithId, SubjectGroupDependancy};
 
     use super::*;
 
@@ -2011,6 +2015,118 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_incompats_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedIncompatsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedIncompatsOperation::Create(incompat_handle, incompat) => {
+                let incompat_backend = match convert_incompat_from_handles(
+                    incompat.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        DataStatusWithId::Ok => panic!("DataStatusWithId::Ok is not an error"),
+                        DataStatusWithId::BadCrossId(week_pattern_handle) => {
+                            return Err(UpdateError::IncompatBadWeekPattern(week_pattern_handle))
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .incompats_add(&incompat_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CrossError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CrossError::InvalidCrossId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .incompats
+                    .update_handle(*incompat_handle, Some(new_id));
+                Ok(ReturnHandle::Incompat(*incompat_handle))
+            }
+            AnnotatedIncompatsOperation::Remove(incompat_handle) => {
+                let incompat_id = manager
+                    .get_handle_managers()
+                    .incompats
+                    .get_id(*incompat_handle)
+                    .ok_or(UpdateError::IncompatRemoved(*incompat_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .incompats_remove(incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| match dep {
+                                    IncompatDependancy::Student(id) => IncompatDependancy::Student(
+                                        manager.get_handle_managers_mut().students.get_handle(id),
+                                    ),
+                                    IncompatDependancy::Subject(id) => IncompatDependancy::Subject(
+                                        manager.get_handle_managers_mut().subjects.get_handle(id),
+                                    ),
+                                })
+                                .collect();
+                            UpdateError::IncompatDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .incompats
+                    .update_handle(*incompat_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedIncompatsOperation::Update(incompat_handle, incompat) => {
+                let incompat_backend = match convert_incompat_from_handles(
+                    incompat.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        DataStatusWithId::Ok => panic!("DataStatusWithId::Ok is not an error"),
+                        DataStatusWithId::BadCrossId(week_pattern_handle) => {
+                            return Err(UpdateError::IncompatBadWeekPattern(week_pattern_handle))
+                        }
+                    },
+                };
+                let incompat_id = manager
+                    .get_handle_managers()
+                    .incompats
+                    .get_id(*incompat_handle)
+                    .ok_or(UpdateError::IncompatRemoved(*incompat_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .incompats_update(incompat_id, &incompat_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CrossIdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::CrossIdError::InvalidCrossId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CrossIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -2021,7 +2137,7 @@ pub(super) mod private {
             AnnotatedOperation::Teachers(op) => update_teachers_state(manager, op).await,
             AnnotatedOperation::Students(op) => update_students_state(manager, op).await,
             AnnotatedOperation::SubjectGroups(op) => update_subject_groups_state(manager, op).await,
-            AnnotatedOperation::Incompats(_op) => todo!(),
+            AnnotatedOperation::Incompats(op) => update_incompats_state(manager, op).await,
             AnnotatedOperation::GroupLists(_op) => todo!(),
             AnnotatedOperation::Subjects(_op) => todo!(),
             AnnotatedOperation::TimeSlots(_op) => todo!(),
