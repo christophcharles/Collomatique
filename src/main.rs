@@ -1007,16 +1007,26 @@ async fn main() -> Result<()> {
 
     let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
+    let random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let random_initializer = collomatique::ilp::initializers::Random::new(random_gen);
+    use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
+    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
+    let max_steps = Some(1000);
+    let retries = 5;
+    let mut incremental_initializer =
+        ilp_translator.incremental_initializer(random_initializer, solver, max_steps, retries);
+
     for i in 1.. {
         println!("Attempt n°{}...", i);
 
-        let random_gen = collomatique::ilp::random::DefaultRndGen::new();
-        let mut initializer = collomatique::ilp::initializers::Random::new(random_gen);
-
         use collomatique::ilp::initializers::ConfigInitializer;
-        sa_optimizer.set_init_config(initializer.build_init_config(&problem).unwrap());
+        let init_config = match incremental_initializer.build_init_config(&problem) {
+            Some(config) => config,
+            None => continue,
+        };
+        sa_optimizer.set_init_config(init_config);
         sa_optimizer.set_max_steps(Some(1000));
-        sa_optimizer.set_init_max_steps(Some(100000));
+        sa_optimizer.set_init_max_steps(Some(1000));
 
         use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
         let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
