@@ -5,8 +5,8 @@
 //! multiple different solvers as a backend
 //! and therefore, this multiplies the possiblities for collomatique.
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 use super::{ProblemRepr, Solver};
 use crate::{
