@@ -10,11 +10,12 @@ use history::{
     ModificationHistory, ReversibleOperation,
 };
 
+use self::history::AggregatedOperations;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
     General(GeneralOperation),
     WeekPatterns(WeekPatternsOperation),
-    Aggregated(Vec<Operation>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,7 +95,9 @@ impl<T: backend::Storage> AppState<T> {
         let rev_op = self.build_rev_op(op).await?;
 
         self.update_internal_state(&rev_op.forward).await?;
-        self.mod_history.apply(rev_op);
+
+        let aggregated_ops = AggregatedOperations::new(vec![rev_op]);
+        self.mod_history.apply(aggregated_ops);
 
         Ok(())
     }
@@ -109,8 +112,8 @@ impl<T: backend::Storage> AppState<T> {
 
     pub async fn undo(&mut self) -> Result<(), UndoError<T::InternalError>> {
         match self.mod_history.undo() {
-            Some(op) => {
-                self.update_internal_state(&op).await.map_err(
+            Some(aggregated_ops) => {
+                self.update_internal_state_with_aggregated(&aggregated_ops).await.map_err(
                     |e| match e {
                         UpdateError::Internal(int_err) => UndoError::InternalError(int_err),
                         _ => panic!("Data should be consistent as it was automatically build from previous state"),
@@ -124,8 +127,8 @@ impl<T: backend::Storage> AppState<T> {
 
     pub async fn redo(&mut self) -> Result<(), RedoError<T::InternalError>> {
         match self.mod_history.redo() {
-            Some(op) => {
-                self.update_internal_state(&op).await.map_err(
+            Some(aggregated_ops) => {
+                self.update_internal_state_with_aggregated(&aggregated_ops).await.map_err(
                     |e| match e {
                         UpdateError::Internal(int_err) => RedoError::InternalError(int_err),
                         _ => panic!("Data should be consistent as it was automatically build from previous state"),
@@ -231,13 +234,6 @@ impl<T: backend::Storage> AppState<T> {
         Ok(backward)
     }
 
-    async fn build_backward_aggregated_op(
-        &mut self,
-        _ops: &[AnnotatedOperation],
-    ) -> Result<Vec<AnnotatedOperation>, T::InternalError> {
-        todo!()
-    }
-
     async fn build_rev_op(
         &mut self,
         op: Operation,
@@ -249,9 +245,6 @@ impl<T: backend::Storage> AppState<T> {
             }
             AnnotatedOperation::WeekPatterns(op) => {
                 AnnotatedOperation::WeekPatterns(self.build_backward_week_patterns_op(op).await?)
-            }
-            AnnotatedOperation::Aggregated(ops) => {
-                AnnotatedOperation::Aggregated(self.build_backward_aggregated_op(ops).await?)
             }
         };
         let rev_op = ReversibleOperation { forward, backward };
@@ -396,13 +389,6 @@ impl<T: backend::Storage> AppState<T> {
         }
     }
 
-    async fn update_aggregated_state(
-        &mut self,
-        _ops: &[AnnotatedOperation],
-    ) -> Result<(), UpdateError<T>> {
-        todo!()
-    }
-
     async fn update_internal_state(
         &mut self,
         op: &AnnotatedOperation,
@@ -410,8 +396,50 @@ impl<T: backend::Storage> AppState<T> {
         match op {
             AnnotatedOperation::General(op) => self.update_general_state(op).await?,
             AnnotatedOperation::WeekPatterns(op) => self.update_week_patterns_state(op).await?,
-            AnnotatedOperation::Aggregated(ops) => self.update_aggregated_state(ops).await?,
         }
         Ok(())
+    }
+
+    async fn update_internal_state_with_aggregated(
+        &mut self,
+        aggregated_ops: &AggregatedOperations,
+    ) -> Result<(), UpdateError<T>> {
+        let ops = aggregated_ops.inner();
+
+        let mut error = None;
+        let mut count = 0;
+
+        for rev_op in ops {
+            let result = self.update_internal_state(&rev_op.forward).await;
+
+            if let Err(err) = result {
+                error = Some(err);
+                break;
+            }
+
+            count += 1;
+        }
+
+        let Some(err) = error else {
+            return Ok(());
+        };
+
+        let skip_size = ops.len() - count;
+        for rev_op in ops.iter().rev().skip(skip_size) {
+            let result = self.update_internal_state(&rev_op.backward).await;
+
+            if let Err(e) = result {
+                panic!(
+                    r#"Failed to reverse failed aggregated operations.
+Initial failed op: {:?}
+Initial error: {:?}
+Problematic op to reverse: {:?}
+Error in reversing: {:?}"#,
+                    ops[count], err, rev_op, e,
+                );
+            }
+        }
+
+        Err(err)
     }
 }
