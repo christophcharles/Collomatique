@@ -63,7 +63,7 @@ pub async fn add(pool: &SqlitePool, subject_group: &SubjectGroup) -> Result<Id> 
     Ok(subject_group_id)
 }
 
-pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), Error> {
     let subject_group_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -78,12 +78,10 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
     .rows_affected();
 
     if count > 1 {
-        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "Multiple subject groups with id {:?}",
             index
-        ))));
-    } else if count == 0 {
-        return Err(IdError::InvalidId(index));
+        )));
     }
 
     Ok(())
