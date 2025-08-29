@@ -2279,6 +2279,352 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_incompats_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedIncompatsOperation,
+    ) -> Result<
+        AnnotatedIncompatsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedIncompatsOperation::Create(handle, _incompat) => {
+                AnnotatedIncompatsOperation::Remove(*handle)
+            }
+            AnnotatedIncompatsOperation::Remove(handle) => {
+                let incompat_id = manager
+                    .get_handle_managers()
+                    .incompats
+                    .get_id(*handle)
+                    .ok_or(RevError::IncompatRemoved(*handle))?;
+                let incompat = manager
+                    .get_backend_logic()
+                    .incompats_get(incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedIncompatsOperation::Create(
+                    *handle,
+                    convert_incompat_to_handles(incompat, manager.get_handle_managers_mut()),
+                )
+            }
+            AnnotatedIncompatsOperation::Update(handle, _new_incompat) => {
+                let incompat_id = manager
+                    .get_handle_managers()
+                    .incompats
+                    .get_id(*handle)
+                    .ok_or(RevError::IncompatRemoved(*handle))?;
+                let incompat = manager
+                    .get_backend_logic()
+                    .incompats_get(incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedIncompatsOperation::Update(
+                    *handle,
+                    convert_incompat_to_handles(incompat, manager.get_handle_managers_mut()),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
+    pub async fn build_backward_group_lists_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedGroupListsOperation,
+    ) -> Result<
+        AnnotatedGroupListsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedGroupListsOperation::Create(handle, _group_list) => {
+                AnnotatedGroupListsOperation::Remove(*handle)
+            }
+            AnnotatedGroupListsOperation::Remove(handle) => {
+                let group_list_id = manager
+                    .get_handle_managers()
+                    .group_lists
+                    .get_id(*handle)
+                    .ok_or(RevError::GroupListRemoved(*handle))?;
+                let group_list = manager
+                    .get_backend_logic()
+                    .group_lists_get(group_list_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedGroupListsOperation::Create(
+                    *handle,
+                    convert_group_list_to_handles(group_list, manager.get_handle_managers_mut()),
+                )
+            }
+            AnnotatedGroupListsOperation::Update(handle, _new_group_list) => {
+                let group_list_id = manager
+                    .get_handle_managers()
+                    .group_lists
+                    .get_id(*handle)
+                    .ok_or(RevError::GroupListRemoved(*handle))?;
+                let group_list = manager
+                    .get_backend_logic()
+                    .group_lists_get(group_list_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedGroupListsOperation::Update(
+                    *handle,
+                    convert_group_list_to_handles(group_list, manager.get_handle_managers_mut()),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
+    pub async fn build_backward_subjects_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedSubjectsOperation,
+    ) -> Result<AnnotatedSubjectsOperation, RevError<<T::Storage as backend::Storage>::InternalError>>
+    {
+        let backward = match op {
+            AnnotatedSubjectsOperation::Create(handle, _subject) => {
+                AnnotatedSubjectsOperation::Remove(*handle)
+            }
+            AnnotatedSubjectsOperation::Remove(handle) => {
+                let subject_id = manager
+                    .get_handle_managers()
+                    .subjects
+                    .get_id(*handle)
+                    .ok_or(RevError::SubjectRemoved(*handle))?;
+                let subject = manager
+                    .get_backend_logic()
+                    .subjects_get(subject_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedSubjectsOperation::Create(
+                    *handle,
+                    convert_subject_to_handles(subject, manager.get_handle_managers_mut()),
+                )
+            }
+            AnnotatedSubjectsOperation::Update(handle, _new_subject) => {
+                let subject_id = manager
+                    .get_handle_managers()
+                    .subjects
+                    .get_id(*handle)
+                    .ok_or(RevError::SubjectRemoved(*handle))?;
+                let subject = manager
+                    .get_backend_logic()
+                    .subjects_get(subject_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedSubjectsOperation::Update(
+                    *handle,
+                    convert_subject_to_handles(subject, manager.get_handle_managers_mut()),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
+    pub async fn build_backward_time_slots_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedTimeSlotsOperation,
+    ) -> Result<
+        AnnotatedTimeSlotsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedTimeSlotsOperation::Create(handle, _time_slot) => {
+                AnnotatedTimeSlotsOperation::Remove(*handle)
+            }
+            AnnotatedTimeSlotsOperation::Remove(handle) => {
+                let time_slot_id = manager
+                    .get_handle_managers()
+                    .time_slots
+                    .get_id(*handle)
+                    .ok_or(RevError::TimeSlotRemoved(*handle))?;
+                let time_slot = manager
+                    .get_backend_logic()
+                    .time_slots_get(time_slot_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedTimeSlotsOperation::Create(
+                    *handle,
+                    convert_time_slot_to_handles(time_slot, manager.get_handle_managers_mut()),
+                )
+            }
+            AnnotatedTimeSlotsOperation::Update(handle, _new_time_slot) => {
+                let time_slot_id = manager
+                    .get_handle_managers()
+                    .time_slots
+                    .get_id(*handle)
+                    .ok_or(RevError::TimeSlotRemoved(*handle))?;
+                let time_slot = manager
+                    .get_backend_logic()
+                    .time_slots_get(time_slot_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedTimeSlotsOperation::Update(
+                    *handle,
+                    convert_time_slot_to_handles(time_slot, manager.get_handle_managers_mut()),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
+    pub async fn build_backward_groupings_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedGroupingsOperation,
+    ) -> Result<
+        AnnotatedGroupingsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedGroupingsOperation::Create(handle, _grouping) => {
+                AnnotatedGroupingsOperation::Remove(*handle)
+            }
+            AnnotatedGroupingsOperation::Remove(handle) => {
+                let grouping_id = manager
+                    .get_handle_managers()
+                    .groupings
+                    .get_id(*handle)
+                    .ok_or(RevError::GroupingRemoved(*handle))?;
+                let grouping = manager
+                    .get_backend_logic()
+                    .groupings_get(grouping_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedGroupingsOperation::Create(
+                    *handle,
+                    convert_grouping_to_handles(grouping, manager.get_handle_managers_mut()),
+                )
+            }
+            AnnotatedGroupingsOperation::Update(handle, _new_grouping) => {
+                let grouping_id = manager
+                    .get_handle_managers()
+                    .groupings
+                    .get_id(*handle)
+                    .ok_or(RevError::GroupingRemoved(*handle))?;
+                let grouping = manager
+                    .get_backend_logic()
+                    .groupings_get(grouping_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedGroupingsOperation::Update(
+                    *handle,
+                    convert_grouping_to_handles(grouping, manager.get_handle_managers_mut()),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
+    pub async fn build_backward_grouping_incompats_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedGroupingIncompatsOperation,
+    ) -> Result<
+        AnnotatedGroupingIncompatsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedGroupingIncompatsOperation::Create(handle, _grouping_incompat) => {
+                AnnotatedGroupingIncompatsOperation::Remove(*handle)
+            }
+            AnnotatedGroupingIncompatsOperation::Remove(handle) => {
+                let grouping_incompat_id = manager
+                    .get_handle_managers()
+                    .grouping_incompats
+                    .get_id(*handle)
+                    .ok_or(RevError::GroupingIncompatRemoved(*handle))?;
+                let grouping_incompat = manager
+                    .get_backend_logic()
+                    .grouping_incompats_get(grouping_incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedGroupingIncompatsOperation::Create(
+                    *handle,
+                    convert_grouping_incompat_to_handles(
+                        grouping_incompat,
+                        manager.get_handle_managers_mut(),
+                    ),
+                )
+            }
+            AnnotatedGroupingIncompatsOperation::Update(handle, _new_grouping_incompat) => {
+                let grouping_incompat_id = manager
+                    .get_handle_managers()
+                    .grouping_incompats
+                    .get_id(*handle)
+                    .ok_or(RevError::GroupingIncompatRemoved(*handle))?;
+                let grouping_incompat = manager
+                    .get_backend_logic()
+                    .grouping_incompats_get(grouping_incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedGroupingIncompatsOperation::Update(
+                    *handle,
+                    convert_grouping_incompat_to_handles(
+                        grouping_incompat,
+                        manager.get_handle_managers_mut(),
+                    ),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
     pub async fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
@@ -2301,12 +2647,24 @@ pub(super) mod private {
             AnnotatedOperation::SubjectGroups(op) => AnnotatedOperation::SubjectGroups(
                 build_backward_subject_groups_op(manager, op).await?,
             ),
-            AnnotatedOperation::Incompats(_op) => todo!(),
-            AnnotatedOperation::GroupLists(_op) => todo!(),
-            AnnotatedOperation::Subjects(_op) => todo!(),
-            AnnotatedOperation::TimeSlots(_op) => todo!(),
-            AnnotatedOperation::Groupings(_op) => todo!(),
-            AnnotatedOperation::GroupingIncompats(_op) => todo!(),
+            AnnotatedOperation::Incompats(op) => {
+                AnnotatedOperation::Incompats(build_backward_incompats_op(manager, op).await?)
+            }
+            AnnotatedOperation::GroupLists(op) => {
+                AnnotatedOperation::GroupLists(build_backward_group_lists_op(manager, op).await?)
+            }
+            AnnotatedOperation::Subjects(op) => {
+                AnnotatedOperation::Subjects(build_backward_subjects_op(manager, op).await?)
+            }
+            AnnotatedOperation::TimeSlots(op) => {
+                AnnotatedOperation::TimeSlots(build_backward_time_slots_op(manager, op).await?)
+            }
+            AnnotatedOperation::Groupings(op) => {
+                AnnotatedOperation::Groupings(build_backward_groupings_op(manager, op).await?)
+            }
+            AnnotatedOperation::GroupingIncompats(op) => AnnotatedOperation::GroupingIncompats(
+                build_backward_grouping_incompats_op(manager, op).await?,
+            ),
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
