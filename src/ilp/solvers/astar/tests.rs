@@ -63,16 +63,16 @@ fn test_astar() {
         .add((&y21 + &y22).eq(&one))
         .build()
         .unwrap();
-    let config = pb.config_from(["x11", "y12", "y21"]);
+    let config = pb.config_from(["x11", "y12", "y21"]).unwrap();
 
     let astar_solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = astar_solver.restore_feasability(&config.repr());
+    let solution = astar_solver.restore_feasability(&config);
 
     assert_eq!(
         solution.expect("Solution should be found").into_inner(),
-        pb.config_from(["x11", "y12", "y21", "x22"]).repr()
+        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap()
     );
 }
