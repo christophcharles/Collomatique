@@ -19,6 +19,7 @@ pub enum CmdMsg {
 pub enum UpdateMsg {
     GeneralPlanning(GeneralPlanningCmdMsg),
     Subjects(SubjectsCmdMsg),
+    Teachers(TeachersCmdMsg),
 }
 
 impl UpdateMsg {
@@ -31,6 +32,7 @@ impl UpdateMsg {
                 crate::ops::UpdateOp::GeneralPlanning(op.promote(data)?)
             }
             UpdateMsg::Subjects(op) => crate::ops::UpdateOp::Subjects(op.promote(data)?),
+            UpdateMsg::Teachers(op) => crate::ops::UpdateOp::Teachers(op.promote(data)?),
         })
     }
 }
