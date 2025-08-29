@@ -558,6 +558,60 @@ enum StudentStatus {
     NotConcerned,
 }
 
+trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self;
+
+    fn is_slot_relevant(&self, slot: &SlotWithTeacher) -> bool {
+        let other = Self::from_subject_slot(slot);
+        *self == other
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TeacherBalancing {
+    teacher: usize,
+}
+
+impl BalancingData for TeacherBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherBalancing {
+            teacher: slot.teacher,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TimeslotBalancing {
+    weekday: time::Weekday,
+    time: time::Time,
+}
+
+impl BalancingData for TimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TimeslotBalancing {
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TeacherAndTimeslotBalancing {
+    teacher: usize,
+    weekday: time::Weekday,
+    time: time::Time,
+}
+
+impl BalancingData for TeacherAndTimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherAndTimeslotBalancing {
+            teacher: slot.teacher,
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
 impl<'a> IlpTranslator<'a> {
     fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
         !group.can_be_extended || (group.students.len() == subject.students_per_group.end().get())
@@ -1816,6 +1870,178 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_max_min_balancing_from_expr(
+        &self,
+        subject: &Subject,
+        count: usize,
+        expr: Expr<Variable>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let group_count = subject.groups.prefilled_groups.len();
+        let week_count = usize::try_from(self.data.general.week_count.get()).unwrap();
+        let period = usize::try_from(subject.period.get()).unwrap();
+        let needed_slots = (group_count * week_count) as f64 / (period as f64);
+
+        let updated_count = (count as f64) * needed_slots / (subject.slots.len() as f64);
+
+        let expected_use_per_group = updated_count / (group_count as f64);
+
+        let max_use = expected_use_per_group.ceil() as i32;
+        let min_use = expected_use_per_group.floor() as i32;
+
+        if max_use == min_use {
+            BTreeSet::from([expr.eq(&Expr::constant(max_use))])
+        } else {
+            BTreeSet::from([
+                expr.leq(&Expr::constant(max_use)),
+                expr.geq(&Expr::constant(min_use)),
+            ])
+        }
+    }
+
+    fn build_balancing_constraints_for_subject_and_not_assigned_student<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+        slot_type: &T,
+        count: usize,
+        student: usize,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (j, slot) in subject.slots.iter().enumerate() {
+            if !slot_type.is_slot_relevant(slot) {
+                continue;
+            }
+
+            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                if Self::is_group_fixed(group, subject) {
+                    continue;
+                }
+                expr = expr
+                    + Expr::var(Variable::DynamicGroupAssignment {
+                        subject: i,
+                        slot: j,
+                        group: k,
+                        student,
+                    });
+            }
+        }
+
+        self.build_max_min_balancing_from_expr(subject, count, expr)
+    }
+
+    fn build_balancing_constraints_for_subject_and_group<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+        slot_type: &T,
+        count: usize,
+        k: usize,
+        _group: &GroupDesc,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (j, slot) in subject.slots.iter().enumerate() {
+            if !slot_type.is_slot_relevant(slot) {
+                continue;
+            }
+
+            expr = expr
+                + Expr::var(Variable::GroupInSlot {
+                    subject: i,
+                    slot: j,
+                    group: k,
+                });
+        }
+
+        self.build_max_min_balancing_from_expr(subject, count, expr)
+    }
+
+    fn build_balancing_constraints_for_subject<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut counts = BTreeMap::<T, usize>::new();
+
+        for slot in &subject.slots {
+            let data = T::from_subject_slot(slot);
+            match counts.get_mut(&data) {
+                Some(c) => {
+                    *c += 1;
+                }
+                None => {
+                    counts.insert(data, 1);
+                }
+            }
+        }
+
+        let mut constraints = BTreeSet::new();
+
+        for (slot_type, count) in counts {
+            for student in subject.groups.not_assigned.iter().copied() {
+                constraints.extend(
+                    self.build_balancing_constraints_for_subject_and_not_assigned_student(
+                        i, subject, &slot_type, count, student,
+                    ),
+                );
+            }
+
+            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                if group.students.is_empty() {
+                    // Ignore empty groups
+                    // But groups with students assigned (the group might be fixed or dynamic, it does not matter)
+                    // should have a constraint
+                    continue;
+                }
+                constraints.extend(self.build_balancing_constraints_for_subject_and_group(
+                    i, subject, &slot_type, count, k, group,
+                ));
+            }
+        }
+
+        constraints
+    }
+
+    fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            match (
+                subject.balancing_requirements.teachers,
+                subject.balancing_requirements.timeslots,
+            ) {
+                (true, true) => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(
+                            i,
+                            subject,
+                        )
+                    );
+                }
+                (true, false) => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TeacherBalancing>(
+                            i, subject,
+                        ),
+                    );
+                }
+                (false, true) => {
+                    constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TimeslotBalancing>(
+                            i, subject,
+                        ),
+                    );
+                }
+                (false, false) => {
+                    // ignore, no balancing needed
+                }
+            }
+        }
+
+        constraints
+    }
+
     fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -1861,6 +2087,8 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_grouping_incompats_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_students_incompats_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_balancing_constraints())
             .expect("Variables should be declared")
     }
 
