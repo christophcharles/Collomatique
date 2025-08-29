@@ -45,7 +45,7 @@ pub enum EntryOutput {
 impl Entry {
     fn generate_title_text(&self) -> String {
         let week_count = self.weeks.len();
-        let index = self.index.current_index() + 1;
+        let index = self.index.current_index();
 
         format!(
             "<b><big>{}</big></b>",
