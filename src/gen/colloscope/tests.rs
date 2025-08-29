@@ -2919,7 +2919,6 @@ fn without_student_not_in_last_period_variables() {
     let ilp_translator = data.ilp_translator();
     let student_not_in_last_period = ilp_translator.build_student_not_in_last_period();
 
-    #[rustfmt::skip]
     let expected_result = BTreeSet::new();
 
     assert_eq!(student_not_in_last_period, expected_result);
