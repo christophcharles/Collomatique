@@ -16,6 +16,8 @@ pub mod open_file_dialog;
 pub use open_file_dialog::*;
 pub mod week_patterns;
 pub use week_patterns::*;
+pub mod slots;
+pub use slots::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
@@ -37,6 +39,7 @@ pub enum UpdateMsg {
     Students(StudentsCmdMsg),
     Assignments(AssignmentsCmdMsg),
     WeekPatterns(WeekPatternsCmdMsg),
+    Slots(SlotsCmdMsg),
 }
 
 impl UpdateMsg {
@@ -53,6 +56,7 @@ impl UpdateMsg {
             UpdateMsg::Students(op) => crate::ops::UpdateOp::Students(op.promote(data)?),
             UpdateMsg::Assignments(op) => crate::ops::UpdateOp::Assignments(op.promote(data)?),
             UpdateMsg::WeekPatterns(op) => crate::ops::UpdateOp::WeekPatterns(op.promote(data)?),
+            UpdateMsg::Slots(op) => crate::ops::UpdateOp::Slots(op.promote(data)?),
         })
     }
 }
