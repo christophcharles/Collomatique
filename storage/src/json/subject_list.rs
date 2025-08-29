@@ -38,6 +38,7 @@ impl From<Subject> for collomatique_state_colloscopes::subjects::SubjectExternal
         collomatique_state_colloscopes::subjects::SubjectExternalData {
             parameters: value.parameters.into(),
             excluded_periods: value.excluded_periods,
+            incompatibilities: BTreeSet::new(),
         }
     }
 }
