@@ -328,6 +328,8 @@ pub enum ValidationError {
     DuplicatedId(u64),
     #[error("Week pattern {0:?} has weeks outside of last week")]
     WeekPatternWithWeekTooBig(WeekPatternId),
+    #[error("Group list {0:?} has an invalid group number")]
+    GroupListWithInvalidGroupNumber(GroupListId),
     #[error("Week pattern id {0:?} is referenced but does not exist")]
     BadWeekPatternId(WeekPatternId),
     #[error("Subject group id {0:?} is referenced but does not exist")]
@@ -463,10 +465,15 @@ impl JsonData {
     }
 
     fn validate_group_lists(&self) -> ValidationResult<()> {
-        for (_, group_list) in &self.group_lists {
-            for (student_id, _) in &group_list.students_mapping {
+        for (group_list_id, group_list) in &self.group_lists {
+            for (student_id, group) in &group_list.students_mapping {
                 if !self.students.contains_key(student_id) {
                     return Err(ValidationError::BadStudentId(*student_id));
+                }
+                if *group >= group_list.groups.len() {
+                    return Err(ValidationError::GroupListWithInvalidGroupNumber(
+                        *group_list_id,
+                    ));
                 }
             }
         }
