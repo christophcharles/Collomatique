@@ -323,12 +323,86 @@ struct ValidatedJson {
 }
 
 #[derive(Debug, Error)]
-pub enum ValidationError {}
+pub enum ValidationError {
+    #[error("Id {0} appears twice in data")]
+    DuplicatedId(u64),
+}
 
 pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
 
 impl JsonData {
+    fn find_duplicated_id(&self) -> Option<u64> {
+        let mut ids = BTreeSet::new();
+
+        for (id, _) in &self.week_patterns {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.teachers {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.students {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.subject_groups {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.incompats {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.group_lists {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.subjects {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.time_slots {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.groupings {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.grouping_incompats {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.colloscopes {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+        for (id, _) in &self.slot_selections {
+            if !ids.insert(id.0) {
+                return Some(id.0);
+            }
+        }
+
+        None
+    }
+
     fn validate(self) -> ValidationResult<ValidatedJson> {
+        if let Some(id) = self.find_duplicated_id() {
+            return Err(ValidationError::DuplicatedId(id));
+        }
+
         Ok(ValidatedJson { validated: self })
     }
 }
