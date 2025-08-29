@@ -295,7 +295,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
             icon_button(
                 tools::Icon::SaveAs,
                 button::primary,
-                "Enregistrer sous",
+                "Enregistrer",
                 None
             ),
             Space::with_height(20),
