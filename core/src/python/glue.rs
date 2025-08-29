@@ -3,6 +3,10 @@ use pyo3::prelude::*;
 #[pymodule]
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Session>()?;
+    m.add_class::<general_planning::Period>()?;
+    m.add_class::<subjects::Subject>()?;
+    m.add_class::<subjects::SubjectParameters>()?;
+    m.add_class::<subjects::SubjectPeriodicity>()?;
     m.add_class::<time::NaiveMondayDate>()?;
     m.add_class::<time::NaiveDate>()?;
 
