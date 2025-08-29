@@ -1,8 +1,18 @@
+//! This module defines useful traits that should be implemented to represent a problem.
+//! 
+//! A problem is represented by a structure that implements [BaseConstraints].
+//! Extension to this problem can be implemented using other structures that implement [ExtraConstraints].
+
 use collomatique_ilp::{
     ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
 };
 use std::collections::BTreeMap;
 
+/// Variable type used in [BaseConstraints] trait definition.
+/// 
+/// [BaseConstraints] distinguishes between [BaseConstraints::MainVariable]
+/// and [BaseConstraints::StructureVariable]. To express some constraints,
+/// we need to mix these variables and this is the purpose of this type.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BaseVariable<M: UsableData, S: UsableData> {
     Main(M),
@@ -20,22 +30,130 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
     }
 }
 
+/// Base trait that should be implemented by any structure representing a problem.
+/// 
+/// The type of problems that can be represented is volontarily restricted. But it is
+/// large enough to represent most schedule (and colloscope !) resolution problem.
+/// 
+/// We use the following restrictions :
+/// - we can define a finite set of ILP variables such that the space of possible
+///   values for this set is one-to-one with the space of possible solutions of the problem.
+/// 
+///   This constraint means we can convert back and forth between two representations of the problem.
+///   The conversion is done by the two functions [BaseConstraints::partial_solution_to_configuration]
+///   and [BaseConstraints::configuration_to_partial_solution].
+///   One representation is the one we use in the rest of the program and is described
+///   by [BaseConstraints::PartialSolution] and the other one is a set of values for these
+///   variables (represented using [ConfigData]).
+/// 
+///   A few things must be noted here. First, we are talking about a space of possible solutions
+///   not a space of actual solutions. For instance, for a soduko grid, that might be associating
+///   a number into each cell of a grid. It does not have to satisfy the rules of the soduko. And
+///   this is by design: we don't know what are correct solutions yet!
+/// 
+///   Then, this is actually quite constrained. For instance, for a soduko grid of size 9x9,
+///   we usually represent the problem with 9x9x9 boolean variables. The variable x<sub>ijk</sub>
+///   is `1` if the number `k` is in the cell `(i,j)`. This allows for multiple numbers to be written
+///   in each cell (or none at all!). If we use such a choice for the ILP variables, we then *must*
+///   enlarge our description of possible solutions by allowing multiple numbers to be written into
+///   each cell (and also allow no number at all in a given cell). This is needed to maintain the
+///   one-to-one correspond between the ILP description and the programmatic description for the
+///   rest of the program.
+/// 
+///   Finally the type is called [BaseConstraints::PartialSolution] because the description might
+///   be partial and not complete. In the ILP realm, this means some variables do not have a definite
+///   value set (and must still be solved in some way). The programatic description must be adapted
+///   accordingly.
+/// 
+///   This is actually not completely counter-intuitive: this is helpful in at least two cases.
+///   First, we want to build a colloscope building software. We need the possibility of partially
+///   built colloscopes, that still need to be completed. The same situation exists for a soduko grid:
+///   we want to be able to describe a grid that has not fully been solved yet.
+///   Second, this is actually useful to complete an started solution. In the case of soduko, this might
+///   represent the numbers put on the initial grid as help. In the case of a colloscope, that might
+///   be a partial descriptions of student groups because some students want to be together.
+/// 
+/// - we can define a second set of (ILP) variables that we call [BaseConstraints::StructureVariable].
+///   These variables can be entirely deduced from the [BaseConstraints::MainVariable].
+///   There are useful only to write the problem in a linear fashion.
+/// 
+///   Two functions are noteworthy with regard to these variables. First there is [BaseConstraints::structure_constraints].
+///   It returns a set of (ILP) constraints such that, if given a set of [BaseConstraints::MainVariable],
+///   when solved will lead to the unique corresponding set of values fot the [BaseConstraints::StructureVariable]
+///   variables.
+/// 
+///   Second, there is [BaseConstraints::reconstruct_structure_variables] which does basically the same thing
+///   but programmatically but allows for partial solutions (and so gives only a partial set of structure
+///   variables).
+/// 
+/// - The problem itself can be described linearly using both [BaseConstraints::MainVariable] and
+///   [BaseConstraints::MainVariable] with linear constraints. These are returned by
+///   [BaseConstraints::general_constraints].
 pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
+    /// Type to represent the main variables
+    /// 
+    /// The main variables are the variables whose set of values is in one to one correspondance
+    /// with the set of possible solutions.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     type MainVariable: UsableData;
+
+    /// Type to represent the structure variables
+    /// 
+    /// The structure variables do not provide any new information and can entirely
+    /// be rebuild from the main variables (represented by [BaseConstraints::MainVariable]).
+    /// They only have a practical utility and help representing the problem as an ILP problem.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     type StructureVariable: UsableData;
+
+    /// Type to represent the description of structure constraints
+    /// 
+    /// Structure constraints define the structure variables ([BaseConstraints::StructureVariable])
+    /// from the main variables ([BaseConstraints::MainVariable]).
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     type StructureConstraintDesc: UsableData;
+
+    /// Type to represent the description of general constraints
+    /// 
+    /// Genral constraints actually define the problem using both main variables ([BaseConstraints::MainVariable])
+    /// and the structure variables ([BaseConstraints::StructureVariable]).
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     type GeneralConstraintDesc: UsableData;
+
+    /// Partial solution type associated to the problem.
+    /// 
+    /// This type is used in the rest of the program to represent a solution (actually a partial
+    /// solution) to the problem.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     type PartialSolution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq;
 
+    /// Definition of the main variables for the problem.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable>;
+
+    /// Definition of the structure variables for the problem.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable>;
 
+    /// Definition of the structure constraints for the problem.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     fn structure_constraints(
         &self,
     ) -> Vec<(
         Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
         Self::StructureConstraintDesc,
     )>;
+
+    /// Definition of the general constraints for the problem.
+    /// 
+    /// See [BaseConstraints] for the full discussion.
     fn general_constraints(
         &self,
     ) -> Vec<(
@@ -43,19 +161,50 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
         Self::GeneralConstraintDesc,
     )>;
 
+    /// Definition of a linear objective for the problem.
+    /// 
+    /// An ILP problem has an objective to optimize. By default it is
+    /// a constant function which means there is nothing to optimize.
+    /// But you can define such an objective by using both main and structure variables.
+    /// 
+    /// See [BaseConstraints] for the full discussion on the different types of variables.
     fn objective(&self) -> Objective<BaseVariable<Self::MainVariable, Self::StructureVariable>> {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
 
+    /// Converts a [BaseConstraints::PartialSolution] into a set of values for the main variables.
+    /// 
+    /// The description should be exactly one to one. This means two things:
+    /// - first, [BaseConstraints::partial_solution_to_configuration] and [BaseConstraints::configuration_to_partial_solution]
+    ///   should be reciprocal to each other.
+    /// - second, if the solution is partial, this should be correctly reflected by not setting the value of some
+    ///   main variables.
     fn partial_solution_to_configuration(&self, sol: &Self::PartialSolution) -> ConfigData<Self::MainVariable>;
+    /// Converts a set of values for the main variables into a [BaseConstraints::PartialSolution].
+    /// 
+    /// The description should be exactly one to one. This means two things:
+    /// - first, [BaseConstraints::partial_solution_to_configuration] and [BaseConstraints::configuration_to_partial_solution]
+    ///   should be reciprocal to each other.
+    /// - second, if the set of values is partial, this should be correctly reflected in a partial solution output.
     fn configuration_to_partial_solution(&self, config: &ConfigData<Self::MainVariable>) -> Self::PartialSolution;
 
+    /// Reconstructs as many structure variables as possible from the main variables.
+    /// 
+    /// A value should only be given if it can indeed be fixed. If the solution is complete (meaning
+    /// all main variables have a fixed value) then all structure variables should have a value too
+    /// and it should uniquely be fixed by the main variables.
     fn reconstruct_structure_variables(
         &self,
         config: &ConfigData<Self::MainVariable>,
     ) -> ConfigData<Self::StructureVariable>;
 }
 
+/// Variable type used in [ExtraConstraints] trait definition.
+/// 
+/// [ExtraConstraints] can introduce its own structure variables.
+/// To express some constraints, we need to mix these variables
+/// with the main and structure variables of the corresponding
+/// [BaseConstraints]. This is the purpose of this type.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ExtraVariable<M: UsableData, S: UsableData, E: UsableData> {
     BaseMain(M),

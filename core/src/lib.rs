@@ -26,6 +26,9 @@
 //!
 //! The main struct is [ProblemBuilder] and you should start from there to see how this crate
 //! works.
+//! 
+//! If you want to implement a problem, you should implement [BaseConstraints] on some structure
+//! and possibly [ExtraConstraints] on a few others.
 
 pub mod colloscopes;
 pub mod time;
