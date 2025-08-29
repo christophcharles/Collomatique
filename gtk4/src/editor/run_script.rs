@@ -1,4 +1,4 @@
-use collomatique_core::rpc::{CmdMsg, OutMsg};
+use collomatique_core::rpc::ResultMsg;
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
@@ -225,28 +225,21 @@ impl Component for Dialog {
                     .unwrap();
             }
             DialogInput::Cmd(cmd) => match cmd {
-                Ok(cmd_msg) => {
+                Ok(_cmd_msg) => {
                     self.add_command(
                         sender,
-                        match cmd_msg {
-                            CmdMsg::Success => {
-                                msg_display::EntryData::Success("Successful command".into())
-                            }
-                            CmdMsg::Warning => {
-                                msg_display::EntryData::Failed("Failed command".into())
-                            }
-                        },
+                        msg_display::EntryData::Success("Received command".into()),
                     );
                     self.rpc_logger
                         .sender()
-                        .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Ack))
+                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack))
                         .unwrap();
                 }
                 Err(e) => {
                     self.add_command(sender, msg_display::EntryData::Invalid(e));
                     self.rpc_logger
                         .sender()
-                        .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Invalid))
+                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::InvalidMsg))
                         .unwrap();
                 }
             },

@@ -467,13 +467,8 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::UpdateOp(op) => {
-                match op {
-                    collomatique_core::ops::UpdateOp::GeneralPlanning(period_op) => {
-                        period_op
-                            .apply(&mut self.data)
-                            .expect("Operation should be valid");
-                    }
-                }
+                op.apply(&mut self.data)
+                    .expect("GUI operations should always be valid");
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
             }
