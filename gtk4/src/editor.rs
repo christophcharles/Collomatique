@@ -163,7 +163,7 @@ impl SimpleComponent for EditorPanel {
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
-            dirty: true,
+            dirty: false,
         };
         let widgets = view_output!();
 

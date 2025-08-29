@@ -1,4 +1,4 @@
-use gtk::prelude::{GtkWindowExt, WidgetExt};
+use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
@@ -73,6 +73,8 @@ pub enum AppInput {
     ColloscopeLoadingFailed(PathBuf, String),
     RequestOpenExistingColloscopeWithDialog,
     OpenExistingColloscopeWithDialog,
+    RequestQuit,
+    Quit,
 }
 
 relm4::new_action_group!(AppActionGroup, "app");
@@ -103,6 +105,11 @@ impl SimpleComponent for AppModel {
                 set_visible_child_name: model.state.get_screen_name(),
                 set_transition_type: gtk::StackTransitionType::Crossfade,
             },
+
+            connect_close_request[sender] => move |_| {
+                sender.input(AppInput::RequestQuit);
+                gtk::glib::Propagation::Stop
+            }
         }
     }
 
@@ -290,6 +297,12 @@ impl SimpleComponent for AppModel {
                     Some(msg) => sender.input(msg),
                     None => {}
                 }
+            }
+            AppInput::RequestQuit => {
+                self.send_but_check_dirty(sender, AppInput::Quit);
+            }
+            AppInput::Quit => {
+                relm4::main_application().quit();
             }
         }
     }
