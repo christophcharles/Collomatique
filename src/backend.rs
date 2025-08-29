@@ -931,7 +931,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn teachers_patterns_remove(
+    pub async fn teachers_remove(
         &mut self,
         index: T::TeacherId,
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TeacherId, Vec<T::TimeSlotId>>>

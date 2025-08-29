@@ -6,7 +6,8 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedOperation, AnnotatedWeekPatternsOperation, ModificationHistory, ReversibleOperation,
+    AnnotatedOperation, AnnotatedTeachersOperation, AnnotatedWeekPatternsOperation,
+    ModificationHistory, ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
@@ -22,6 +23,7 @@ use self::history::AggregatedOperations;
 pub enum Operation {
     GeneralData(backend::GeneralData),
     WeekPatterns(WeekPatternsOperation),
+    Teachers(TeachersOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,6 +31,13 @@ pub enum WeekPatternsOperation {
     Create(backend::WeekPattern),
     Remove(WeekPatternHandle),
     Update(WeekPatternHandle, backend::WeekPattern),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TeachersOperation {
+    Create(backend::Teacher),
+    Remove(TeacherHandle),
+    Update(TeacherHandle, backend::Teacher),
 }
 
 #[derive(Debug)]

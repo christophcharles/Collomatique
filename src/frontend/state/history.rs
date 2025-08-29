@@ -6,6 +6,7 @@ use super::*;
 pub enum AnnotatedOperation {
     GeneralData(backend::GeneralData),
     WeekPatterns(AnnotatedWeekPatternsOperation),
+    Teachers(AnnotatedTeachersOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -13,6 +14,13 @@ pub enum AnnotatedWeekPatternsOperation {
     Create(handles::WeekPatternHandle, backend::WeekPattern),
     Remove(handles::WeekPatternHandle),
     Update(handles::WeekPatternHandle, backend::WeekPattern),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedTeachersOperation {
+    Create(handles::TeacherHandle, backend::Teacher),
+    Remove(handles::TeacherHandle),
+    Update(handles::TeacherHandle, backend::Teacher),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -33,6 +41,24 @@ impl AnnotatedWeekPatternsOperation {
     }
 }
 
+impl AnnotatedTeachersOperation {
+    fn annotate<T: backend::Storage>(
+        op: TeachersOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            TeachersOperation::Create(pattern) => {
+                let handle = handle_managers.teachers.create_handle();
+                AnnotatedTeachersOperation::Create(handle, pattern)
+            }
+            TeachersOperation::Remove(handle) => AnnotatedTeachersOperation::Remove(handle),
+            TeachersOperation::Update(handle, pattern) => {
+                AnnotatedTeachersOperation::Update(handle, pattern)
+            }
+        }
+    }
+}
+
 impl AnnotatedOperation {
     pub fn annotate<T: backend::Storage>(
         op: Operation,
@@ -42,6 +68,9 @@ impl AnnotatedOperation {
             Operation::GeneralData(data) => AnnotatedOperation::GeneralData(data),
             Operation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 AnnotatedWeekPatternsOperation::annotate(op, handle_managers),
+            ),
+            Operation::Teachers(op) => AnnotatedOperation::Teachers(
+                AnnotatedTeachersOperation::annotate(op, handle_managers),
             ),
         }
     }
