@@ -385,7 +385,7 @@ impl Database {
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use crate::backend::{self, IdError};
+use crate::backend::{self, Id2Error, IdError};
 use crate::frontend::state::update::ReturnHandle;
 use crate::frontend::state::{self, Operation, RedoError, UndoError, UpdateError};
 
@@ -402,6 +402,7 @@ pub enum Command {
     TimeSlots(TimeSlotsCommand),
     Groupings(GroupingsCommand),
     GroupingIncompats(GroupingIncompatsCommand),
+    RegisterStudent(RegisterStudentCommand),
     Undo,
     Redo,
     Exit,
@@ -503,6 +504,14 @@ pub enum GroupingIncompatsCommand {
     Remove(GroupingIncompatHandle),
 }
 
+#[derive(Debug, Clone)]
+pub enum RegisterStudentCommand {
+    InSubjectGroupGet(StudentHandle, SubjectGroupHandle),
+    InSubjectGroupSet(StudentHandle, SubjectGroupHandle, Option<SubjectHandle>),
+    InIncompatGet(StudentHandle, IncompatHandle),
+    InIncompatSet(StudentHandle, IncompatHandle, bool),
+}
+
 #[derive(Debug)]
 struct PythonError {
     int_err: Box<dyn std::error::Error + Send>,
@@ -529,6 +538,7 @@ pub enum Answer {
     TimeSlots(TimeSlotsAnswer),
     Groupings(GroupingsAnswer),
     GroupingIncompats(GroupingIncompatsAnswer),
+    RegisterStudent(RegisterStudentAnswer),
     Undo,
     Redo,
 }
@@ -627,6 +637,14 @@ pub enum GroupingIncompatsAnswer {
     Create(GroupingIncompatHandle),
     Update,
     Remove,
+}
+
+#[derive(Debug)]
+pub enum RegisterStudentAnswer {
+    InSubjectGroupGet(Option<SubjectHandle>),
+    InSubjectGroupSet,
+    InIncompatGet(bool),
+    InIncompatSet,
 }
 
 #[derive(Debug)]
@@ -1720,6 +1738,111 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
+    async fn execute_register_student_job<T: state::Manager>(
+        register_student_command: &RegisterStudentCommand,
+        manager: &mut T,
+    ) -> PyResult<RegisterStudentAnswer> {
+        match register_student_command {
+            RegisterStudentCommand::InSubjectGroupGet(student_handle, subject_group_handle) => {
+                let result = manager
+                    .subject_group_for_student_get(
+                        student_handle.handle,
+                        subject_group_handle.handle,
+                    )
+                    .await
+                    .map_err(|e| match e {
+                        Id2Error::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        Id2Error::InvalidId1(_student_id) => {
+                            PyValueError::new_err("Invalid student handle")
+                        }
+                        Id2Error::InvalidId2(_subject_group_id) => {
+                            PyValueError::new_err("Invalid subject group handle")
+                        }
+                    })?;
+
+                Ok(RegisterStudentAnswer::InSubjectGroupGet(
+                    result.map(|x| x.into()),
+                ))
+            }
+            RegisterStudentCommand::InSubjectGroupSet(
+                student_handle,
+                subject_group_handle,
+                subject_handle,
+            ) => {
+                manager
+                    .apply(Operation::RegisterStudent(
+                        state::RegisterStudentOperation::InSubjectGroup(
+                            student_handle.handle,
+                            subject_group_handle.handle,
+                            subject_handle.clone().map(|x| x.handle),
+                        ),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::StudentRemoved(_) => {
+                            PyValueError::new_err("Student was previously removed")
+                        }
+                        UpdateError::SubjectGroupRemoved(_) => {
+                            PyValueError::new_err("Subject group was previously removed")
+                        }
+                        UpdateError::SubjectRemoved(_) => {
+                            PyValueError::new_err("Subject was previously removed")
+                        }
+                        UpdateError::RegisterStudentBadSubject(_, _) => PyValueError::new_err(
+                            "Subject is not a valid subject for the given subject group",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(RegisterStudentAnswer::InSubjectGroupSet)
+            }
+            RegisterStudentCommand::InIncompatGet(student_handle, incompat_handle) => {
+                let result = manager
+                    .incompat_for_student_get(student_handle.handle, incompat_handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        Id2Error::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        Id2Error::InvalidId1(_student_id) => {
+                            PyValueError::new_err("Invalid student handle")
+                        }
+                        Id2Error::InvalidId2(_incompat_id) => {
+                            PyValueError::new_err("Invalid incompat handle")
+                        }
+                    })?;
+
+                Ok(RegisterStudentAnswer::InIncompatGet(result))
+            }
+            RegisterStudentCommand::InIncompatSet(student_handle, incompat_handle, enabled) => {
+                manager
+                    .apply(Operation::RegisterStudent(
+                        state::RegisterStudentOperation::InIncompat(
+                            student_handle.handle,
+                            incompat_handle.handle,
+                            *enabled,
+                        ),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::StudentRemoved(_) => {
+                            PyValueError::new_err("Student was previously removed")
+                        }
+                        UpdateError::IncompatRemoved(_) => {
+                            PyValueError::new_err("Incompat was previously removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(RegisterStudentAnswer::InIncompatSet)
+            }
+        }
+    }
+
     async fn execute_job<T: state::Manager>(
         command: &Command,
         manager: &mut T,
@@ -1772,6 +1895,11 @@ impl<'scope> SessionConnection<'scope> {
                     Self::execute_grouping_incompats_job(grouping_incompats_command, manager)
                         .await?;
                 Ok(Answer::GroupingIncompats(answer))
+            }
+            Command::RegisterStudent(register_student_command) => {
+                let answer =
+                    Self::execute_register_student_job(register_student_command, manager).await?;
+                Ok(Answer::RegisterStudent(answer))
             }
             Command::Undo => {
                 manager.undo().await.map_err(|e| match e {
