@@ -15,6 +15,7 @@ fn restricted_interrogations_per_week() {
     let subjects = vec![
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(1).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
@@ -109,6 +110,7 @@ fn restricted_interrogations_per_week() {
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
@@ -171,6 +173,7 @@ fn restricted_interrogations_per_week() {
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
@@ -229,6 +232,7 @@ fn restricted_interrogations_per_week() {
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,

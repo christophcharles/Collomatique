@@ -128,6 +128,7 @@ impl GroupsDesc {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_group: RangeInclusive<NonZeroUsize>,
+    pub max_groups_per_slot: NonZeroUsize,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
