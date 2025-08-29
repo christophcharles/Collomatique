@@ -42,11 +42,12 @@ use super::FeasabilitySolver;
 use crate::ilp::mat_repr::ProblemRepr;
 
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
         &self,
         config: &Config<'a, V, P>,
         origin: Option<&FeasableConfig<'a, V, P>>,
         mut max_steps: Option<usize>,
+        _hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
         let init_g_score = 0.0f32;
         let init_f_score = init_g_score + self.distance_heuristic(config);

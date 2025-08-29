@@ -36,8 +36,11 @@ pub enum CliCommand {
         #[arg(short, long, default_value_t = false)]
         force: bool,
         /// Verbose resolution output
-        #[arg(short, long)]
+        #[arg(short, long, default_value_t = false)]
         verbose: bool,
+        /// Try to actually have random init config. This is way longer.
+        #[arg(short, long, default_value_t = false)]
+        long_init: bool,
     },
     /// Create, remove or run python script
     Python {
@@ -338,6 +341,7 @@ fn solve_initial_guess<'a>(
     ilp_translator: &IlpTranslator<'a>,
     problem: &'a Problem<Variable>,
     verbose: bool,
+    long_init: bool,
 ) -> Config<'a, Variable> {
     let general_initializer =
         crate::ilp::initializers::Random::with_p(crate::ilp::random::DefaultRndGen::new(), 0.01)
@@ -345,8 +349,14 @@ fn solve_initial_guess<'a>(
     let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
     let max_steps = None;
     let retries = 1;
-    let incremental_initializer =
-        ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
+    let quick_init = !long_init;
+    let incremental_initializer = ilp_translator.incremental_initializer(
+        general_initializer,
+        solver,
+        max_steps,
+        retries,
+        quick_init,
+    );
 
     use crate::ilp::initializers::ConfigInitializer;
     incremental_initializer.build_init_config(&problem)
@@ -357,11 +367,14 @@ use std::rc::Rc;
 fn solve_initial_colloscope<'a>(
     init_config: Config<'a, Variable>,
     verbose: bool,
+    long_init: bool,
 ) -> (
     Option<(Rc<FeasableConfig<'a, Variable>>, f64)>,
     impl Iterator<Item = (Rc<FeasableConfig<'a, Variable>>, f64)>,
 ) {
-    let sa_optimizer = crate::ilp::optimizers::sa::Optimizer::new(init_config);
+    let mut sa_optimizer = crate::ilp::optimizers::sa::Optimizer::new(init_config);
+    let first_config_is_only_hint = !long_init;
+    sa_optimizer.set_first_config_is_only_hint(first_config_is_only_hint);
     let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
     let random_gen = crate::ilp::random::DefaultRndGen::new();
     let mutation_policy = crate::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
@@ -379,6 +392,7 @@ fn solve_thread<'a>(
     problem: &'a Problem<Variable>,
     step_count: usize,
     verbose: bool,
+    long_init: bool,
 ) -> Option<(FeasableConfig<'a, Variable>, f64)> {
     use std::time::Duration;
 
@@ -386,10 +400,10 @@ fn solve_thread<'a>(
     pb.set_message("Building initial guess... (this can take a few minutes)");
     pb.enable_steady_tick(Duration::from_millis(100));
 
-    let init_config = solve_initial_guess(ilp_translator, problem, verbose);
+    let init_config = solve_initial_guess(ilp_translator, problem, verbose, long_init);
 
     pb.set_message("Building initial colloscope... (this can take a few minutes)");
-    let (first_config_opt, iterator) = solve_initial_colloscope(init_config, verbose);
+    let (first_config_opt, iterator) = solve_initial_colloscope(init_config, verbose, long_init);
 
     let (first_sol, first_cost) = match first_config_opt {
         Some(value) => value,
@@ -479,6 +493,7 @@ async fn solve_command(
     name: Option<String>,
     force: bool,
     verbose: bool,
+    long_init: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
@@ -555,8 +570,15 @@ async fn solve_command(
                 .into_par_iter()
                 .panic_fuse()
                 .map(|(pb, style, ilp_translator)| {
-                    let (best_config, best_cost) =
-                        solve_thread(pb, style, &ilp_translator, &problem, step_count, verbose)?;
+                    let (best_config, best_cost) = solve_thread(
+                        pb,
+                        style,
+                        &ilp_translator,
+                        &problem,
+                        step_count,
+                        verbose,
+                        long_init,
+                    )?;
 
                     use ordered_float::OrderedFloat;
                     Some((best_config, OrderedFloat(best_cost)))
@@ -1500,7 +1522,19 @@ pub async fn execute_cli_command(
             name,
             force,
             verbose,
-        } => solve_command(steps, thread_count, name, force, verbose, app_state).await,
+            long_init,
+        } => {
+            solve_command(
+                steps,
+                thread_count,
+                name,
+                force,
+                verbose,
+                long_init,
+                app_state,
+            )
+            .await
+        }
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
