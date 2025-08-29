@@ -127,6 +127,14 @@ pub enum PeriodError {
     /// The period id already exists
     #[error("period id ({0:?}) already exists")]
     PeriodIdAlreadyExists(PeriodId),
+
+    /// The period is referenced by a subject
+    #[error("period id ({0:?}) is referenced by subject {1:?}")]
+    PeriodIsReferencedBySubject(PeriodId, SubjectId),
+
+    /// Cannot reduce the week count because of a subject
+    #[error("subject {0:?} references sepcific week numbers which is implies a minimum week count of {1}")]
+    SubjectImpliesMinimumWeekCount(SubjectId, usize),
 }
 
 /// Errors for subject operations
