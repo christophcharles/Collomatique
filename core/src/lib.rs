@@ -34,6 +34,38 @@ use std::collections::BTreeMap;
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, ObjectiveSense, UsableData, Variable};
 
+pub trait PartialSolution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq {
+    fn is_complete(&self) -> bool;
+}
+
+pub struct CompleteSolution<T: PartialSolution>(T);
+
+impl<T: PartialSolution> CompleteSolution<T> {
+    pub fn new(sol: T) -> Option<Self> {
+        if !sol.is_complete() {
+            return None;
+        }
+
+        Some(CompleteSolution(sol))
+    }
+
+    pub fn inner(&self) -> &T {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T: PartialSolution> std::ops::Deref for CompleteSolution<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BaseVariable<M: UsableData, S: UsableData> {
     Main(M),
@@ -124,7 +156,7 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     type StructureVariable: UsableData;
     type StructureConstraintDesc: UsableData;
     type GeneralConstraintDesc: UsableData;
-    type Solution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq;
+    type Solution: PartialSolution;
 
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable>;
     fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable>;
