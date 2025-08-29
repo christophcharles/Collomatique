@@ -326,6 +326,8 @@ struct ValidatedJson {
 pub enum ValidationError {
     #[error("Id {0} appears twice in data")]
     DuplicatedId(u64),
+    #[error("Week pattern id {0:?} is referenced but does not exist")]
+    BadWeekPatternId(WeekPatternId),
 }
 
 pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
@@ -398,10 +400,26 @@ impl JsonData {
         None
     }
 
+    fn validate_incompats(&self) -> ValidationResult<()> {
+        for (_, incompat) in &self.incompats {
+            for group in &incompat.groups {
+                for slot in &group.slots {
+                    if !self.week_patterns.contains_key(&slot.week_pattern_id) {
+                        return Err(ValidationError::BadWeekPatternId(slot.week_pattern_id));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn validate(self) -> ValidationResult<ValidatedJson> {
         if let Some(id) = self.find_duplicated_id() {
             return Err(ValidationError::DuplicatedId(id));
         }
+
+        self.validate_incompats()?;
 
         Ok(ValidatedJson { validated: self })
     }
