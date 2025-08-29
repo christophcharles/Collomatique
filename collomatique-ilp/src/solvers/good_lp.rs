@@ -9,10 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver};
-use crate::{
-    linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData,
-    VariableType,
-};
+use crate::{linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData};
 
 /// [good_lp] solver
 ///
@@ -72,10 +69,9 @@ impl GoodSolver {
                 let col = pb_vars.add({
                     let mut var_def = good_lp::VariableDefinition::new();
 
-                    match desc.get_type() {
-                        VariableType::Integer => var_def = var_def.integer(),
-                        _ => {}
-                    };
+                    if desc.is_integer() {
+                        var_def = var_def.integer();
+                    }
 
                     if let Some(m) = desc.get_min() {
                         var_def = var_def.min(m);

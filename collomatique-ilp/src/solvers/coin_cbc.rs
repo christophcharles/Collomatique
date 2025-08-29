@@ -9,10 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver, SolverWithTimeLimit, TimeLimitSolution};
-use crate::{
-    linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData,
-    VariableType,
-};
+use crate::{linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData};
 
 /// Coin-cbc solver
 ///
@@ -118,9 +115,10 @@ impl CbcSolver {
             .get_variables()
             .iter()
             .map(|(var, desc)| {
-                let col = match desc.get_type() {
-                    VariableType::Integer => model.add_integer(),
-                    VariableType::Continuous => model.add_col(),
+                let col = if desc.is_integer() {
+                    model.add_integer()
+                } else {
+                    model.add_col()
                 };
 
                 match desc.get_min() {

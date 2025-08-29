@@ -252,30 +252,6 @@ impl<
 {
 }
 
-/// Represents the different possible types of variables
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub enum VariableType {
-    /// Continuous variable.
-    ///
-    /// In practice, this is represented by an f64
-    #[default]
-    Continuous,
-    /// Integer variable.
-    ///
-    /// It is still represented by an f64, but the possible
-    /// values will be restricted to integers (positive or negative).
-    Integer,
-}
-
-impl std::fmt::Display for VariableType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VariableType::Integer => write!(f, "int"),
-            VariableType::Continuous => write!(f, "real"),
-        }
-    }
-}
-
 /// Complete description of the possible range of values for a variable.
 ///
 /// The description is built using a builder pattern by starting with a call to
@@ -287,25 +263,27 @@ impl std::fmt::Display for VariableType {
 /// Further constraints can be imposed with [Variable::min] and [Variable::max].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Variable {
-    var_type: VariableType,
+    is_integer: bool,
     min: Option<ordered_float::OrderedFloat<f64>>,
     max: Option<ordered_float::OrderedFloat<f64>>,
 }
 
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let var_type = if self.is_integer { "int" } else { "continuous" };
+
         match (self.min, self.max) {
             (Some(mi), Some(ma)) => {
-                write!(f, "{} [{},{}]", self.var_type, mi, ma)?;
+                write!(f, "{} [{},{}]", var_type, mi, ma)?;
             }
             (None, Some(ma)) => {
-                write!(f, "{} ]-oo,{}]", self.var_type, ma)?;
+                write!(f, "{} ]-oo,{}]", var_type, ma)?;
             }
             (Some(mi), None) => {
-                write!(f, "{} [{},+oo[", self.var_type, mi)?;
+                write!(f, "{} [{},+oo[", var_type, mi)?;
             }
             (None, None) => {
-                write!(f, "{} ]-oo,+oo[", self.var_type)?;
+                write!(f, "{} ]-oo,+oo[", var_type)?;
             }
         }
         Ok(())
@@ -316,7 +294,7 @@ impl Default for Variable {
     /// By default, a variable is continuous without any range restriction.
     fn default() -> Self {
         Variable {
-            var_type: VariableType::default(),
+            is_integer: false,
             min: None,
             max: None,
         }
@@ -336,7 +314,7 @@ impl Variable {
     /// ```
     pub fn integer() -> Self {
         Variable {
-            var_type: VariableType::Integer,
+            is_integer: true,
             min: None,
             max: None,
         }
@@ -357,7 +335,7 @@ impl Variable {
     /// ```
     pub fn binary() -> Self {
         Variable {
-            var_type: VariableType::Integer,
+            is_integer: true,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: Some(ordered_float::OrderedFloat(1.0)),
         }
@@ -377,7 +355,7 @@ impl Variable {
     /// ```
     pub fn uinteger() -> Self {
         Variable {
-            var_type: VariableType::Integer,
+            is_integer: true,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: None,
         }
@@ -395,7 +373,7 @@ impl Variable {
     /// ```
     pub fn continuous() -> Self {
         Variable {
-            var_type: VariableType::Continuous,
+            is_integer: false,
             min: None,
             max: None,
         }
@@ -413,7 +391,7 @@ impl Variable {
     /// ```
     pub fn non_negative() -> Self {
         Variable {
-            var_type: VariableType::Continuous,
+            is_integer: false,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: None,
         }
@@ -431,7 +409,7 @@ impl Variable {
     /// ```
     pub fn non_positive() -> Self {
         Variable {
-            var_type: VariableType::Continuous,
+            is_integer: false,
             min: None,
             max: Some(ordered_float::OrderedFloat(0.0)),
         }
@@ -497,8 +475,8 @@ impl Variable {
     /// assert_eq!(continuous_var.get_type(), VariableType::Continuous);
     /// assert_eq!(integer_var.get_type(), VariableType::Integer);
     /// ```
-    pub fn get_type(&self) -> VariableType {
-        self.var_type
+    pub fn is_integer(&self) -> bool {
+        self.is_integer
     }
 
     /// Returns the minimum bound of the variable.
@@ -1187,10 +1165,13 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
             return false;
         };
 
-        match var_constraint.get_type() {
-            VariableType::Continuous => true,
-            VariableType::Integer => f64_equals(value, value.floor()),
+        if var_constraint.is_integer() {
+            if !f64_equals(value, value.floor()) {
+                return false;
+            }
         }
+
+        true
     }
 
     /// Builds a [Config] for the problem from a [ConfigData] without checking first
