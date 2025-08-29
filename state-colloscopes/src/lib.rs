@@ -14,7 +14,7 @@ pub mod ids;
 use ids::IdIssuer;
 pub use ids::{PeriodId, StudentId, SubjectId, TeacherId};
 pub mod ops;
-pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp};
+pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
 use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp};
 pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
