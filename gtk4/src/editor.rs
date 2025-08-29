@@ -2,7 +2,7 @@ use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
 use general_planning::GeneralPlanningUpdateOp;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
-use relm4::prelude::ComponentController;
+use relm4::prelude::{ComponentController, RelmWidgetExt};
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use std::collections::BTreeMap;
@@ -181,10 +181,30 @@ impl Component for EditorPanel {
                         },
                     },
                     #[wrap(Some)]
-                    set_content = &gtk::StackSidebar {
+                    set_content = &gtk::Box {
                         set_vexpand: true,
-                        set_size_request: (200, -1),
-                        set_stack: &main_stack,
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Vertical,
+                        gtk::StackSidebar {
+                            set_vexpand: true,
+                            set_size_request: (200, -1),
+                            set_stack: &main_stack,
+                        },
+                        gtk::Box {
+                            set_vexpand: true,
+                        },
+                        gtk::Button {
+                            set_hexpand: true,
+                            set_size_request: (-1,50),
+                            set_sensitive: false,
+                            add_css_class: "frame",
+                            add_css_class: "warning",
+                            set_margin_all: 5,
+                            adw::ButtonContent {
+                                set_icon_name: "text-x-script",
+                                set_label: "Exécuter un script",
+                            }
+                        },
                     },
                 },
             },
@@ -255,7 +275,7 @@ impl Component for EditorPanel {
                                     }
                                 }
                             ),
-                        }
+                        },
                     },
                 },
             },
