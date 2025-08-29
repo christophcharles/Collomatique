@@ -43,7 +43,7 @@ impl From<NonZeroDurationInMinutes> for chrono::TimeDelta {
 /// Encapsulates a [chrono::Weekday] and gives it a default ordering
 /// (monday is the lowest and sunday the biggest day)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Weekday(chrono::Weekday);
+pub struct Weekday(pub chrono::Weekday);
 
 impl PartialOrd for Weekday {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -65,16 +65,30 @@ impl From<chrono::Weekday> for Weekday {
     }
 }
 
+impl Weekday {
+    pub fn inner(&self) -> &chrono::Weekday {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> chrono::Weekday {
+        self.0
+    }
+
+    pub fn inner_mut(&mut self) -> &mut chrono::Weekday {
+        &mut self.0
+    }
+}
+
 impl std::ops::Deref for Weekday {
     type Target = chrono::Weekday;
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.inner()
     }
 }
 
 impl std::ops::DerefMut for Weekday {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        self.inner_mut()
     }
 }
 
@@ -152,6 +166,11 @@ impl SlotWithDuration {
     /// at the end time.
     pub fn end_time(&self) -> chrono::NaiveTime {
         self.start.start_time + self.duration.time_delta()
+    }
+
+    /// Returns the duration of a slot
+    pub fn duration(&self) -> NonZeroDurationInMinutes {
+        self.duration
     }
 
     /// Checks if two slots (with duration) overlap
