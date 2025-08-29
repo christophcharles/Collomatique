@@ -450,6 +450,11 @@ impl Data {
         &self.inner_data.student_list
     }
 
+    /// Get the subjects
+    pub fn get_subjects(&self) -> &subjects::Subjects {
+        &self.inner_data.subjects
+    }
+
     /// Return the description of the periods
     pub fn get_periods(&self) -> &periods::Periods {
         &self.inner_data.periods
