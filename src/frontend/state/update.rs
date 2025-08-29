@@ -61,6 +61,14 @@ pub enum UpdateError<IntError: std::error::Error> {
     SubjectWithStudentRegistered(StudentHandle),
     #[error("Time slot corresponding to handle {0:?} was previously removed")]
     TimeSlotRemoved(TimeSlotHandle),
+    #[error("Time slot references a bad subject (probably removed) of id {0:?}")]
+    TimeSlotBadSubject(SubjectHandle),
+    #[error("Time slot references a bad teacher (probably removed) of id {0:?}")]
+    TimeSlotBadTeacher(TeacherHandle),
+    #[error("Time slot references a bad week pattern (probably removed) of id {0:?}")]
+    TimeSlotBadWeekPattern(WeekPatternHandle),
+    #[error("Cannot remove time slot: it is referenced by the database")]
+    TimeSlotDependanciesRemaining(Vec<GroupingHandle>),
     #[error("Grouping corresponding to handle {0:?} was previously removed")]
     GroupingRemoved(GroupingHandle),
     #[error("Grouping ncompat corresponding to handle {0:?} was previously removed")]
@@ -123,6 +131,7 @@ pub enum ReturnHandle {
     Incompat(IncompatHandle),
     GroupList(GroupListHandle),
     Subject(SubjectHandle),
+    TimeSlot(TimeSlotHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -2416,6 +2425,141 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_time_slots_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedTimeSlotsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedTimeSlotsOperation::Create(time_slot_handle, time_slot) => {
+                let time_slot_backend = match convert_time_slot_from_handles(
+                    time_slot.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId3::Ok => {
+                            panic!("DataStatusWithId3::Ok is not an error")
+                        }
+                        backend::DataStatusWithId3::BadCrossId1(subject_handle) => {
+                            return Err(UpdateError::TimeSlotBadSubject(subject_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId2(teacher_handle) => {
+                            return Err(UpdateError::TimeSlotBadTeacher(teacher_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId3(week_pattern_handle) => {
+                            return Err(UpdateError::TimeSlotBadWeekPattern(week_pattern_handle))
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .time_slots_add(&time_slot_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross3Error::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::Cross3Error::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3Error::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3Error::InvalidCrossId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .time_slots
+                    .update_handle(*time_slot_handle, Some(new_id));
+                Ok(ReturnHandle::TimeSlot(*time_slot_handle))
+            }
+            AnnotatedTimeSlotsOperation::Remove(time_slot_handle) => {
+                let subject_id = manager
+                    .get_handle_managers()
+                    .time_slots
+                    .get_id(*time_slot_handle)
+                    .ok_or(UpdateError::TimeSlotRemoved(*time_slot_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .time_slots_remove(subject_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| {
+                                    manager.get_handle_managers_mut().groupings.get_handle(dep)
+                                })
+                                .collect();
+                            UpdateError::TimeSlotDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .time_slots
+                    .update_handle(*time_slot_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedTimeSlotsOperation::Update(time_slot_handle, time_slot) => {
+                let time_slot_backend = match convert_time_slot_from_handles(
+                    time_slot.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId3::Ok => {
+                            panic!("DataStatusWithId3::Ok is not an error")
+                        }
+                        backend::DataStatusWithId3::BadCrossId1(subject_handle) => {
+                            return Err(UpdateError::TimeSlotBadSubject(subject_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId2(teacher_handle) => {
+                            return Err(UpdateError::TimeSlotBadTeacher(teacher_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId3(week_pattern_handle) => {
+                            return Err(UpdateError::TimeSlotBadWeekPattern(week_pattern_handle))
+                        }
+                    },
+                };
+                let time_slot_id = manager
+                    .get_handle_managers()
+                    .time_slots
+                    .get_id(*time_slot_handle)
+                    .ok_or(UpdateError::TimeSlotRemoved(*time_slot_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .time_slots_update(time_slot_id, &time_slot_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross3IdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::Cross3IdError::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdError::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdError::InvalidCrossId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -2429,7 +2573,7 @@ pub(super) mod private {
             AnnotatedOperation::Incompats(op) => update_incompats_state(manager, op).await,
             AnnotatedOperation::GroupLists(op) => update_group_lists_state(manager, op).await,
             AnnotatedOperation::Subjects(op) => update_subjects_state(manager, op).await,
-            AnnotatedOperation::TimeSlots(_op) => todo!(),
+            AnnotatedOperation::TimeSlots(op) => update_time_slots_state(manager, op).await,
             AnnotatedOperation::Groupings(_op) => todo!(),
             AnnotatedOperation::GroupingIncompats(_op) => todo!(),
         }
