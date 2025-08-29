@@ -1,5 +1,5 @@
 use collomatique::ilp::linexpr::Expr;
-use collomatique::ilp::{Config, ProblemBuilder};
+use collomatique::ilp::ProblemBuilder;
 
 fn main() {
     // We test on a simple scheduling problem.
@@ -79,6 +79,6 @@ fn main() {
     let iterator = sa_optimizer.iterate(dijkstra_solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
-        println!("{}: {} - {}", i, cost, Config::from(sol.inner()));
+        println!("{}: {} - {}", i, cost, sol.inner().clone());
     }
 }

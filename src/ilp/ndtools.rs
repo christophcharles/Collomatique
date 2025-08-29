@@ -55,48 +55,42 @@ impl MatRepr {
         }
     }
 
-    pub fn config<'a>(&self, config: &Config<'a>) -> ConfigRepr<'a> {
-        let p = config.problem.variables.len();
+    pub fn default_config_repr(&self) -> ConfigRepr {
+        let p = self.leq_mat.shape()[1];
+
+        let values = Array1::zeros(p);
+
+        ConfigRepr { values }
+    }
+
+    pub fn random_config_repr<T: random::RandomGen>(&self, random_gen: &mut T) -> ConfigRepr {
+        let p = self.leq_mat.shape()[1];
 
         let mut values = Array1::zeros(p);
 
-        for (i, var) in config.problem.variables.iter().enumerate() {
-            if config.get(var).expect("Variable declared for config") {
-                values[i] = 1;
-            }
+        for i in 0..p {
+            values[i] = if random_gen.randbool() { 1 } else { 0 };
         }
 
-        ConfigRepr {
-            problem: config.problem,
-            values,
-        }
+        ConfigRepr { values }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigRepr<'a> {
-    problem: &'a Problem,
+pub struct ConfigRepr {
     values: Array1<i32>,
 }
 
-impl<'a> PartialEq for ConfigRepr<'a> {
+impl PartialEq for ConfigRepr {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a> Eq for ConfigRepr<'a> {}
+impl Eq for ConfigRepr {}
 
-impl<'a> Ord for ConfigRepr<'a> {
+impl Ord for ConfigRepr {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let p1: *const Problem = &*self.problem;
-        let p2: *const Problem = &*other.problem;
-
-        let mat_repr_ord = p1.cmp(&p2);
-        if mat_repr_ord != std::cmp::Ordering::Equal {
-            return mat_repr_ord;
-        }
-
         let l1 = self.values.len();
         let l2 = other.values.len();
 
@@ -112,34 +106,16 @@ impl<'a> Ord for ConfigRepr<'a> {
     }
 }
 
-impl<'a> PartialOrd for ConfigRepr<'a> {
+impl PartialOrd for ConfigRepr {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> From<&ConfigRepr<'a>> for Config<'a> {
-    fn from(value: &ConfigRepr<'a>) -> Self {
-        let mut config = value.problem.default_config();
-        for (i, var) in value.problem.variables.iter().enumerate() {
-            *config.get_mut(var).expect("Variable declared in config") = value.values[i] == 1;
-        }
-        config
-    }
-}
-
-impl<'a> From<ConfigRepr<'a>> for Config<'a> {
-    fn from(value: ConfigRepr<'a>) -> Self {
-        Config::from(&value)
-    }
-}
-
-impl<'a> ConfigRepr<'a> {
-    pub fn is_feasable(&self) -> bool {
-        let leq_column =
-            self.problem.mat_repr.leq_mat.dot(&self.values) + &self.problem.mat_repr.leq_constants;
-        let eq_column =
-            self.problem.mat_repr.eq_mat.dot(&self.values) + &self.problem.mat_repr.eq_constants;
+impl ConfigRepr {
+    pub fn is_feasable(&self, mat_repr: &MatRepr) -> bool {
+        let leq_column = mat_repr.leq_mat.dot(&self.values) + &mat_repr.leq_constants;
+        let eq_column = mat_repr.eq_mat.dot(&self.values) + &mat_repr.eq_constants;
 
         for v in &leq_column {
             if *v > 0 {
@@ -154,19 +130,7 @@ impl<'a> ConfigRepr<'a> {
         true
     }
 
-    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfigRepr<'a> {
-        FeasableConfigRepr(self)
-    }
-
-    pub fn into_feasable(self) -> Option<FeasableConfigRepr<'a>> {
-        if !self.is_feasable() {
-            return None;
-        }
-
-        Some(unsafe { self.into_feasable_unchecked() })
-    }
-
-    pub fn neighbours(&self) -> Vec<ConfigRepr<'a>> {
+    pub fn neighbours(&self) -> Vec<ConfigRepr> {
         let mut output = vec![];
 
         for i in 0..self.values.len() {
@@ -180,7 +144,7 @@ impl<'a> ConfigRepr<'a> {
         output
     }
 
-    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> ConfigRepr<'a> {
+    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> ConfigRepr {
         let mut output = self.clone();
 
         let i = random_gen.rand_in_range(0..self.values.len());
@@ -188,29 +152,12 @@ impl<'a> ConfigRepr<'a> {
 
         output
     }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FeasableConfigRepr<'a>(ConfigRepr<'a>);
-
-impl<'a> FeasableConfigRepr<'a> {
-    pub fn into_inner(self) -> ConfigRepr<'a> {
-        self.0
+    pub unsafe fn get_unchecked(&self, i: usize) -> i32 {
+        self.values[i]
     }
 
-    pub fn inner(&self) -> &ConfigRepr<'a> {
-        &self.0
-    }
-}
-
-impl<'a> From<&FeasableConfigRepr<'a>> for FeasableConfig<'a> {
-    fn from(value: &FeasableConfigRepr<'a>) -> Self {
-        unsafe { Config::from(value.inner()).into_feasable_unchecked() }
-    }
-}
-
-impl<'a> From<FeasableConfigRepr<'a>> for FeasableConfig<'a> {
-    fn from(value: FeasableConfigRepr<'a>) -> Self {
-        FeasableConfig::from(&value)
+    pub unsafe fn set_unchecked(&mut self, i: usize, val: i32) {
+        self.values[i] = val
     }
 }

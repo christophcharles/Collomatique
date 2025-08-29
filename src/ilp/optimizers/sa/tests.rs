@@ -75,7 +75,7 @@ fn test_sa() {
 
     let mut sa_optimizer = super::Optimizer::new(&pb);
 
-    let config = pb.config_from(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
+    let config = pb.config_from(["x11", "y12", "y21"]).unwrap(); // We choose a starting closer to the "bad" (high cost) solution
     sa_optimizer.set_init_config(config);
 
     let mut random_gen = crate::ilp::random::DefaultRndGen::new();
@@ -87,10 +87,10 @@ fn test_sa() {
 
     assert_eq!(
         solution.expect("Solution found").0.inner().clone(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).repr()
+        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap()
     );
 
-    let config = pb.config_from(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
+    let config = pb.config_from(["x12", "y11", "y22"]).unwrap(); // We choose a starting closer to the "good" (low cost) solution
     sa_optimizer.set_init_config(config);
 
     let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new();
@@ -100,6 +100,6 @@ fn test_sa() {
 
     assert_eq!(
         solution.expect("Solution found").0.inner().clone(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).repr()
+        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap()
     );
 }

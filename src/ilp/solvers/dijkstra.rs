@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::ndtools::{ConfigRepr, FeasableConfigRepr};
+use crate::ilp::{Config, FeasableConfig};
 
 #[derive(Debug, Clone, Default)]
 pub struct Solver {}
@@ -18,12 +18,12 @@ use std::collections::BTreeSet;
 impl FeasabilitySolver for Solver {
     fn restore_feasability_exclude<'a>(
         &self,
-        config: &ConfigRepr<'a>,
-        exclude_list: &BTreeSet<&FeasableConfigRepr<'a>>,
-    ) -> Option<FeasableConfigRepr<'a>> {
+        config: &Config<'a>,
+        exclude_list: &BTreeSet<&FeasableConfig<'a>>,
+    ) -> Option<FeasableConfig<'a>> {
         use std::collections::VecDeque;
 
-        let exclude_configs: BTreeSet<ConfigRepr<'a>> =
+        let exclude_configs: BTreeSet<Config<'a>> =
             exclude_list.iter().map(|x| x.inner().clone()).collect();
         let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();

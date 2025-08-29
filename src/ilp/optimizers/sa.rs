@@ -2,7 +2,6 @@
 mod tests;
 
 use crate::ilp::dbg::Debuggable;
-use crate::ilp::ndtools::{ConfigRepr, FeasableConfigRepr};
 use crate::ilp::random::RandomGen;
 use crate::ilp::solvers::FeasabilitySolver;
 use crate::ilp::{Config, FeasableConfig, Problem};
@@ -18,13 +17,13 @@ impl Default for TemperatureFn {
 #[derive(Debug, Clone)]
 pub struct Optimizer<'a> {
     problem: &'a Problem,
-    init_config: ConfigRepr<'a>,
+    init_config: Config<'a>,
     temp_profile: TemperatureFn,
 }
 
 impl<'a> Optimizer<'a> {
     pub fn new(problem: &'a Problem) -> Self {
-        let init_config = problem.default_config().repr();
+        let init_config = problem.default_config();
 
         Optimizer {
             problem,
@@ -34,7 +33,7 @@ impl<'a> Optimizer<'a> {
     }
 
     pub fn set_init_config(&mut self, init_config: Config<'a>) {
-        self.init_config = init_config.repr();
+        self.init_config = init_config;
     }
 
     pub fn set_temp_profile(&mut self, temp_profile: TemperatureFn) {
@@ -66,8 +65,8 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver>
     solver: S,
     random_gen: &'c mut R,
 
-    previous_config: Option<(Rc<FeasableConfigRepr<'a>>, f64)>,
-    current_config: ConfigRepr<'a>,
+    previous_config: Option<(Rc<FeasableConfig<'a>>, f64)>,
+    current_config: Config<'a>,
 
     k: usize,
     temp_profile: TemperatureFn,
@@ -76,7 +75,7 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver>
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> Iterator
     for OptimizerIterator<'b, 'a, 'c, R, S>
 {
-    type Item = (Rc<FeasableConfigRepr<'a>>, f64);
+    type Item = (Rc<FeasableConfig<'a>>, f64);
 
     fn next(&mut self) -> Option<Self::Item> {
         use std::collections::BTreeSet;
@@ -92,7 +91,7 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> Iterator
                 .restore_feasability_exclude(&self.current_config, &exclude_list)?,
         );
 
-        let config_cost = (self.optimizer.problem.eval_fn)(&FeasableConfig::from(config.as_ref()));
+        let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
 
         let acceptance = match self.previous_config {
             Some((_, old_cost)) => {
@@ -113,7 +112,7 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> Iterator
 }
 
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver> OptimizerIterator<'b, 'a, 'c, R, S> {
-    pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfigRepr<'a>>, f64)> {
+    pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a>>, f64)> {
         self.take(max_iter)
             .min_by(|x, y| x.1.partial_cmp(&y.1).expect("Non NaN"))
     }
