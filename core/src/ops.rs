@@ -192,50 +192,109 @@ impl UpdateWarning {
 
 #[derive(Clone, Debug)]
 struct CleaningOp<T: Clone + std::fmt::Debug> {
+    warning_desc: String,
     warning: T,
     ops: Vec<UpdateOp>,
 }
 
-#[derive(Clone, Debug)]
-struct CleaningOps<T: Clone + std::fmt::Debug> {
-    cleaning_ops: Vec<CleaningOp<T>>,
-}
-
-impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> CleaningOps<T> {
-    fn downcast(self) -> CleaningOps<UpdateWarning> {
-        CleaningOps {
-            cleaning_ops: self
-                .cleaning_ops
-                .into_iter()
-                .map(|x| CleaningOp {
-                    warning: x.warning.into(),
-                    ops: x.ops,
-                })
-                .collect(),
+impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> CleaningOp<T> {
+    fn into_general_warning(self) -> CleaningOp<UpdateWarning> {
+        CleaningOp {
+            warning_desc: self.warning_desc,
+            warning: self.warning.into(),
+            ops: self.ops,
         }
     }
 }
 
+impl CleaningOp<UpdateWarning> {
+    fn downcast<T: Clone + std::fmt::Debug + Into<UpdateWarning>>(
+        x: Option<CleaningOp<T>>,
+    ) -> Option<Self> {
+        x.map(|x| x.into_general_warning())
+    }
+}
+
 impl UpdateOp {
-    fn get_cleaning_ops<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+    fn get_next_cleaning_op<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> CleaningOps<UpdateWarning> {
+    ) -> Option<CleaningOp<UpdateWarning>> {
         match self {
-            UpdateOp::GeneralPlanning(period_op) => period_op.get_cleaning_ops(data).downcast(),
-            UpdateOp::Subjects(subject_op) => subject_op.get_cleaning_ops(data).downcast(),
-            UpdateOp::Teachers(teacher_op) => teacher_op.get_cleaning_ops(data).downcast(),
-            UpdateOp::Students(student_op) => student_op.get_cleaning_ops(data).downcast(),
-            UpdateOp::Assignments(assignment_op) => assignment_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::GeneralPlanning(period_op) => {
+                CleaningOp::downcast(period_op.get_next_cleaning_op(data))
+            }
+            UpdateOp::Subjects(subject_op) => {
+                CleaningOp::downcast(subject_op.get_next_cleaning_op(data))
+            }
+            UpdateOp::Teachers(teacher_op) => {
+                CleaningOp::downcast(teacher_op.get_next_cleaning_op(data))
+            }
+            UpdateOp::Students(student_op) => {
+                CleaningOp::downcast(student_op.get_next_cleaning_op(data))
+            }
+            UpdateOp::Assignments(assignment_op) => {
+                CleaningOp::downcast(assignment_op.get_next_cleaning_op(data))
+            }
             UpdateOp::WeekPatterns(week_pattern_op) => {
-                week_pattern_op.get_cleaning_ops(data).downcast()
+                CleaningOp::downcast(week_pattern_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Slots(slot_op) => slot_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Slots(slot_op) => CleaningOp::downcast(slot_op.get_next_cleaning_op(data)),
             UpdateOp::Incompatibilities(incompat_op) => {
-                incompat_op.get_cleaning_ops(data).downcast()
+                CleaningOp::downcast(incompat_op.get_next_cleaning_op(data))
             }
-            UpdateOp::GroupLists(group_list_op) => group_list_op.get_cleaning_ops(data).downcast(),
-            UpdateOp::Rules(rule_op) => rule_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::GroupLists(group_list_op) => {
+                CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
+            }
+            UpdateOp::Rules(rule_op) => CleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
+        }
+    }
+
+    fn apply_no_cleaning<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &mut T,
+    ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {
+        match self {
+            UpdateOp::GeneralPlanning(period_op) => {
+                let result = period_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Subjects(subject_op) => {
+                let result = subject_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Teachers(teacher_op) => {
+                let result = teacher_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Students(student_op) => {
+                let result = student_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Assignments(assignment_op) => {
+                assignment_op.apply_no_cleaning(data)?;
+                Ok(None)
+            }
+            UpdateOp::WeekPatterns(week_pattern_op) => {
+                let result = week_pattern_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Slots(slot_op) => {
+                let result = slot_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Incompatibilities(incompat_op) => {
+                let result = incompat_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::GroupLists(group_list_op) => {
+                let result = group_list_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Rules(rule_op) => {
+                let result = rule_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
         }
     }
 }
