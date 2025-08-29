@@ -347,35 +347,89 @@ impl BalancingData for TeacherAndTimeslotBalancing {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotsInformation {
+    pub slots: Vec<SlotWithTeacher>,
+    pub balancing_requirements: BalancingRequirements,
+}
+
+impl SlotsInformation {
+    pub fn from_slots(slots: Vec<SlotWithTeacher>) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements::default_from_slots(&slots),
+            slots,
+        }
+    }
+
+    pub fn balance_teachers_and_timeslots_from_slots(
+        slots: Vec<SlotWithTeacher>,
+        constraints: BalancingConstraints,
+    ) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements {
+                constraints,
+                slot_selections: BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                    &slots,
+                ),
+            },
+            slots,
+        }
+    }
+
+    pub fn balance_teachers_from_slots(
+        slots: Vec<SlotWithTeacher>,
+        constraints: BalancingConstraints,
+    ) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements {
+                constraints,
+                slot_selections: BalancingRequirements::balance_teachers_from_slots(&slots),
+            },
+            slots,
+        }
+    }
+
+    pub fn balance_timeslots_from_slots(
+        slots: Vec<SlotWithTeacher>,
+        constraints: BalancingConstraints,
+    ) -> Self {
+        SlotsInformation {
+            balancing_requirements: BalancingRequirements {
+                constraints,
+                slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
+            },
+            slots,
+        }
+    }
+}
+
+impl Default for SlotsInformation {
+    fn default() -> Self {
+        Self::from_slots(vec![])
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_group: RangeInclusive<NonZeroUsize>,
     pub max_groups_per_slot: NonZeroUsize,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
-    pub balancing_requirements: BalancingRequirements,
     pub duration: NonZeroU32,
-    pub slots: Vec<SlotWithTeacher>,
+    pub slots_information: SlotsInformation,
     pub groups: GroupsDesc,
 }
 
 impl Default for Subject {
     fn default() -> Self {
-        let slots = vec![];
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
-            balancing_requirements: BalancingRequirements {
-                constraints: BalancingConstraints::OptimizeOnly,
-                slot_selections: BalancingRequirements::balance_teachers_and_timeslots_from_slots(
-                    &slots,
-                ),
-            },
             duration: NonZeroU32::new(60).unwrap(),
-            slots,
+            slots_information: SlotsInformation::default(),
             groups: GroupsDesc::default(),
         }
     }
@@ -477,6 +531,7 @@ impl ValidatedData {
 
         for (i, subject) in subjects.iter().enumerate() {
             for (j, slot_selection) in subject
+                .slots_information
                 .balancing_requirements
                 .slot_selections
                 .iter()
@@ -499,7 +554,7 @@ impl ValidatedData {
                                 Error::SubjectWithOverlappingSlotsInBalancingSlotSelection(i, j),
                             );
                         }
-                        if slot >= subject.slots.len() {
+                        if slot >= subject.slots_information.slots.len() {
                             return Err(Error::SubjectWithInvalidSlotInBalancing(i, slot));
                         }
                         used_slots.insert(slot);
@@ -522,7 +577,7 @@ impl ValidatedData {
                 ));
             }
 
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.teacher >= general.teacher_count {
                     return Err(Error::SubjectWithInvalidTeacher(i, j, slot.teacher));
                 }
@@ -675,7 +730,7 @@ impl ValidatedData {
                 if slot_ref.subject >= subjects.len() {
                     return Err(Error::SlotGroupingWithInvalidSubject(i, slot_ref.clone()));
                 }
-                if slot_ref.slot >= subjects[slot_ref.subject].slots.len() {
+                if slot_ref.slot >= subjects[slot_ref.subject].slots_information.slots.len() {
                     return Err(Error::SlotGroupingWithInvalidSlot(i, slot_ref.clone()));
                 }
                 match slot_grouping_previous_refs.get(slot_ref) {
@@ -845,7 +900,7 @@ impl<'a> IlpTranslator<'a> {
 
         for subject in &self.data.subjects {
             result = gcd(result, subject.duration.get());
-            for slot in &subject.slots {
+            for slot in &subject.slots_information.slots {
                 result = gcd(result, slot.start.start_time.get())
             }
         }
@@ -867,6 +922,7 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject
+                    .slots_information
                     .slots
                     .iter()
                     .enumerate()
@@ -890,6 +946,7 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject
+                    .slots_information
                     .balancing_requirements
                     .slot_selections
                     .iter()
@@ -915,11 +972,8 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject.groups.not_assigned.iter().flat_map(move |l| {
-                    subject
-                        .slots
-                        .iter()
-                        .enumerate()
-                        .flat_map(move |(j, _slot)| {
+                    subject.slots_information.slots.iter().enumerate().flat_map(
+                        move |(j, _slot)| {
                             subject
                                 .groups
                                 .prefilled_groups
@@ -937,7 +991,8 @@ impl<'a> IlpTranslator<'a> {
                                         student: *l,
                                     })
                                 })
-                        })
+                        },
+                    )
                 })
             })
             .collect()
@@ -1006,25 +1061,30 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .flat_map(|(i, subject)| {
-                subject.slots.iter().enumerate().map(move |(j, _slot)| {
-                    let mut expr = Expr::constant(0);
+                subject
+                    .slots_information
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .map(move |(j, _slot)| {
+                        let mut expr = Expr::constant(0);
 
-                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        expr = expr
-                            + Expr::var(Variable::GroupInSlot {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                            });
-                    }
+                        for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
 
-                    let max_groups_per_slot = subject
-                        .max_groups_per_slot
-                        .get()
-                        .try_into()
-                        .expect("Should be less than 2^31 maximum");
-                    expr.leq(&Expr::constant(max_groups_per_slot))
-                })
+                        let max_groups_per_slot = subject
+                            .max_groups_per_slot
+                            .get()
+                            .try_into()
+                            .expect("Should be less than 2^31 maximum");
+                        expr.leq(&Expr::constant(max_groups_per_slot))
+                    })
             })
             .collect()
     }
@@ -1081,7 +1141,7 @@ impl<'a> IlpTranslator<'a> {
         let mut expr = Expr::<Variable>::constant(0);
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if Self::is_time_unit_in_slot(
                     week,
                     weekday,
@@ -1181,7 +1241,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
                 for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
@@ -1216,7 +1276,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
                 expr = expr
                     + Expr::var(Variable::GroupInSlot {
@@ -1396,7 +1456,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
+        for (j, slot) in subject.slots_information.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
                 expr = expr
                     + Expr::var(Variable::GroupInSlot {
@@ -1582,7 +1642,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, _slot) in subject.slots.iter().enumerate() {
+            for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
                 for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
@@ -1626,7 +1686,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, _slot) in subject.slots.iter().enumerate() {
+            for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
                 for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
@@ -1657,7 +1717,7 @@ impl<'a> IlpTranslator<'a> {
                 // ignore tutorial sessions for interrogation count
                 continue;
             }
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
                 }
@@ -1736,7 +1796,7 @@ impl<'a> IlpTranslator<'a> {
                 // ignore tutorial sessions for interrogation count
                 continue;
             }
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
                 }
@@ -1812,7 +1872,7 @@ impl<'a> IlpTranslator<'a> {
                 // ignore tutorial sessions for interrogation count
                 continue;
             }
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
                 }
@@ -1892,7 +1952,7 @@ impl<'a> IlpTranslator<'a> {
                 // ignore tutorial sessions for interrogation count
                 continue;
             }
-            for (j, slot) in subject.slots.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
                 }
@@ -2024,7 +2084,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> BTreeSet<Constraint<Variable>> {
         let mut expr = Expr::constant(0);
 
-        for (j, _slot) in subject.slots.iter().enumerate() {
+        for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
             if !relevant_slots.contains(&j) {
                 continue;
             }
@@ -2071,7 +2131,7 @@ impl<'a> IlpTranslator<'a> {
         slot_selection: &BalancingSlotSelection,
     ) -> BTreeSet<Constraint<Variable>> {
         let weeks = slot_selection
-            .extract_weeks(&subject.slots)
+            .extract_weeks(&subject.slots_information.slots)
             .expect("Slot number in slot selection should be valid");
         let first_week_in_selection = weeks
             .first()
@@ -2149,7 +2209,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (slot_num, slot) in subject.slots.iter().enumerate() {
+        for (slot_num, slot) in subject.slots_information.slots.iter().enumerate() {
             if !range.contains(&slot.start.week) {
                 continue;
             }
@@ -2244,7 +2304,7 @@ impl<'a> IlpTranslator<'a> {
         let rolling_ranges = self.generate_rolling_ranges(initial_ranges, window_size);
 
         let weeks = slot_selection
-            .extract_weeks(&subject.slots)
+            .extract_weeks(&subject.slots_information.slots)
             .expect("Slot number in slot selection should be valid");
         let first_week_in_selection = weeks
             .first()
@@ -2332,8 +2392,11 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let slot_selections = &subject.balancing_requirements.slot_selections;
-            match &subject.balancing_requirements.constraints {
+            let slot_selections = &subject
+                .slots_information
+                .balancing_requirements
+                .slot_selections;
+            match &subject.slots_information.balancing_requirements.constraints {
                 BalancingConstraints::OptimizeOnly => {} // Ignore, no strict constraint in this case
                 BalancingConstraints::OverallOnly => {
                     constraints.extend(self.build_balancing_constraints_for_subject_overall(
@@ -2381,12 +2444,17 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            constraints.extend(self.build_balancing_constraints_for_subject_strict(
-                i,
-                subject,
-                &subject.balancing_requirements.slot_selections,
-                false,
-            ));
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_strict(
+                    i,
+                    subject,
+                    &subject
+                        .slots_information
+                        .balancing_requirements
+                        .slot_selections,
+                    false,
+                ),
+            );
         }
 
         constraints
@@ -2501,7 +2569,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
-        for (l, slot) in subject.slots.iter().enumerate() {
+        for (l, slot) in subject.slots_information.slots.iter().enumerate() {
             for p in student.incompatibilities.iter().copied() {
                 let incompat = &self.data.incompatibilities[p];
                 for q in incompat.groups.iter().copied() {
@@ -2677,7 +2745,10 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let slot_selections = &subject.balancing_requirements.slot_selections;
+            let slot_selections = &subject
+                .slots_information
+                .balancing_requirements
+                .slot_selections;
 
             for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                 let choice_constraint = self
@@ -2699,7 +2770,7 @@ impl<'a> IlpTranslator<'a> {
                     );
                 }
 
-                for (slot, _) in subject.slots.iter().enumerate() {
+                for (slot, _) in subject.slots_information.slots.iter().enumerate() {
                     constraints.insert(
                         self.build_group_on_slot_selection_constraints_slot_allowed_if_in_selection(
                             i,
@@ -2812,7 +2883,8 @@ impl<'a> IlpTranslator<'a> {
                             group: _,
                         } = var
                         {
-                            manual_costs += f64::from(subjects[*subject].slots[*slot].cost);
+                            manual_costs +=
+                                f64::from(subjects[*subject].slots_information.slots[*slot].cost);
                         }
                     }
 
@@ -2869,19 +2941,29 @@ impl<'a> IlpTranslator<'a> {
             .data
             .subjects
             .iter()
-            .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
+            .map(|subject| {
+                subject
+                    .slots_information
+                    .slots
+                    .iter()
+                    .map(|slot| slot.start.week)
+                    .collect()
+            })
             .collect();
         let subject_slot_selection_map = self
             .data
             .subjects
             .iter()
             .map(|subject| {
-                let slot_selections = &subject.balancing_requirements.slot_selections;
+                let slot_selections = &subject
+                    .slots_information
+                    .balancing_requirements
+                    .slot_selections;
 
                 slot_selections
                     .iter()
                     .map(|x| {
-                        x.extract_weeks(&subject.slots)
+                        x.extract_weeks(&subject.slots_information.slots)
                             .expect("Slot numbers should be valid")
                     })
                     .collect()
@@ -2896,7 +2978,7 @@ impl<'a> IlpTranslator<'a> {
                     .slots
                     .iter()
                     .map(|slot_ref| {
-                        self.data.subjects[slot_ref.subject].slots[slot_ref.slot]
+                        self.data.subjects[slot_ref.subject].slots_information.slots[slot_ref.slot]
                             .start
                             .week
                     })
@@ -2963,9 +3045,9 @@ impl<'a> IlpTranslator<'a> {
             groups.push(output);
         }
 
-        let mut slots = Vec::with_capacity(subject.slots.len());
+        let mut slots = Vec::with_capacity(subject.slots_information.slots.len());
 
-        for (j, _slot) in subject.slots.iter().enumerate() {
+        for (j, _slot) in subject.slots_information.slots.iter().enumerate() {
             let mut assigned_groups = BTreeSet::new();
 
             for k in 0..subject.groups.prefilled_groups.len() {
