@@ -37,6 +37,24 @@ pub struct Constraint {
 use std::collections::BTreeSet;
 
 impl Expr {
+    pub fn var<T: Into<String>>(name: T) -> Self {
+        Expr {
+            coefs: BTreeMap::from([
+                (name.into(), 1)
+            ]),
+            constant: 0,
+        }
+    }
+
+    pub fn constant(number: i32) -> Self {
+        Expr {
+            coefs: BTreeMap::new(),
+            constant: number,
+        }
+    }
+}
+
+impl Expr {
     pub fn variables(&self) -> BTreeSet<String> {
         self.coefs.keys().cloned().collect()
     }
@@ -209,37 +227,6 @@ impl std::fmt::Display for Constraint {
     }
 }
 
-impl From<String> for Expr {
-    fn from(name: String) -> Self {
-        Expr {
-            coefs: BTreeMap::from([
-                (name, 1)
-            ]),
-            constant: 0,
-        }
-    }
-}
-
-impl From<&str> for Expr {
-    fn from(name: &str) -> Self {
-        Expr {
-            coefs: BTreeMap::from([
-                (String::from(name), 1)
-            ]),
-            constant: 0,
-        }
-    }
-}
-
-impl From<i32> for Expr {
-    fn from(number: i32) -> Self {
-        Expr {
-            coefs: BTreeMap::new(),
-            constant: number,
-        }
-    }
-}
-
 impl std::ops::Add for &Expr {
     type Output = Expr;
 
@@ -291,7 +278,7 @@ impl std::ops::Add<&i32> for &Expr {
     type Output = Expr;
 
     fn add(self, rhs: &i32) -> Self::Output {
-        self + Expr::from(*rhs)
+        self + Expr::constant(*rhs)
     }
 }
 
