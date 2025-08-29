@@ -171,6 +171,8 @@ impl FactoryComponent for Entry {
                 set_hexpand: true,
                 add_css_class: "boxed-list",
                 set_selection_mode: gtk::SelectionMode::None,
+                #[watch]
+                set_visible: !self.weeks.is_empty(),
             },
         },
     }
