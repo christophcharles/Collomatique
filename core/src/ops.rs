@@ -35,6 +35,7 @@ pub type Desc = (OpCategory, String);
 
 #[derive(Debug, Clone)]
 pub enum OpCategory {
+    None,
     GeneralPlanning,
     Subjects,
     Teachers,
