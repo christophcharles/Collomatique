@@ -37,8 +37,6 @@ pub enum Error {
         "Subject {0} has an invalid non-extensible group ({1}) which is too small given the constraint ({2:?})"
     )]
     SubjectWithTooSmallNonExtensibleGroup(usize, usize, RangeInclusive<NonZeroUsize>),
-    #[error("Subject {0} has an empty group ({1})")]
-    SubjectWithEmptyGroup(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error(
@@ -241,9 +239,6 @@ impl ValidatedData {
                         subject.students_per_interrogation.clone(),
                     ));
                 }
-                if group.students.is_empty() {
-                    return Err(Error::SubjectWithEmptyGroup(i, j));
-                }
                 if group.students.len() < subject.students_per_interrogation.start().get()
                     && !group.can_be_extended
                 {
@@ -334,5 +329,198 @@ impl ValidatedData {
             slot_groupings,
             slot_grouping_incompats: grouping_incompats,
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Variable {
+    FixedGroup {
+        subject: usize,
+        interrogation: usize,
+        slot: usize,
+        group: usize,
+    },
+    DynamicGroup {
+        subject: usize,
+        interrogation: usize,
+        slot: usize,
+        group: usize,
+        student: usize,
+    },
+    InGroup {
+        subject: usize,
+        student: usize,
+        group: usize,
+    },
+}
+
+impl std::fmt::Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Variable::FixedGroup {
+                subject,
+                interrogation,
+                slot,
+                group,
+            } => write!(f, "F_{}_{}_{}_{}", *subject, *interrogation, *slot, *group),
+            Variable::DynamicGroup {
+                subject,
+                interrogation,
+                slot,
+                group,
+                student,
+            } => write!(
+                f,
+                "D_{}_{}_{}_{}_{}",
+                *subject, *interrogation, *slot, *group, *student
+            ),
+            Variable::InGroup {
+                subject,
+                student,
+                group,
+            } => write!(f, "G_{}_{}_{}", *subject, *student, *group),
+        }
+    }
+}
+
+impl ValidatedData {
+    pub fn ilp_translator<'a>(&'a self) -> IlpTranslator<'a> {
+        IlpTranslator { data: self }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct IlpTranslator<'a> {
+    data: &'a ValidatedData,
+}
+
+use crate::ilp::{Problem, ProblemBuilder};
+
+impl<'a> IlpTranslator<'a> {
+    fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
+        !group.can_be_extended
+            || (group.students.len() == subject.students_per_interrogation.end().get())
+    }
+
+    fn build_fixed_group_variables(&self) -> Vec<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .flat_map(|(i, subject)| {
+                subject
+                    .interrogations
+                    .iter()
+                    .enumerate()
+                    .flat_map(move |(j, interrogation)| {
+                        interrogation
+                            .slots
+                            .iter()
+                            .enumerate()
+                            .flat_map(move |(k, _slot)| {
+                                subject
+                                    .groups
+                                    .assigned_to_group
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(move |(l, group)| {
+                                        if !Self::is_group_fixed(group, subject) {
+                                            return None;
+                                        }
+
+                                        Some(Variable::FixedGroup {
+                                            subject: i,
+                                            interrogation: j,
+                                            slot: k,
+                                            group: l,
+                                        })
+                                    })
+                            })
+                    })
+            })
+            .collect()
+    }
+
+    fn build_dynamic_group_variables(&self) -> Vec<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .flat_map(|(i, subject)| {
+                subject.groups.not_assigned.iter().flat_map(move |m| {
+                    subject
+                        .interrogations
+                        .iter()
+                        .enumerate()
+                        .flat_map(move |(j, interrogation)| {
+                            interrogation
+                                .slots
+                                .iter()
+                                .enumerate()
+                                .flat_map(move |(k, _slot)| {
+                                    subject
+                                        .groups
+                                        .assigned_to_group
+                                        .iter()
+                                        .enumerate()
+                                        .filter_map(move |(l, group)| {
+                                            if Self::is_group_fixed(group, subject) {
+                                                return None;
+                                            }
+
+                                            Some(Variable::DynamicGroup {
+                                                subject: i,
+                                                interrogation: j,
+                                                slot: k,
+                                                group: l,
+                                                student: *m,
+                                            })
+                                        })
+                                })
+                        })
+                })
+            })
+            .collect()
+    }
+
+    fn build_in_group_variables(&self) -> Vec<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .flat_map(|(i, subject)| {
+                subject.groups.not_assigned.iter().flat_map(move |j| {
+                    subject
+                        .groups
+                        .assigned_to_group
+                        .iter()
+                        .enumerate()
+                        .filter_map(move |(k, group)| {
+                            if Self::is_group_fixed(group, subject) {
+                                return None;
+                            }
+
+                            Some(Variable::InGroup {
+                                subject: i,
+                                student: *j,
+                                group: k,
+                            })
+                        })
+                })
+            })
+            .collect()
+    }
+
+    pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
+        ProblemBuilder::new()
+            .add_variables(self.build_fixed_group_variables())
+            .add_variables(self.build_dynamic_group_variables())
+            .add_variables(self.build_in_group_variables())
+    }
+
+    pub fn problem(&self) -> Problem<Variable> {
+        self.problem_builder()
+            .build()
+            .expect("Automatically built problem should be valid")
     }
 }

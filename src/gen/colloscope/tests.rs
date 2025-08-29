@@ -1320,7 +1320,11 @@ fn empty_group() {
             grouping_incompats
         )
         .err(),
-        Some(Error::SubjectWithEmptyGroup(0, 2))
+        Some(Error::SubjectWithTooSmallNonExtensibleGroup(
+            0,
+            2,
+            NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap()
+        ))
     );
 }
 
@@ -1423,7 +1427,7 @@ fn extensible_empty_group() {
             grouping_incompats
         )
         .err(),
-        Some(Error::SubjectWithEmptyGroup(0, 2))
+        None
     );
 }
 
