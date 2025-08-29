@@ -335,16 +335,16 @@ pub enum PythonCommand {
     },
 }
 
-use crate::frontend::state::{AppSession, AppState};
-use crate::json::json;
+use collomatique::frontend::state::{AppSession, AppState};
+use collomatique::json::json;
 
 fn is_colloscope_name_used(
     colloscopes: &std::collections::BTreeMap<
-        crate::frontend::state::ColloscopeHandle,
-        crate::json::Colloscope<
-            crate::frontend::state::TeacherHandle,
-            crate::frontend::state::SubjectHandle,
-            crate::frontend::state::StudentHandle,
+        collomatique::frontend::state::ColloscopeHandle,
+        collomatique::json::Colloscope<
+            collomatique::frontend::state::TeacherHandle,
+            collomatique::frontend::state::SubjectHandle,
+            collomatique::frontend::state::StudentHandle,
         >,
     >,
     name: &str,
@@ -359,11 +359,11 @@ fn is_colloscope_name_used(
 
 fn find_colloscope_name(
     colloscopes: &std::collections::BTreeMap<
-        crate::frontend::state::ColloscopeHandle,
-        crate::json::Colloscope<
-            crate::frontend::state::TeacherHandle,
-            crate::frontend::state::SubjectHandle,
-            crate::frontend::state::StudentHandle,
+        collomatique::frontend::state::ColloscopeHandle,
+        collomatique::json::Colloscope<
+            collomatique::frontend::state::TeacherHandle,
+            collomatique::frontend::state::SubjectHandle,
+            collomatique::frontend::state::StudentHandle,
         >,
     >,
 ) -> String {
@@ -388,7 +388,7 @@ fn solve_command(
     #[cfg(feature = "highs")] highs: bool,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
+    use collomatique::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
     use indicatif::{ProgressBar, ProgressStyle};
     use std::time::Duration;
 
@@ -429,7 +429,7 @@ fn solve_command(
     pb.set_message("Building colloscope... (this can take a few minutes)");
     pb.enable_steady_tick(Duration::from_millis(100));
 
-    use crate::ilp::solvers::FeasabilitySolver;
+    use collomatique::ilp::solvers::FeasabilitySolver;
     let minimize_objective = !quick;
 
     let config_hint = problem.default_config();
@@ -441,16 +441,16 @@ fn solve_command(
 
     #[cfg(feature = "highs")]
     let config_opt = if highs {
-        let solver = crate::ilp::solvers::highs::Solver::with_disable_logging(!verbose);
+        let solver = collomatique::ilp::solvers::highs::Solver::with_disable_logging(!verbose);
         solver.solve(&config_hint, minimize_objective, time_limit_in_seconds)
     } else {
-        let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
+        let solver = collomatique::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
         solver.solve(&config_hint, minimize_objective, time_limit_in_seconds)
     };
 
     #[cfg(not(feature = "highs"))]
     let config_opt = {
-        let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
+        let solver = collomatique::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
         solver.solve(&config_hint, minimize_objective, time_limit_in_seconds)
     };
 
@@ -476,8 +476,8 @@ fn solve_command(
     pb.set_message("Saving colloscope in database...");
     pb.enable_steady_tick(Duration::from_millis(20));
 
-    let _ = app_state.apply(crate::frontend::state::Operation::Colloscopes(
-        crate::frontend::state::ColloscopesOperation::Create(backend_config),
+    let _ = app_state.apply(collomatique::frontend::state::Operation::Colloscopes(
+        collomatique::frontend::state::ColloscopesOperation::Create(backend_config),
     ))?;
 
     pb.finish();
@@ -492,7 +492,7 @@ fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
@@ -591,7 +591,7 @@ fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::frontend::state::{Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError};
 
     match command {
         MaxInterrogationsPerDayCommand::Set {
@@ -637,7 +637,7 @@ fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::frontend::state::{Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError};
 
     match command {
         InterrogationsPerWeekRangeCommand::SetMax {
@@ -725,7 +725,7 @@ fn general_command(
     }
 }
 
-fn week_pattern_to_string(week_pattern: &crate::json::WeekPattern) -> String {
+fn week_pattern_to_string(week_pattern: &collomatique::json::WeekPattern) -> String {
     week_pattern
         .weeks
         .iter()
@@ -739,10 +739,10 @@ fn get_week_pattern(
     name: &str,
     week_pattern_number: Option<NonZeroUsize>,
 ) -> Result<(
-    crate::frontend::state::WeekPatternHandle,
-    crate::json::WeekPattern,
+    collomatique::frontend::state::WeekPatternHandle,
+    collomatique::json::WeekPattern,
 )> {
-    use crate::frontend::state::Manager;
+    use collomatique::frontend::state::Manager;
 
     let week_patterns = app_state.week_patterns_get_all()?;
 
@@ -779,8 +779,8 @@ fn get_week_pattern(
 fn predefined_week_pattern_weeks(
     filling: WeekPatternFilling,
     week_count: NonZeroU32,
-) -> BTreeSet<crate::json::Week> {
-    use crate::json::Week;
+) -> BTreeSet<collomatique::json::Week> {
+    use collomatique::json::Week;
     let weeks = (0..week_count.get()).into_iter();
     match filling {
         WeekPatternFilling::All => weeks.map(|w| Week::new(w)).collect(),
@@ -793,7 +793,7 @@ fn week_patterns_check_existing_names(
     app_state: &mut AppState<json::JsonStore>,
     name: &str,
 ) -> Result<()> {
-    use crate::frontend::state::Manager;
+    use collomatique::frontend::state::Manager;
 
     let week_patterns = app_state.week_patterns_get_all()?;
     for (_, week_pattern) in &week_patterns {
@@ -811,8 +811,8 @@ fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
-    use crate::json::WeekPattern;
+    use collomatique::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
+    use collomatique::json::WeekPattern;
 
     match command {
         WeekPatternCommand::Create {
@@ -855,7 +855,7 @@ fn week_pattern_command(
             week_pattern_number,
             force,
         } => {
-            use crate::json::IdError;
+            use collomatique::json::IdError;
 
             let (handle, _week_pattern) = get_week_pattern(app_state, &name, week_pattern_number)?;
             let dependancies =
@@ -1009,7 +1009,7 @@ fn week_pattern_command(
             week_pattern_number,
             weeks,
         } => {
-            use crate::json::Week;
+            use collomatique::json::Week;
 
             let general_data = app_state.general_data_get()?;
             for week in &weeks {
@@ -1045,7 +1045,7 @@ fn week_pattern_command(
             week_pattern_number,
             weeks,
         } => {
-            use crate::json::Week;
+            use collomatique::json::Week;
 
             let (handle, mut week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number)?;
@@ -1082,14 +1082,14 @@ fn get_colloscope(
     name: &str,
     colloscope_number: Option<NonZeroUsize>,
 ) -> Result<(
-    crate::frontend::state::ColloscopeHandle,
-    crate::json::Colloscope<
-        crate::frontend::state::TeacherHandle,
-        crate::frontend::state::SubjectHandle,
-        crate::frontend::state::StudentHandle,
+    collomatique::frontend::state::ColloscopeHandle,
+    collomatique::json::Colloscope<
+        collomatique::frontend::state::TeacherHandle,
+        collomatique::frontend::state::SubjectHandle,
+        collomatique::frontend::state::StudentHandle,
     >,
 )> {
-    use crate::frontend::state::Manager;
+    use collomatique::frontend::state::Manager;
 
     let colloscopes = app_state.colloscopes_get_all()?;
 
@@ -1124,7 +1124,7 @@ fn colloscopes_check_existing_names(
     app_state: &mut AppState<json::JsonStore>,
     name: &str,
 ) -> Result<()> {
-    use crate::frontend::state::Manager;
+    use collomatique::frontend::state::Manager;
 
     let colloscopes = app_state.colloscopes_get_all()?;
     for (_, colloscope) in &colloscopes {
@@ -1142,8 +1142,8 @@ fn colloscope_command(
     command: ColloscopeCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::frontend::state::{ColloscopesOperation, Manager, Operation, UpdateError};
-    use crate::json::Colloscope;
+    use collomatique::frontend::state::{ColloscopesOperation, Manager, Operation, UpdateError};
+    use collomatique::json::Colloscope;
 
     match command {
         ColloscopeCommand::Remove {
@@ -1227,7 +1227,7 @@ fn colloscope_command(
             let subject_groups = app_state.subject_groups_get_all()?;
             let students = app_state.students_get_all()?;
 
-            super::xlsx::export_colloscope_to_xlsx(
+            collomatique::frontend::xlsx::export_colloscope_to_xlsx(
                 &colloscope,
                 &teachers,
                 &subjects,
@@ -1271,8 +1271,8 @@ fn python_command(
             delimiter,
         } => {
             if let Some(path) = csv {
-                let python_code = crate::frontend::python::PythonCode::from_file(&script)?;
-                let csv_content = crate::frontend::csv::Content::from_csv_file(&path)?;
+                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+                let csv_content = collomatique::frontend::csv::Content::from_csv_file(&path)?;
 
                 if !delimiter.is_ascii() {
                     return Err(anyhow!(
@@ -1281,7 +1281,7 @@ fn python_command(
                 }
                 let delimiter_str = delimiter.to_string();
 
-                let params = crate::frontend::csv::Params {
+                let params = collomatique::frontend::csv::Params {
                     has_headers: !no_headers,
                     delimiter: delimiter_str.as_bytes()[0],
                 };
@@ -1315,7 +1315,7 @@ fn python_command(
 
                 Ok(None)
             } else {
-                let python_code = crate::frontend::python::PythonCode::from_file(&script)?;
+                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
 
                 {
                     let mut app_session = AppSession::new(app_state);

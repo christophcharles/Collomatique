@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use collomatique::frontend::shell::CliCommand;
+use cli::CliCommand;
 
 mod cli;
 mod gui;
