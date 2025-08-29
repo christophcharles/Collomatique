@@ -1,4 +1,5 @@
 pub mod linexpr;
+pub mod solvers;
 mod tools;
 
 #[cfg(test)]
