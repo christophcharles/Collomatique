@@ -62,7 +62,14 @@ pub enum FileType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum FileContent {
+    ValidFileContent(ValidFileContent),
+    UnknownFileContent(serde_json::Value),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ValidFileContent {
     Colloscope,
 }
 
