@@ -64,7 +64,7 @@ impl SimpleAsyncComponent for EditorPanel {
                         },
                         pack_end = &gtk::MenuButton {
                             set_icon_name: "open-menu-symbolic",
-                            set_popover: Some(&gtk::PopoverMenu::from_model(Some(&main_menu))),
+                            set_menu_model: Some(&main_menu),
                         },
                     },
                     #[wrap(Some)]
