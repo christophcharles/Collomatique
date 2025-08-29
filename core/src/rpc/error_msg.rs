@@ -57,6 +57,12 @@ impl From<StudentsError> for ErrorMsg {
     }
 }
 
+impl From<AssignmentsError> for ErrorMsg {
+    fn from(value: AssignmentsError) -> Self {
+        ErrorMsg::Assignments(value)
+    }
+}
+
 impl std::fmt::Display for ErrorMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
