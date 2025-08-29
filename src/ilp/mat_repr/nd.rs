@@ -91,7 +91,7 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
         }
     }
 
-    fn default_nd_config(&self) -> NdConfig<V> {
+    fn default_config(&self) -> NdConfig<V> {
         let p = self.leq_mat.shape()[1];
 
         let values = Array1::zeros(p);
@@ -102,7 +102,7 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
         }
     }
 
-    fn random_nd_config<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig<V> {
+    fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig<V> {
         let p = self.leq_mat.shape()[1];
 
         let mut values = Array1::zeros(p);
@@ -158,16 +158,16 @@ impl<V: VariableName> PartialOrd for NdConfig<V> {
 impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
     type Problem = NdProblem<V>;
 
-    fn max_distance_to_constraint(&self, nd_problem: &NdProblem<V>) -> f32 {
+    fn max_distance_to_constraint(&self, problem: &NdProblem<V>) -> f32 {
         let mut max_dist = 0.0f32;
-        let p = nd_problem.leq_mat.shape()[1];
+        let p = problem.leq_mat.shape()[1];
 
-        let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
+        let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
 
         for (i, v) in leq_column.iter().copied().enumerate() {
             let mut norm2 = 0.0f32;
             for j in 0..p {
-                norm2 += nd_problem.leq_mat[(i, j)] as f32;
+                norm2 += (problem.leq_mat[(i, j)] as f32).powi(2);
             }
             let dist = ((v as f32) / norm2.sqrt()).min(0.0f32);
 
@@ -176,12 +176,12 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
             }
         }
 
-        let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
+        let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
 
         for (i, v) in eq_column.iter().copied().enumerate() {
             let mut norm2 = 0.0f32;
             for j in 0..p {
-                norm2 += nd_problem.eq_mat[(i, j)] as f32;
+                norm2 += (problem.eq_mat[(i, j)] as f32).powi(2);
             }
             let dist = ((v as f32) / norm2.sqrt()).abs();
 
@@ -193,13 +193,13 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
         max_dist
     }
 
-    fn compute_lhs(&self, nd_problem: &NdProblem<V>) -> BTreeMap<linexpr::Constraint<V>, i32> {
-        let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
-        let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
+    fn compute_lhs(&self, problem: &NdProblem<V>) -> BTreeMap<linexpr::Constraint<V>, i32> {
+        let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
+        let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
 
         let mut output = BTreeMap::new();
 
-        for (c, r) in &nd_problem.constraints_map {
+        for (c, r) in &problem.constraints_map {
             let val = match r {
                 ConstraintRef::Eq(num) => eq_column[*num],
                 ConstraintRef::Leq(num) => leq_column[*num],
@@ -210,9 +210,9 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
         output
     }
 
-    fn is_feasable(&self, nd_problem: &NdProblem<V>) -> bool {
-        let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
-        let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
+    fn is_feasable(&self, problem: &NdProblem<V>) -> bool {
+        let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
+        let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
 
         for v in &leq_column {
             if *v > 0 {
