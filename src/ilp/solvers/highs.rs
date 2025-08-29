@@ -200,7 +200,7 @@ impl Solver {
                 if *var_type != VariableType::Bool {
                     return None;
                 }
-                Some((var.clone(), columns[i] == 1.))
+                Some((var.clone(), columns[i] > 0.5))
             })
             .collect();
 
