@@ -333,8 +333,12 @@ impl Storage for Store {
     }
     fn week_pattern_get_all(
         &self,
-    ) -> impl core::future::Future<Output = std::result::Result<Vec<WeekPattern>, Self::InternalError>>
-           + Send {
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::WeekPatternId, WeekPattern>,
+            Self::InternalError,
+        >,
+    > + Send {
         week_patterns::get_all(&self.pool)
     }
     fn week_pattern_add(
@@ -364,8 +368,9 @@ impl Storage for Store {
     }
     fn teachers_get_all(
         &self,
-    ) -> impl core::future::Future<Output = std::result::Result<Vec<Teacher>, Self::InternalError>> + Send
-    {
+    ) -> impl core::future::Future<
+        Output = std::result::Result<BTreeMap<Self::TeacherId, Teacher>, Self::InternalError>,
+    > + Send {
         teachers::get_all(&self.pool)
     }
     fn teachers_add(

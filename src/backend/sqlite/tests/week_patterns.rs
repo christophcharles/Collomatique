@@ -362,31 +362,40 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
     let result = store.week_pattern_get_all().await.unwrap();
 
-    let expected_result = vec![
-        WeekPattern {
-            name: String::from("Toutes"),
-            weeks: BTreeSet::from([
-                Week(0),
-                Week(1),
-                Week(2),
-                Week(3),
-                Week(4),
-                Week(5),
-                Week(6),
-                Week(7),
-                Week(8),
-                Week(9),
-            ]),
-        },
-        WeekPattern {
-            name: String::from("Impaires"),
-            weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
-        },
-        WeekPattern {
-            name: String::from("Paires"),
-            weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
-        },
-    ];
+    let expected_result = BTreeMap::from([
+        (
+            super::super::week_patterns::Id(1),
+            WeekPattern {
+                name: String::from("Toutes"),
+                weeks: BTreeSet::from([
+                    Week(0),
+                    Week(1),
+                    Week(2),
+                    Week(3),
+                    Week(4),
+                    Week(5),
+                    Week(6),
+                    Week(7),
+                    Week(8),
+                    Week(9),
+                ]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(2),
+            WeekPattern {
+                name: String::from("Impaires"),
+                weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(3),
+            WeekPattern {
+                name: String::from("Paires"),
+                weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
+            },
+        ),
+    ]);
 
     assert_eq!(result, expected_result);
 }
@@ -411,27 +420,33 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
     let result = store.week_pattern_get_all().await.unwrap();
 
-    let expected_result = vec![
-        WeekPattern {
-            name: String::from("Toutes"),
-            weeks: BTreeSet::from([
-                Week(0),
-                Week(1),
-                Week(2),
-                Week(3),
-                Week(4),
-                Week(5),
-                Week(6),
-                Week(7),
-                Week(8),
-                Week(9),
-            ]),
-        },
-        WeekPattern {
-            name: String::from("Paires"),
-            weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
-        },
-    ];
+    let expected_result = BTreeMap::from([
+        (
+            super::super::week_patterns::Id(1),
+            WeekPattern {
+                name: String::from("Toutes"),
+                weeks: BTreeSet::from([
+                    Week(0),
+                    Week(1),
+                    Week(2),
+                    Week(3),
+                    Week(4),
+                    Week(5),
+                    Week(6),
+                    Week(7),
+                    Week(8),
+                    Week(9),
+                ]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(3),
+            WeekPattern {
+                name: String::from("Paires"),
+                weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
+            },
+        ),
+    ]);
 
     assert_eq!(result, expected_result);
 }
@@ -466,31 +481,40 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
     let result = store.week_pattern_get_all().await.unwrap();
 
-    let expected_result = vec![
-        WeekPattern {
-            name: String::from("Toutes"),
-            weeks: BTreeSet::from([
-                Week(0),
-                Week(1),
-                Week(2),
-                Week(3),
-                Week(4),
-                Week(5),
-                Week(6),
-                Week(7),
-                Week(8),
-                Week(9),
-            ]),
-        },
-        WeekPattern {
-            name: String::from("Paires"),
-            weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
-        },
-        WeekPattern {
-            name: String::from("Impaires"),
-            weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
-        },
-    ];
+    let expected_result = BTreeMap::from([
+        (
+            super::super::week_patterns::Id(1),
+            WeekPattern {
+                name: String::from("Toutes"),
+                weeks: BTreeSet::from([
+                    Week(0),
+                    Week(1),
+                    Week(2),
+                    Week(3),
+                    Week(4),
+                    Week(5),
+                    Week(6),
+                    Week(7),
+                    Week(8),
+                    Week(9),
+                ]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(3),
+            WeekPattern {
+                name: String::from("Paires"),
+                weeks: BTreeSet::from([Week(1), Week(3), Week(5), Week(7), Week(9)]),
+            },
+        ),
+        (
+            super::super::week_patterns::Id(4),
+            WeekPattern {
+                name: String::from("Impaires"),
+                weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
+            },
+        ),
+    ]);
 
     assert_eq!(result, expected_result);
 }
