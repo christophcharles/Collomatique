@@ -819,6 +819,95 @@ impl Database {
 
         Ok(())
     }
+
+    fn subject_group_for_student_get(
+        self_: PyRef<'_, Self>,
+        student_handle: StudentHandle,
+        subject_group_handle: SubjectGroupHandle,
+    ) -> PyResult<Option<SubjectHandle>> {
+        let Answer::RegisterStudent(RegisterStudentAnswer::InSubjectGroupGet(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::RegisterStudent(RegisterStudentCommand::InSubjectGroupGet(
+                    student_handle,
+                    subject_group_handle,
+                )),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    #[pyo3(signature=(student_handle, subject_group_handle, subject_handle))]
+    fn subject_group_for_student_set(
+        self_: PyRef<'_, Self>,
+        student_handle: StudentHandle,
+        subject_group_handle: SubjectGroupHandle,
+        subject_handle: Option<SubjectHandle>,
+    ) -> PyResult<()> {
+        let Answer::RegisterStudent(RegisterStudentAnswer::InSubjectGroupSet) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::RegisterStudent(RegisterStudentCommand::InSubjectGroupSet(
+                    student_handle,
+                    subject_group_handle,
+                    subject_handle,
+                )),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn incompat_for_student_get(
+        self_: PyRef<'_, Self>,
+        student_handle: StudentHandle,
+        incompat_handle: IncompatHandle,
+    ) -> PyResult<bool> {
+        let Answer::RegisterStudent(RegisterStudentAnswer::InIncompatGet(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::RegisterStudent(RegisterStudentCommand::InIncompatGet(
+                    student_handle,
+                    incompat_handle,
+                )),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn incompat_for_student_set(
+        self_: PyRef<'_, Self>,
+        student_handle: StudentHandle,
+        incompat_handle: IncompatHandle,
+        enabled: bool,
+    ) -> PyResult<()> {
+        let Answer::RegisterStudent(RegisterStudentAnswer::InIncompatSet) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::RegisterStudent(RegisterStudentCommand::InIncompatSet(
+                    student_handle,
+                    incompat_handle,
+                    enabled,
+                )),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
