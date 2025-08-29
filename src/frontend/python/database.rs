@@ -29,6 +29,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GroupingIncompat>()?;
 
     m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
+    m.add_function(wrap_pyfunction!(load_csv, m)?)?;
 
     Ok(())
 }
