@@ -151,6 +151,13 @@ impl EditorPanel {
                 self.data.get_data().get_subjects().clone(),
             ))
             .unwrap();
+        self.teachers
+            .sender()
+            .send(teachers::TeachersInput::Update(
+                self.data.get_data().get_subjects().clone(),
+                self.data.get_data().get_teachers().clone(),
+            ))
+            .unwrap();
     }
 
     fn inner_op_to_panel_number(

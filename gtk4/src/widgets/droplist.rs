@@ -1,4 +1,4 @@
-use gtk::prelude::{Cast, ListItemExt, WidgetExt};
+use gtk::prelude::WidgetExt;
 use relm4::{gtk, Component};
 use relm4::{ComponentParts, ComponentSender};
 
@@ -10,6 +10,7 @@ pub struct WidgetParams {
     pub width_request: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum WidgetInput {
     UpdateList(Vec<String>, Option<usize>),
