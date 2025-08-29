@@ -54,7 +54,7 @@
 pub mod linexpr;
 pub mod mat_repr;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
 pub use linexpr::{Constraint, LinExpr};
@@ -812,6 +812,93 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConfigDataVarCheck<V: UsableData> {
+    pub missing_variables: BTreeSet<V>,
+    pub excess_variables: BTreeSet<V>,
+    pub non_conforming_variables: BTreeSet<V>,
+}
+
+impl<V: UsableData> ConfigDataVarCheck<V> {
+    pub fn is_empty(&self) -> bool {
+        self.missing_variables.is_empty()
+            && self.excess_variables.is_empty()
+            && self.non_conforming_variables.is_empty()
+    }
+}
+
+impl<V: UsableData, C: UsableData> Problem<V, C> {
+    pub fn check_config_data_variables(
+        &self,
+        config_data: &ConfigData<V>,
+    ) -> ConfigDataVarCheck<V> {
+        let config_vars: BTreeSet<V> = config_data.values.keys().cloned().collect();
+        let problem_vars: BTreeSet<V> = self.variables.keys().cloned().collect();
+
+        let vars_in_common = config_vars.intersection(&problem_vars);
+
+        ConfigDataVarCheck {
+            missing_variables: problem_vars.difference(&config_vars).cloned().collect(),
+            excess_variables: config_vars.difference(&problem_vars).cloned().collect(),
+            non_conforming_variables: vars_in_common
+                .filter(|&x| !self.check_variable_conformity(config_data, x))
+                .cloned()
+                .collect(),
+        }
+    }
+
+    fn check_variable_conformity(&self, config_data: &ConfigData<V>, name: &V) -> bool {
+        let Some(value) = config_data.values.get(name).map(|x| x.into_inner()) else {
+            return false;
+        };
+
+        self.check_value_conformity(name, value)
+    }
+
+    fn check_value_conformity(&self, name: &V, value: f64) -> bool {
+        let Some(var_constraint) = self.variables.get(name) else {
+            return false;
+        };
+
+        if let Some(m) = var_constraint.get_min() {
+            if value < m {
+                return false;
+            }
+        }
+        if let Some(m) = var_constraint.get_max() {
+            if value > m {
+                return false;
+            }
+        }
+
+        match var_constraint.get_type() {
+            VariableType::Continuous => true,
+            VariableType::Integer => value == value.floor(),
+            VariableType::Binary => value == 0.0 || value == 1.0,
+        }
+    }
+
+    pub unsafe fn build_config_unchecked(&self, config_data: ConfigData<V>) -> Config<'_, V, C> {
+        Config {
+            problem: self,
+            values: config_data.values,
+        }
+    }
+
+    pub fn build_config(
+        &self,
+        config_data: ConfigData<V>,
+    ) -> Result<Config<'_, V, C>, ConfigDataVarCheck<V>> {
+        let report = self.check_config_data_variables(&config_data);
+
+        if !report.is_empty() {
+            return Err(report);
+        }
+
+        Ok(unsafe { self.build_config_unchecked(config_data) })
+    }
+}
+
 /// ILP configuration data
 ///
 /// This data structure is an intermediary structure
@@ -819,52 +906,81 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
 /// and their values.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConfigData<V: UsableData> {
-    variables: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
 }
 
-impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item=(U, W)>> From<T> for ConfigData<V> {
+impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>> From<T>
+    for ConfigData<V>
+{
     fn from(value: T) -> Self {
         ConfigData {
-            variables: BTreeMap::from_iter(value.into_iter().map(|(x,y)| (x.into(), ordered_float::OrderedFloat(y.into())))),
+            values: BTreeMap::from_iter(
+                value
+                    .into_iter()
+                    .map(|(x, y)| (x.into(), ordered_float::OrderedFloat(y.into()))),
+            ),
         }
     }
 }
 
 impl<V: UsableData> ConfigData<V> {
     pub fn set<U: Into<V>, W: Into<f64>>(mut self, name: U, value: W) -> Self {
-        self.variables.insert(name.into(), ordered_float::OrderedFloat(value.into()));
+        self.values
+            .insert(name.into(), ordered_float::OrderedFloat(value.into()));
         self
     }
 
-    pub fn set_iter<U: Into<V>, W: Into<f64>, T: IntoIterator<Item=(U,W)>>(mut self, values: T) -> Self {
-        for (name,value) in values {
-            self.variables.insert(name.into(), ordered_float::OrderedFloat(value.into()));
+    pub fn set_iter<U: Into<V>, W: Into<f64>, T: IntoIterator<Item = (U, W)>>(
+        mut self,
+        values: T,
+    ) -> Self {
+        for (name, value) in values {
+            self.values
+                .insert(name.into(), ordered_float::OrderedFloat(value.into()));
         }
         self
     }
 
     pub fn remove<U: Into<V>>(mut self, name: U) -> Self {
-        self.variables.remove(&name.into());
+        self.values.remove(&name.into());
         self
     }
 
-    pub fn remove_iter<U: Into<V>, T: IntoIterator<Item=U>>(mut self, names: T) -> Self {
+    pub fn remove_iter<U: Into<V>, T: IntoIterator<Item = U>>(mut self, names: T) -> Self {
         for name in names {
-            self.variables.remove(&name.into());
+            self.values.remove(&name.into());
         }
         self
     }
 
     pub fn retain<F>(mut self, mut f: F) -> Self
     where
-        F: FnMut(&V, f64) -> bool
+        F: FnMut(&V, f64) -> bool,
     {
-        self.variables.retain(|k,v| f(k, v.into_inner()));
+        self.values.retain(|k, v| f(k, v.into_inner()));
         self
     }
 
     pub fn get<U: Into<V>>(&self, name: U) -> Option<f64> {
-        self.variables.get(&name.into()).map(|x| x.into_inner())
+        self.values.get(&name.into()).map(|x| x.into_inner())
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Config<'a, V: UsableData, C: UsableData> {
+    problem: &'a Problem<V, C>,
+    values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+}
+
+impl<'a, V: UsableData, C: UsableData> Config<'a, V, C> {
+    pub fn get_problem(&self) -> &Problem<V, C> {
+        self.problem
+    }
+
+    pub fn get<T: Into<V>>(&self, name: T) -> Result<f64, ()> {
+        match self.values.get(&name.into()) {
+            Some(v) => Ok(v.into_inner()),
+            None => Err(()),
+        }
+    }
+}
