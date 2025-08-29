@@ -94,13 +94,9 @@ impl std::ops::DerefMut for Weekday {
 
 /// Type representing the beginning of a slot in time
 ///
-/// A slot starts on a given week, on a given weekday
-/// and a certain time.
+/// A slot starts on a given weekday at a certain time.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotStart {
-    /// Week of the colloscope the slot starts on
-    pub week: u32,
-
     /// Weekday the slot starts on
     pub weekday: Weekday,
 
@@ -175,9 +171,6 @@ impl SlotWithDuration {
 
     /// Checks if two slots (with duration) overlap
     pub fn overlaps_with(&self, other: &SlotWithDuration) -> bool {
-        if self.start.week != other.start.week {
-            return false;
-        }
         if self.start.weekday != other.start.weekday {
             return false;
         }
