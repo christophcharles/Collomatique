@@ -5,7 +5,7 @@ fn test_config_from_iterator() {
     let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["x", "y", "z", "t"])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     let config = pb
         .config_from_bools([("x", true), ("y", true), ("z", true)])
@@ -27,7 +27,7 @@ fn invalid_variable_in_config() {
     let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_bool_variables(["x", "y", "z", "t"])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     let config = pb.config_from_bools([("x", true), ("y", true), ("w", true)]);
 
@@ -61,7 +61,7 @@ fn test_is_feasable() {
         .unwrap()
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     let config_0 = pb.default_config();
     let config_1 = pb.config_from_bools([("a", true)]).unwrap();
@@ -131,7 +131,7 @@ fn problem_extra_variable() {
     let pb = ProblemBuilder::<String>::new()
         .add_bool_variable("X")
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     assert_eq!(
         pb.variables,
@@ -148,7 +148,7 @@ fn problem_extra_variables() {
         .unwrap()
         .add_bool_variables(["Z", "W"])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     assert_eq!(
         pb.variables,
