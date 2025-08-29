@@ -3,14 +3,54 @@ use std::collections::BTreeSet;
 use super::*;
 
 #[derive(Debug)]
-pub enum SubjectsUpdateWarning {}
+pub enum SubjectsUpdateWarning {
+    LooseInterrogationDataForTeacher(
+        collomatique_state_colloscopes::TeacherId,
+        collomatique_state_colloscopes::SubjectId,
+    ),
+    LooseStudentsAssignmentsForPeriod(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::SubjectId,
+    ),
+}
 
 impl SubjectsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> String {
-        String::new()
+        match self {
+            Self::LooseInterrogationDataForTeacher(teacher_id, subject_id) => {
+                let Some(teacher) = data.get_data().get_teachers().teacher_map.get(teacher_id)
+                else {
+                    return String::new();
+                };
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return String::new();
+                };
+                format!(
+                    "Désincription du colleur {} {} pour la matière \"{}\"",
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name,
+                )
+            }
+            Self::LooseStudentsAssignmentsForPeriod(period_id, subject_id) => {
+                let Some(period_index) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return String::new();
+                };
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return String::new();
+                };
+                format!(
+                    "Perte des inscriptions des élèves pour la matière \"{}\" sur la période {}",
+                    subject.parameters.name,
+                    period_index + 1
+                )
+            }
+        }
     }
 }
 
@@ -119,9 +159,112 @@ impl SubjectsUpdateOp {
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Vec<SubjectsUpdateWarning> {
-        vec![]
+        match self {
+            Self::AddNewSubject(_) => vec![],
+            Self::MoveUp(_) => vec![],
+            Self::MoveDown(_) => vec![],
+            Self::UpdateSubject(subject_id, params) => {
+                let Some(current_subject) =
+                    data.get_data().get_subjects().find_subject(*subject_id)
+                else {
+                    return vec![];
+                };
+
+                let mut output = vec![];
+
+                let previously_had_interrogations = current_subject
+                    .parameters
+                    .interrogation_parameters
+                    .is_some();
+
+                let no_more_interrogations = params.interrogation_parameters.is_none();
+
+                if previously_had_interrogations && no_more_interrogations {
+                    for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
+                        if teacher.subjects.contains(subject_id) {
+                            output.push(SubjectsUpdateWarning::LooseInterrogationDataForTeacher(
+                                *teacher_id,
+                                *subject_id,
+                            ));
+                        }
+                    }
+                }
+
+                output
+            }
+            Self::UpdatePeriodStatus(subject_id, period_id, new_status) => {
+                let Some(current_subject) =
+                    data.get_data().get_subjects().find_subject(*subject_id)
+                else {
+                    return vec![];
+                };
+
+                let mut output = vec![];
+
+                let old_status = !current_subject.excluded_periods.contains(period_id);
+
+                if !*new_status && old_status {
+                    let Some(period_assignments) =
+                        data.get_data().get_assignments().period_map.get(period_id)
+                    else {
+                        return vec![];
+                    };
+
+                    let assigned_students = period_assignments
+                        .subject_map
+                        .get(subject_id)
+                        .expect("subject_id should be available in subject map at this point");
+
+                    if !assigned_students.is_empty() {
+                        output.push(SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
+                            *period_id,
+                            *subject_id,
+                        ));
+                    }
+                }
+
+                output
+            }
+            Self::DeleteSubject(subject_id) => {
+                let mut output = vec![];
+
+                for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
+                    if teacher.subjects.contains(subject_id) {
+                        output.push(SubjectsUpdateWarning::LooseInterrogationDataForTeacher(
+                            *teacher_id,
+                            *subject_id,
+                        ));
+                    }
+                }
+
+                let Some(subject) = &data.get_data().get_subjects().find_subject(*subject_id)
+                else {
+                    return vec![];
+                };
+
+                let excluded_periods = &subject.excluded_periods;
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    let assigned_students = period_assignments.subject_map.get(subject_id)
+                        .expect("Assignment data is inconsistent and does not have a required subject entry");
+
+                    if !assigned_students.is_empty() {
+                        output.push(SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
+                            *period_id,
+                            *subject_id,
+                        ));
+                    }
+                }
+
+                output
+            }
+        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
