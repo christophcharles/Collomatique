@@ -37,3 +37,21 @@ pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
         .to_file_path()
         .ok()
 }
+
+pub async fn open_dialog() -> Option<PathBuf> {
+    SelectedFiles::open_file()
+        .title("Ouvrir")
+        .accept_label("Ouvrir")
+        .filter(FileFilter::new("Fichiers collomatique (*.collomatique)").glob("*.collomatique"))
+        .filter(FileFilter::new("Tous les fichiers").glob("*"))
+        .modal(true)
+        .send()
+        .await
+        .ok()?
+        .response()
+        .ok()?
+        .uris()
+        .first()?
+        .to_file_path()
+        .ok()
+}
