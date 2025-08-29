@@ -32,6 +32,12 @@ pub enum CliCommand {
         /// Verbose resolution output
         #[arg(short, long, default_value_t = false)]
         verbose: bool,
+        /// Quick resolution: do not optimize the colloscope.
+        /// This is useful to see if the constraints are compatible as a solution
+        /// can usually be found in a few minutes. However, the resulting colloscope
+        /// is usually unusable.
+        #[arg(short, long, default_value_t = false)]
+        quick: bool,
     },
     /// Create, remove or run python script
     Python {
@@ -369,6 +375,7 @@ async fn solve_command(
     name: Option<String>,
     force: bool,
     verbose: bool,
+    quick: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
@@ -414,7 +421,8 @@ async fn solve_command(
 
     use crate::ilp::solvers::FeasabilitySolver;
     let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-    let config_opt = solver.solve(&problem, true);
+    let minimize_objective = !quick;
+    let config_opt = solver.solve(&problem, minimize_objective);
 
     pb.finish_with_message("Done. Found valid colloscope");
 
@@ -1347,7 +1355,8 @@ pub async fn execute_cli_command(
             name,
             force,
             verbose,
-        } => solve_command(name, force, verbose, app_state).await,
+            quick,
+        } => solve_command(name, force, verbose, quick, app_state).await,
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
