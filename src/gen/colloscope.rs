@@ -1130,6 +1130,18 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_one_interrogation_per_period_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            constraints.extend(
+                self.build_one_interrogation_per_period_constraints_for_subject(i, subject, true),
+            );
+        }
+
+        constraints
+    }
+
     fn build_at_most_one_interrogation_per_period_for_empty_groups_contraint_for_group(
         &self,
         i: usize,
@@ -2110,6 +2122,8 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_interrogations_per_week_optimizer())
             .expect("Variables should be declared")
             .add_constraints(self.build_max_interrogations_per_day_optimizer())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_one_interrogation_per_period_optimizer())
             .expect("Variables should be declared")
     }
 
