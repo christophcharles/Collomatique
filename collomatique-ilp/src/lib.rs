@@ -35,7 +35,7 @@
 //! In fact, such a problem is NP-hard and so, solving it means we can solve any NP problem.
 //!
 //! This covers a *lot* of problems. But in our case, it is particularly suited to the representation of
-//! scheduling problems (see for instance <https://doi.org/10.1016/S0377-2217(03)00095-X>, <http://dx.doi.org/10.1007/s11750-015-0366-z> or
+//! scheduling problems (see for instance <https://doi.org/10.1016/S0377-2217(03)00095-X>, <https://doi.org/10.1007/s11750-015-0366-z> or
 //! <https://doi.org/10.1016/j.ejor.2012.11.029>). Though it is not the only way to solve our colloscope problem, it is the one we chose
 //! and this crate contains only the mathematical tools for it.
 //!
