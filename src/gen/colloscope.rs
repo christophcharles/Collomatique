@@ -822,6 +822,9 @@ pub enum Variable {
     LowerBoundInterrogationPerWeek {
         student: usize,
     },
+    UpperBoundInterrogationPerDayGlobal,
+    UpperBoundInterrogationPerWeekGlobal,
+    LowerBoundInterrogationPerWeekGlobal,
 }
 
 impl<'a> From<&'a Variable> for Variable {
@@ -865,6 +868,13 @@ impl std::fmt::Display for Variable {
             }
             Variable::LowerBoundInterrogationPerWeek { student } => {
                 write!(f, "LB_IpW_{}", *student)
+            }
+            Variable::UpperBoundInterrogationPerDayGlobal => write!(f, "UB_IpD_G"),
+            Variable::UpperBoundInterrogationPerWeekGlobal => {
+                write!(f, "UB_IpW_G")
+            }
+            Variable::LowerBoundInterrogationPerWeekGlobal => {
+                write!(f, "LB_IpW_G")
             }
         }
     }
@@ -1107,6 +1117,23 @@ impl<'a> IlpTranslator<'a> {
                 )
             })
             .collect()
+    }
+
+    fn build_global_bound_variables(&self) -> BTreeMap<Variable, crate::ilp::VariableType> {
+        BTreeMap::from([
+            (
+                Variable::UpperBoundInterrogationPerDayGlobal,
+                crate::ilp::VariableType::Integer(0..=i32::MAX),
+            ),
+            (
+                Variable::UpperBoundInterrogationPerWeekGlobal,
+                crate::ilp::VariableType::Integer(0..=i32::MAX),
+            ),
+            (
+                Variable::LowerBoundInterrogationPerWeekGlobal,
+                crate::ilp::VariableType::Integer(0..=i32::MAX),
+            ),
+        ])
     }
 
     fn build_at_most_max_groups_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
@@ -3045,6 +3072,90 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
+    fn build_upper_bound_interrogation_per_day_global_constraints_for_student(
+        &self,
+        student_num: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::UpperBoundInterrogationPerDay {
+            student: student_num,
+        });
+        let rhs = Expr::var(Variable::UpperBoundInterrogationPerDayGlobal);
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_upper_bound_interrogation_per_day_global_constraints(
+        &self,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            output.insert(
+                self.build_upper_bound_interrogation_per_day_global_constraints_for_student(
+                    student_num,
+                ),
+            );
+        }
+
+        output
+    }
+
+    fn build_upper_bound_interrogation_per_week_global_constraints_for_student(
+        &self,
+        student_num: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::UpperBoundInterrogationPerWeek {
+            student: student_num,
+        });
+        let rhs = Expr::var(Variable::UpperBoundInterrogationPerWeekGlobal);
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_upper_bound_interrogation_per_week_global_constraints(
+        &self,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            output.insert(
+                self.build_upper_bound_interrogation_per_week_global_constraints_for_student(
+                    student_num,
+                ),
+            );
+        }
+
+        output
+    }
+
+    fn build_lower_bound_interrogation_per_week_global_constraints_for_student(
+        &self,
+        student_num: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::LowerBoundInterrogationPerWeek {
+            student: student_num,
+        });
+        let rhs = Expr::var(Variable::LowerBoundInterrogationPerWeekGlobal);
+
+        lhs.geq(&rhs)
+    }
+
+    fn build_lower_bound_interrogation_per_week_global_constraints(
+        &self,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            output.insert(
+                self.build_lower_bound_interrogation_per_week_global_constraints_for_student(
+                    student_num,
+                ),
+            );
+        }
+
+        output
+    }
+
     fn problem_builder_soft(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_bool_variables(self.build_group_in_slot_variables())
@@ -3089,6 +3200,8 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_lower_bound_interrogation_per_week_variables())
             .expect("Should not have duplicates")
+            .add_variables(self.build_global_bound_variables())
+            .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
@@ -3128,6 +3241,12 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_upper_bound_interrogation_per_week_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_lower_bound_interrogation_per_week_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_upper_bound_interrogation_per_day_global_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_upper_bound_interrogation_per_week_global_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_lower_bound_interrogation_per_week_global_constraints())
             .expect("Variables should be declared")
     }
 
