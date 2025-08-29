@@ -9,6 +9,10 @@
 //! works. If you want to implement a problem, you should implement [BaseProblem] on some structure
 //! and possibly [ProblemConstraints] on a few others.
 //! A generic usage example is provided in the [examples::simple_schedule] module.
+//!
+//! However a simpler route is to use the [simplified] module and rather implement [SimpleBaseProblem]
+//! and [SimpleProblemConstraints]. This will auto-implement [BaseProblem] and [ProblemConstraints]
+//! but will allow a simplified definition of structure variables using [tools::AggregatedVariable].
 
 pub mod examples;
 pub mod generics;
