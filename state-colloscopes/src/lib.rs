@@ -191,6 +191,12 @@ pub enum SubjectError {
     /// The subject is referenced by a teacher
     #[error("subject id ({0:?}) is referenced by teacher {1:?}")]
     SubjectIsReferencedByTeacher(SubjectId, TeacherId),
+
+    /// Some non-default assignments are still present for the subject
+    #[error(
+        "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed"
+    )]
+    SubjectStillHasNonTrivialAssignments(PeriodId, SubjectId),
 }
 
 /// Errors for teacher operations
@@ -935,6 +941,22 @@ impl Data {
                     .subjects
                     .ordered_subject_list
                     .insert(position, (*new_id, params.clone()));
+                for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
+                    if params.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .assignments
+                        .period_map
+                        .get_mut(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    period_assignment
+                        .subject_exclusion_map
+                        .insert(*new_id, BTreeSet::new());
+                }
 
                 Ok(())
             }
@@ -971,10 +993,50 @@ impl Data {
                     }
                 }
 
-                self.inner_data
+                let params = &self.inner_data.subjects.ordered_subject_list[position].1;
+                for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
+                    if params.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .assignments
+                        .period_map
+                        .get(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    let excluded_students = period_assignment
+                        .subject_exclusion_map
+                        .get(id)
+                        .expect("Subject should appear in assignments for relevant periods");
+
+                    if !excluded_students.is_empty() {
+                        return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
+                            *period_id, *id,
+                        ));
+                    }
+                }
+
+                let (_, params) = self
+                    .inner_data
                     .subjects
                     .ordered_subject_list
                     .remove(position);
+                for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
+                    if params.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .assignments
+                        .period_map
+                        .get_mut(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    period_assignment.subject_exclusion_map.remove(id);
+                }
 
                 Ok(())
             }
@@ -984,7 +1046,71 @@ impl Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
+                let old_params = self.inner_data.subjects.ordered_subject_list[position]
+                    .1
+                    .clone();
+                for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
+                    // If the period was excluded before, there is no structure to check
+                    // and if the period is not excluded now, the structure will be fine anyway
+                    if old_params.excluded_periods.contains(period_id)
+                        || !new_params.excluded_periods.contains(period_id)
+                    {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .assignments
+                        .period_map
+                        .get(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    let excluded_students = period_assignment
+                        .subject_exclusion_map
+                        .get(id)
+                        .expect("Subject should appear in assignments for relevant periods");
+
+                    if !excluded_students.is_empty() {
+                        return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
+                            *period_id, *id,
+                        ));
+                    }
+                }
+
                 self.inner_data.subjects.ordered_subject_list[position].1 = new_params.clone();
+
+                for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
+                    // Only change in period status should be considered
+                    if old_params.excluded_periods.contains(period_id)
+                        == new_params.excluded_periods.contains(period_id)
+                    {
+                        continue;
+                    }
+
+                    if old_params.excluded_periods.contains(period_id) {
+                        // The period was excluded but is not anymore
+                        let period_assignment = self
+                            .inner_data
+                            .assignments
+                            .period_map
+                            .get_mut(period_id)
+                            .expect("Every period should appear in assignments");
+
+                        period_assignment
+                            .subject_exclusion_map
+                            .insert(*id, BTreeSet::new());
+                    } else {
+                        // The period was included but will now be excluded
+                        let period_assignment = self
+                            .inner_data
+                            .assignments
+                            .period_map
+                            .get_mut(period_id)
+                            .expect("Every period should appear in assignments");
+
+                        period_assignment.subject_exclusion_map.remove(id);
+                    }
+                }
 
                 Ok(())
             }
