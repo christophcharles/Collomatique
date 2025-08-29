@@ -226,8 +226,7 @@ struct StudentIncompatDb {
 async fn remove_student(pool: sqlx::SqlitePool) {
     let mut store = prepare_example_db(pool).await;
 
-    store
-        .students_remove(super::super::students::Id(3))
+    unsafe { store.students_remove_unchecked(super::super::students::Id(3)) }
         .await
         .unwrap();
 

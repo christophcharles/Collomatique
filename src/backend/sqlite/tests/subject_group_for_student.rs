@@ -270,8 +270,7 @@ async fn remove_student(pool: sqlx::SqlitePool) {
         .await
         .unwrap();
 
-    store
-        .students_remove(super::super::students::Id(13))
+    unsafe { store.students_remove_unchecked(super::super::students::Id(13)) }
         .await
         .unwrap();
 

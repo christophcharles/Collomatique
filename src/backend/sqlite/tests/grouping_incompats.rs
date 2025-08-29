@@ -417,8 +417,7 @@ async fn grouping_incompats_add_multiple(pool: SqlitePool) {
 async fn grouping_incompats_remove_one(pool: SqlitePool) {
     let mut store = prepare_example_db(pool).await;
 
-    store
-        .grouping_incompats_remove(super::super::grouping_incompats::Id(1))
+    unsafe { store.grouping_incompats_remove_unchecked(super::super::grouping_incompats::Id(1)) }
         .await
         .unwrap();
 
@@ -466,8 +465,7 @@ async fn grouping_incompats_remove_one(pool: SqlitePool) {
 async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
     let mut store = prepare_example_db(pool).await;
 
-    store
-        .grouping_incompats_remove(super::super::grouping_incompats::Id(1))
+    unsafe { store.grouping_incompats_remove_unchecked(super::super::grouping_incompats::Id(1)) }
         .await
         .unwrap();
 
