@@ -73,35 +73,10 @@ pub async fn get(
     })
 }
 
-async fn search_invalid_time_slot_id(
-    pool: &SqlitePool,
-    grouping: &Grouping<time_slots::Id>,
-) -> Result<Option<time_slots::Id>> {
-    let time_slot_ids = sqlx::query!("SELECT time_slot_id FROM time_slots",)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.time_slot_id)
-        .collect::<BTreeSet<_>>();
-
-    for slot in &grouping.slots {
-        if !time_slot_ids.contains(&slot.0) {
-            return Ok(Some(slot.clone()));
-        }
-    }
-
-    Ok(None)
-}
-
 pub async fn add(
     pool: &SqlitePool,
     grouping: &Grouping<super::time_slots::Id>,
-) -> std::result::Result<Id, CrossError<Error, super::time_slots::Id>> {
-    if let Some(time_slot_id) = search_invalid_time_slot_id(pool, grouping).await? {
-        return Err(CrossError::InvalidCrossId(time_slot_id));
-    }
-
+) -> std::result::Result<Id, Error> {
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let grouping_id = sqlx::query!("INSERT INTO groupings (name) VALUES (?1)", grouping.name)
@@ -162,11 +137,7 @@ pub async fn update(
     pool: &SqlitePool,
     index: Id,
     grouping: &Grouping<super::time_slots::Id>,
-) -> std::result::Result<(), CrossIdError<Error, Id, super::time_slots::Id>> {
-    if let Some(time_slot_id) = search_invalid_time_slot_id(pool, grouping).await? {
-        return Err(CrossIdError::InvalidCrossId(time_slot_id));
-    }
-
+) -> std::result::Result<(), Error> {
     let grouping_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -190,11 +161,10 @@ pub async fn update(
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(CrossIdError::InternalError(Error::CorruptedDatabase(
-            format!("Multiple groupings with id {:?}", index),
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple groupings with id {:?}",
+            index
         )));
-    } else if rows_affected == 0 {
-        return Err(CrossIdError::InvalidId(index));
     }
 
     for slot in &grouping.slots {
