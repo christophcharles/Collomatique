@@ -1,9 +1,10 @@
 use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
-use gtk::prelude::{ButtonExt, WidgetExt};
+use gtk::prelude::{ButtonExt, ObjectExt, WidgetExt};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
@@ -55,6 +56,8 @@ pub struct EditorPanel {
     dirty: bool,
     save_dialog: Controller<dialogs::open_save::Dialog>,
     toast_info: Option<ToastInfo>,
+    pages_names: Vec<&'static str>,
+    pages_titles_map: BTreeMap<&'static str, &'static str>,
 }
 
 impl EditorPanel {
@@ -128,7 +131,11 @@ impl Component for EditorPanel {
             },
             #[wrap(Some)]
             set_content = &adw::NavigationPage {
-                set_title: "Editor Panel",
+                #[watch]
+                set_title: match main_stack.visible_child_name() {
+                    Some(n) => model.pages_titles_map.get(n.as_str()).unwrap(),
+                    None => "Editor Panel",
+                },
                 #[wrap(Some)]
                 set_child = &adw::ToolbarView {
                     add_top_bar = &adw::HeaderBar {
@@ -166,10 +173,18 @@ impl Component for EditorPanel {
                         #[name(main_stack)]
                         gtk::Stack {
                             set_hexpand: true,
-                            add_titled: (&gtk::Label::new(Some("Test1 - content")), Some("test1"), &"Test1"),
-                            add_titled: (&gtk::Label::new(Some("Test2 - content")), Some("test2"), &"Test2"),
-                            add_titled: (&gtk::Label::new(Some("Test3 - content")), Some("test3"), &"Test3"),
                             set_transition_type: gtk::StackTransitionType::SlideUpDown,
+                            // Force update_view when visible-child is changed
+                            // This maintains the title up top
+                            connect_notify: (
+                                Some("visible-child"),
+                                {
+                                    let sender = sender.clone();
+                                    move |_widget,_| {
+                                        sender.input(EditorInput::Ignore);
+                                    }
+                                }
+                            ),
                         }
                     },
                 },
@@ -215,14 +230,37 @@ impl Component for EditorPanel {
                 }
             });
 
+        let pages_names = vec!["test1", "test2", "test3"];
+
+        let pages_titles_map =
+            BTreeMap::from([("test1", "Test1"), ("test2", "Test2"), ("test3", "Test3")]);
+
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
             dirty: false,
             save_dialog,
             toast_info: None,
+            pages_names,
+            pages_titles_map,
         };
         let widgets = view_output!();
+
+        widgets.main_stack.add_titled(
+            &gtk::Label::new(Some("Test1 - content")),
+            Some(model.pages_names[0]),
+            model.pages_titles_map.get(model.pages_names[0]).unwrap(),
+        );
+        widgets.main_stack.add_titled(
+            &gtk::Label::new(Some("Test2 - content")),
+            Some(model.pages_names[1]),
+            model.pages_titles_map.get(model.pages_names[1]).unwrap(),
+        );
+        widgets.main_stack.add_titled(
+            &gtk::Label::new(Some("Test3 - content")),
+            Some(model.pages_names[2]),
+            model.pages_titles_map.get(model.pages_names[2]).unwrap(),
+        );
 
         ComponentParts { model, widgets }
     }
