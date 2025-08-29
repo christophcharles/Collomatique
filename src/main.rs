@@ -73,45 +73,72 @@ const DEFAULT_OPTIMIZING_STEP_COUNT: usize = 1000;
 
 #[derive(Debug, Subcommand)]
 enum GeneralCommand {
+    /// Show or modify week-count (the total number of weeks in the colloscope)
+    WeekCount {
+        #[command(subcommand)]
+        command: WeekCountCommand,
+    },
+    /// Show or modify the maximum number of interrogations per day for a student
+    MaxInterrogationsPerDay {
+        #[command(subcommand)]
+        command: MaxInterrogationsPerDayCommand,
+    },
+    /// Show or modify the maximum and minimum number of interrogations per week for a student
+    InterrogationsPerWeekRange {
+        #[command(subcommand)]
+        command: InterrogationsPerWeekRangeCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum WeekCountCommand {
     /// Change the number of weeks in the colloscope
-    SetWeekCount {
+    Set {
         /// New week count for the colloscope
         week_count: NonZeroU32,
         /// Force truncating of week_patterns if needed
         #[arg(short, long, default_value_t = false)]
         force: bool,
     },
+    /// Show the number of weeks currently in the colloscope
+    Print,
+}
+
+#[derive(Debug, Subcommand)]
+enum MaxInterrogationsPerDayCommand {
     /// Set a maximum number of interrogations per day for each student
-    SetMaxInterrogationsPerDay {
+    Set {
         /// New maximum number of interrogations per day for each student
         max_interrogations_per_day: NonZeroU32,
     },
     /// Disable any maximum number of interrogations per day for each student
-    DisableMaxInterrogationsPerDay,
+    Disable,
+    /// Show the maximum number of interrogations per day (show \"none\" if none is set)
+    Print,
+}
+
+#[derive(Debug, Subcommand)]
+enum InterrogationsPerWeekRangeCommand {
     /// Set a maximum number of interrogations per week for each student - will set minimum to 0 if not already set
-    SetMaxInterrogationsPerWeek {
+    SetMax {
         /// New maximum number of interrogations per week for each student
         max_interrogations_per_week: u32,
     },
     /// Set a maximum number of interrogations per week for each student - will set maximum to the same value if not already set
-    SetMinInterrogationsPerWeek {
+    SetMin {
         /// New minimum number of interrogations per week for each student
         min_interrogations_per_week: u32,
     },
     /// Disable any limit on possible numbers of interrogations per week for each student
-    DisableInterrogationsPerWeekRange,
-    /// Show the number of weeks currently in the colloscope
-    GetWeekCount,
-    /// Show the maximum number of interrogations per day (show \"none\" if none is set)
-    GetMaxInterrogationsPerDay,
+    Disable,
     /// Show the possible range of number of interrogations per week (show \"none\" if none is set)
-    GetInterrogationsPerWeekRange,
+    Print,
 }
 
 #[derive(Debug, Subcommand)]
 enum WeekPatternCommand {
     /// Create a new week pattern
-    New {
+    Add {
         /// Name for the new week pattern
         name: String,
         /// Possible prefill of the week pattern
@@ -342,15 +369,15 @@ async fn solve_command(
     Ok(())
 }
 
-async fn general_command(
-    command: GeneralCommand,
+async fn week_count_command(
+    command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
     new_line_needed: bool,
 ) -> Result<()> {
     use collomatique::frontend::state::{Operation, UpdateError};
 
     match command {
-        GeneralCommand::SetWeekCount { week_count, force } => {
+        WeekCountCommand::Set { week_count, force } => {
             if force {
                 todo!("Force flag for \"general set-week-count\"");
             }
@@ -386,7 +413,28 @@ async fn general_command(
                 return Err(err);
             }
         }
-        GeneralCommand::SetMaxInterrogationsPerDay {
+        WeekCountCommand::Print => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let week_count = general_data.week_count.get();
+            print!("{}", week_count);
+            if new_line_needed {
+                println!("");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn max_interrogations_per_day_command(
+    command: MaxInterrogationsPerDayCommand,
+    app_state: &mut AppState<sqlite::Store>,
+    new_line_needed: bool,
+) -> Result<()> {
+    use collomatique::frontend::state::{Operation, UpdateError};
+
+    match command {
+        MaxInterrogationsPerDayCommand::Set {
             max_interrogations_per_day: max_interrogation_per_day,
         } => {
             if let Err(e) = app_state
@@ -402,7 +450,7 @@ async fn general_command(
                 return Err(err);
             }
         }
-        GeneralCommand::DisableMaxInterrogationsPerDay => {
+        MaxInterrogationsPerDayCommand::Disable => {
             if let Err(e) = app_state
                 .apply(Operation::GeneralSetMaxInterrogationsPerDay(None))
                 .await
@@ -414,7 +462,31 @@ async fn general_command(
                 return Err(err);
             }
         }
-        GeneralCommand::SetMaxInterrogationsPerWeek {
+        MaxInterrogationsPerDayCommand::Print => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let max_interrogations_per_day = general_data.max_interrogations_per_day;
+            match max_interrogations_per_day {
+                Some(value) => print!("{}", value.get()),
+                None => print!("none"),
+            }
+            if new_line_needed {
+                println!("");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn interrogations_per_week_range_command(
+    command: InterrogationsPerWeekRangeCommand,
+    app_state: &mut AppState<sqlite::Store>,
+    new_line_needed: bool,
+) -> Result<()> {
+    use collomatique::frontend::state::{Operation, UpdateError};
+
+    match command {
+        InterrogationsPerWeekRangeCommand::SetMax {
             max_interrogations_per_week,
         } => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
@@ -438,7 +510,7 @@ async fn general_command(
                 return Err(err);
             }
         }
-        GeneralCommand::SetMinInterrogationsPerWeek {
+        InterrogationsPerWeekRangeCommand::SetMin {
             min_interrogations_per_week,
         } => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
@@ -462,7 +534,7 @@ async fn general_command(
                 return Err(err);
             }
         }
-        GeneralCommand::DisableInterrogationsPerWeekRange => {
+        InterrogationsPerWeekRangeCommand::Disable => {
             if let Err(e) = app_state
                 .apply(Operation::GeneralSetInterrogationsPerWeekRange(None))
                 .await
@@ -474,26 +546,7 @@ async fn general_command(
                 return Err(err);
             }
         }
-        GeneralCommand::GetWeekCount => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
-            let week_count = general_data.week_count.get();
-            print!("{}", week_count);
-            if new_line_needed {
-                println!("");
-            }
-        }
-        GeneralCommand::GetMaxInterrogationsPerDay => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
-            let max_interrogations_per_day = general_data.max_interrogations_per_day;
-            match max_interrogations_per_day {
-                Some(value) => print!("{}", value.get()),
-                None => print!("none"),
-            }
-            if new_line_needed {
-                println!("");
-            }
-        }
-        GeneralCommand::GetInterrogationsPerWeekRange => {
+        InterrogationsPerWeekRangeCommand::Print => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let interrogations_per_week = general_data.interrogations_per_week;
             match interrogations_per_week {
@@ -503,6 +556,26 @@ async fn general_command(
             if new_line_needed {
                 println!("");
             }
+        }
+    }
+
+    Ok(())
+}
+
+async fn general_command(
+    command: GeneralCommand,
+    app_state: &mut AppState<sqlite::Store>,
+    new_line_needed: bool,
+) -> Result<()> {
+    match command {
+        GeneralCommand::WeekCount { command } => {
+            week_count_command(command, app_state, new_line_needed).await?
+        }
+        GeneralCommand::MaxInterrogationsPerDay { command } => {
+            max_interrogations_per_day_command(command, app_state, new_line_needed).await?
+        }
+        GeneralCommand::InterrogationsPerWeekRange { command } => {
+            interrogations_per_week_range_command(command, app_state, new_line_needed).await?
         }
     }
 
@@ -519,7 +592,7 @@ async fn week_pattern_command(
     use std::collections::BTreeSet;
 
     match command {
-        WeekPatternCommand::New {
+        WeekPatternCommand::Add {
             name,
             prefill,
             force,
