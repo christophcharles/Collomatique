@@ -39,14 +39,14 @@ fn generate_student_list(data: &Data) -> student_list::List {
 
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
-    let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
+    let student_list_entry = EntryContent::StudentList(generate_student_list(data));
 
     JsonData {
         header,
         entries: vec![Entry {
             minimum_spec_version: student_list_entry.minimum_spec_version(),
             needed_entry: student_list_entry.needed_entry(),
-            content: EntryContent::ValidEntry(student_list_entry),
+            content: student_list_entry,
         }],
     }
 }

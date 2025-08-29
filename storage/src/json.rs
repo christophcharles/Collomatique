@@ -84,29 +84,26 @@ pub mod common;
 pub mod student_list;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
 pub enum EntryContent {
-    ValidEntry(ValidEntry),
-    UnknownEntry(serde_json::Value),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ValidEntry {
     StudentList(student_list::List),
+    #[serde(other)]
+    UnknownEntry,
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
 
-impl ValidEntry {
+impl EntryContent {
     pub fn minimum_spec_version(&self) -> u32 {
         match self {
-            ValidEntry::StudentList(_) => 1,
+            EntryContent::StudentList(_) => 1,
+            EntryContent::UnknownEntry => 1,
         }
     }
 
     pub fn needed_entry(&self) -> bool {
         match self {
-            ValidEntry::StudentList(_) => true,
+            EntryContent::StudentList(_) => true,
+            EntryContent::UnknownEntry => false,
         }
     }
 }
