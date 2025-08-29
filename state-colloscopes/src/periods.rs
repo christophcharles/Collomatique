@@ -40,6 +40,13 @@ impl Periods {
                 .collect(),
         }
     }
+
+    /// Finds the position of a period by id
+    pub fn find_period_position(&self, id: PeriodId) -> Option<usize> {
+        self.ordered_period_list
+            .iter()
+            .position(|(current_id, _desc)| *current_id == id)
+    }
 }
 
 /// Description of the periods but unchecked

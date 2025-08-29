@@ -10,10 +10,10 @@ use std::collections::BTreeMap;
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::StudentId;
+pub use ids::{PeriodId, StudentId};
 pub mod ops;
-use ops::AnnotatedStudentOp;
 pub use ops::{AnnotatedOp, Op, StudentOp};
+use ops::{AnnotatedPeriodOp, AnnotatedStudentOp};
 
 pub mod periods;
 
@@ -109,6 +109,14 @@ pub enum Error {
     /// The student id already exists
     #[error("student id ({0:?}) already exists")]
     StudentIdAlreadyExists(StudentId),
+
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// The period id already exists
+    #[error("period id ({0:?}) already exists")]
+    PeriodIdAlreadyExists(PeriodId),
 }
 
 impl InMemoryData for Data {
@@ -128,12 +136,16 @@ impl InMemoryData for Data {
             AnnotatedOp::Student(student_op) => {
                 Ok(AnnotatedOp::Student(self.build_rev_student(student_op)?))
             }
+            AnnotatedOp::Period(period_op) => {
+                Ok(AnnotatedOp::Period(self.build_rev_period(period_op)?))
+            }
         }
     }
 
     fn apply(&mut self, op: &Self::AnnotatedOperation) -> std::result::Result<(), Self::Error> {
         match op {
             AnnotatedOp::Student(student_op) => self.apply_student(student_op),
+            AnnotatedOp::Period(period_op) => self.apply_period(period_op),
         }
     }
 }
@@ -223,6 +235,74 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply period operations
+    fn apply_period(&mut self, period_op: &AnnotatedPeriodOp) -> std::result::Result<(), Error> {
+        match period_op {
+            AnnotatedPeriodOp::ChangeStartDate(new_date) => {
+                self.inner_data.periods.first_week = new_date.clone();
+                Ok(())
+            }
+            AnnotatedPeriodOp::AddFront(period_id, desc) => {
+                if self
+                    .inner_data
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(Error::PeriodIdAlreadyExists(*period_id));
+                }
+
+                self.inner_data
+                    .periods
+                    .ordered_period_list
+                    .insert(0, (*period_id, desc.clone()));
+                Ok(())
+            }
+            AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
+                if self
+                    .inner_data
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(Error::PeriodIdAlreadyExists(*period_id));
+                }
+
+                let Some(position) = self.inner_data.periods.find_period_position(*after_id) else {
+                    return Err(Error::InvalidPeriodId(*after_id));
+                };
+
+                self.inner_data
+                    .periods
+                    .ordered_period_list
+                    .insert(position + 1, (*period_id, desc.clone()));
+                Ok(())
+            }
+            AnnotatedPeriodOp::Remove(period_id) => {
+                let Some(position) = self.inner_data.periods.find_period_position(*period_id)
+                else {
+                    return Err(Error::InvalidPeriodId(*period_id));
+                };
+
+                self.inner_data.periods.ordered_period_list.remove(position);
+
+                Ok(())
+            }
+            AnnotatedPeriodOp::Update(period_id, desc) => {
+                let Some(position) = self.inner_data.periods.find_period_position(*period_id)
+                else {
+                    return Err(Error::InvalidPeriodId(*period_id));
+                };
+
+                self.inner_data.periods.ordered_period_list[position].1 = desc.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -251,6 +331,78 @@ impl Data {
                 };
 
                 Ok(AnnotatedStudentOp::Update(student_id.clone(), old_student))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a period operation
+    fn build_rev_period(
+        &self,
+        period_op: &AnnotatedPeriodOp,
+    ) -> std::result::Result<AnnotatedPeriodOp, Error> {
+        match period_op {
+            AnnotatedPeriodOp::ChangeStartDate(_new_date) => Ok(
+                AnnotatedPeriodOp::ChangeStartDate(self.inner_data.periods.first_week.clone()),
+            ),
+            AnnotatedPeriodOp::AddFront(new_id, _desc) => {
+                if self
+                    .inner_data
+                    .periods
+                    .find_period_position(*new_id)
+                    .is_some()
+                {
+                    return Err(Error::PeriodIdAlreadyExists(new_id.clone()));
+                }
+
+                Ok(AnnotatedPeriodOp::Remove(new_id.clone()))
+            }
+            AnnotatedPeriodOp::AddAfter(new_id, after_id, _desc) => {
+                if self
+                    .inner_data
+                    .periods
+                    .find_period_position(*new_id)
+                    .is_some()
+                {
+                    return Err(Error::PeriodIdAlreadyExists(new_id.clone()));
+                }
+
+                let Some(_after_position) = self.inner_data.periods.find_period_position(*after_id)
+                else {
+                    return Err(Error::InvalidPeriodId(after_id.clone()));
+                };
+
+                Ok(AnnotatedPeriodOp::Remove(new_id.clone()))
+            }
+            AnnotatedPeriodOp::Remove(period_id) => {
+                let Some(position) = self.inner_data.periods.find_period_position(*period_id)
+                else {
+                    return Err(Error::InvalidPeriodId(period_id.clone()));
+                };
+
+                let old_desc = self.inner_data.periods.ordered_period_list[position]
+                    .1
+                    .clone();
+
+                Ok(if position == 0 {
+                    AnnotatedPeriodOp::AddFront(period_id.clone(), old_desc)
+                } else {
+                    let previous_id = self.inner_data.periods.ordered_period_list[position - 1].0;
+                    AnnotatedPeriodOp::AddAfter(period_id.clone(), previous_id.clone(), old_desc)
+                })
+            }
+            AnnotatedPeriodOp::Update(period_id, _desc) => {
+                let Some(position) = self.inner_data.periods.find_period_position(*period_id)
+                else {
+                    return Err(Error::InvalidPeriodId(period_id.clone()));
+                };
+
+                let old_desc = self.inner_data.periods.ordered_period_list[position]
+                    .1
+                    .clone();
+
+                Ok(AnnotatedPeriodOp::Update(period_id.clone(), old_desc))
             }
         }
     }
