@@ -3,14 +3,15 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use crate::rpc::{
-    cmd_msg::{ExtensionDesc, MsgStudentId, MsgWeekPatternId, OpenFileDialogMsg},
+    cmd_msg::{ExtensionDesc, MsgSlotId, MsgStudentId, MsgWeekPatternId, OpenFileDialogMsg},
     error_msg::{
-        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
-        AssignmentsError, CutPeriodError, DeletePeriodError, DeleteStudentError,
-        DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
-        DuplicatePreviousPeriodError, GeneralPlanningError, MergeWithPreviousPeriodError,
-        MoveDownError, MoveUpError, StudentsError, SubjectsError, TeachersError,
-        UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateStudentError,
+        AddNewSlotError, AddNewStudentError, AddNewSubjectError, AddNewTeacherError,
+        AssignAllError, AssignError, AssignmentsError, CutPeriodError, DeletePeriodError,
+        DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
+        DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningError,
+        MergeWithPreviousPeriodError, MoveDownError, MoveSlotDownError, MoveSlotUpError,
+        MoveUpError, SlotsError, StudentsError, SubjectsError, TeachersError,
+        UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError,
         UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
         WeekPatternsError,
     },
@@ -91,6 +92,7 @@ mod students;
 use students::{Student, StudentId};
 mod week_patterns;
 use week_patterns::{WeekPattern, WeekPatternId};
+mod slots;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
@@ -892,6 +894,183 @@ impl Session {
             .week_pattern_map
             .iter()
             .map(|(id, data)| (MsgWeekPatternId::from(*id).into(), data.clone().into()))
+            .collect()
+    }
+
+    fn slots_add(
+        self_: PyRef<'_, Self>,
+        subject_id: subjects::SubjectId,
+        slot: slots::SlotParameters,
+    ) -> PyResult<slots::SlotId> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
+                    crate::rpc::cmd_msg::SlotsCmdMsg::AddNewSlot(subject_id.into(), slot.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::SlotId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::Slots(SlotsError::AddNewSlot(e))) => match e {
+                AddNewSlotError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                AddNewSlotError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid teacher id {:?}",
+                    id
+                ))),
+                AddNewSlotError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid week pattern id {:?}",
+                    id
+                ))),
+                AddNewSlotError::SubjectHasNoInterrogation(id) => Err(PyValueError::new_err(
+                    format!("Subject id {:?} does not have interrogations", id),
+                )),
+                AddNewSlotError::TeacherDoesNotTeachInSubject(tid, sid) => {
+                    Err(PyValueError::new_err(format!(
+                        "Teacher id {:?} does not match subject id {:?}",
+                        tid, sid,
+                    )))
+                }
+                AddNewSlotError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(format!(
+                    "Slot overlaps with next day"
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn slots_update(
+        self_: PyRef<'_, Self>,
+        id: slots::SlotId,
+        new_slot: slots::SlotParameters,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
+                    crate::rpc::cmd_msg::SlotsCmdMsg::UpdateSlot(id.into(), new_slot.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Slots(SlotsError::UpdateSlot(e))) => match e {
+                UpdateSlotError::InvalidSlotId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
+                }
+                UpdateSlotError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                UpdateSlotError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid teacher id {:?}",
+                    id
+                ))),
+                UpdateSlotError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid week pattern id {:?}",
+                    id
+                ))),
+                UpdateSlotError::SubjectHasNoInterrogation(id) => Err(PyValueError::new_err(
+                    format!("Subject id {:?} does not have interrogations", id),
+                )),
+                UpdateSlotError::TeacherDoesNotTeachInSubject(tid, sid) => {
+                    Err(PyValueError::new_err(format!(
+                        "Teacher id {:?} does not match subject id {:?}",
+                        tid, sid,
+                    )))
+                }
+                UpdateSlotError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(format!(
+                    "Slot overlaps with next day"
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn slots_delete(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
+                    crate::rpc::cmd_msg::SlotsCmdMsg::DeleteSlot(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Slots(SlotsError::DeleteSlot(e))) => match e {
+                DeleteSlotError::InvalidSlotId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn slots_move_up(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
+                    crate::rpc::cmd_msg::SlotsCmdMsg::MoveSlotUp(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Slots(SlotsError::MoveSlotUp(e))) => match e {
+                MoveSlotUpError::InvalidSlotId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
+                }
+                MoveSlotUpError::NoUpperPosition => {
+                    Err(PyValueError::new_err("The slot is already the first"))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn slots_move_down(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
+                    crate::rpc::cmd_msg::SlotsCmdMsg::MoveSlotDown(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Slots(SlotsError::MoveSlotDown(e))) => match e {
+                MoveSlotDownError::InvalidSlotId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
+                }
+                MoveSlotDownError::NoLowerPosition => {
+                    Err(PyValueError::new_err("The slot is already the last"))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn slots_get_list(self_: PyRef<'_, Self>) -> BTreeMap<subjects::SubjectId, Vec<slots::Slot>> {
+        self_
+            .token
+            .get_data()
+            .get_slots()
+            .subject_map
+            .iter()
+            .map(|(subject_id, subject_slots)| {
+                (
+                    MsgSubjectId::from(*subject_id).into(),
+                    subject_slots
+                        .ordered_slots
+                        .iter()
+                        .map(|(id, data)| slots::Slot {
+                            id: MsgSlotId::from(*id).into(),
+                            parameters: data.clone().into(),
+                        })
+                        .collect(),
+                )
+            })
             .collect()
     }
 }

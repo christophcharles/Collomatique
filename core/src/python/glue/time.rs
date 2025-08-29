@@ -81,3 +81,129 @@ impl From<NaiveDate> for chrono::NaiveDate {
         value.internal
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[pyclass]
+pub struct NaiveTime {
+    internal: chrono::NaiveTime,
+}
+
+#[pymethods]
+impl NaiveTime {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", self_.internal);
+        PyString::new(self_.py(), output.as_str())
+    }
+
+    #[new]
+    fn new(h: u32, m: u32, s: u32, milli: u32) -> PyResult<Self> {
+        let Some(internal) = chrono::NaiveTime::from_hms_milli_opt(h, m, s, milli) else {
+            return Err(PyValueError::new_err(format!("Invalid time")));
+        };
+
+        Ok(NaiveTime { internal })
+    }
+}
+
+impl From<chrono::NaiveTime> for NaiveTime {
+    fn from(value: chrono::NaiveTime) -> Self {
+        NaiveTime { internal: value }
+    }
+}
+
+impl From<NaiveTime> for chrono::NaiveTime {
+    fn from(value: NaiveTime) -> Self {
+        value.internal
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[pyclass]
+pub enum Weekday {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday,
+}
+
+#[pymethods]
+impl Weekday {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<collomatique_time::Weekday> for Weekday {
+    fn from(value: collomatique_time::Weekday) -> Self {
+        match value.0 {
+            chrono::Weekday::Mon => Weekday::Monday,
+            chrono::Weekday::Tue => Weekday::Tuesday,
+            chrono::Weekday::Wed => Weekday::Wednesday,
+            chrono::Weekday::Thu => Weekday::Thursday,
+            chrono::Weekday::Fri => Weekday::Friday,
+            chrono::Weekday::Sat => Weekday::Saturday,
+            chrono::Weekday::Sun => Weekday::Sunday,
+        }
+    }
+}
+
+impl From<Weekday> for collomatique_time::Weekday {
+    fn from(value: Weekday) -> Self {
+        collomatique_time::Weekday(match value {
+            Weekday::Monday => chrono::Weekday::Mon,
+            Weekday::Tuesday => chrono::Weekday::Tue,
+            Weekday::Wednesday => chrono::Weekday::Wed,
+            Weekday::Thursday => chrono::Weekday::Thu,
+            Weekday::Friday => chrono::Weekday::Fri,
+            Weekday::Saturday => chrono::Weekday::Sat,
+            Weekday::Sunday => chrono::Weekday::Sun,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[pyclass]
+pub struct SlotStart {
+    #[pyo3(set, get)]
+    pub start_time: NaiveTime,
+    #[pyo3(set, get)]
+    pub weekday: Weekday,
+}
+
+#[pymethods]
+impl SlotStart {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+
+    #[new]
+    fn new(weekday: Weekday, start_time: NaiveTime) -> Self {
+        SlotStart {
+            start_time,
+            weekday,
+        }
+    }
+}
+
+impl From<collomatique_time::SlotStart> for SlotStart {
+    fn from(value: collomatique_time::SlotStart) -> Self {
+        SlotStart {
+            weekday: value.weekday.into(),
+            start_time: value.start_time.into(),
+        }
+    }
+}
+
+impl From<SlotStart> for collomatique_time::SlotStart {
+    fn from(value: SlotStart) -> Self {
+        collomatique_time::SlotStart {
+            weekday: value.weekday.into(),
+            start_time: value.start_time.internal,
+        }
+    }
+}
