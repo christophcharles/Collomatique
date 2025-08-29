@@ -162,6 +162,9 @@ impl AssignmentsUpdateOp {
                     if student.excluded_periods.contains(period_id) {
                         continue;
                     }
+                    if student.excluded_periods.contains(&previous_period_id) {
+                        continue;
+                    }
 
                     for (subject_id, _) in &current_period_assignments.subject_map {
                         let Some(previous_assigned_students) =
