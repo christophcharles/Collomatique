@@ -1,6 +1,7 @@
-use gtk::prelude::WidgetExt;
+use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::component::{AsyncComponentParts, AsyncComponentSender, SimpleAsyncComponent};
 use relm4::gtk;
+use relm4::RelmWidgetExt;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,6 +30,25 @@ impl SimpleAsyncComponent for EditorPanel {
         gtk::Box {
             set_hexpand: true,
             set_vexpand: true,
+
+            set_orientation: gtk::Orientation::Horizontal,
+            set_margin_all: 5,
+            set_spacing: 5,
+
+            gtk::StackSidebar {
+                set_vexpand: true,
+                set_size_request: (200, -1),
+                set_stack: &main_stack,
+            },
+
+            #[name(main_stack)]
+            gtk::Stack {
+                set_hexpand: true,
+                add_titled: (&gtk::Label::new(Some("Test1 - content")), Some("Test1"), &"Test1"),
+                add_titled: (&gtk::Label::new(Some("Test2 - content")), Some("Test2"), &"Test2"),
+                add_titled: (&gtk::Label::new(Some("Test3 - content")), Some("Test3"), &"Test3"),
+                set_transition_type: gtk::StackTransitionType::SlideUpDown,
+            },
         }
     }
 
