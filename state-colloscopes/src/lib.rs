@@ -262,12 +262,38 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// checks all that subjects have valid week numbers when used
+    fn check_subjects_have_valid_week_numbers(&self, week_count: usize) -> bool {
+        for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
+            if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                weeks_at_start_of_new_block,
+            } = &subject.parameters.periodicity
+            {
+                for week in weeks_at_start_of_new_block {
+                    if *week >= week_count {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// USED INTERNALLY
+    ///
     /// checks all the invariants in subject data
-    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) -> bool {
+    fn check_subjects_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+        week_count: usize,
+    ) -> bool {
         if !self.check_subjects_data_has_correct_period_ids(period_ids) {
             return false;
         }
         if !self.check_subjects_data_has_correct_ranges() {
+            return false;
+        }
+        if !self.check_subjects_have_valid_week_numbers(week_count) {
             return false;
         }
         true
@@ -288,13 +314,27 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Compute the total number of weeks covered in periods
+    ///
+    /// This is useful to check that week numbers are valid
+    fn build_week_count(&self) -> usize {
+        self.inner_data
+            .periods
+            .ordered_period_list
+            .iter()
+            .fold(0usize, |acc, (_id, desc)| acc + desc.len())
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) -> bool {
         if !self.check_no_duplicate_ids() {
             return false;
         }
         let period_ids = self.build_period_ids();
-        if !self.check_subjects_data_consistency(&period_ids) {
+        let week_count = self.build_week_count();
+        if !self.check_subjects_data_consistency(&period_ids, week_count) {
             return false;
         }
         true
@@ -335,7 +375,11 @@ impl Data {
             .iter()
             .map(|(id, _d)| *id)
             .collect();
-        if !subjects.validate_all(&period_ids) {
+        let week_count = periods
+            .ordered_period_list
+            .iter()
+            .fold(0usize, |acc, (_id, desc)| acc + desc.len());
+        if !subjects.validate_all(&period_ids, week_count) {
             return Err(tools::IdError::InvalidId);
         }
 
