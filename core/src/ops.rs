@@ -24,18 +24,22 @@ pub use subjects::*;
 #[derive(Debug)]
 pub enum UpdateOp {
     GeneralPlanning(GeneralPlanningUpdateOp),
+    Subjects(SubjectsUpdateOp),
 }
 
 #[derive(Debug, Error)]
 pub enum UpdateError {
     #[error(transparent)]
     GeneralPlanning(#[from] GeneralPlanningUpdateError),
+    #[error(transparent)]
+    Subjects(#[from] SubjectsUpdateError),
 }
 
 impl UpdateOp {
     pub fn get_desc(&self) -> String {
         match self {
             UpdateOp::GeneralPlanning(period_op) => period_op.get_desc(),
+            UpdateOp::Subjects(subject_op) => subject_op.get_desc(),
         }
     }
 
@@ -46,6 +50,10 @@ impl UpdateOp {
         match self {
             UpdateOp::GeneralPlanning(period_op) => {
                 let result = period_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Subjects(subject_op) => {
+                let result = subject_op.apply(data)?;
                 Ok(result.map(|x| x.into()))
             }
         }

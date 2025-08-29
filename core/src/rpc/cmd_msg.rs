@@ -2,6 +2,8 @@ use super::*;
 
 pub mod general_planning;
 pub use general_planning::*;
+pub mod subjects;
+pub use subjects::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
@@ -12,6 +14,7 @@ pub enum CmdMsg {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdateMsg {
     GeneralPlanning(GeneralPlanningCmdMsg),
+    Subjects(SubjectsCmdMsg),
 }
 
 impl UpdateMsg {
@@ -23,6 +26,7 @@ impl UpdateMsg {
             UpdateMsg::GeneralPlanning(op) => {
                 crate::ops::UpdateOp::GeneralPlanning(op.promote(data)?)
             }
+            UpdateMsg::Subjects(op) => crate::ops::UpdateOp::Subjects(op.promote(data)?),
         })
     }
 }
