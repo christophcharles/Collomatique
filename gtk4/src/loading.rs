@@ -2,6 +2,7 @@ use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::RelmWidgetExt;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, WorkerController};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 mod file_loader;
@@ -14,13 +15,21 @@ pub enum LoadingInput {
 
 #[derive(Debug)]
 pub enum LoadingOutput {
-    Loaded(PathBuf, collomatique_state_colloscopes::Data),
+    Loaded(
+        PathBuf,
+        collomatique_state_colloscopes::Data,
+        BTreeSet<collomatique_storage::Caveat>,
+    ),
     Failed(PathBuf, String),
 }
 
 #[derive(Debug)]
 pub enum LoadingCmdOutput {
-    Loaded(PathBuf, collomatique_state_colloscopes::Data),
+    Loaded(
+        PathBuf,
+        collomatique_state_colloscopes::Data,
+        BTreeSet<collomatique_storage::Caveat>,
+    ),
     Failed(PathBuf, String),
 }
 
@@ -119,8 +128,8 @@ impl Component for LoadingPanel {
                         file_loader::FileLoadingOutput::Failed(path, error) => {
                             LoadingCmdOutput::Failed(path, error)
                         }
-                        file_loader::FileLoadingOutput::Loaded(path, data) => {
-                            LoadingCmdOutput::Loaded(path, data)
+                        file_loader::FileLoadingOutput::Loaded(path, data, caveats) => {
+                            LoadingCmdOutput::Loaded(path, data, caveats)
                         }
                     });
                 worker
@@ -128,12 +137,6 @@ impl Component for LoadingPanel {
                     .send(file_loader::FileLoadingInput::Load(path))
                     .unwrap();
                 self.worker = Some(worker);
-                /*sender.oneshot_command(async move {
-                    match collomatique_storage::load_data_from_file(&path).await {
-                        Ok((data, _caveats)) => LoadingCmdOutput::Loaded(path, data),
-                        Err(e) => LoadingCmdOutput::Failed(path, e.to_string()),
-                    }
-                });*/
             }
             LoadingInput::StopLoading => {
                 self.path = None;
@@ -149,13 +152,15 @@ impl Component for LoadingPanel {
         _root: &Self::Root,
     ) {
         match message {
-            LoadingCmdOutput::Loaded(path, data) => {
+            LoadingCmdOutput::Loaded(path, data, caveats) => {
                 if Some(&path) != self.path.as_ref() {
                     return;
                 }
                 self.path = None;
                 self.worker = None;
-                sender.output(LoadingOutput::Loaded(path, data)).unwrap();
+                sender
+                    .output(LoadingOutput::Loaded(path, data, caveats))
+                    .unwrap();
             }
             LoadingCmdOutput::Failed(path, error) => {
                 if Some(&path) != self.path.as_ref() {

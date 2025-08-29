@@ -4,6 +4,7 @@ use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 #[allow(dead_code)]
@@ -25,6 +26,7 @@ struct AppControllers {
     editor: Controller<editor::EditorPanel>,
 
     file_error: Controller<dialogs::file_error::Dialog>,
+    file_caveats: Controller<dialogs::file_caveats::Dialog>,
     open_dialog: Controller<dialogs::open_save::Dialog>,
     warn_dirty: Controller<dialogs::warning_changed::Dialog>,
 }
@@ -78,7 +80,11 @@ pub enum AppInput {
     RequestNewColloscope,
     NewColloscope(Option<PathBuf>),
     LoadColloscope(PathBuf),
-    ColloscopeLoaded(PathBuf, collomatique_state_colloscopes::Data),
+    ColloscopeLoaded(
+        PathBuf,
+        collomatique_state_colloscopes::Data,
+        BTreeSet<collomatique_storage::Caveat>,
+    ),
     ColloscopeLoadingFailed(PathBuf, String),
     ColloscopeSavingFailed(PathBuf, String),
     RequestOpenExistingColloscopeWithDialog,
@@ -164,8 +170,8 @@ impl Component for AppModel {
             loading::LoadingPanel::builder()
                 .launch(())
                 .forward(sender.input_sender(), |msg| match msg {
-                    loading::LoadingOutput::Loaded(path, data) => {
-                        AppInput::ColloscopeLoaded(path, data)
+                    loading::LoadingOutput::Loaded(path, data, caveats) => {
+                        AppInput::ColloscopeLoaded(path, data, caveats)
                     }
                     loading::LoadingOutput::Failed(path, error) => {
                         AppInput::ColloscopeLoadingFailed(path, error)
@@ -183,6 +189,11 @@ impl Component for AppModel {
                 });
 
         let file_error = dialogs::file_error::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |_| AppInput::Ignore);
+
+        let file_caveats = dialogs::file_caveats::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |_| AppInput::Ignore);
@@ -209,6 +220,7 @@ impl Component for AppModel {
             loading,
             editor,
             file_error,
+            file_caveats,
             open_dialog,
             warn_dirty,
         };
@@ -371,11 +383,21 @@ impl Component for AppModel {
                     .send(dialogs::open_save::DialogInput::Show)
                     .unwrap();
             }
-            AppInput::ColloscopeLoaded(path, data) => {
+            AppInput::ColloscopeLoaded(path, data, caveats) => {
                 if self.state != GlobalState::LoadingScreen {
                     return;
                 }
                 self.state = GlobalState::EditorScreen;
+                if !caveats.is_empty() {
+                    self.controllers
+                        .file_caveats
+                        .sender()
+                        .send(dialogs::file_caveats::DialogInput::Show(
+                            path.clone(),
+                            caveats,
+                        ))
+                        .unwrap();
+                }
                 self.controllers
                     .editor
                     .sender()
