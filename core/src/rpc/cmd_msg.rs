@@ -18,6 +18,8 @@ pub mod week_patterns;
 pub use week_patterns::*;
 pub mod slots;
 pub use slots::*;
+pub mod incompatibilities;
+pub use incompatibilities::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
