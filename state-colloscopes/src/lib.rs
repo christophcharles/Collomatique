@@ -167,9 +167,11 @@ impl InMemoryData for Data {
 
     fn apply(&mut self, op: &Self::AnnotatedOperation) -> std::result::Result<(), Self::Error> {
         match op {
-            AnnotatedOp::Student(student_op) => self.apply_student(student_op),
-            AnnotatedOp::Period(period_op) => self.apply_period(period_op),
+            AnnotatedOp::Student(student_op) => self.apply_student(student_op)?,
+            AnnotatedOp::Period(period_op) => self.apply_period(period_op)?,
         }
+        assert!(self.check_invariants());
+        Ok(())
     }
 }
 
@@ -194,6 +196,13 @@ impl Data {
         }
 
         Some(student_id)
+    }
+}
+
+impl Data {
+    /// Internal function for checks
+    fn check_invariants(&self) -> bool {
+        true
     }
 }
 
@@ -245,14 +254,18 @@ impl Data {
         let periods = unsafe { Periods::from_external_data(periods) };
         let subjects = unsafe { Subjects::from_external_data(subjects) };
 
-        Ok(Data {
+        let data = Data {
             id_issuer,
             inner_data: InnerData {
                 student_list,
                 periods,
                 subjects,
             },
-        })
+        };
+
+        assert!(data.check_invariants());
+
+        Ok(data)
     }
 
     /// Get the student list
