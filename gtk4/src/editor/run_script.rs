@@ -1,5 +1,5 @@
 use collomatique_rpc::{CmdMsg, OutMsg};
-use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
@@ -19,6 +19,7 @@ pub struct Dialog {
     warning_running: Controller<warning_running::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
     commands: FactoryVecDeque<msg_display::Entry>,
+    adjust_scrolling: bool,
 }
 
 #[derive(Debug)]
@@ -33,13 +34,18 @@ pub enum DialogInput {
     Error(String),
 }
 
+#[derive(Debug)]
+pub enum DialogCmdOutput {
+    AdjustScrolling,
+}
+
 #[relm4::component(pub)]
 impl Component for Dialog {
     type Init = ();
 
     type Input = DialogInput;
     type Output = ();
-    type CommandOutput = ();
+    type CommandOutput = DialogCmdOutput;
 
     view! {
         #[root]
@@ -94,6 +100,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Start,
                         set_label: "Opérations effectuées :",
                     },
+                    #[name(scrolled_window)]
                     gtk::ScrolledWindow {
                         set_hexpand: true,
                         set_vexpand: true,
@@ -164,6 +171,7 @@ impl Component for Dialog {
             rpc_logger,
             is_running: false,
             commands,
+            adjust_scrolling: false,
         };
 
         let cmds_listbox = model.commands.widget();
@@ -174,6 +182,7 @@ impl Component for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.adjust_scrolling = false;
         match msg {
             DialogInput::Run(path, _script) => {
                 self.hidden = false;
@@ -206,21 +215,24 @@ impl Component for Dialog {
             }
             DialogInput::Cmd(cmd) => match cmd {
                 Ok(cmd_msg) => {
-                    self.commands.guard().push_back(match cmd_msg {
-                        CmdMsg::Success => {
-                            msg_display::EntryData::Success("Successful command".into())
-                        }
-                        CmdMsg::Warning => msg_display::EntryData::Warning("Failed command".into()),
-                    });
+                    self.add_command(
+                        sender,
+                        match cmd_msg {
+                            CmdMsg::Success => {
+                                msg_display::EntryData::Success("Successful command".into())
+                            }
+                            CmdMsg::Warning => {
+                                msg_display::EntryData::Warning("Failed command".into())
+                            }
+                        },
+                    );
                     self.rpc_logger
                         .sender()
                         .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Ack))
                         .unwrap();
                 }
                 Err(e) => {
-                    self.commands
-                        .guard()
-                        .push_back(msg_display::EntryData::Error(e));
+                    self.add_command(sender, msg_display::EntryData::Error(e));
                     self.rpc_logger
                         .sender()
                         .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Invalid))
@@ -238,5 +250,35 @@ impl Component for Dialog {
                     .unwrap();
             }
         }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.adjust_scrolling {
+            let adj = widgets.scrolled_window.vadjustment();
+            adj.set_value(adj.upper());
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        _sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            DialogCmdOutput::AdjustScrolling => {
+                self.adjust_scrolling = true;
+            }
+        }
+    }
+}
+
+impl Dialog {
+    fn add_command(&mut self, sender: ComponentSender<Self>, data: msg_display::EntryData) {
+        self.commands.guard().push_back(data);
+        sender.oneshot_command(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            DialogCmdOutput::AdjustScrolling
+        });
     }
 }
