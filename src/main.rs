@@ -388,7 +388,7 @@ async fn general_command(
             max_interrogations_per_day: max_interrogation_per_day,
         } => {
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetMaxInterrogationPerDay(Some(
+                .apply(Operation::GeneralSetMaxInterrogationsPerDay(Some(
                     max_interrogation_per_day,
                 )))
                 .await
@@ -402,7 +402,7 @@ async fn general_command(
         }
         GeneralCommand::DisableMaxInterrogationsPerDay => {
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetMaxInterrogationPerDay(None))
+                .apply(Operation::GeneralSetMaxInterrogationsPerDay(None))
                 .await
             {
                 let err = match e {
@@ -424,7 +424,7 @@ async fn general_command(
                 return Err(anyhow!("The maximum number of interrogations per week must be greater than the minimum number"));
             }
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetInterrogationPerWeekRange(Some(
+                .apply(Operation::GeneralSetInterrogationsPerWeekRange(Some(
                     interrogations_per_week,
                 )))
                 .await
@@ -448,7 +448,7 @@ async fn general_command(
                 return Err(anyhow!("The minimum number of interrogations per week must be less than the maximum number"));
             }
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetInterrogationPerWeekRange(Some(
+                .apply(Operation::GeneralSetInterrogationsPerWeekRange(Some(
                     interrogations_per_week,
                 )))
                 .await
@@ -462,7 +462,7 @@ async fn general_command(
         }
         GeneralCommand::DisableInterrogationsPerWeekRange => {
             if let Err(e) = app_state
-                .apply(Operation::GeneralSetInterrogationPerWeekRange(None))
+                .apply(Operation::GeneralSetInterrogationsPerWeekRange(None))
                 .await
             {
                 let err = match e {
