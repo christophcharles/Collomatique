@@ -67,7 +67,7 @@ use mat_repr::{ConfigRepr, ProblemRepr};
 /// Tolerance for 0 checking on f64
 /// 
 /// Computation with f64 can lead, because
-/// of rounding errors to small values that really should be
+/// of rounding errors, to small values that really should be
 /// zero.
 /// 
 /// In Collomatique, most values are integers.
