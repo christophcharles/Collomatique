@@ -69,6 +69,48 @@ pub struct SubjectParameters {
     #[pyo3(set, get)]
     name: String,
     #[pyo3(set, get)]
+    interrogation_parameters: Option<SubjectInterrogationParameters>,
+}
+
+impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParameters {
+    fn from(value: collomatique_state_colloscopes::SubjectParameters) -> Self {
+        SubjectParameters {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<SubjectParameters> for crate::rpc::cmd_msg::subjects::SubjectParametersMsg {
+    fn from(value: SubjectParameters) -> Self {
+        use crate::rpc::cmd_msg::subjects::SubjectParametersMsg;
+        SubjectParametersMsg {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+#[pymethods]
+impl SubjectParameters {
+    #[new]
+    fn new(name: String) -> Self {
+        SubjectParameters {
+            name,
+            interrogation_parameters: Some(SubjectInterrogationParameters::new()),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectInterrogationParameters {
+    #[pyo3(set, get)]
     students_per_group_min: NonZeroU32,
     #[pyo3(set, get)]
     students_per_group_max: NonZeroU32,
@@ -84,10 +126,11 @@ pub struct SubjectParameters {
     periodicity: SubjectPeriodicity,
 }
 
-impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParameters {
-    fn from(value: collomatique_state_colloscopes::SubjectParameters) -> Self {
-        SubjectParameters {
-            name: value.name,
+impl From<collomatique_state_colloscopes::SubjectInterrogationParameters>
+    for SubjectInterrogationParameters
+{
+    fn from(value: collomatique_state_colloscopes::SubjectInterrogationParameters) -> Self {
+        SubjectInterrogationParameters {
             students_per_group_min: value.students_per_group.start().clone(),
             students_per_group_max: value.students_per_group.end().clone(),
             groups_per_interrogation_min: value.students_per_group.start().clone(),
@@ -99,11 +142,12 @@ impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParamete
     }
 }
 
-impl From<SubjectParameters> for crate::rpc::cmd_msg::subjects::SubjectParametersMsg {
-    fn from(value: SubjectParameters) -> Self {
-        use crate::rpc::cmd_msg::subjects::SubjectParametersMsg;
-        SubjectParametersMsg {
-            name: value.name,
+impl From<SubjectInterrogationParameters>
+    for crate::rpc::cmd_msg::subjects::SubjectInterrogationParametersMsg
+{
+    fn from(value: SubjectInterrogationParameters) -> Self {
+        use crate::rpc::cmd_msg::subjects::SubjectInterrogationParametersMsg;
+        SubjectInterrogationParametersMsg {
             students_per_group: value.students_per_group_min..=value.students_per_group_max,
             groups_per_interrogation: value.groups_per_interrogation_min
                 ..=value.groups_per_interrogation_max,
@@ -115,11 +159,10 @@ impl From<SubjectParameters> for crate::rpc::cmd_msg::subjects::SubjectParameter
 }
 
 #[pymethods]
-impl SubjectParameters {
+impl SubjectInterrogationParameters {
     #[new]
-    fn new(name: String) -> Self {
-        SubjectParameters {
-            name,
+    fn new() -> Self {
+        SubjectInterrogationParameters {
             students_per_group_min: NonZeroU32::new(2).unwrap(),
             students_per_group_max: NonZeroU32::new(3).unwrap(),
             groups_per_interrogation_min: NonZeroU32::new(1).unwrap(),

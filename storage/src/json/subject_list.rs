@@ -46,6 +46,30 @@ impl From<Subject> for collomatique_state_colloscopes::subjects::SubjectExternal
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectParameters {
     pub name: String,
+    pub interrogation_parameters: Option<SubjectInterrogationParameters>,
+}
+
+impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParameters {
+    fn from(value: collomatique_state_colloscopes::SubjectParameters) -> Self {
+        SubjectParameters {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParameters {
+    fn from(value: SubjectParameters) -> Self {
+        collomatique_state_colloscopes::SubjectParameters {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+/// JSON desc of interrogation parameters for a single subject
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectInterrogationParameters {
     pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
     pub groups_per_interrogation: std::ops::RangeInclusive<NonZeroU32>,
     pub duration: NonZeroU32,
@@ -53,10 +77,11 @@ pub struct SubjectParameters {
     pub periodicity: SubjectPeriodicity,
 }
 
-impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParameters {
-    fn from(value: collomatique_state_colloscopes::SubjectParameters) -> Self {
-        SubjectParameters {
-            name: value.name,
+impl From<collomatique_state_colloscopes::SubjectInterrogationParameters>
+    for SubjectInterrogationParameters
+{
+    fn from(value: collomatique_state_colloscopes::SubjectInterrogationParameters) -> Self {
+        SubjectInterrogationParameters {
             students_per_group: value.students_per_group,
             groups_per_interrogation: value.groups_per_interrogation,
             duration: value.duration.get(),
@@ -66,10 +91,11 @@ impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParamete
     }
 }
 
-impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParameters {
-    fn from(value: SubjectParameters) -> Self {
-        collomatique_state_colloscopes::SubjectParameters {
-            name: value.name,
+impl From<SubjectInterrogationParameters>
+    for collomatique_state_colloscopes::SubjectInterrogationParameters
+{
+    fn from(value: SubjectInterrogationParameters) -> Self {
+        collomatique_state_colloscopes::SubjectInterrogationParameters {
             students_per_group: value.students_per_group,
             groups_per_interrogation: value.groups_per_interrogation,
             duration: value.duration.into(),

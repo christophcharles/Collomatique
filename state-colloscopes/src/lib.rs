@@ -21,7 +21,9 @@ use ops::{
     AnnotatedTeacherOp,
 };
 pub use ops::{AnnotatedOp, AssignmentOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
-pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
+pub use subjects::{
+    Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+};
 
 pub mod assignments;
 pub mod periods;
@@ -491,14 +493,18 @@ impl Data {
             }
         }
 
-        if subject.parameters.students_per_group.is_empty() {
+        let Some(interrogation_parameters) = &subject.parameters.interrogation_parameters else {
+            return Ok(());
+        };
+
+        if interrogation_parameters.students_per_group.is_empty() {
             return Err(SubjectError::StudentsPerGroupRangeIsEmpty);
         }
-        if subject.parameters.groups_per_interrogation.is_empty() {
+        if interrogation_parameters.groups_per_interrogation.is_empty() {
             return Err(SubjectError::GroupsPerInterrogationRangeIsEmpty);
         }
 
-        match &subject.parameters.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 blocks,
                 minimum_week_separation: _,
