@@ -715,7 +715,7 @@ where
     /// Returns the inner solution
     ///
     /// This method works like [Self::inner] but consumes the [DecoratedSolution].
-    pub fn into_innter(self) -> T::PartialSolution {
+    pub fn into_inner(self) -> T::PartialSolution {
         self.internal_solution
     }
 
