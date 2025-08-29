@@ -398,11 +398,49 @@ impl Store {
         &self,
         pattern: WeekPattern,
     ) -> WeekPatternResult<WeekPatternId> {
-        todo!()
+        let mut conn = self.pool.acquire().await?;
+
+        let id = sqlx::query!("INSERT INTO week_patterns (name) VALUES (?)", pattern.name)
+            .execute(&mut *conn)
+            .await?
+            .last_insert_rowid();
+
+        for Week(week) in pattern.weeks.iter().copied() {
+            let _ = sqlx::query!(
+                "INSERT INTO weeks (week_pattern_id, week) VALUES (?1, ?2)",
+                id,
+                week
+            )
+            .execute(&mut *conn)
+            .await?;
+        }
+
+        let week_pattern_id = WeekPatternId(usize::try_from(id).expect("Should be valid usize id"));
+
+        Ok(week_pattern_id)
     }
 
     async fn week_pattern_remove_internal(&self, index: WeekPatternId) -> WeekPatternResult<()> {
-        todo!()
+        let week_pattern_id =
+            i64::try_from(index.0).map_err(|_| WeekPatternError::InvalidId(index))?;
+
+        let mut conn = self.pool.acquire().await?;
+
+        let _ = sqlx::query!(
+            "DELETE FROM weeks WHERE week_pattern_id = ?",
+            week_pattern_id
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        let _ = sqlx::query!(
+            "DELETE FROM week_patterns WHERE week_pattern_id = ?",
+            week_pattern_id
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
     }
 }
 
