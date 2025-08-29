@@ -219,7 +219,7 @@ enum WeekPatternCommand {
         /// Be careful the order might change between databases update (even when using undo/redo)
         #[arg(short = 'n')]
         week_pattern_number: Option<NonZeroUsize>,
-        /// List of weeks to add separated by spaces
+        /// List of weeks to add separated by spaces (already existing weeks in pattern are ignored)
         weeks: Vec<NonZeroU32>,
     },
 }
