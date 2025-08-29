@@ -167,172 +167,580 @@
   },
   "students": {
     "21": {
-      "surname": "Roth",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Roth",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "22": {
-      "surname": "Marin",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Marin",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "23": {
-      "surname": "Bordes",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Bordes",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "24": {
-      "surname": "Bresson",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Bresson",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "25": {
-      "surname": "Gosset",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Gosset",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "26": {
-      "surname": "Martel",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Martel",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "27": {
-      "surname": "Delarue",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Delarue",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "28": {
-      "surname": "Chauvet",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Chauvet",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "29": {
-      "surname": "Bourdon",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Bourdon",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "30": {
-      "surname": "Lafond",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Lafond",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "31": {
-      "surname": "Rondeau",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Rondeau",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "32": {
-      "surname": "Vigneron",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Vigneron",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "33": {
-      "surname": "Davy",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Davy",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "34": {
-      "surname": "Gosselin",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Gosselin",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "35": {
-      "surname": "Jeannin",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Jeannin",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "36": {
-      "surname": "Sicard",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Sicard",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "37": {
-      "surname": "Mounier",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Mounier",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "38": {
-      "surname": "Lafon",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Lafon",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "39": {
-      "surname": "Brun",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Brun",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "40": {
-      "surname": "Hardy",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Hardy",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "41": {
-      "surname": "Girault",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Girault",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "42": {
-      "surname": "Delahaye",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Delahaye",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "43": {
-      "surname": "Levasseur",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Levasseur",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     },
     "44": {
-      "surname": "Gonthier",
-      "firstname": "",
-      "email": null,
-      "phone": null,
-      "no_consecutive_slots": false
+      "student": {
+        "surname": "Gonthier",
+        "firstname": "",
+        "email": null,
+        "phone": null,
+        "no_consecutive_slots": false
+      },
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
     }
   },
   "subject_groups": {
@@ -3150,415 +3558,5 @@
       }
     }
   },
-  "slot_selections": {},
-  "student_assignments": {
-    "21": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "22": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "23": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "24": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "25": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "26": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "27": {
-      "subject_groups": {
-        "45": 63,
-        "46": 67,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "28": {
-      "subject_groups": {
-        "45": 63,
-        "46": 67,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "29": {
-      "subject_groups": {
-        "45": 62,
-        "46": 67,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "30": {
-      "subject_groups": {
-        "45": 63,
-        "46": 67,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "31": {
-      "subject_groups": {
-        "45": 63,
-        "46": 67,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "32": {
-      "subject_groups": {
-        "45": 63,
-        "46": 67,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "33": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "34": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "35": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "36": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "37": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "38": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "39": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "40": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "41": {
-      "subject_groups": {
-        "45": 62,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "42": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "43": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    },
-    "44": {
-      "subject_groups": {
-        "45": 63,
-        "46": 66,
-        "47": 65,
-        "48": 68,
-        "49": 64,
-        "50": 69
-      },
-      "incompats": [
-        54,
-        55,
-        56,
-        57,
-        58
-      ]
-    }
-  }
+  "slot_selections": {}
 }
