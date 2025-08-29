@@ -1,9 +1,22 @@
+//! Solver module.
+//!
+//! This module implements most of the logic for solving problems
+//! defined using [BaseConstraints] and [ExtraConstraints].
+//!
+//! The standard process to solve such a problem is to start
+//! by building a [ProblemBuilder] from a [BaseConstraints].
+//! See [ProblemBuilder] or [Problem] for more details.
+
 use super::*;
 
 use std::collections::BTreeMap;
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, UsableData, Variable};
 
+/// Internal IDs
+///
+/// These IDs are issued by an [IdIssuer] and are
+/// used internally to type erase some data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InternalId(u64);
 
@@ -13,16 +26,25 @@ impl std::fmt::Display for InternalId {
     }
 }
 
+/// Id issuer
+///
+/// This is used to issue internal ids as needed
+/// to uniquely represent type erased data.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 struct IdIssuer {
+    /// Newt available ID
     available: u64,
 }
 
 impl IdIssuer {
+    /// Create a new ID issuer (first ID will be 0).
     fn new() -> Self {
         Self::default()
     }
 
+    /// Get an ID from the ID issuer.
+    ///
+    /// Each ID from the (same) ID issuer is garanteed to be different.
     fn get_id(&mut self) -> InternalId {
         let new_id = InternalId(self.available);
         self.available += 1;
@@ -30,6 +52,11 @@ impl IdIssuer {
     }
 }
 
+/// Variables used internally in [Problem] and [ProblemBuilder].
+///
+/// When [ExtraConstraints] define structure variables, they
+/// are typed erased behind a generic ID (to simplify the API).
+/// This type represents such a type erased variable.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct IdVariable {
     id: InternalId,
@@ -42,6 +69,14 @@ impl std::fmt::Display for IdVariable {
     }
 }
 
+/// Builder for [Problem].
+///
+/// This allows the progressive building of a [Problem]
+/// from a [BaseConstraints] and possibly multiple [ExtraConstraints].
+///
+/// One starts by calling [ProblemBuilder::new] and providing a [BaseConstraints].
+/// Extensions to the problem can be added with [ProblemBuilder::add_constraints].
+/// Once the problem is entirely described, it can be built using [ProblemBuilder::build].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProblemBuilder<
     M,
@@ -54,16 +89,29 @@ pub struct ProblemBuilder<
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// base [BaseConstraints] the problem is built from.
     base: T,
+    /// Internal [IdIssuer] used for type eraser when adding
+    /// problem extensions (described by [ExtraConstraints]).
     id_issuer: IdIssuer,
+    /// Phantom data for generic `P`.
     phantom_p: std::marker::PhantomData<P>,
 
+    /// Internal objective that is progressively built from the problem and its
+    /// possible extensions.
     objective: Objective<ExtraVariable<M, S, IdVariable>>,
 
+    /// Definitions of the variables for the final ILP problem.
     variables: BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>,
 
+    /// Descriptions of the general constraints of the original [BaseConstraints] problem.
     general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
+    /// Descriptions of the structure constraints of the original [BaseConstraints] problem.
     structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
+    /// Constraints that are gradually built for the full ILP problem.
+    /// It includes general constraints from the original problem but also the structure constraints
+    /// of the base problem.
+    /// It will also include possible structure and general constraints from problem extensions.
     constraints: Vec<(Constraint<ExtraVariable<M, S, IdVariable>>, InternalId)>,
 }
 
@@ -74,6 +122,13 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// Starts building a problem from a given [BaseConstraints].
+    ///
+    /// This functions can actually fail if there is a mismatch between the
+    /// declared variables and the variables that appear in the constraints
+    /// and the objective.
+    ///
+    /// In that case, it returns `None`.
     pub fn new(base: T) -> Option<Self> {
         let orig_main_variables = base.main_variables();
         let orig_structure_variables = base.structure_variables();
@@ -168,6 +223,14 @@ where
         })
     }
 
+    /// Used internally
+    ///
+    /// Takes a map of variable definition and builds
+    /// a two way map between internal IDs and these variables.
+    ///
+    /// This changes the internal state of the builder because of the internal
+    /// IDs that are issued. But the variables are not committed yet to the problem
+    /// to allow for failure in the calling function.
     fn scan_variables<U: UsableData>(
         &mut self,
         variables: BTreeMap<U, Variable>,
@@ -192,10 +255,17 @@ where
         (rev_v_map, v_map)
     }
 
+    /// Used internally
+    ///
+    /// Commit variables as returned by [ProblemBuilder::scan_variables] into the ILP problem.
     fn add_variables(&mut self, mut v_map: BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>) {
         self.variables.append(&mut v_map);
     }
 
+    /// Used internally
+    ///
+    /// Checks that all the variables in an expression were correctly declared
+    /// using the rev_map returned by [ProblemBuilder::scan_variables]
     fn check_variables_in_expr<U: UsableData>(
         &self,
         expr: &LinExpr<ExtraVariable<M, S, U>>,
@@ -212,6 +282,10 @@ where
         true
     }
 
+    /// Used internally
+    ///
+    /// Checks that all the variables in a list of constraints were correctly declared
+    /// using the rev_map returned by [ProblemBuilder::scan_variables]
     fn check_variables_in_constraints<U: UsableData, C: UsableData>(
         &self,
         constraints: &Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
@@ -226,6 +300,10 @@ where
         true
     }
 
+    /// Used internally
+    ///
+    /// Update a variable type to the internal [ExtraVariable] that uses
+    /// IDs to type erase.
     fn update_var<U: UsableData>(
         &self,
         v: &ExtraVariable<M, S, U>,
@@ -245,6 +323,10 @@ where
         }
     }
 
+    /// Used internally
+    ///
+    /// Commit constraints to the ILP problem but transmute them in the process
+    /// to use the correct internal [ExtraVariable] (for type erasure).
     fn add_constraints_internal<U: UsableData, C: UsableData>(
         &mut self,
         constraints: Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
@@ -268,6 +350,20 @@ where
         c_map
     }
 
+    /// Add a problem extension defined by an [ExtraConstraints] to the problem.
+    ///
+    /// The first parameter is a struct `extra` describing the extension and must implement [ExtraConstraints]
+    /// for the specific [BaseConstraints] of the problem.
+    /// The extension can provide further constraints and an additional (linear) objective.
+    ///
+    /// The second parameter is the weight that should be given to the additional objective.
+    /// The sign of this parameter is basicaly ignored.
+    ///
+    /// This function can fail and in this case returns `None`. This happens if there is a mismatch
+    /// between the variables that appear in the constraints or the objective and the declared variables.
+    ///
+    /// If the function succeeds, it returns a translator of type [ExtraTranslator]. This structure contains
+    /// the necessary data to identify which extra constraints is not correctly satisfied in a (non-feasible) solution.
     pub fn add_constraints<E: ExtraConstraints<T>>(
         &mut self,
         extra: E,
@@ -302,6 +398,10 @@ where
         })
     }
 
+    /// Builds the [Problem].
+    ///
+    /// This is the last function to call in the builder pattern. It
+    /// consumes the [ProblemBuilder] and builds the [Problem] as described.
     pub fn build(self) -> Problem<M, S, T, P> {
         let ilp_problem = collomatique_ilp::ProblemBuilder::new()
             .set_variables(self.variables)
