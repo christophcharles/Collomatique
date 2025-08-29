@@ -218,6 +218,10 @@ pub enum SubjectError {
     /// Some teachers still are associated to the subject
     #[error("teacher id ({0:?}) is associated to the subject id {1:?}")]
     SubjectStillHasAssociatedTeachers(TeacherId, SubjectId),
+
+    /// The subject is referenced by a teacher
+    #[error("subject id ({0:?}) is referenced by slots")]
+    SubjectStillHasAssociatedSlots(SubjectId),
 }
 
 /// Errors for teacher operations
@@ -1269,6 +1273,14 @@ impl Data {
                     .subjects
                     .ordered_subject_list
                     .insert(position, (*new_id, params.clone()));
+                if params.parameters.interrogation_parameters.is_some() {
+                    self.inner_data.slots.subject_map.insert(
+                        *new_id,
+                        slots::SubjectSlots {
+                            ordered_slots: vec![],
+                        },
+                    );
+                }
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
                     if params.excluded_periods.contains(period_id) {
                         continue;
@@ -1315,9 +1327,18 @@ impl Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
+                if let Some(subject_slots) = self.inner_data.slots.subject_map.get(id) {
+                    if !subject_slots.ordered_slots.is_empty() {
+                        return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
+                    }
+                }
+
                 for (teacher_id, teacher) in &self.inner_data.teachers.teacher_map {
                     if teacher.subjects.contains(id) {
-                        return Err(SubjectError::SubjectStillHasAssociatedTeachers(*teacher_id, *id));
+                        return Err(SubjectError::SubjectStillHasAssociatedTeachers(
+                            *teacher_id,
+                            *id,
+                        ));
                     }
                 }
 
@@ -1351,6 +1372,7 @@ impl Data {
                     .subjects
                     .ordered_subject_list
                     .remove(position);
+                self.inner_data.slots.subject_map.remove(id);
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
                     if params.excluded_periods.contains(period_id) {
                         continue;
@@ -1390,6 +1412,18 @@ impl Data {
                             ));
                         }
                     }
+
+                    // Let's also check that we don't have corresponding interrogations
+                    let subject_slots = self
+                        .inner_data
+                        .slots
+                        .subject_map
+                        .get(id)
+                        .expect("Subject should have a slot list at this point");
+
+                    if !subject_slots.ordered_slots.is_empty() {
+                        return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
+                    }
                 }
 
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
@@ -1421,6 +1455,7 @@ impl Data {
                 }
 
                 self.inner_data.subjects.ordered_subject_list[position].1 = new_params.clone();
+                self.inner_data.slots.subject_map.remove(id);
 
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
                     // Only change in period status should be considered
