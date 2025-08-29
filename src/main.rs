@@ -10,9 +10,6 @@ struct Args {
     create: bool,
     /// Sqlite file (to open or create) that contains the database
     db: std::path::PathBuf,
-    /// Select what colloscope to compute (default is the first one in the db)
-    #[arg(short, long)]
-    name: Option<String>,
 }
 
 use sqlx::migrate::MigrateDatabase;
@@ -197,9 +194,7 @@ CREATE TABLE "student_subjects" (
 
 CREATE TABLE "group_lists" (
 	"group_list_id"	INTEGER NOT NULL,
-	"colloscope_id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
-	FOREIGN KEY("colloscope_id") REFERENCES "colloscopes"("colloscope_id"),
 	PRIMARY KEY("group_list_id" AUTOINCREMENT)
 );
 
@@ -904,7 +899,6 @@ struct SubjectsData {
 async fn generate_subjects(
     db_conn: &SqlitePool,
     student_id_map: &std::collections::BTreeMap<i64, usize>,
-    collo_id: i64,
 ) -> Result<SubjectsData> {
     let subject_data = sqlx::query_as!(SubjectRecord, "
 SELECT subject_id AS id, duration, min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots
@@ -932,10 +926,8 @@ FROM time_slots NATURAL JOIN weeks"
 SELECT subject_id, group_id, student_id
 FROM group_list_subjects 
 JOIN group_lists ON group_list_subjects.group_list_id = group_lists.group_list_id
-JOIN group_items ON group_lists.group_list_id = group_items.group_list_id
-WHERE colloscope_id = ?;
-        ",
-        collo_id
+JOIN group_items ON group_lists.group_list_id = group_items.group_list_id;
+        "
     )
     .fetch_all(db_conn);
     let groups_data_req = sqlx::query_as!(
@@ -945,10 +937,8 @@ SELECT subject_id, group_list_items.group_id, extendable
 FROM group_list_subjects
 JOIN group_list_items ON group_list_subjects.group_list_id = group_list_items.group_list_id
 JOIN groups ON group_list_items.group_id = groups.group_id
-JOIN group_lists On group_lists.group_list_id = group_list_subjects.group_list_id
-WHERE colloscope_id = ?;
-        ",
-        collo_id
+JOIN group_lists On group_lists.group_list_id = group_list_subjects.group_list_id;
+        "
     )
     .fetch_all(db_conn);
 
@@ -1117,7 +1107,7 @@ async fn generate_grouping_incompats(
     Ok(set)
 }
 
-async fn get_colloscope_id(db_conn: &SqlitePool, colloscope: Option<String>) -> Result<i64> {
+/*async fn get_colloscope_id(db_conn: &SqlitePool, colloscope: Option<String>) -> Result<i64> {
     match colloscope {
         Some(name) => {
             let id = sqlx::query!("SELECT colloscope_id FROM colloscopes WHERE name = ?", name)
@@ -1134,20 +1124,17 @@ async fn get_colloscope_id(db_conn: &SqlitePool, colloscope: Option<String>) -> 
                 .ok_or(anyhow!("No available colloscope to fill in"))
         }
     }
-}
+}*/
 
 async fn generate_colloscope_data(
     db_conn: &SqlitePool,
-    colloscope: Option<String>,
 ) -> Result<collomatique::gen::colloscope::ValidatedData> {
     use collomatique::gen::colloscope::*;
-
-    let collo_id = get_colloscope_id(db_conn, colloscope).await?;
 
     let general = generate_general_data(db_conn);
     let incompatibilities = generate_incompatibilies(db_conn).await?;
     let students = generate_students(db_conn, &incompatibilities.id_map).await?;
-    let subjects = generate_subjects(db_conn, &students.id_map, collo_id).await?;
+    let subjects = generate_subjects(db_conn, &students.id_map).await?;
     let slot_groupings = generate_slot_groupings(db_conn, &subjects.slot_map).await?;
     let grouping_incompats = generate_grouping_incompats(db_conn, &slot_groupings.id_map);
 
@@ -1169,7 +1156,7 @@ async fn main() -> Result<()> {
     println!("Opening database...");
     let db = connect_db(args.create, args.db.as_path()).await?;
 
-    let data = generate_colloscope_data(&db, args.name).await?;
+    let data = generate_colloscope_data(&db).await?;
 
     let ilp_translator = data.ilp_translator();
 
