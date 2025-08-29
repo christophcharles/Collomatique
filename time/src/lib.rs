@@ -76,6 +76,20 @@ impl From<chrono::Weekday> for Weekday {
     }
 }
 
+impl std::fmt::Display for Weekday {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            chrono::Weekday::Mon => write!(f, "lundi"),
+            chrono::Weekday::Tue => write!(f, "mardi"),
+            chrono::Weekday::Wed => write!(f, "mercredi"),
+            chrono::Weekday::Thu => write!(f, "jeudi"),
+            chrono::Weekday::Fri => write!(f, "vendredi"),
+            chrono::Weekday::Sat => write!(f, "samedi"),
+            chrono::Weekday::Sun => write!(f, "Dimanche"),
+        }
+    }
+}
+
 impl Weekday {
     pub fn inner(&self) -> &chrono::Weekday {
         &self.0
