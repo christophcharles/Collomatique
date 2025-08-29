@@ -24,6 +24,12 @@ pub struct EditorPanel {
 }
 
 impl EditorPanel {
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+}
+
+impl EditorPanel {
     fn generate_subtitle(&self) -> String {
         let default_name = "Fichier sans nom".into();
         let name = match &self.file_name {
