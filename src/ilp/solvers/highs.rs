@@ -8,18 +8,35 @@ pub struct Solver {
     disable_logging: bool,
 }
 
+enum Objective {
+    None,
+    MinimumDistance,
+    MinimumObjectiveFn,
+}
+
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
     fn find_closest_solution<'a>(
         &self,
         config: &Config<'a, V, P>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        self.solve_internal(config, true)
+        self.solve_internal(config, Objective::MinimumDistance)
     }
 
-    fn solve<'a>(&self, problem: &'a Problem<V, P>) -> Option<FeasableConfig<'a, V, P>> {
+    fn solve<'a>(
+        &self,
+        problem: &'a Problem<V, P>,
+        minimize_objective: bool,
+    ) -> Option<FeasableConfig<'a, V, P>> {
         let init_config = problem.default_config();
-        self.solve_internal(&init_config, false)
+        self.solve_internal(
+            &init_config,
+            if minimize_objective {
+                Objective::MinimumObjectiveFn
+            } else {
+                Objective::None
+            },
+        )
     }
 }
 
@@ -47,7 +64,7 @@ impl Solver {
     fn solve_internal<'a, V: VariableName, P: ProblemRepr<V>>(
         &self,
         init_config: &Config<'a, V, P>,
-        minimize_distance_to_init_config: bool,
+        objective: Objective,
     ) -> Option<FeasableConfig<'a, V, P>> {
         // When everything is solved for some reason this is sometimes an issue...
         if let Some(result) = init_config.clone().into_feasable() {
@@ -56,8 +73,7 @@ impl Solver {
 
         let problem = init_config.get_problem();
 
-        let highs_problem =
-            self.build_problem(problem, init_config, minimize_distance_to_init_config);
+        let highs_problem = self.build_problem(problem, init_config, objective);
 
         use highs::Sense;
         let mut model = highs_problem.problem.try_optimise(Sense::Minimise).ok()?;
@@ -74,7 +90,7 @@ impl Solver {
         &self,
         problem: &Problem<V, P>,
         init_config: &Config<'_, V, P>,
-        minimize_distance_to_init_config: bool,
+        objective: Objective,
     ) -> HighsProblem {
         use crate::ilp::VariableType;
         use highs::RowProblem;
@@ -88,37 +104,46 @@ impl Solver {
             .map(|(var, var_type)| {
                 match var_type {
                     VariableType::Bool => {
-                        let value = if init_config.get_bool(var).expect("Variable should be valid")
-                        {
-                            1.
-                        } else {
-                            0.
-                        };
-                        // Try minimizing the number of changes with respect to the config
-                        // So if a variable is true in the config, false should be penalized
-                        // And if a variable is false in the config, true should be penalized
-                        // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-                        let col_factor = if minimize_distance_to_init_config {
-                            1. - 2. * value
-                        } else {
-                            match problem.get_objective_fn().get(var) {
-                                Some(coef) => coef.into(),
-                                None => 0.,
+                        let col_factor = match objective {
+                            Objective::MinimumDistance => {
+                                let value =
+                                    if init_config.get_bool(var).expect("Variable should be valid")
+                                    {
+                                        1.
+                                    } else {
+                                        0.
+                                    };
+                                // Try minimizing the number of changes with respect to the config
+                                // So if a variable is true in the config, false should be penalized
+                                // And if a variable is false in the config, true should be penalized
+                                // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+                                1. - 2. * value
                             }
+                            Objective::MinimumObjectiveFn => {
+                                match problem.get_objective_fn().get(var) {
+                                    Some(coef) => coef.into(),
+                                    None => 0.,
+                                }
+                            }
+                            Objective::None => 0.,
                         };
 
                         let col = highs_problem.add_integer_column(col_factor, 0..=1);
                         (var.clone(), col)
                     }
                     VariableType::Integer(range) => {
-                        // Ignore dist mininization for integers variables
-                        let col_factor = if !minimize_distance_to_init_config {
-                            match problem.get_objective_fn().get(var) {
-                                Some(coef) => coef.into(),
-                                None => 0.,
+                        let col_factor = match objective {
+                            Objective::MinimumDistance => {
+                                // Ignore dist minimization for integers variables
+                                0.
                             }
-                        } else {
-                            0.
+                            Objective::MinimumObjectiveFn => {
+                                match problem.get_objective_fn().get(var) {
+                                    Some(coef) => coef.into(),
+                                    None => 0.,
+                                }
+                            }
+                            Objective::None => 0.,
                         };
 
                         let col = highs_problem.add_integer_column(col_factor, range.clone());

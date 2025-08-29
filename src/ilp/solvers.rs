@@ -14,5 +14,9 @@ pub trait FeasabilitySolver<V: VariableName, P: ProblemRepr<V>>: Send + Sync {
         config: &Config<'a, V, P>,
     ) -> Option<FeasableConfig<'a, V, P>>;
 
-    fn solve<'a>(&self, problem: &'a Problem<V, P>) -> Option<FeasableConfig<'a, V, P>>;
+    fn solve<'a>(
+        &self,
+        problem: &'a Problem<V, P>,
+        minimize_objective: bool,
+    ) -> Option<FeasableConfig<'a, V, P>>;
 }
