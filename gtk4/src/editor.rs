@@ -180,6 +180,7 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp::Subject(_) => Some(PanelNumbers::Subjects),
             collomatique_state_colloscopes::AnnotatedOp::Teacher(_) => Some(PanelNumbers::Teachers),
             collomatique_state_colloscopes::AnnotatedOp::Student(_) => Some(PanelNumbers::Students),
+            collomatique_state_colloscopes::AnnotatedOp::Assignment(_) => None,
         }
     }
 

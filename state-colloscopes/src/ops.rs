@@ -26,6 +26,8 @@ pub enum Op {
     Subject(SubjectOp),
     /// Operation on the teachers
     Teacher(TeacherOp),
+    /// Operation on assignments
+    Assignment(AssignmentOp),
 }
 
 impl Operation for Op {}
@@ -93,6 +95,16 @@ pub enum TeacherOp {
     Update(TeacherId, teachers::Teacher),
 }
 
+/// Assignment operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// assignments of students we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssignmentOp {
+    /// Assign (or deassign) a student to a subject on a given period
+    Assign(PeriodId, StudentId, SubjectId, bool),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -110,6 +122,8 @@ pub enum AnnotatedOp {
     Subject(AnnotatedSubjectOp),
     /// Operation on the teachers
     Teacher(AnnotatedTeacherOp),
+    /// Operation on assignments
+    Assignment(AnnotatedAssignmentOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -133,6 +147,12 @@ impl From<AnnotatedSubjectOp> for AnnotatedOp {
 impl From<AnnotatedTeacherOp> for AnnotatedOp {
     fn from(value: AnnotatedTeacherOp) -> Self {
         AnnotatedOp::Teacher(value)
+    }
+}
+
+impl From<AnnotatedAssignmentOp> for AnnotatedOp {
+    fn from(value: AnnotatedAssignmentOp) -> Self {
+        AnnotatedOp::Assignment(value)
     }
 }
 
@@ -214,6 +234,19 @@ pub enum AnnotatedTeacherOp {
     Update(TeacherId, teachers::Teacher),
 }
 
+/// Assignment annotated operation enumeration
+///
+/// Compared to [AssignmentOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedAssignmentOp {
+    /// Assign (or deassign) a student to a subject on a given period
+    Assign(PeriodId, StudentId, SubjectId, bool),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -243,6 +276,10 @@ impl AnnotatedOp {
             Op::Teacher(teacher_op) => {
                 let (op, id) = AnnotatedTeacherOp::annotate(teacher_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
+            }
+            Op::Assignment(assignment_op) => {
+                let op = AnnotatedAssignmentOp::annotate(assignment_op);
+                (op.into(), None)
             }
         }
     }
@@ -337,6 +374,19 @@ impl AnnotatedTeacherOp {
             TeacherOp::Remove(id) => (AnnotatedTeacherOp::Remove(id), None),
             TeacherOp::Update(id, new_teacher) => {
                 (AnnotatedTeacherOp::Update(id, new_teacher), None)
+            }
+        }
+    }
+}
+
+impl AnnotatedAssignmentOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [AssignmentOp].
+    fn annotate(assignment_op: AssignmentOp) -> AnnotatedAssignmentOp {
+        match assignment_op {
+            AssignmentOp::Assign(period_id, student_id, subject_id, status) => {
+                AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status)
             }
         }
     }

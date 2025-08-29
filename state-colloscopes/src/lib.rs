@@ -16,8 +16,11 @@ pub mod ids;
 use ids::IdIssuer;
 pub use ids::{PeriodId, StudentId, SubjectId, TeacherId};
 pub mod ops;
+use ops::{
+    AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp,
+    AnnotatedTeacherOp,
+};
 pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
-use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp};
 pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
 pub mod assignments;
@@ -223,6 +226,32 @@ pub enum TeacherError {
     InvalidSubjectId(SubjectId),
 }
 
+/// Errors for assignment operations
+///
+/// These errors can be returned when trying to modify [Data] with a assignment op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum AssignmentError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// A student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+
+    /// Subject does not run on given period
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
+
+    /// Student is not present on given period
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    StudentIsNotPresentOnPeriod(StudentId, PeriodId),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -236,6 +265,8 @@ pub enum Error {
     Subject(#[from] SubjectError),
     #[error(transparent)]
     Teacher(#[from] TeacherError),
+    #[error(transparent)]
+    Assignment(#[from] AssignmentError),
 }
 
 /// Potential new id returned by annotation
@@ -298,6 +329,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Teacher(teacher_op) => {
                 Ok(AnnotatedOp::Teacher(self.build_rev_teacher(teacher_op)?))
             }
+            AnnotatedOp::Assignment(assignment_op) => Ok(AnnotatedOp::Assignment(
+                self.build_rev_assignment(assignment_op)?,
+            )),
         }
     }
 
@@ -307,6 +341,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Period(period_op) => self.apply_period(period_op)?,
             AnnotatedOp::Subject(subject_op) => self.apply_subject(subject_op)?,
             AnnotatedOp::Teacher(teacher_op) => self.apply_teacher(teacher_op)?,
+            AnnotatedOp::Assignment(assignment_op) => self.apply_assignment(assignment_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -743,6 +778,11 @@ impl Data {
     /// Get the subjects
     pub fn get_teachers(&self) -> &teachers::Teachers {
         &self.inner_data.teachers
+    }
+
+    /// Get the assignments
+    pub fn get_assignments(&self) -> &assignments::Assignments {
+        &self.inner_data.assignments
     }
 
     /// Used internally
@@ -1203,6 +1243,62 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply teacher operations
+    fn apply_assignment(
+        &mut self,
+        assignment_op: &AnnotatedAssignmentOp,
+    ) -> std::result::Result<(), AssignmentError> {
+        match assignment_op {
+            AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
+                let Some(period_assignments) =
+                    self.inner_data.assignments.period_map.get_mut(period_id)
+                else {
+                    return Err(AssignmentError::InvalidPeriodId(*period_id));
+                };
+
+                if self
+                    .inner_data
+                    .subjects
+                    .find_subject_position(*subject_id)
+                    .is_none()
+                {
+                    return Err(AssignmentError::InvalidSubjectId(*subject_id));
+                }
+
+                let Some(excluded_students) =
+                    period_assignments.subject_exclusion_map.get_mut(subject_id)
+                else {
+                    return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
+                        *subject_id,
+                        *period_id,
+                    ));
+                };
+
+                let Some(student_desc) = self.inner_data.students.student_map.get(student_id)
+                else {
+                    return Err(AssignmentError::InvalidStudentId(*student_id));
+                };
+
+                if student_desc.excluded_periods.contains(period_id) {
+                    return Err(AssignmentError::StudentIsNotPresentOnPeriod(
+                        *student_id,
+                        *period_id,
+                    ));
+                }
+
+                if *status {
+                    excluded_students.remove(student_id);
+                } else {
+                    excluded_students.insert(*student_id);
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -1424,6 +1520,63 @@ impl Data {
                 };
 
                 Ok(AnnotatedTeacherOp::Update(*teacher_id, old_teacher.clone()))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of an assignment operation
+    fn build_rev_assignment(
+        &self,
+        assignment_op: &AnnotatedAssignmentOp,
+    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError> {
+        match assignment_op {
+            AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, _status) => {
+                let Some(period_assignments) =
+                    self.inner_data.assignments.period_map.get(period_id)
+                else {
+                    return Err(AssignmentError::InvalidPeriodId(*period_id));
+                };
+
+                if self
+                    .inner_data
+                    .subjects
+                    .find_subject_position(*subject_id)
+                    .is_none()
+                {
+                    return Err(AssignmentError::InvalidSubjectId(*subject_id));
+                }
+
+                let Some(excluded_students) =
+                    period_assignments.subject_exclusion_map.get(subject_id)
+                else {
+                    return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
+                        *subject_id,
+                        *period_id,
+                    ));
+                };
+
+                let Some(student_desc) = self.inner_data.students.student_map.get(student_id)
+                else {
+                    return Err(AssignmentError::InvalidStudentId(*student_id));
+                };
+
+                if student_desc.excluded_periods.contains(period_id) {
+                    return Err(AssignmentError::StudentIsNotPresentOnPeriod(
+                        *student_id,
+                        *period_id,
+                    ));
+                }
+
+                let previous_status = !excluded_students.contains(student_id);
+
+                Ok(AnnotatedAssignmentOp::Assign(
+                    *period_id,
+                    *student_id,
+                    *subject_id,
+                    previous_status,
+                ))
             }
         }
     }
