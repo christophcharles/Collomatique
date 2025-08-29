@@ -1,4 +1,4 @@
-use pyo3::exceptions::PyException;
+use pyo3::exceptions::{PyException, PyValueError};
 
 use super::*;
 
@@ -20,12 +20,31 @@ pub struct GeneralData {
     week_count: NonZeroU32,
 }
 
-impl From<backend::GeneralData> for GeneralData {
-    fn from(value: backend::GeneralData) -> Self {
+impl From<&backend::GeneralData> for GeneralData {
+    fn from(value: &backend::GeneralData) -> Self {
         GeneralData {
             interrogations_per_week_range: value
                 .interrogations_per_week
+                .clone()
                 .map(|range| (range.start, range.end)),
+            max_interrogations_per_day: value.max_interrogations_per_day,
+            week_count: value.week_count,
+        }
+    }
+}
+
+impl From<backend::GeneralData> for GeneralData {
+    fn from(value: backend::GeneralData) -> Self {
+        GeneralData::from(&value)
+    }
+}
+
+impl From<&GeneralData> for backend::GeneralData {
+    fn from(value: &GeneralData) -> Self {
+        backend::GeneralData {
+            interrogations_per_week: value
+                .interrogations_per_week_range
+                .map(|tuple| tuple.0..tuple.1),
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
         }
@@ -34,13 +53,7 @@ impl From<backend::GeneralData> for GeneralData {
 
 impl From<GeneralData> for backend::GeneralData {
     fn from(value: GeneralData) -> Self {
-        backend::GeneralData {
-            interrogations_per_week: value
-                .interrogations_per_week_range
-                .map(|tuple| tuple.0..tuple.1),
-            max_interrogations_per_day: value.max_interrogations_per_day,
-            week_count: value.week_count,
-        }
+        backend::GeneralData::from(&value)
     }
 }
 
@@ -55,16 +68,29 @@ impl Database {
 
         val
     }
+
+    fn general_data_set(self_: PyRef<'_, Self>, general_data: GeneralData) -> PyResult<()> {
+        let Answer::GeneralDataSet(val) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GeneralDataSet(general_data),
+        ) else {
+            panic!("Bad answer type");
+        };
+
+        val
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::backend;
-use crate::frontend::state;
+use crate::frontend::state::{self, Operation, UpdateError};
 
 #[derive(Debug, Clone)]
 pub enum Command {
     GeneralDataGet,
+    GeneralDataSet(GeneralData),
     Exit,
 }
 
@@ -84,6 +110,7 @@ impl std::error::Error for PythonError {}
 #[derive(Debug)]
 pub enum Answer {
     GeneralDataGet(PyResult<GeneralData>),
+    GeneralDataSet(PyResult<()>),
 }
 
 #[derive(Debug)]
@@ -166,6 +193,23 @@ impl<'scope> SessionConnection<'scope> {
                     .map(GeneralData::from);
 
                 Answer::GeneralDataGet(general_data)
+            }
+            Command::GeneralDataSet(general_data) => {
+                let result = manager
+                    .apply(Operation::GeneralData(general_data.into()))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::InterrogationsPerWeekRangeIsEmpty => {
+                            PyValueError::new_err("Interrogations per week range is empty")
+                        }
+                        UpdateError::WeekPatternsNeedTruncating(week_patterns) => {
+                            PyValueError::new_err("Some wwek patterns need truncating")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    });
+
+                Answer::GeneralDataSet(result)
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
