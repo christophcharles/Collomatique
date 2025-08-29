@@ -142,15 +142,15 @@ pub enum SubjectPeriodicity {
     /// [SubjectPeriodicity::OnceForEveryBlockOfWeeks] is used *way* more often
     /// and can be represented in a simpler way on screen in a GUI.
     OnceForEveryArbitraryBlock {
-        /// Dates that separate blocks
+        /// Weeks that separate blocks
         ///
         /// If this list is empty, there will be a single block that
         /// starts at the first week of the first period and will end at the
         /// last week of the last period.
         ///
         /// Here, we can split this single blocks by giving other dates that
-        /// separate them. So there always is `dates_between_blocks.len()+1` blocks.
-        dates_between_blocks: BTreeSet<collomatique_time::NaiveMondayDate>,
+        /// separate them. So there always is `weeks_at_start_of_new_block.len()+1` blocks.
+        weeks_at_start_of_new_block: BTreeSet<usize>,
     },
 }
 
@@ -232,14 +232,14 @@ pub struct SubjectsExternalData {
 impl SubjectsExternalData {
     /// Checks the validity of all [SubjectExternalData] in the ordered list.
     ///
-    /// In practice, this means checking that the ids for periods are valid
-    /// and that the ranges are non-empty
+    /// In practice, this means checking that the ids for periods are valid,
+    /// that the ranges are non-empty and that week references are in bound
     ///
     /// **Beware**, this does not check the validity of the ids for the subjects!
-    pub fn validate_all(&self, period_ids: &BTreeSet<u64>) -> bool {
+    pub fn validate_all(&self, period_ids: &BTreeSet<u64>, week_count: usize) -> bool {
         self.ordered_period_list
             .iter()
-            .all(|(_id, data)| data.validate(period_ids))
+            .all(|(_id, data)| data.validate(period_ids, week_count))
     }
 }
 
@@ -268,12 +268,26 @@ impl SubjectExternalData {
     /// Checks the validity of a [SubjectExternalData].
     ///
     /// In practice, this means checking that the ids for periods are valid
-    /// and that the ranges are non-empty
-    pub fn validate(&self, period_ids: &BTreeSet<u64>) -> bool {
+    /// that the ranges are non-empty and that week references are in bound
+    pub fn validate(&self, period_ids: &BTreeSet<u64>, week_count: usize) -> bool {
         if !self.excluded_periods.iter().all(|x| period_ids.contains(x)) {
             return false;
         }
-        !self.parameters.students_per_group.is_empty()
-            && !self.parameters.groups_per_interrogation.is_empty()
+        if self.parameters.students_per_group.is_empty()
+            || self.parameters.groups_per_interrogation.is_empty()
+        {
+            return false;
+        }
+        if let SubjectPeriodicity::OnceForEveryArbitraryBlock {
+            weeks_at_start_of_new_block,
+        } = &self.parameters.periodicity
+        {
+            for week in weeks_at_start_of_new_block {
+                if *week >= week_count {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
