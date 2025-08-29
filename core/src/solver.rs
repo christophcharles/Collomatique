@@ -77,7 +77,6 @@ impl std::fmt::Display for IdVariable {
 /// One starts by calling [ProblemBuilder::new] and providing a [BaseConstraints].
 /// Extensions to the problem can be added with [ProblemBuilder::add_constraints].
 /// Once the problem is entirely described, it can be built using [ProblemBuilder::build].
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProblemBuilder<
     M,
     S,
@@ -113,6 +112,21 @@ pub struct ProblemBuilder<
     /// of the base problem.
     /// It will also include possible structure and general constraints from problem extensions.
     constraints: Vec<(Constraint<ExtraVariable<M, S, IdVariable>>, InternalId)>,
+
+    /// functions to reconstruct extra structure variables
+    ///
+    /// These are used to rebuild a complete configuration together with
+    /// extra structure variables coming from problem extensions.
+    reconstruction_funcs: Vec<
+        Box<
+            dyn Fn(
+                    &T,
+                    &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+                ) -> ConfigData<IdVariable>
+                + Send
+                + Sync,
+        >,
+    >,
 }
 
 impl<M, S, T, P> ProblemBuilder<M, S, T, P>
@@ -220,6 +234,7 @@ where
             general_constraint_descs,
             structure_constraint_descs,
             constraints,
+            reconstruction_funcs: vec![],
         })
     }
 
@@ -382,7 +397,7 @@ where
     ///
     /// If the function succeeds, it returns a translator of type [ExtraTranslator]. This structure contains
     /// the necessary data to identify which extra constraints is not correctly satisfied in a (non-feasible) solution.
-    pub fn add_constraints<E: ExtraConstraints<T>>(
+    pub fn add_constraints<E: ExtraConstraints<T> + 'static>(
         &mut self,
         extra: E,
         obj_coef: f64,
@@ -409,8 +424,27 @@ where
         let new_obj = objective.transmute(|x| self.update_var(x, &rev_v_map));
         self.objective = &self.objective + obj_coef * new_obj;
 
+        let lean_rev_v_map: BTreeMap<_, _> = rev_v_map
+            .into_iter()
+            .map(|(e, fluff)| match fluff {
+                ExtraVariable::Extra(id) => (e, id),
+                _ => panic!("Should only have extra variables"),
+            })
+            .collect();
+
+        let reconstruct_func = move |base: &T, config: &ConfigData<BaseVariable<M, S>>| {
+            let pre_output = extra.reconstruct_extra_structure_variables(base, config);
+            pre_output.transmute(|x| {
+                lean_rev_v_map
+                    .get(x)
+                    .cloned()
+                    .expect("Variable should be defined")
+            })
+        };
+
+        self.reconstruction_funcs.push(Box::new(reconstruct_func));
+
         Some(ExtraTranslator {
-            extra,
             general_c_map,
             structure_c_map,
         })
@@ -433,18 +467,17 @@ where
             base: self.base,
             general_constraint_descs: self.general_constraint_descs,
             structure_constraint_descs: self.structure_constraint_descs,
+            reconstruction_funcs: self.reconstruction_funcs,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
-    extra: E,
     general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
     structure_c_map: BTreeMap<InternalId, E::StructureConstraintDesc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem<M, S, T, P>
 where
     M: UsableData,
@@ -456,9 +489,19 @@ where
     base: T,
     general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
     structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
+    reconstruction_funcs: Vec<
+        Box<
+            dyn Fn(
+                    &T,
+                    &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+                ) -> ConfigData<IdVariable>
+                + Send
+                + Sync,
+        >,
+    >,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct DecoratedSolution<'a, M, S, T, P>
 where
     M: UsableData,
@@ -521,7 +564,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct TimeLimitSolution<'a, M, S, T, P>
 where
     M: UsableData,
@@ -540,6 +583,46 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    pub fn decorate_solution<'a>(
+        &'a self,
+        solution: T::PartialSolution,
+    ) -> DecoratedSolution<'a, M, S, T, P> {
+        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution);
+        let mut base_config_data =
+            starting_configuration_data.transmute(|x| BaseVariable::Main(x.clone()));
+        base_config_data = base_config_data.set_iter(
+            self.base
+                .reconstruct_structure_variables(&starting_configuration_data)
+                .get_values()
+                .into_iter()
+                .map(|(var, value)| (BaseVariable::Structure(var), value)),
+        );
+
+        let mut config_data = base_config_data.transmute(|x| match x {
+            BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+            BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+        });
+        for func in &self.reconstruction_funcs {
+            config_data = config_data.set_iter(
+                func(&self.base, &base_config_data)
+                    .get_values()
+                    .into_iter()
+                    .map(|(var, value)| (ExtraVariable::Extra(var), value)),
+            );
+        }
+
+        let ilp_config = self
+            .ilp_problem
+            .build_config(config_data)
+            .expect("Variables should be defined");
+
+        DecoratedSolution {
+            problem: self,
+            internal_solution: solution,
+            ilp_config,
+        }
+    }
+
     fn feasable_config_into_config_data(
         &self,
         feasable_config: &collomatique_ilp::FeasableConfig<
