@@ -55,6 +55,8 @@ pub enum DecodeError {
     IllformedSlotInSubjectIncompatibilities,
     #[error("A group list is ill-formed")]
     IllformedGroupList,
+    #[error("Group lists were already decoded from a previous block")]
+    GroupListsAlreadyDecoded,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
@@ -173,6 +175,7 @@ struct PreData {
 }
 
 mod assignment_map;
+mod group_list_list;
 mod incompat_list;
 mod period_list;
 mod slot_list;
@@ -214,6 +217,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::IncompatList(incompat_list) => {
                 incompat_list::decode_entry(incompat_list, &mut pre_data)?;
             }
+            ValidEntry::GroupListList(group_lists) => {
+                group_list_list::decode_entry(group_lists, &mut pre_data)?;
+            }
         }
     }
 
@@ -242,6 +248,7 @@ pub enum EntryTag {
     WeekPatternList,
     SlotList,
     IncompatList,
+    GroupListList,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -255,6 +262,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::WeekPatternList(_) => EntryTag::WeekPatternList,
             ValidEntry::SlotList(_) => EntryTag::SlotList,
             ValidEntry::IncompatList(_) => EntryTag::IncompatList,
+            ValidEntry::GroupListList(_) => EntryTag::GroupListList,
         }
     }
 }

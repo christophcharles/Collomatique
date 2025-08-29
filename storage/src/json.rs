@@ -96,6 +96,7 @@ pub struct Entry {
 
 pub mod assignment_map;
 pub mod common;
+pub mod group_list_list;
 pub mod incompat_list;
 pub mod period_list;
 pub mod slot_list;
@@ -136,6 +137,7 @@ pub enum ValidEntry {
     WeekPatternList(week_pattern_list::List),
     SlotList(slot_list::List),
     IncompatList(incompat_list::List),
+    GroupListList(group_list_list::List),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
@@ -151,6 +153,7 @@ impl ValidEntry {
             ValidEntry::WeekPatternList(_) => 1,
             ValidEntry::SlotList(_) => 1,
             ValidEntry::IncompatList(_) => 1,
+            ValidEntry::GroupListList(_) => 1,
         }
     }
 
@@ -164,6 +167,7 @@ impl ValidEntry {
             ValidEntry::WeekPatternList(_) => true,
             ValidEntry::SlotList(_) => true,
             ValidEntry::IncompatList(_) => true,
+            ValidEntry::GroupListList(_) => true,
         }
     }
 }

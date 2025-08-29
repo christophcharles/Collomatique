@@ -124,6 +124,23 @@ fn generate_incompat_list(data: &Data) -> incompat_list::List {
     }
 }
 
+fn generate_group_list_list(data: &Data) -> group_list_list::List {
+    let orig_group_lists = data.get_group_lists();
+
+    group_list_list::List {
+        group_list_map: orig_group_lists
+            .group_list_map
+            .iter()
+            .map(|(group_list_id, group_list)| (group_list_id.inner(), group_list.into()))
+            .collect(),
+        subjects_associations: orig_group_lists
+            .subjects_associations
+            .iter()
+            .map(|(subject_id, group_list_id)| (subject_id.inner(), group_list_id.inner()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
@@ -134,6 +151,7 @@ pub fn encode(data: &Data) -> JsonData {
     let week_pattern_list_entry = ValidEntry::WeekPatternList(generate_week_pattern_list(data));
     let slot_list_entry = ValidEntry::SlotList(generate_slot_list(data));
     let incompat_list_entry = ValidEntry::IncompatList(generate_incompat_list(data));
+    let group_list_list_entry = ValidEntry::GroupListList(generate_group_list_list(data));
 
     JsonData {
         header,
@@ -146,6 +164,7 @@ pub fn encode(data: &Data) -> JsonData {
             week_pattern_list_entry,
             slot_list_entry,
             incompat_list_entry,
+            group_list_list_entry,
         ]
         .into_iter()
         .map(|x| Entry {
