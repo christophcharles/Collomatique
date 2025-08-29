@@ -248,6 +248,19 @@ pub enum ColloscopeCommand {
     },
     /// Show all colloscopes
     PrintAll,
+    /// Export a colloscope to xlsx
+    Export {
+        /// Name of the colloscope to export
+        name: String,
+        /// If multiple colloscopes have the same name, select which one to use.
+        /// So if there are 3 colloscopes with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        colloscope_number: Option<NonZeroUsize>,
+        /// Name of the output xlsx file.
+        /// If the file already exists, it will be overwritten.
+        output: std::path::PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1351,6 +1364,29 @@ async fn colloscope_command(
                 .collect();
 
             Ok(Some(colloscope_vec.join("\n")))
+        }
+        ColloscopeCommand::Export {
+            name,
+            colloscope_number,
+            output,
+        } => {
+            let (_handle, colloscope) = get_colloscope(app_state, &name, colloscope_number).await?;
+
+            let teachers = app_state.teachers_get_all().await?;
+            let subjects = app_state.subjects_get_all().await?;
+            let subject_groups = app_state.subject_groups_get_all().await?;
+            let students = app_state.students_get_all().await?;
+
+            super::xlsx::export_colloscope_to_xlsx(
+                &colloscope,
+                &teachers,
+                &subjects,
+                &subject_groups,
+                &students,
+                &output,
+            )?;
+
+            Ok(None)
         }
     }
 }
