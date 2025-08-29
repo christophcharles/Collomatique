@@ -48,6 +48,13 @@ impl Dialog {
         )
         .expect("valid date")
     }
+
+    fn generate_selected_date_text(&self) -> String {
+        format!(
+            "Date sélectionnée: {}",
+            self.start_date.inner().format("%d/%m/%Y")
+        )
+    }
 }
 
 #[relm4::component(pub)]
@@ -123,10 +130,7 @@ impl SimpleComponent for Dialog {
                     },
                     gtk::Label {
                         #[watch]
-                        set_label: &format!(
-                            "Date sélectionnée: {}",
-                            model.start_date.inner()
-                        ),
+                        set_label: &model.generate_selected_date_text(),
                     },
                 }
             }
