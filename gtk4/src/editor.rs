@@ -138,15 +138,6 @@ impl EditorPanel {
             _ => None,
         }
     }
-
-    fn aggregated_op_to_panel_number(
-        aggregated_op: &collomatique_state::history::AggregatedOp<
-            collomatique_state_colloscopes::AnnotatedOp,
-        >,
-    ) -> Option<PanelNumbers> {
-        let first_op = aggregated_op.inner().last()?;
-        Self::inner_op_to_panel_number(first_op.inner())
-    }
 }
 
 #[relm4::component(pub)]
@@ -411,8 +402,10 @@ impl Component for EditorPanel {
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
                     let aggregated_op = self.data.undo().expect("Should be able to undo");
-                    self.show_particular_panel =
-                        Self::aggregated_op_to_panel_number(&aggregated_op);
+                    let first_action = aggregated_op.inner().first();
+                    self.show_particular_panel = first_action
+                        .map(|x| Self::inner_op_to_panel_number(x.inner()))
+                        .flatten();
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -420,8 +413,10 @@ impl Component for EditorPanel {
             EditorInput::RedoClicked => {
                 if self.data.can_redo() {
                     let aggregated_op = self.data.redo().expect("Should be able to undo");
-                    self.show_particular_panel =
-                        Self::aggregated_op_to_panel_number(&aggregated_op);
+                    let last_action = aggregated_op.inner().last();
+                    self.show_particular_panel = last_action
+                        .map(|x| Self::inner_op_to_panel_number(x.inner()))
+                        .flatten();
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
