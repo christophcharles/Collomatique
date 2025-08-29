@@ -3168,28 +3168,42 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn problem_builder_soft(&self) -> ProblemBuilder<Variable> {
-        ProblemBuilder::new()
-            .add_bool_variables(self.build_group_in_slot_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_dynamic_group_assignment_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_student_in_group_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_use_grouping_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_incompat_group_for_student_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_group_on_slot_selection_variables())
-            .expect("Should not have duplicates")
-            .add_constraints(self.build_interrogations_per_week_optimizer())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_max_interrogations_per_day_optimizer())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_one_interrogation_per_period_optimizer())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_balancing_optimizer())
-            .expect("Variables should be declared")
+    fn add_bool_variables(
+        output: &mut BTreeMap<Variable, crate::ilp::VariableType>,
+        vars: BTreeSet<Variable>,
+    ) {
+        for var in vars {
+            output.insert(var, crate::ilp::VariableType::Bool);
+        }
+    }
+
+    fn build_variables(&self) -> BTreeMap<Variable, crate::ilp::VariableType> {
+        let mut output = BTreeMap::new();
+
+        Self::add_bool_variables(&mut output, self.build_group_in_slot_variables());
+        Self::add_bool_variables(&mut output, self.build_dynamic_group_assignment_variables());
+        Self::add_bool_variables(&mut output, self.build_student_in_group_variables());
+        Self::add_bool_variables(&mut output, self.build_use_grouping_variables());
+        Self::add_bool_variables(
+            &mut output,
+            self.build_incompat_group_for_student_variables(),
+        );
+        Self::add_bool_variables(&mut output, self.build_group_on_slot_selection_variables());
+
+        output.extend(self.build_upper_bound_interrogation_per_day_variables());
+        output.extend(self.build_upper_bound_interrogation_per_week_variables());
+        output.extend(self.build_lower_bound_interrogation_per_week_variables());
+        output.extend(self.build_global_bound_variables());
+
+        output
+    }
+
+    fn build_soft_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        output.extend(self.build_balancing_optimizer());
+
+        output
     }
 
     fn build_objective_fn(&self) -> Expr<Variable> {
@@ -3258,82 +3272,45 @@ impl<'a> IlpTranslator<'a> {
         expr
     }
 
-    fn problem_builder_hard(&self) -> ProblemBuilder<Variable> {
-        ProblemBuilder::new()
-            .add_bool_variables(self.build_group_in_slot_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_dynamic_group_assignment_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_student_in_group_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_use_grouping_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_incompat_group_for_student_variables())
-            .expect("Should not have duplicates")
-            .add_bool_variables(self.build_group_on_slot_selection_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_upper_bound_interrogation_per_day_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_upper_bound_interrogation_per_week_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_lower_bound_interrogation_per_week_variables())
-            .expect("Should not have duplicates")
-            .add_variables(self.build_global_bound_variables())
-            .expect("Should not have duplicates")
-            .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_one_interrogation_per_period_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(
-                self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints(),
-            )
-            .expect("Variables should be declared")
-            .add_constraints(self.build_students_per_group_count_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_student_in_single_group_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_dynamic_groups_group_in_slot_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_interrogations_per_week_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_max_interrogations_per_day_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_grouping_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_grouping_incompats_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_incompat_group_for_student_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_student_incompat_max_count_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_group_on_slot_selection_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_balancing_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_upper_bound_interrogation_per_day_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_upper_bound_interrogation_per_week_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_lower_bound_interrogation_per_week_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_upper_bound_interrogation_per_day_global_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_upper_bound_interrogation_per_week_global_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_lower_bound_interrogation_per_week_global_constraints())
-            .expect("Variables should be declared")
+    fn build_hard_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        output.extend(self.build_at_most_max_groups_per_slot_constraints());
+        output.extend(self.build_at_most_one_interrogation_per_time_unit_constraints());
+        output.extend(self.build_one_interrogation_per_period_constraints());
+        output
+            .extend(self.build_at_most_one_interrogation_per_period_for_empty_groups_contraints());
+        output.extend(self.build_students_per_group_count_constraints());
+        output.extend(self.build_student_in_single_group_constraints());
+        output.extend(self.build_dynamic_groups_student_in_group_constraints());
+        output.extend(self.build_dynamic_groups_group_in_slot_constraints());
+        output.extend(self.build_interrogations_per_week_constraints());
+        output.extend(self.build_max_interrogations_per_day_constraints());
+        output.extend(self.build_grouping_constraints());
+        output.extend(self.build_grouping_incompats_constraints());
+        output.extend(self.build_incompat_group_for_student_constraints());
+        output.extend(self.build_student_incompat_max_count_constraints());
+        output.extend(self.build_group_on_slot_selection_constraints());
+        output.extend(self.build_balancing_constraints());
+        output.extend(self.build_upper_bound_interrogation_per_day_constraints());
+        output.extend(self.build_upper_bound_interrogation_per_week_constraints());
+        output.extend(self.build_lower_bound_interrogation_per_week_constraints());
+        output.extend(self.build_upper_bound_interrogation_per_day_global_constraints());
+        output.extend(self.build_upper_bound_interrogation_per_week_global_constraints());
+        output.extend(self.build_lower_bound_interrogation_per_week_global_constraints());
+
+        output
     }
 
     fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
         //let soft_problem = self.problem_builder_soft().build();
         //let subjects = self.data.subjects.clone();
 
-        let hard_problem_builder = self
-            .problem_builder_hard()
+        let hard_problem_builder = ProblemBuilder::new()
+            .add_variables(self.build_variables())
+            .expect("Should not have duplicates")
+            .add_constraints(self.build_hard_constraints())
+            .expect("Variables should be defined")
             .set_objective_fn(self.build_objective_fn())
             .expect("Variables should be declared");
         // Comment out for now, we are going to need this code for the linear optimization
