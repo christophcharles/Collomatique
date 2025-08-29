@@ -76,11 +76,13 @@ impl ProblemBuilder {
         }
 
         let variables_vec = self.variables.iter().cloned().collect();
+        let mat_repr = ndtools::MatRepr::new(&variables_vec, &self.constraints);
         Ok(Problem {
             variables: self.variables,
             variables_vec,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
+            mat_repr,
         })
     }
 }
@@ -93,6 +95,7 @@ pub struct Problem {
     variables_vec: Vec<String>,
     constraints: Vec<linexpr::Constraint>,
     eval_fn: EvalFn,
+    mat_repr: ndtools::MatRepr,
 }
 
 impl std::fmt::Display for Problem {
