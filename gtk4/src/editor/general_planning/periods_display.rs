@@ -63,20 +63,37 @@ impl Entry {
                 let end_date = start_date
                     .checked_add_days(chrono::Days::new(7 * (week_count as u64) - 1))
                     .expect("Valid end date");
-                format!(
-                    "<b><big>Période {} du {} au {} (semaines {} à {})</big></b>",
-                    index,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
-                    start_week,
-                    end_week,
-                )
+                if start_week != end_week {
+                    format!(
+                        "<b><big>Période {} du {} au {} (semaines {} à {})</big></b>",
+                        index,
+                        start_date.format("%d/%m/%Y").to_string(),
+                        end_date.format("%d/%m/%Y").to_string(),
+                        start_week,
+                        end_week,
+                    )
+                } else {
+                    format!(
+                        "<b><big>Période {} du {} au {} (semaine {})</big></b>",
+                        index,
+                        start_date.format("%d/%m/%Y").to_string(),
+                        end_date.format("%d/%m/%Y").to_string(),
+                        start_week,
+                    )
+                }
             }
             None => {
-                format!(
-                    "<b><big>Période {} (semaines {} à {})</big></b>",
-                    index, start_week, end_week,
-                )
+                if start_week != end_week {
+                    format!(
+                        "<b><big>Période {} (semaines {} à {})</big></b>",
+                        index, start_week, end_week,
+                    )
+                } else {
+                    format!(
+                        "<b><big>Période {} (semaine {})</big></b>",
+                        index, start_week,
+                    )
+                }
             }
         }
     }
