@@ -1,3 +1,56 @@
+//! The collomatique-ilp crate contains the code of collomatique
+//! pertaining to representing Integer Linear Programming problems
+//! pertinent for the collomatique algorithm.
+//! 
+//! ILP problems (or MILP problems for Mixed-ILP) are linear problems
+//! containing equations and inequations with several unknown variables.
+//! There are of the form:
+//! 
+//! a<sub>11</sub> x<sub>1</sub> + a<sub>12</sub> x<sub>2</sub> + a<sub>13</sub> x<sub>3</sub> + ... <= b<sub>1</sub>\
+//! a<sub>21</sub> x<sub>1</sub> + a<sub>22</sub> x<sub>2</sub> + a<sub>23</sub> x<sub>3</sub> + ... <= b<sub>2</sub>\
+//! ...
+//! 
+//! The a<sub>ij</sub> are coefficients and the b<sub>i</sub> are fixed values. The unknown variables are denoted
+//! x<sub>i</sub> in the previous equations.
+//! The equations are equalities or (large) inequalities.
+//! 
+//! On top of these equations, we add possibles ranges for the various variables :
+//! 
+//! m<sub>1</sub> <= x<sub>1</sub> <= M<sub>1</sub>\
+//! m<sub>2</sub> <= x<sub>2</sub> <= M<sub>2</sub>\
+//! ...
+//! 
+//! and a (linear) objective function that we try to minimize or maximize :
+//! 
+//! c<sub>1</sub> x<sub>1</sub> + c<sub>2</sub> x<sub>2</sub> + c<sub>3</sub> x<sub>3</sub> + ...
+//! 
+//! where the c<sub>i</sub> are fixed coefficients.
+//! 
+//! Such a type of problem is called a Linear Programming (LP) problem.
+//! 
+//! An Integer Linear Programming problem adds the requirement that all (or only some of
+//! them for a Mixed-ILP problem) the variables are integers.
+//! 
+//! It turns out that a lot of problems can be represented this way (See the wikipedia page: <https://en.wikipedia.org/wiki/Integer_programming>).
+//! In fact, such a problem is NP-hard and so, solving it means we can solve any NP problem.
+//! 
+//! This covers a *lot* of problems. But in our case, it is particularly suited to the representation of
+//! scheduling problems (see for instance <https://doi.org/10.1016/S0377-2217(03)00095-X>, <http://dx.doi.org/10.1007/s11750-015-0366-z> or
+//! <https://doi.org/10.1016/j.ejor.2012.11.029>). Though it is not the only way to solve our colloscope problem, it is the one we chose
+//! and this crate contains only the mathematical tools for it.
+//! 
+//! There are already a few crates to represent ILP problems in Rust, most notably good_lp (<https://docs.rs/good_lp/1.13.0/good_lp/>).
+//! There are also crates for solving ILP problems either with their own implementation of an algorithm, for instance microlp
+//! <https://docs.rs/microlp/latest/microlp/>, or as interfaces to code in other languages (usually in C or C++), for instance
+//! highs <https://docs.rs/highs/1.8.0/highs/> and coinc_cbc <https://docs.rs/coin_cbc/0.1.8/coin_cbc/>.
+//! 
+//! We don't try to reinvent the wheel here. In fact, we do use such crates as backend. However, this crate was developed to serve two other goals:
+//! - to have an internal representation with more generic variable names that is easier to handler in the main collomatique code.
+//! - to have a possibility to simply check if a possible solution is indeed a solution without calling a solver. And in case it is not
+//!   a solution to be able to trace which constraints are not satisfied.
+//! 
+//! The normal workflow with this crate is to start with a [ProblemBuilder].
+
 pub mod linexpr;
 
 use std::collections::BTreeMap;
