@@ -11,19 +11,25 @@
 //! each course exactly once. That's it. There are only three variables to our problem: n, m as
 //! already described, as well as the number of weeks. Thus we only have to complete a very simple schedule.
 //!
-//! The problem itself is described by [SimpleScheduleBase].
+//! The problem itself is described by [SimpleScheduleDesc] and the fundamental constraints are provided by
+//! [SimpleScheduleConstraints].
 //!
 //! Here a simple example of using the library to solve such a simple scheduling problem:
 //! ```
-//! # use collomatique_core::{examples::simple_schedule::SimpleScheduleBase, ProblemBuilder};
+//! # use collomatique_core::{examples::simple_schedule::{SimpleScheduleDesc, SimpleScheduleConstraints}, ProblemBuilder};
 //! # use std::collections::BTreeSet;
-//! let problem_desc = SimpleScheduleBase {
+//! let problem_desc = SimpleScheduleDesc {
 //!     group_count: 2,
 //!     week_count: 2,
 //!     course_count: 2,
 //! };
+//! let constraints = SimpleScheduleConstraints {};
 //!
-//! let problem = ProblemBuilder::<_,_,_>::new(problem_desc, 1.0).expect("Consistent ILP description").build();
+//! let mut problem_builder = ProblemBuilder::<_,_,_>::new(problem_desc, 1.0)
+//!     .expect("Consistent ILP description");
+//! let translator = problem_builder.add_constraints(constraints, 1.0)
+//!     .expect("Consistent ILP description");
+//! let problem = problem_builder.build();
 //!
 //! let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
 //! let solution = problem.solve(&solver).expect("There should be at least a solution").into_solution();
@@ -98,7 +104,7 @@ mod tests;
 /// We just have to implement a few general constraints. See [SimpleScheduleConstraint]
 /// to see the description of such constraints.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SimpleScheduleBase {
+pub struct SimpleScheduleDesc {
     /// Number of courses in our simple scheduling problem
     pub course_count: u32,
     /// Number of groups (of students) in our simple scheduling problem
@@ -138,58 +144,6 @@ pub struct SimpleScheduleVariable {
 impl std::fmt::Display for SimpleScheduleVariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "GiCoW_{}_{}_{}", self.group, self.course, self.week)
-    }
-}
-
-/// Constraints descriptions for the simple scheduling problem
-///
-/// We only have general constraints and no structure constraints
-/// for such a simple scheduling problem. So this type is built to describe
-/// the possible (general) constraints that describes the problem
-/// as an ILP problem.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SimpleScheduleConstraint {
-    /// This describes a first kind of constraints: each group
-    /// can have *at most* one course per week.
-    AtMostOneCoursePerWeekForAGivenGroup {
-        /// Number of the group concerned by the constraint
-        group: u32,
-        /// Index of the week that the constraint considers
-        week: u32,
-    },
-    /// This describes a second kind of constraints: each course
-    /// can only have one group at a time.
-    AtMostOneGroupPerCourseOnAGivenWeek {
-        /// Number of the course concerned by the constraint
-        course: u32,
-        /// Index of the week that the constraint considers
-        week: u32,
-    },
-    /// This describes a third (and final) kind of constraints:
-    /// each group should attend each course exactly once.
-    EachGroupShouldAttendEachCourseExactlyOnce {
-        /// Number of the course concerned by the constraint
-        course: u32,
-        /// Number of the group concerned by the constraint
-        group: u32,
-    },
-}
-
-impl std::fmt::Display for SimpleScheduleConstraint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AtMostOneCoursePerWeekForAGivenGroup { group, week } => {
-                write!(f, "At most one course on week {} for group {}", week, group)
-            }
-            Self::AtMostOneGroupPerCourseOnAGivenWeek { course, week } => write!(
-                f,
-                "At most one group for course {} on week {}",
-                course, week
-            ),
-            Self::EachGroupShouldAttendEachCourseExactlyOnce { course, group } => {
-                write!(f, "Group {} attends course {} exactly once", group, course)
-            }
-        }
     }
 }
 
@@ -268,126 +222,10 @@ impl SimpleSchedulePartialSolution {
     }
 }
 
-impl SimpleScheduleBase {
-    fn generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(
-        &self,
-        group: u32,
-        week: u32,
-    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
-        let mut lhs = LinExpr::constant(0.);
-
-        for course in 0..self.course_count {
-            lhs = lhs
-                + LinExpr::var(SimpleScheduleVariable {
-                    group,
-                    week,
-                    course,
-                });
-        }
-
-        let rhs = LinExpr::constant(1.0);
-
-        (
-            lhs.leq(&rhs),
-            SimpleScheduleConstraint::AtMostOneCoursePerWeekForAGivenGroup { group, week },
-        )
-    }
-
-    fn generate_at_most_one_course_per_week_for_a_given_group_constraints(
-        &self,
-    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
-        let mut output = vec![];
-
-        for group in 0..self.group_count {
-            for week in 0..self.week_count {
-                output.push(self.generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(group, week));
-            }
-        }
-
-        output
-    }
-
-    fn generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(
-        &self,
-        week: u32,
-        course: u32,
-    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
-        let mut lhs = LinExpr::constant(0.);
-
-        for group in 0..self.group_count {
-            lhs = lhs
-                + LinExpr::var(SimpleScheduleVariable {
-                    group,
-                    week,
-                    course,
-                });
-        }
-
-        let rhs = LinExpr::constant(1.0);
-
-        (
-            lhs.leq(&rhs),
-            SimpleScheduleConstraint::AtMostOneGroupPerCourseOnAGivenWeek { course, week },
-        )
-    }
-
-    fn generate_at_most_one_group_per_course_on_a_given_week_constraints(
-        &self,
-    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
-        let mut output = vec![];
-
-        for week in 0..self.week_count {
-            for course in 0..self.course_count {
-                output.push(self.generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(week, course));
-            }
-        }
-
-        output
-    }
-
-    fn generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(
-        &self,
-        group: u32,
-        course: u32,
-    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
-        let mut lhs = LinExpr::constant(0.);
-
-        for week in 0..self.week_count {
-            lhs = lhs
-                + LinExpr::var(SimpleScheduleVariable {
-                    group,
-                    week,
-                    course,
-                });
-        }
-
-        let rhs = LinExpr::constant(1.0);
-
-        (
-            lhs.eq(&rhs),
-            SimpleScheduleConstraint::EachGroupShouldAttendEachCourseExactlyOnce { course, group },
-        )
-    }
-
-    fn generate_each_group_should_attend_each_course_exactly_once_constraints(
-        &self,
-    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
-        let mut output = vec![];
-
-        for group in 0..self.group_count {
-            for course in 0..self.course_count {
-                output.push(self.generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(group, course));
-            }
-        }
-
-        output
-    }
-}
-
-impl BaseConstraints for SimpleScheduleBase {
+impl BaseConstraints for SimpleScheduleDesc {
     type MainVariable = SimpleScheduleVariable;
     type StructureVariable = ();
-    type GeneralConstraintDesc = SimpleScheduleConstraint;
+    type GeneralConstraintDesc = ();
     type StructureConstraintDesc = ();
     type PartialSolution = SimpleSchedulePartialSolution;
 
@@ -431,25 +269,7 @@ impl BaseConstraints for SimpleScheduleBase {
         Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
         Self::GeneralConstraintDesc,
     )> {
-        let mut output = vec![];
-
-        output.extend(
-            self.generate_at_most_one_course_per_week_for_a_given_group_constraints()
-                .into_iter()
-                .map(|(c, d)| (c.into_transmuted(|x| BaseVariable::Main(x)), d)),
-        );
-        output.extend(
-            self.generate_at_most_one_group_per_course_on_a_given_week_constraints()
-                .into_iter()
-                .map(|(c, d)| (c.into_transmuted(|x| BaseVariable::Main(x)), d)),
-        );
-        output.extend(
-            self.generate_each_group_should_attend_each_course_exactly_once_constraints()
-                .into_iter()
-                .map(|(c, d)| (c.into_transmuted(|x| BaseVariable::Main(x)), d)),
-        );
-
-        output
+        vec![]
     }
 
     fn partial_solution_to_configuration(
@@ -546,5 +366,239 @@ impl BaseConstraints for SimpleScheduleBase {
         _config: &ConfigData<Self::MainVariable>,
     ) -> ConfigData<Self::StructureVariable> {
         ConfigData::new()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SimpleScheduleConstraints {}
+
+/// Constraints descriptions for the simple scheduling problem
+///
+/// We only have general constraints and no structure constraints
+/// for such a simple scheduling problem. So this type is built to describe
+/// the possible (general) constraints that describes the problem
+/// as an ILP problem.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SimpleScheduleConstraint {
+    /// This describes a first kind of constraints: each group
+    /// can have *at most* one course per week.
+    AtMostOneCoursePerWeekForAGivenGroup {
+        /// Number of the group concerned by the constraint
+        group: u32,
+        /// Index of the week that the constraint considers
+        week: u32,
+    },
+    /// This describes a second kind of constraints: each course
+    /// can only have one group at a time.
+    AtMostOneGroupPerCourseOnAGivenWeek {
+        /// Number of the course concerned by the constraint
+        course: u32,
+        /// Index of the week that the constraint considers
+        week: u32,
+    },
+    /// This describes a third (and final) kind of constraints:
+    /// each group should attend each course exactly once.
+    EachGroupShouldAttendEachCourseExactlyOnce {
+        /// Number of the course concerned by the constraint
+        course: u32,
+        /// Number of the group concerned by the constraint
+        group: u32,
+    },
+}
+
+impl std::fmt::Display for SimpleScheduleConstraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AtMostOneCoursePerWeekForAGivenGroup { group, week } => {
+                write!(f, "At most one course on week {} for group {}", week, group)
+            }
+            Self::AtMostOneGroupPerCourseOnAGivenWeek { course, week } => write!(
+                f,
+                "At most one group for course {} on week {}",
+                course, week
+            ),
+            Self::EachGroupShouldAttendEachCourseExactlyOnce { course, group } => {
+                write!(f, "Group {} attends course {} exactly once", group, course)
+            }
+        }
+    }
+}
+
+impl SimpleScheduleConstraints {
+    fn generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(
+        desc: &SimpleScheduleDesc,
+        group: u32,
+        week: u32,
+    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
+        let mut lhs = LinExpr::constant(0.);
+
+        for course in 0..desc.course_count {
+            lhs = lhs
+                + LinExpr::var(SimpleScheduleVariable {
+                    group,
+                    week,
+                    course,
+                });
+        }
+
+        let rhs = LinExpr::constant(1.0);
+
+        (
+            lhs.leq(&rhs),
+            SimpleScheduleConstraint::AtMostOneCoursePerWeekForAGivenGroup { group, week },
+        )
+    }
+
+    fn generate_at_most_one_course_per_week_for_a_given_group_constraints(
+        desc: &SimpleScheduleDesc,
+    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
+        let mut output = vec![];
+
+        for group in 0..desc.group_count {
+            for week in 0..desc.week_count {
+                output.push(Self::generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(desc, group, week));
+            }
+        }
+
+        output
+    }
+
+    fn generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(
+        desc: &SimpleScheduleDesc,
+        week: u32,
+        course: u32,
+    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
+        let mut lhs = LinExpr::constant(0.);
+
+        for group in 0..desc.group_count {
+            lhs = lhs
+                + LinExpr::var(SimpleScheduleVariable {
+                    group,
+                    week,
+                    course,
+                });
+        }
+
+        let rhs = LinExpr::constant(1.0);
+
+        (
+            lhs.leq(&rhs),
+            SimpleScheduleConstraint::AtMostOneGroupPerCourseOnAGivenWeek { course, week },
+        )
+    }
+
+    fn generate_at_most_one_group_per_course_on_a_given_week_constraints(
+        desc: &SimpleScheduleDesc,
+    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
+        let mut output = vec![];
+
+        for week in 0..desc.week_count {
+            for course in 0..desc.course_count {
+                output.push(Self::generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(desc, week, course));
+            }
+        }
+
+        output
+    }
+
+    fn generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(
+        desc: &SimpleScheduleDesc,
+        group: u32,
+        course: u32,
+    ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
+        let mut lhs = LinExpr::constant(0.);
+
+        for week in 0..desc.week_count {
+            lhs = lhs
+                + LinExpr::var(SimpleScheduleVariable {
+                    group,
+                    week,
+                    course,
+                });
+        }
+
+        let rhs = LinExpr::constant(1.0);
+
+        (
+            lhs.eq(&rhs),
+            SimpleScheduleConstraint::EachGroupShouldAttendEachCourseExactlyOnce { course, group },
+        )
+    }
+
+    fn generate_each_group_should_attend_each_course_exactly_once_constraints(
+        desc: &SimpleScheduleDesc,
+    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
+        let mut output = vec![];
+
+        for group in 0..desc.group_count {
+            for course in 0..desc.course_count {
+                output.push(Self::generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(desc, group, course));
+            }
+        }
+
+        output
+    }
+}
+
+impl ExtraConstraints<SimpleScheduleDesc> for SimpleScheduleConstraints {
+    type GeneralConstraintDesc = SimpleScheduleConstraint;
+    type StructureConstraintDesc = ();
+    type StructureVariable = ();
+
+    fn is_fit_for_problem(&self, _desc: &SimpleScheduleDesc) -> bool {
+        true
+    }
+
+    fn extra_structure_variables(
+        &self,
+        _desc: &SimpleScheduleDesc,
+    ) -> BTreeMap<Self::StructureVariable, Variable> {
+        BTreeMap::new()
+    }
+
+    fn extra_structure_constraints(
+        &self,
+        _desc: &SimpleScheduleDesc,
+    ) -> Vec<(
+        Constraint<ExtraVariable<SimpleScheduleVariable, (), Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )> {
+        vec![]
+    }
+
+    fn reconstruct_extra_structure_variables(
+        &self,
+        _desc: &SimpleScheduleDesc,
+        _config: &ConfigData<BaseVariable<SimpleScheduleVariable, ()>>,
+    ) -> ConfigData<Self::StructureVariable> {
+        ConfigData::new()
+    }
+
+    fn extra_general_constraints(
+        &self,
+        desc: &SimpleScheduleDesc,
+    ) -> Vec<(
+        Constraint<ExtraVariable<SimpleScheduleVariable, (), Self::StructureVariable>>,
+        Self::GeneralConstraintDesc,
+    )> {
+        let mut output = vec![];
+
+        output.extend(
+            Self::generate_at_most_one_course_per_week_for_a_given_group_constraints(desc)
+                .into_iter()
+                .map(|(c, d)| (c.into_transmuted(|x| ExtraVariable::BaseMain(x)), d)),
+        );
+        output.extend(
+            Self::generate_at_most_one_group_per_course_on_a_given_week_constraints(desc)
+                .into_iter()
+                .map(|(c, d)| (c.into_transmuted(|x| ExtraVariable::BaseMain(x)), d)),
+        );
+        output.extend(
+            Self::generate_each_group_should_attend_each_course_exactly_once_constraints(desc)
+                .into_iter()
+                .map(|(c, d)| (c.into_transmuted(|x| ExtraVariable::BaseMain(x)), d)),
+        );
+
+        output
     }
 }
