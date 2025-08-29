@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-storage = { path = "../storage" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
 clap = { version = "4.5", features = ["derive"] }

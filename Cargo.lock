@@ -264,6 +264,7 @@ dependencies = [
  "clap",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-storage",
  "libadwaita",
  "relm4",
  "tokio",
