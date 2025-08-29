@@ -5,7 +5,6 @@
 //! This should allow for implementation of different
 //! UIs all using the same state code.
 
-pub mod colloscopes;
 pub mod history;
 pub mod state;
 pub mod tools;
