@@ -77,17 +77,21 @@ impl Database {
         Ok(val)
     }
 
-    fn week_patterns_create(self_: PyRef<'_, Self>, pattern: WeekPattern) -> PyResult<()> {
-        let Answer::WeekPatterns(WeekPatternsAnswer::Create) = SessionConnection::send_command(
-            self_.py(),
-            &self_.sender,
-            Command::WeekPatterns(WeekPatternsCommand::Create(pattern)),
-        )?
+    fn week_patterns_create(
+        self_: PyRef<'_, Self>,
+        pattern: WeekPattern,
+    ) -> PyResult<WeekPatternHandle> {
+        let Answer::WeekPatterns(WeekPatternsAnswer::Create(handle)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::WeekPatterns(WeekPatternsCommand::Create(pattern)),
+            )?
         else {
             panic!("Bad answer type");
         };
 
-        Ok(())
+        Ok(handle)
     }
 
     fn week_patterns_update(
@@ -124,6 +128,7 @@ impl Database {
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::backend::{self, IdError};
+use crate::frontend::state::update::ReturnHandle;
 use crate::frontend::state::{self, Operation, UpdateError};
 
 #[derive(Debug, Clone)]
@@ -177,7 +182,7 @@ pub enum GeneralDataAnswer {
 pub enum WeekPatternsAnswer {
     GetAll(BTreeMap<WeekPatternHandle, WeekPattern>),
     Get(WeekPattern),
-    Create,
+    Create(WeekPatternHandle),
     Update,
     Remove,
 }
@@ -296,9 +301,7 @@ impl<'scope> SessionConnection<'scope> {
                     .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
-                    .map(|(handle, pattern)| {
-                        (WeekPatternHandle { handle }, WeekPattern::from(pattern))
-                    })
+                    .map(|(handle, pattern)| (handle.into(), WeekPattern::from(pattern)))
                     .collect::<BTreeMap<_, _>>();
 
                 Ok(WeekPatternsAnswer::GetAll(result))
@@ -318,7 +321,7 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(WeekPatternsAnswer::Get(result.into()))
             }
             WeekPatternsCommand::Create(pattern) => {
-                manager
+                let output = manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Create(pattern.into()),
                     ))
@@ -331,7 +334,11 @@ impl<'scope> SessionConnection<'scope> {
                         _ => panic!("Unexpected error!"),
                     })?;
 
-                Ok(WeekPatternsAnswer::Create)
+                let ReturnHandle::WeekPattern(handle) = output else {
+                    panic!("No week pattern handle returned on WeekPatternsOperation::Create");
+                };
+
+                Ok(WeekPatternsAnswer::Create(handle.into()))
             }
             WeekPatternsCommand::Update(handle, pattern) => {
                 manager
