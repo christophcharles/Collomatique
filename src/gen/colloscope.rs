@@ -37,8 +37,10 @@ pub enum Error {
         "Subject {0} has an invalid non-extensible group ({1}) which is too small given the constraint ({2:?})"
     )]
     SubjectWithTooSmallNonExtensibleGroup(usize, usize, RangeInclusive<NonZeroUsize>),
-    #[error("Subject {0} has not enough groups to fit all non-assigned students")]
-    SubjectWithTooFewGroups(usize),
+    #[error("Subject {0} has not enough groups to fit all non-assigned students within the high bound of the range {1:?}")]
+    SubjectWithTooFewGroups(usize, RangeInclusive<NonZeroUsize>),
+    #[error("Subject {0} has too many groups to satisfy the low bound on the range {1:?}")]
+    SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error(
@@ -224,13 +226,38 @@ impl ValidatedData {
 
             let mut remaining_seats = 0usize;
             for group in &subject.groups.assigned_to_group {
-                if group.can_be_extended {
-                    remaining_seats +=
-                        subject.students_per_interrogation.end().get() - group.students.len();
+                if !group.can_be_extended {
+                    continue;
                 }
+                if group.students.len() >= subject.students_per_interrogation.end().get() {
+                    continue;
+                }
+                remaining_seats +=
+                    subject.students_per_interrogation.end().get() - group.students.len();
             }
             if subject.groups.not_assigned.len() > remaining_seats {
-                return Err(Error::SubjectWithTooFewGroups(i));
+                return Err(Error::SubjectWithTooFewGroups(
+                    i,
+                    subject.students_per_interrogation.clone(),
+                ));
+            }
+
+            let mut min_seats = 0usize;
+            for group in &subject.groups.assigned_to_group {
+                if !group.can_be_extended {
+                    continue;
+                }
+                if group.students.len() >= subject.students_per_interrogation.start().get() {
+                    continue;
+                }
+                min_seats +=
+                    subject.students_per_interrogation.start().get() - group.students.len();
+            }
+            if subject.groups.not_assigned.len() < min_seats {
+                return Err(Error::SubjectWithTooManyGroups(
+                    i,
+                    subject.students_per_interrogation.clone(),
+                ));
             }
 
             let mut students_no_duplicate = BTreeMap::new();
