@@ -151,6 +151,7 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
     /// Doing otherwise will lead to failed assertion in rebuilding the structure variables.
     fn extra_aggregated_variables(
         &self,
+        desc: &T,
     ) -> Vec<
         Box<
             dyn crate::tools::AggregatedVariable<
@@ -263,6 +264,98 @@ impl<T: SimpleBaseProblem> crate::BaseProblem for T {
             })
             .into_transmuted(|x| match x {
                 BaseVariable::Structure(s) => s,
+                _ => unreachable!(),
+            })
+    }
+}
+
+impl<T: BaseProblem, C: SimpleProblemConstraints<T>> crate::ProblemConstraints<T> for C {
+    type StructureVariable = <Self as SimpleProblemConstraints<T>>::StructureVariable;
+    type StructureConstraintDesc = AggregatedVariableConstraintDesc<
+        crate::generics::ExtraVariable<
+            T::MainVariable,
+            T::StructureVariable,
+            Self::StructureVariable,
+        >,
+    >;
+    type GeneralConstraintDesc = <Self as SimpleProblemConstraints<T>>::GeneralConstraintDesc;
+
+    fn is_fit_for_problem(&self, desc: &T) -> bool {
+        <Self as SimpleProblemConstraints<T>>::is_fit_for_problem(self, desc)
+    }
+    fn extra_structure_variables(&self, desc: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+        let mut output = BTreeMap::new();
+
+        for aggregated_var in self.extra_aggregated_variables(desc) {
+            let (name, var_desc) = aggregated_var.get_variable_def();
+            let ExtraVariable::Extra(v) = name else {
+                panic!(
+                    "An aggregated variable has a base problem variable name: {:?}",
+                    name
+                );
+            };
+
+            if output.insert(v.clone(), var_desc).is_some() {
+                panic!("Duplicated name for aggregated variable: {:?}", v);
+            }
+        }
+        output
+    }
+    fn extra_structure_constraints(
+        &self,
+        desc: &T,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )> {
+        let mut constraints = vec![];
+
+        for aggregated_var in self.extra_aggregated_variables(desc) {
+            constraints.extend(aggregated_var.get_structure_constraints());
+        }
+
+        constraints
+    }
+    fn general_constraints(
+        &self,
+        desc: &T,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::GeneralConstraintDesc,
+    )> {
+        <Self as SimpleProblemConstraints<T>>::general_constraints(self, desc)
+    }
+    fn objective(
+        &self,
+        desc: &T,
+    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
+    {
+        <Self as SimpleProblemConstraints<T>>::objective(self, desc)
+    }
+    fn reconstruct_extra_structure_variables(
+        &self,
+        desc: &T,
+        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+    ) -> ConfigData<Self::StructureVariable> {
+        let mut temp_config = config.transmute(|x| match x {
+            BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+            BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+        });
+
+        for aggregated_var in self.extra_aggregated_variables(desc) {
+            if let Some(value) = aggregated_var.reconstruct_structure_variable(&temp_config) {
+                temp_config = temp_config.set(aggregated_var.get_variable_def().0, value);
+            }
+        }
+
+        temp_config
+            .retain(|name, _val| match name {
+                ExtraVariable::BaseMain(_) => false,
+                ExtraVariable::BaseStructure(_) => false,
+                ExtraVariable::Extra(_) => true,
+            })
+            .into_transmuted(|x| match x {
+                ExtraVariable::Extra(e) => e,
                 _ => unreachable!(),
             })
     }
