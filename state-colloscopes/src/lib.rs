@@ -244,6 +244,10 @@ pub enum TeacherError {
     /// The selected subject does not have interrogations
     #[error("Subject id ({0:?}) corresponds to a subject without interrogations")]
     SubjectHasNoInterrogation(SubjectId),
+
+    /// The teacher is referenced by a slot
+    #[error("teacher id ({0:?}) is referenced by a slot ({1:?})")]
+    TeacherStillHasAssociatedSlots(TeacherId, SlotId),
 }
 
 /// Errors for assignment operations
@@ -1535,6 +1539,16 @@ impl Data {
             AnnotatedTeacherOp::Remove(id) => {
                 if !self.inner_data.teachers.teacher_map.contains_key(id) {
                     return Err(TeacherError::InvalidTeacherId(*id));
+                }
+
+                for (_subject_id, subject_slots) in &self.inner_data.slots.subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if *id == slot.teacher_id {
+                            return Err(TeacherError::TeacherStillHasAssociatedSlots(
+                                *id, *slot_id,
+                            ));
+                        }
+                    }
                 }
 
                 self.inner_data.teachers.teacher_map.remove(id);
