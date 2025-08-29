@@ -339,6 +339,7 @@ dependencies = [
  "collomatique-time",
  "libadwaita",
  "relm4",
+ "rustix",
  "tokio",
  "vte4",
 ]
