@@ -334,7 +334,10 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    let pattern = store.week_pattern_get(WeekPatternId(2)).await.unwrap();
+    let pattern = store
+        .week_pattern_get(super::super::week_patterns::Id(2))
+        .await
+        .unwrap();
 
     let expected_result = WeekPattern {
         name: String::from("Impaires"),
@@ -401,7 +404,10 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store.week_pattern_remove(WeekPatternId(2)).await.unwrap();
+    store
+        .week_pattern_remove(super::super::week_patterns::Id(2))
+        .await
+        .unwrap();
 
     let result = store.week_pattern_get_all().await.unwrap();
 
@@ -443,7 +449,10 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store.week_pattern_remove(WeekPatternId(2)).await.unwrap();
+    store
+        .week_pattern_remove(super::super::week_patterns::Id(2))
+        .await
+        .unwrap();
 
     let id = store
         .week_pattern_add(WeekPattern {
@@ -453,7 +462,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         .await
         .unwrap();
 
-    assert_eq!(id, WeekPatternId(4));
+    assert_eq!(id, super::super::week_patterns::Id(4));
 
     let result = store.week_pattern_get_all().await.unwrap();
 

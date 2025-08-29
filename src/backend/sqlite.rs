@@ -4,6 +4,16 @@ mod tests;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+pub enum Error {
+    #[error("sqlx error")]
+    SqlxError(#[from] sqlx::Error),
+    #[error("Corrupted database: {0}")]
+    CorruptedDatabase(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Error, Debug)]
 pub enum NewError {
     #[error("Path is not a valid UTF-8 string")]
     InvalidPath,
@@ -305,61 +315,72 @@ mod teachers;
 mod week_patterns;
 
 impl Storage for Store {
-    type WeekPatternError = week_patterns::Error;
+    type WeekPatternId = week_patterns::Id;
+    type TeacherId = teachers::Id;
+
+    type InternalError = Error;
 
     fn week_pattern_get(
         &self,
-        index: WeekPatternId,
-    ) -> impl core::future::Future<Output = Result<WeekPattern, Self::WeekPatternError>> + Send
-    {
+        index: Self::WeekPatternId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            WeekPattern,
+            IdError<Self::InternalError, Self::WeekPatternId>,
+        >,
+    > + Send {
         week_patterns::get(&self.pool, index)
     }
     fn week_pattern_get_all(
         &self,
-    ) -> impl core::future::Future<Output = Result<Vec<WeekPattern>, Self::WeekPatternError>> + Send
-    {
+    ) -> impl core::future::Future<Output = std::result::Result<Vec<WeekPattern>, Self::InternalError>>
+           + Send {
         week_patterns::get_all(&self.pool)
     }
     fn week_pattern_add(
         &self,
         pattern: WeekPattern,
-    ) -> impl core::future::Future<Output = Result<WeekPatternId, Self::WeekPatternError>> + Send
-    {
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::WeekPatternId, Self::InternalError>,
+    > + Send {
         week_patterns::add(&self.pool, pattern)
     }
     fn week_pattern_remove(
         &self,
-        index: WeekPatternId,
-    ) -> impl core::future::Future<Output = Result<(), Self::WeekPatternError>> + Send {
+        index: Self::WeekPatternId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>,
+    > + Send {
         week_patterns::remove(&self.pool, index)
     }
 
-    type TeacherError = teachers::Error;
-
     fn teachers_get(
         &self,
-        index: TeacherId,
-    ) -> impl core::future::Future<Output = Result<Teacher, Self::TeacherError>> + Send {
+        index: Self::TeacherId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Teacher, IdError<Self::InternalError, Self::TeacherId>>,
+    > + Send {
         teachers::get(&self.pool, index)
     }
-
     fn teachers_get_all(
         &self,
-    ) -> impl core::future::Future<Output = Result<Vec<Teacher>, Self::TeacherError>> + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<Vec<Teacher>, Self::InternalError>> + Send
+    {
         teachers::get_all(&self.pool)
     }
-
     fn teachers_add(
         &self,
         teacher: Teacher,
-    ) -> impl core::future::Future<Output = Result<TeacherId, Self::TeacherError>> + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<Self::TeacherId, Self::InternalError>>
+           + Send {
         teachers::add(&self.pool, teacher)
     }
-
     fn teachers_remove(
         &self,
-        index: TeacherId,
-    ) -> impl core::future::Future<Output = Result<(), Self::TeacherError>> + Send {
+        index: Self::TeacherId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
+    > + Send {
         teachers::remove(&self.pool, index)
     }
 }

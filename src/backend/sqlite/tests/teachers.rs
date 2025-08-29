@@ -95,7 +95,10 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         "#
     ).execute(&store.pool).await.unwrap();
 
-    let teacher = store.teachers_get(TeacherId(2)).await.unwrap();
+    let teacher = store
+        .teachers_get(super::super::teachers::Id(2))
+        .await
+        .unwrap();
 
     let expected_result = Teacher {
         surname: String::from("Dupont"),
@@ -151,7 +154,10 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store.teachers_remove(TeacherId(2)).await.unwrap();
+    store
+        .teachers_remove(super::super::teachers::Id(2))
+        .await
+        .unwrap();
 
     let result = store.teachers_get_all().await.unwrap();
 
@@ -182,7 +188,10 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store.teachers_remove(TeacherId(2)).await.unwrap();
+    store
+        .teachers_remove(super::super::teachers::Id(2))
+        .await
+        .unwrap();
 
     let id = store
         .teachers_add(Teacher {
@@ -193,7 +202,7 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         .await
         .unwrap();
 
-    assert_eq!(id, TeacherId(4));
+    assert_eq!(id, super::super::teachers::Id(4));
 
     let result = store.teachers_get_all().await.unwrap();
 
