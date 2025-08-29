@@ -106,6 +106,7 @@ mod week_patterns;
 use week_patterns::{WeekPattern, WeekPatternId};
 mod group_lists;
 mod incompatibilities;
+mod rules;
 mod slots;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
