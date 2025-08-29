@@ -28,6 +28,8 @@ pub enum Op {
     Teacher(TeacherOp),
     /// Operation on assignments
     Assignment(AssignmentOp),
+    /// Operation on week patterns
+    WeekPattern(WeekPatternOp),
 }
 
 impl Operation for Op {}
@@ -105,6 +107,20 @@ pub enum AssignmentOp {
     Assign(PeriodId, StudentId, SubjectId, bool),
 }
 
+/// Week pattern operation enumeration
+///
+/// This is the list of all possible operations related to
+/// week patterns we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WeekPatternOp {
+    /// Add a week pattern
+    Add(week_patterns::WeekPattern),
+    /// Remove an existing week pattern
+    Remove(WeekPatternId),
+    /// Update the parameters of an existing week pattern
+    Update(WeekPatternId, week_patterns::WeekPattern),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -124,6 +140,8 @@ pub enum AnnotatedOp {
     Teacher(AnnotatedTeacherOp),
     /// Operation on assignments
     Assignment(AnnotatedAssignmentOp),
+    /// Operation on week patterns
+    WeekPattern(AnnotatedWeekPatternOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -153,6 +171,12 @@ impl From<AnnotatedTeacherOp> for AnnotatedOp {
 impl From<AnnotatedAssignmentOp> for AnnotatedOp {
     fn from(value: AnnotatedAssignmentOp) -> Self {
         AnnotatedOp::Assignment(value)
+    }
+}
+
+impl From<AnnotatedWeekPatternOp> for AnnotatedOp {
+    fn from(value: AnnotatedWeekPatternOp) -> Self {
+        AnnotatedOp::WeekPattern(value)
     }
 }
 
@@ -247,6 +271,24 @@ pub enum AnnotatedAssignmentOp {
     Assign(PeriodId, StudentId, SubjectId, bool),
 }
 
+/// Week pattern operation enumeration
+///
+/// Compared to [AssignmentOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedWeekPatternOp {
+    /// Add a week pattern
+    /// First parameter is the week pattern id for the new week pattern
+    Add(WeekPatternId, week_patterns::WeekPattern),
+    /// Remove an existing week pattern
+    Remove(WeekPatternId),
+    /// Update the parameters of an existing week pattern
+    Update(WeekPatternId, week_patterns::WeekPattern),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -280,6 +322,10 @@ impl AnnotatedOp {
             Op::Assignment(assignment_op) => {
                 let op = AnnotatedAssignmentOp::annotate(assignment_op);
                 (op.into(), None)
+            }
+            Op::WeekPattern(week_pattern_op) => {
+                let (op, id) = AnnotatedWeekPatternOp::annotate(week_pattern_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
             }
         }
     }
@@ -387,6 +433,30 @@ impl AnnotatedAssignmentOp {
         match assignment_op {
             AssignmentOp::Assign(period_id, student_id, subject_id, status) => {
                 AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status)
+            }
+        }
+    }
+}
+
+impl AnnotatedWeekPatternOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [WeekPatternOp].
+    fn annotate(
+        week_pattern_op: WeekPatternOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedWeekPatternOp, Option<WeekPatternId>) {
+        match week_pattern_op {
+            WeekPatternOp::Add(week_pattern) => {
+                let new_id = id_issuer.get_week_pattern_id();
+                (
+                    AnnotatedWeekPatternOp::Add(new_id, week_pattern),
+                    Some(new_id),
+                )
+            }
+            WeekPatternOp::Remove(id) => (AnnotatedWeekPatternOp::Remove(id), None),
+            WeekPatternOp::Update(id, new_week_pattern) => {
+                (AnnotatedWeekPatternOp::Update(id, new_week_pattern), None)
             }
         }
     }

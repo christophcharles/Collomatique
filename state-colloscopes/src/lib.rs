@@ -11,14 +11,16 @@ use std::collections::BTreeSet;
 use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
 use teachers::{Teachers, TeachersExternalData};
+use week_patterns::WeekPatterns;
+use week_patterns::WeekPatternsExternalData;
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::{PeriodId, StudentId, SubjectId, TeacherId};
+pub use ids::{PeriodId, StudentId, SubjectId, TeacherId, WeekPatternId};
 pub mod ops;
 use ops::{
     AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp,
-    AnnotatedTeacherOp,
+    AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
 pub use ops::{AnnotatedOp, AssignmentOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
 pub use subjects::{
@@ -30,6 +32,7 @@ pub mod periods;
 pub mod students;
 pub mod subjects;
 pub mod teachers;
+pub mod week_patterns;
 
 /// Description of a person with contacts
 ///
@@ -83,6 +86,7 @@ struct InnerData {
     teachers: teachers::Teachers,
     students: students::Students,
     assignments: assignments::Assignments,
+    week_patterns: week_patterns::WeekPatterns,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -254,6 +258,20 @@ pub enum AssignmentError {
     StudentIsNotPresentOnPeriod(StudentId, PeriodId),
 }
 
+/// Errors for week pattern operations
+///
+/// These errors can be returned when trying to modify [Data] with a week pattern op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum WeekPatternError {
+    /// A week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// The week pattern id already exists
+    #[error("week pattern id ({0:?}) already exists")]
+    WeekPatternIdAlreadyExists(WeekPatternId),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -269,6 +287,8 @@ pub enum Error {
     Teacher(#[from] TeacherError),
     #[error(transparent)]
     Assignment(#[from] AssignmentError),
+    #[error(transparent)]
+    WeekPattern(#[from] WeekPatternError),
 }
 
 /// Errors for IDs
@@ -287,6 +307,7 @@ pub enum NewId {
     PeriodId(PeriodId),
     SubjectId(SubjectId),
     TeacherId(TeacherId),
+    WeekPatternId(WeekPatternId),
 }
 
 impl From<StudentId> for NewId {
@@ -310,6 +331,12 @@ impl From<SubjectId> for NewId {
 impl From<TeacherId> for NewId {
     fn from(value: TeacherId) -> Self {
         NewId::TeacherId(value)
+    }
+}
+
+impl From<WeekPatternId> for NewId {
+    fn from(value: WeekPatternId) -> Self {
+        NewId::WeekPatternId(value)
     }
 }
 
@@ -343,6 +370,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Assignment(assignment_op) => Ok(AnnotatedOp::Assignment(
                 self.build_rev_assignment(assignment_op)?,
             )),
+            AnnotatedOp::WeekPattern(week_pattern_op) => Ok(AnnotatedOp::WeekPattern(
+                self.build_rev_week_pattern(week_pattern_op)?,
+            )),
         }
     }
 
@@ -353,6 +383,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Subject(subject_op) => self.apply_subject(subject_op)?,
             AnnotatedOp::Teacher(teacher_op) => self.apply_teacher(teacher_op)?,
             AnnotatedOp::Assignment(assignment_op) => self.apply_assignment(assignment_op)?,
+            AnnotatedOp::WeekPattern(week_pattern_op) => {
+                self.apply_week_pattern(week_pattern_op)?
+            }
         }
         self.check_invariants();
         Ok(())
@@ -408,6 +441,21 @@ impl Data {
             .contains_key(&temp_teacher_id)
         {
             return Some(temp_teacher_id);
+        }
+
+        None
+    }
+
+    /// Promotes an u64 to a [WeekPatternId] if it is valid
+    pub fn validate_week_pattern_id(&self, id: u64) -> Option<WeekPatternId> {
+        let temp_week_pattern_id = unsafe { WeekPatternId::new(id) };
+        if self
+            .inner_data
+            .week_patterns
+            .week_pattern_map
+            .contains_key(&temp_week_pattern_id)
+        {
+            return Some(temp_week_pattern_id);
         }
 
         None
@@ -709,6 +757,7 @@ impl Data {
             TeachersExternalData::default(),
             StudentsExternalData::default(),
             AssignmentsExternalData::default(),
+            WeekPatternsExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -723,12 +772,20 @@ impl Data {
         teachers: teachers::TeachersExternalData,
         students: students::StudentsExternalData,
         assignments: assignments::AssignmentsExternalData,
+        week_patterns: week_patterns::WeekPatternsExternalData,
     ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
         let teacher_ids = teachers.teacher_map.keys().copied();
-        let id_issuer = IdIssuer::new(student_ids, period_ids, subject_ids, teacher_ids)?;
+        let week_patterns_ids = week_patterns.week_pattern_map.keys().copied();
+        let id_issuer = IdIssuer::new(
+            student_ids,
+            period_ids,
+            subject_ids,
+            teacher_ids,
+            week_patterns_ids,
+        )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
             .ordered_period_list
@@ -759,6 +816,7 @@ impl Data {
         let subjects = unsafe { Subjects::from_external_data(subjects) };
         let teachers = unsafe { Teachers::from_external_data(teachers) };
         let assignments = unsafe { Assignments::from_external_data(assignments) };
+        let week_patterns = unsafe { WeekPatterns::from_external_data(week_patterns) };
 
         let data = Data {
             id_issuer,
@@ -768,6 +826,7 @@ impl Data {
                 teachers,
                 students,
                 assignments,
+                week_patterns,
             },
         };
 
@@ -799,6 +858,11 @@ impl Data {
     /// Get the assignments
     pub fn get_assignments(&self) -> &assignments::Assignments {
         &self.inner_data.assignments
+    }
+
+    /// Get the subjects
+    pub fn get_week_patterns(&self) -> &week_patterns::WeekPatterns {
+        &self.inner_data.week_patterns
     }
 
     /// Used internally
@@ -1313,6 +1377,60 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply teacher operations
+    fn apply_week_pattern(
+        &mut self,
+        week_pattern_op: &AnnotatedWeekPatternOp,
+    ) -> std::result::Result<(), WeekPatternError> {
+        match week_pattern_op {
+            AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
+                if self
+                    .inner_data
+                    .week_patterns
+                    .week_pattern_map
+                    .get(new_id)
+                    .is_some()
+                {
+                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
+                }
+
+                self.inner_data
+                    .week_patterns
+                    .week_pattern_map
+                    .insert(*new_id, week_pattern.clone());
+
+                Ok(())
+            }
+            AnnotatedWeekPatternOp::Remove(id) => {
+                if !self
+                    .inner_data
+                    .week_patterns
+                    .week_pattern_map
+                    .contains_key(id)
+                {
+                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                }
+
+                self.inner_data.week_patterns.week_pattern_map.remove(id);
+
+                Ok(())
+            }
+            AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
+                let Some(current_week_pattern) =
+                    self.inner_data.week_patterns.week_pattern_map.get_mut(id)
+                else {
+                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                };
+
+                *current_week_pattern = new_week_pattern.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -1588,6 +1706,64 @@ impl Data {
                     *student_id,
                     *subject_id,
                     previous_status,
+                ))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a teacher operation
+    fn build_rev_week_pattern(
+        &self,
+        week_pattern_op: &AnnotatedWeekPatternOp,
+    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternError> {
+        match week_pattern_op {
+            AnnotatedWeekPatternOp::Add(new_id, _week_pattern) => {
+                if self
+                    .inner_data
+                    .week_patterns
+                    .week_pattern_map
+                    .get(new_id)
+                    .is_some()
+                {
+                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(new_id.clone()));
+                }
+
+                Ok(AnnotatedWeekPatternOp::Remove(new_id.clone()))
+            }
+            AnnotatedWeekPatternOp::Remove(week_pattern_id) => {
+                let Some(old_week_pattern) = self
+                    .inner_data
+                    .week_patterns
+                    .week_pattern_map
+                    .get(week_pattern_id)
+                else {
+                    return Err(WeekPatternError::InvalidWeekPatternId(
+                        week_pattern_id.clone(),
+                    ));
+                };
+
+                Ok(AnnotatedWeekPatternOp::Add(
+                    *week_pattern_id,
+                    old_week_pattern.clone(),
+                ))
+            }
+            AnnotatedWeekPatternOp::Update(week_pattern_id, _new_week_pattern) => {
+                let Some(old_week_pattern) = self
+                    .inner_data
+                    .week_patterns
+                    .week_pattern_map
+                    .get(week_pattern_id)
+                else {
+                    return Err(WeekPatternError::InvalidWeekPatternId(
+                        week_pattern_id.clone(),
+                    ));
+                };
+
+                Ok(AnnotatedWeekPatternOp::Update(
+                    *week_pattern_id,
+                    old_week_pattern.clone(),
                 ))
             }
         }

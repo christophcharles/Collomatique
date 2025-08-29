@@ -78,6 +78,24 @@ impl TeacherId {
     }
 }
 
+/// This type represents an ID for a week pattern
+///
+/// Every week pattern gets a unique ID. IDs then identify week patterns
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WeekPatternId(u64);
+
+impl WeekPatternId {
+    /// Returns the value for the ID
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+
+    pub(crate) unsafe fn new(value: u64) -> WeekPatternId {
+        WeekPatternId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -92,11 +110,13 @@ impl IdIssuer {
         period_ids: impl Iterator<Item = u64>,
         subject_ids: impl Iterator<Item = u64>,
         teacher_ids: impl Iterator<Item = u64>,
+        week_patterns_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
         let existing_ids = student_ids
             .chain(period_ids)
             .chain(subject_ids)
-            .chain(teacher_ids);
+            .chain(teacher_ids)
+            .chain(week_patterns_ids);
         Ok(IdIssuer {
             helper: tools::IdIssuerHelper::new(existing_ids)?,
         })
@@ -107,7 +127,7 @@ impl IdIssuer {
         StudentId(self.helper.get_new_id().inner())
     }
 
-    /// Get a new unused ID for a student
+    /// Get a new unused ID for a period
     pub fn get_period_id(&mut self) -> PeriodId {
         PeriodId(self.helper.get_new_id().inner())
     }
@@ -117,8 +137,13 @@ impl IdIssuer {
         SubjectId(self.helper.get_new_id().inner())
     }
 
-    /// Get a new unused ID for a subject
+    /// Get a new unused ID for a teacher
     pub fn get_teacher_id(&mut self) -> TeacherId {
         TeacherId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a week pattern
+    pub fn get_week_pattern_id(&mut self) -> WeekPatternId {
+        WeekPatternId(self.helper.get_new_id().inner())
     }
 }
