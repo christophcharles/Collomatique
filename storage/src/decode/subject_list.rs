@@ -11,6 +11,9 @@ pub fn decode_entry(
     if !pre_data.subjects.ordered_subject_list.is_empty() {
         return Err(DecodeError::SubjectsAlreadyDecoded);
     }
+    if !pre_data.slots.subject_map.is_empty() {
+        return Err(DecodeError::SlotsDecodedBeforeSubjects);
+    }
 
     let mut ids = BTreeSet::new();
     for (id, subject) in subject_list.ordered_subject_list {
@@ -33,6 +36,15 @@ pub fn decode_entry(
             }
 
             period_assignment.subject_map.insert(id, BTreeSet::new());
+        }
+
+        if subject.parameters.interrogation_parameters.is_some() {
+            pre_data.slots.subject_map.insert(
+                id,
+                collomatique_state_colloscopes::slots::SubjectSlotsExternalData {
+                    ordered_slots: vec![],
+                },
+            );
         }
 
         pre_data
