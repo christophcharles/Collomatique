@@ -147,6 +147,12 @@ pub enum PeriodError {
     /// The period is referenced by a student
     #[error("period id ({0:?}) is referenced by student {1:?}")]
     PeriodIsReferencedByStudent(PeriodId, StudentId),
+
+    /// Some non-default assignments are still present for the period
+    #[error(
+        "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed"
+    )]
+    PeriodStillHasNonTrivialAssignments(PeriodId, SubjectId),
 }
 
 /// Errors for subject operations
@@ -796,6 +802,18 @@ impl Data {
                     .periods
                     .ordered_period_list
                     .insert(0, (*period_id, desc.clone()));
+                self.inner_data.assignments.period_map.insert(
+                    *period_id,
+                    assignments::PeriodAssignments {
+                        subject_exclusion_map: self
+                            .inner_data
+                            .subjects
+                            .ordered_subject_list
+                            .iter()
+                            .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                            .collect(),
+                    },
+                );
                 Ok(())
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
@@ -816,6 +834,18 @@ impl Data {
                     .periods
                     .ordered_period_list
                     .insert(position + 1, (*period_id, desc.clone()));
+                self.inner_data.assignments.period_map.insert(
+                    *period_id,
+                    assignments::PeriodAssignments {
+                        subject_exclusion_map: self
+                            .inner_data
+                            .subjects
+                            .ordered_subject_list
+                            .iter()
+                            .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                            .collect(),
+                    },
+                );
                 Ok(())
             }
             AnnotatedPeriodOp::Remove(period_id) => {
@@ -839,6 +869,18 @@ impl Data {
                             *period_id,
                             *student_id,
                         ));
+                    }
+                }
+
+                for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
+                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
+                    {
+                        if !excluded_students.is_empty() {
+                            return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
+                                *period_id,
+                                *subject_id,
+                            ));
+                        }
                     }
                 }
 
