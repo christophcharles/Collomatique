@@ -12,6 +12,8 @@ pub trait VariableName:
     + Eq
     + Clone
     + for<'a> From<&'a Self>
+    + Send
+    + Sync
 {
 }
 
@@ -23,7 +25,9 @@ impl<
             + PartialEq
             + Eq
             + Clone
-            + for<'a> From<&'a T>,
+            + for<'a> From<&'a T>
+            + Send
+            + Sync,
     > VariableName for T
 {
 }
