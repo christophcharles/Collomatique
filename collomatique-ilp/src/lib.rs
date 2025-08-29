@@ -182,11 +182,11 @@ use mat_repr::{ConfigRepr, ProblemRepr};
 /// a configuration might be detected as valid when it isn't.
 pub const TOLERANCE: f64 = 0.00001;
 
-/// Tests for non-negativity with [TOLERANCE].
+/// Tests for positivity with [TOLERANCE].
 ///
-/// Tests if an f64 is non-negative (positive but non-zero)
+/// Tests if an f64 is positivity (zero is excluded)
 /// but does so taking into account the [TOLERANCE].
-pub fn f64_is_non_negative(v: f64) -> bool {
+pub fn f64_is_positive(v: f64) -> bool {
     v > TOLERANCE
 }
 
