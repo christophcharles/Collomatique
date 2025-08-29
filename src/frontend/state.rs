@@ -15,8 +15,9 @@ use history::{
 use update::private::ManagerInternal;
 
 pub use handles::{
-    GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle, StudentHandle,
-    SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle, WeekPatternHandle,
+    ColloscopeHandle, GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle,
+    StudentHandle, SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle,
+    WeekPatternHandle,
 };
 pub use update::{Manager, UpdateError};
 
