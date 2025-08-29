@@ -22,11 +22,13 @@ pub enum UpdateError<IntError: std::error::Error> {
     #[error("Teacher corresponding to handle {0:?} was previously removed")]
     TeacherRemoved(TeacherHandle),
     #[error("Cannot remove teacher: it is referenced by the database")]
-    TeacherDependanciesRemaining(Vec<TimeSlotHandle>),
+    TeacherDependanciesRemaining(Vec<backend::TeacherDependancy<TimeSlotHandle, ColloscopeHandle>>),
     #[error("Student corresponding to handle {0:?} was previously removed")]
     StudentRemoved(StudentHandle),
     #[error("Cannot remove student: it is referenced by the database")]
-    StudentDependanciesRemaining(Vec<GroupListHandle>),
+    StudentDependanciesRemaining(
+        Vec<backend::StudentDependancy<GroupListHandle, ColloscopeHandle>>,
+    ),
     #[error("Subject group corresponding to handle {0:?} was previously removed")]
     SubjectGroupRemoved(SubjectGroupHandle),
     #[error("Cannot remove subject group: it is referenced by the database")]
@@ -56,7 +58,9 @@ pub enum UpdateError<IntError: std::error::Error> {
     #[error("Subject references a bad group list (probably removed) of id {0:?}")]
     SubjectBadGroupList(GroupListHandle),
     #[error("Cannot remove subject: it is referenced by the database")]
-    SubjectDependanciesRemaining(Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>),
+    SubjectDependanciesRemaining(
+        Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
+    ),
     #[error("Cannot update subject: a student is still registerd")]
     SubjectWithStudentRegistered(StudentHandle),
     #[error("Time slot corresponding to handle {0:?} was previously removed")]
@@ -194,7 +198,7 @@ pub trait Manager: ManagerInternal {
         &mut self,
         handle: TeacherHandle,
     ) -> Result<
-        Vec<TimeSlotHandle>,
+        Vec<backend::TeacherDependancy<TimeSlotHandle, ColloscopeHandle>>,
         IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
     >;
     async fn students_get_all(
@@ -214,7 +218,7 @@ pub trait Manager: ManagerInternal {
         &mut self,
         handle: StudentHandle,
     ) -> Result<
-        Vec<GroupListHandle>,
+        Vec<backend::StudentDependancy<GroupListHandle, ColloscopeHandle>>,
         IdError<<Self::Storage as backend::Storage>::InternalError, StudentHandle>,
     >;
     async fn subject_groups_get_all(
@@ -318,7 +322,7 @@ pub trait Manager: ManagerInternal {
         &mut self,
         handle: SubjectHandle,
     ) -> Result<
-        Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>,
+        Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
         IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
     >;
     async fn time_slots_get_all(
@@ -620,7 +624,7 @@ impl<T: ManagerInternal> Manager for T {
         handle: TeacherHandle,
     ) -> impl core::future::Future<
         Output = Result<
-            Vec<TimeSlotHandle>,
+            Vec<backend::TeacherDependancy<TimeSlotHandle, ColloscopeHandle>>,
             IdError<<Self::Storage as backend::Storage>::InternalError, TeacherHandle>,
         >,
     > + Send {
@@ -641,10 +645,22 @@ impl<T: ManagerInternal> Manager for T {
 
             let handle_managers = &mut self.get_handle_managers_mut();
             let time_slot_handle_manager = &mut handle_managers.time_slots;
+            let colloscope_handle_manager = &mut handle_managers.colloscopes;
 
             let teacher_deps = teacher_deps_backend
                 .into_iter()
-                .map(|dep| time_slot_handle_manager.get_handle(dep))
+                .map(|dep| match dep {
+                    backend::TeacherDependancy::TimeSlot(id) => {
+                        backend::TeacherDependancy::TimeSlot(
+                            time_slot_handle_manager.get_handle(id),
+                        )
+                    }
+                    backend::TeacherDependancy::Colloscope(id) => {
+                        backend::TeacherDependancy::Colloscope(
+                            colloscope_handle_manager.get_handle(id),
+                        )
+                    }
+                })
                 .collect();
 
             Ok(teacher_deps)
@@ -708,7 +724,7 @@ impl<T: ManagerInternal> Manager for T {
         handle: StudentHandle,
     ) -> impl core::future::Future<
         Output = Result<
-            Vec<GroupListHandle>,
+            Vec<backend::StudentDependancy<GroupListHandle, ColloscopeHandle>>,
             IdError<<Self::Storage as backend::Storage>::InternalError, StudentHandle>,
         >,
     > + Send {
@@ -729,10 +745,22 @@ impl<T: ManagerInternal> Manager for T {
 
             let handle_managers = &mut self.get_handle_managers_mut();
             let group_list_handle_manager = &mut handle_managers.group_lists;
+            let colloscope_handle_manager = &mut handle_managers.colloscopes;
 
             let student_deps = student_deps_backend
                 .into_iter()
-                .map(|dep| group_list_handle_manager.get_handle(dep))
+                .map(|dep| match dep {
+                    backend::StudentDependancy::GroupList(id) => {
+                        backend::StudentDependancy::GroupList(
+                            group_list_handle_manager.get_handle(id),
+                        )
+                    }
+                    backend::StudentDependancy::Colloscope(id) => {
+                        backend::StudentDependancy::Colloscope(
+                            colloscope_handle_manager.get_handle(id),
+                        )
+                    }
+                })
                 .collect();
 
             Ok(student_deps)
@@ -1212,7 +1240,7 @@ impl<T: ManagerInternal> Manager for T {
         handle: SubjectHandle,
     ) -> impl core::future::Future<
         Output = Result<
-            Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>,
+            Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle, ColloscopeHandle>>,
             IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
         >,
     > + Send {
@@ -1234,6 +1262,7 @@ impl<T: ManagerInternal> Manager for T {
             let handle_managers = &mut self.get_handle_managers_mut();
             let time_slot_handle_manager = &mut handle_managers.time_slots;
             let student_handle_manager = &mut handle_managers.students;
+            let colloscope_handle_manager = &mut handle_managers.colloscopes;
 
             let subject_deps = subject_deps_backend
                 .into_iter()
@@ -1245,6 +1274,11 @@ impl<T: ManagerInternal> Manager for T {
                     }
                     backend::SubjectDependancy::Student(id) => {
                         backend::SubjectDependancy::Student(student_handle_manager.get_handle(id))
+                    }
+                    backend::SubjectDependancy::Colloscope(id) => {
+                        backend::SubjectDependancy::Colloscope(
+                            colloscope_handle_manager.get_handle(id),
+                        )
                     }
                 })
                 .collect();
@@ -1974,8 +2008,23 @@ pub(super) mod private {
                         backend::CheckedIdError::CheckFailed(dependancies) => {
                             let new_dependancies = dependancies
                                 .into_iter()
-                                .map(|dep| {
-                                    manager.get_handle_managers_mut().time_slots.get_handle(dep)
+                                .map(|dep| match dep {
+                                    backend::TeacherDependancy::TimeSlot(id) => {
+                                        backend::TeacherDependancy::TimeSlot(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .time_slots
+                                                .get_handle(id),
+                                        )
+                                    }
+                                    backend::TeacherDependancy::Colloscope(id) => {
+                                        backend::TeacherDependancy::Colloscope(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .colloscopes
+                                                .get_handle(id),
+                                        )
+                                    }
                                 })
                                 .collect();
                             UpdateError::TeacherDependanciesRemaining(new_dependancies)
@@ -2047,11 +2096,23 @@ pub(super) mod private {
                         backend::CheckedIdError::CheckFailed(dependancies) => {
                             let new_dependancies = dependancies
                                 .into_iter()
-                                .map(|dep| {
-                                    manager
-                                        .get_handle_managers_mut()
-                                        .group_lists
-                                        .get_handle(dep)
+                                .map(|dep| match dep {
+                                    backend::StudentDependancy::GroupList(id) => {
+                                        backend::StudentDependancy::GroupList(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .group_lists
+                                                .get_handle(id),
+                                        )
+                                    }
+                                    backend::StudentDependancy::Colloscope(id) => {
+                                        backend::StudentDependancy::Colloscope(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .colloscopes
+                                                .get_handle(id),
+                                        )
+                                    }
                                 })
                                 .collect();
                             UpdateError::StudentDependanciesRemaining(new_dependancies)
@@ -2486,6 +2547,14 @@ pub(super) mod private {
                                     SubjectDependancy::TimeSlot(id) => SubjectDependancy::TimeSlot(
                                         manager.get_handle_managers_mut().time_slots.get_handle(id),
                                     ),
+                                    SubjectDependancy::Colloscope(id) => {
+                                        SubjectDependancy::Colloscope(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .colloscopes
+                                                .get_handle(id),
+                                        )
+                                    }
                                 })
                                 .collect();
                             UpdateError::SubjectDependanciesRemaining(new_dependancies)

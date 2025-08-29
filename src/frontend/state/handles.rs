@@ -28,6 +28,9 @@ pub struct GroupingHandle(usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupingIncompatHandle(usize);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ColloscopeHandle(usize);
+
 pub(super) trait Handle: Send + Sync + Clone + Copy {
     fn new(value: usize) -> Self;
     fn get(self) -> usize;
@@ -56,6 +59,7 @@ impl_handle!(SubjectHandle);
 impl_handle!(TimeSlotHandle);
 impl_handle!(GroupingHandle);
 impl_handle!(GroupingIncompatHandle);
+impl_handle!(ColloscopeHandle);
 
 use crate::backend;
 use std::collections::BTreeMap;
@@ -131,6 +135,7 @@ pub struct ManagerCollection<T: backend::Storage> {
     pub(super) time_slots: Manager<T::TimeSlotId, TimeSlotHandle>,
     pub(super) groupings: Manager<T::GroupingId, GroupingHandle>,
     pub(super) grouping_incompats: Manager<T::GroupingIncompatId, GroupingIncompatHandle>,
+    pub(super) colloscopes: Manager<T::ColloscopeId, ColloscopeHandle>,
 }
 
 impl<T: backend::Storage> ManagerCollection<T> {
@@ -146,6 +151,7 @@ impl<T: backend::Storage> ManagerCollection<T> {
             time_slots: Manager::new(),
             groupings: Manager::new(),
             grouping_incompats: Manager::new(),
+            colloscopes: Manager::new(),
         }
     }
 }

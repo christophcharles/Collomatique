@@ -740,6 +740,41 @@ pub struct Colloscope<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId> {
     pub subjects: BTreeMap<SubjectId, ColloscopeSubject<TeacherId, StudentId>>,
 }
 
+impl<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId>
+    Colloscope<TeacherId, SubjectId, StudentId>
+{
+    pub fn references_teacher(&self, teacher_id: TeacherId) -> bool {
+        for (_subject_id, subject) in &self.subjects {
+            for time_slot in &subject.time_slots {
+                if time_slot.teacher_id == teacher_id {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn references_subject(&self, subject_id: SubjectId) -> bool {
+        for (&current_subject_id, _subject) in &self.subjects {
+            if subject_id == current_subject_id {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn references_student(&self, student_id: StudentId) -> bool {
+        for (_subject_id, subject) in &self.subjects {
+            for (&current_student_id, _mapping) in &subject.group_list.students_mapping {
+                if current_student_id == student_id {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum WeekPatternDependancy<IncompatId: OrdId, TimeSlotId: OrdId> {
     Incompat(IncompatId),
@@ -759,9 +794,22 @@ pub enum IncompatDependancy<SubjectId: OrdId, StudentId: OrdId> {
 }
 
 #[derive(Clone, Debug)]
-pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId> {
+pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId, ColloscopeId: OrdId> {
     TimeSlot(TimeSlotId),
     Student(StudentId),
+    Colloscope(ColloscopeId),
+}
+
+#[derive(Clone, Debug)]
+pub enum TeacherDependancy<TimeSlotId: OrdId, ColloscopeId: OrdId> {
+    TimeSlot(TimeSlotId),
+    Colloscope(ColloscopeId),
+}
+
+#[derive(Clone, Debug)]
+pub enum StudentDependancy<GroupListId: OrdId, ColloscopeId: OrdId> {
+    GroupList(GroupListId),
+    Colloscope(ColloscopeId),
 }
 
 #[derive(Clone, Debug)]
@@ -999,7 +1047,10 @@ impl<T: Storage> Logic<T> {
     pub async fn teachers_check_can_remove(
         &self,
         index: T::TeacherId,
-    ) -> std::result::Result<Vec<T::TimeSlotId>, IdError<T::InternalError, T::TeacherId>> {
+    ) -> std::result::Result<
+        Vec<TeacherDependancy<T::TimeSlotId, T::ColloscopeId>>,
+        IdError<T::InternalError, T::TeacherId>,
+    > {
         let teachers = self.teachers_get_all().await?;
 
         if !teachers.contains_key(&index) {
@@ -1011,7 +1062,14 @@ impl<T: Storage> Logic<T> {
         let time_slots = self.time_slots_get_all().await?;
         for (time_slot_id, time_slot) in time_slots {
             if time_slot.teacher_id == index {
-                dependancies.push(time_slot_id);
+                dependancies.push(TeacherDependancy::TimeSlot(time_slot_id));
+            }
+        }
+
+        let colloscopes = self.colloscopes_get_all().await?;
+        for (colloscope_id, colloscope) in colloscopes {
+            if colloscope.references_teacher(index) {
+                dependancies.push(TeacherDependancy::Colloscope(colloscope_id));
             }
         }
 
@@ -1020,8 +1078,14 @@ impl<T: Storage> Logic<T> {
     pub async fn teachers_remove(
         &mut self,
         index: T::TeacherId,
-    ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TeacherId, Vec<T::TimeSlotId>>>
-    {
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            T::InternalError,
+            T::TeacherId,
+            Vec<TeacherDependancy<T::TimeSlotId, T::ColloscopeId>>,
+        >,
+    > {
         let dependancies = self
             .teachers_check_can_remove(index)
             .await
@@ -1060,7 +1124,10 @@ impl<T: Storage> Logic<T> {
     pub async fn students_check_can_remove(
         &self,
         index: T::StudentId,
-    ) -> std::result::Result<Vec<T::GroupListId>, IdError<T::InternalError, T::StudentId>> {
+    ) -> std::result::Result<
+        Vec<StudentDependancy<T::GroupListId, T::ColloscopeId>>,
+        IdError<T::InternalError, T::StudentId>,
+    > {
         let students = self.students_get_all().await?;
 
         if !students.contains_key(&index) {
@@ -1072,7 +1139,14 @@ impl<T: Storage> Logic<T> {
         let group_lists = self.group_lists_get_all().await?;
         for (group_list_id, group_list) in group_lists {
             if group_list.references_student(index) {
-                dependancies.push(group_list_id)
+                dependancies.push(StudentDependancy::GroupList(group_list_id));
+            }
+        }
+
+        let colloscopes = self.colloscopes_get_all().await?;
+        for (colloscope_id, colloscope) in colloscopes {
+            if colloscope.references_student(index) {
+                dependancies.push(StudentDependancy::Colloscope(colloscope_id));
             }
         }
 
@@ -1081,8 +1155,14 @@ impl<T: Storage> Logic<T> {
     pub async fn students_remove(
         &mut self,
         index: T::StudentId,
-    ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::StudentId, Vec<T::GroupListId>>>
-    {
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            T::InternalError,
+            T::StudentId,
+            Vec<StudentDependancy<T::GroupListId, T::ColloscopeId>>,
+        >,
+    > {
         let dependancies = self
             .students_check_can_remove(index)
             .await
@@ -1569,7 +1649,7 @@ impl<T: Storage> Logic<T> {
         &self,
         index: T::SubjectId,
     ) -> std::result::Result<
-        Vec<SubjectDependancy<T::TimeSlotId, T::StudentId>>,
+        Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId>>,
         IdError<T::InternalError, T::SubjectId>,
     > {
         let subject = self.subjects_get(index).await?;
@@ -1600,6 +1680,13 @@ impl<T: Storage> Logic<T> {
             }
         }
 
+        let colloscopes = self.colloscopes_get_all().await?;
+        for (colloscope_id, colloscope) in colloscopes {
+            if colloscope.references_subject(index) {
+                dependancies.push(SubjectDependancy::Colloscope(colloscope_id));
+            }
+        }
+
         Ok(dependancies)
     }
     pub async fn subjects_remove(
@@ -1610,7 +1697,7 @@ impl<T: Storage> Logic<T> {
         CheckedIdError<
             T::InternalError,
             T::SubjectId,
-            Vec<SubjectDependancy<T::TimeSlotId, T::StudentId>>,
+            Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId>>,
         >,
     > {
         let dependancies = self
