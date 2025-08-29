@@ -1,14 +1,13 @@
-use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
-use vte4::TerminalExt;
 
 use std::path::PathBuf;
 
 pub struct Dialog {
     hidden: bool,
     path: PathBuf,
-    pipe: Option<std::fs::File>,
+    is_running: bool,
 }
 
 #[derive(Debug)]
@@ -39,10 +38,15 @@ impl SimpleComponent for Dialog {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
                     set_show_end_title_buttons: false,
-                    pack_end = &gtk::Button {
-                        set_label: "Fermer",
+                    pack_start = &gtk::Button {
+                        set_label: "Annuler",
                         set_sensitive: true,
-                        add_css_class: "suggested-action",
+                        connect_clicked => DialogInput::Close,
+                    },
+                    pack_end = &gtk::Button {
+                        set_label: "Valider les modifications",
+                        set_sensitive: false,
+                        add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Close,
                     },
                 },
@@ -51,16 +55,103 @@ impl SimpleComponent for Dialog {
                     set_orientation: gtk::Orientation::Vertical,
                     set_hexpand: true,
                     set_vexpand: true,
+                    adw::Spinner {
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_size_request: (50, 50),
+                        #[watch]
+                        set_visible: model.is_running,
+                    },
+                    gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_size_request: (50, 50),
+                        set_icon_size: gtk::IconSize::Large,
+                        #[watch]
+                        set_visible: !model.is_running,
+                    },
+                    gtk::Label {
+                        set_margin_all: 5,
+                        set_halign: gtk::Align::Start,
+                        set_label: "Opérations effectuées :",
+                    },
                     gtk::ScrolledWindow {
                         set_hexpand: true,
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                         set_margin_all: 5,
-                        #[name(term)]
-                        vte4::Terminal {
+                        gtk::ListBox {
                             set_hexpand: true,
-                            set_vexpand: true,
+                            add_css_class: "boxed-list",
+                            set_selection_mode: gtk::SelectionMode::None,
+                            gtk::ListBoxRow {
+                                gtk::Box {
+                                    set_margin_all: 5,
+                                    add_css_class: "success",
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    gtk::Image::from_icon_name("emblem-success") {
+                                        set_margin_end: 5,
+                                    },
+                                    gtk::Label {
+                                        set_halign: gtk::Align::Start,
+                                        set_label: "Test1",
+                                    },
+                                },
+                            },
+                            gtk::ListBoxRow {
+                                gtk::Box {
+                                    set_margin_all: 5,
+                                    add_css_class: "warning",
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    gtk::Image::from_icon_name("emblem-warning") {
+                                        set_margin_end: 5,
+                                    },
+                                    gtk::Label {
+                                        set_halign: gtk::Align::Start,
+                                        set_label: "Test2",
+                                    },
+                                },
+                            },
+                            gtk::ListBoxRow {
+                                gtk::Box {
+                                    set_margin_all: 5,
+                                    add_css_class: "error",
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    gtk::Image::from_icon_name("emblem-error") {
+                                        set_margin_end: 5,
+                                    },
+                                    gtk::Label {
+                                        set_halign: gtk::Align::Start,
+                                        set_label: "Test3",
+                                    },
+                                },
+                            },
+                        }
+                    },
+                    gtk::Expander {
+                        set_margin_all: 5,
+                        set_hexpand: true,
+                        #[wrap(Some)]
+                        set_label_widget = &gtk::Label {
+                            set_label: "Informations de débogage",
                         },
+                        #[wrap(Some)]
+                        set_child = &gtk::ScrolledWindow {
+                            set_hexpand: true,
+                            set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                            set_margin_all: 5,
+                            gtk::TextView {
+                                add_css_class: "frame",
+                                add_css_class: "osd",
+                                set_wrap_mode: gtk::WrapMode::Char,
+                                set_editable: false,
+                                set_monospace: true,
+                                #[wrap(Some)]
+                                set_buffer = &gtk::TextBuffer {
+                                    set_text: "Test",
+                                },
+                            }
+                        }
                     },
                     gtk::Label {
                         set_margin_all: 5,
@@ -78,24 +169,13 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let mut model = Dialog {
+        let model = Dialog {
             hidden: true,
             path: PathBuf::new(),
-            pipe: None,
+            is_running: true,
         };
 
         let widgets = view_output!();
-
-        let pty = widgets
-            .term
-            .pty_new_sync(vte4::PtyFlags::empty(), gtk::gio::Cancellable::NONE)
-            .unwrap();
-        widgets.term.set_pty(Some(&pty));
-        let owned_fd = pty.fd().try_clone_to_owned().unwrap();
-        let peer_fd =
-            rustix::pty::ioctl_tiocgptpeer(owned_fd, rustix::pty::OpenptFlags::RDWR).unwrap();
-        let pipe = std::fs::File::from(peer_fd);
-        model.pipe = Some(pipe);
 
         ComponentParts { model, widgets }
     }
