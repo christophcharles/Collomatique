@@ -97,14 +97,9 @@ impl<'de> Deserialize<'de> for EntryContent {
     {
         let value: Box<serde_json::value::RawValue> = Deserialize::deserialize(deserializer)?;
 
-        println!("{:?}", value);
-
         use serde::de::IntoDeserializer;
         match ValidEntry::deserialize(value.into_deserializer()) {
-            Ok(valid_entry) => {
-                println!("{:?}", valid_entry);
-                Ok(EntryContent::ValidEntry(valid_entry))
-            }
+            Ok(valid_entry) => Ok(EntryContent::ValidEntry(valid_entry)),
             Err(_) => Ok(EntryContent::UnknownEntry),
         }
     }
