@@ -83,7 +83,7 @@ impl reedline::Completer for ReedCompleter {
         let current_dir = std::env::current_dir().ok();
         let current_dir_ref = current_dir.as_ref().map(|x| x.as_path());
         let Ok(candidates) =
-            clap_complete::dynamic::complete(&mut cmd, args, arg_index, current_dir_ref)
+            clap_complete::engine::complete(&mut cmd, args, arg_index, current_dir_ref)
         else {
             return vec![];
         };
@@ -91,8 +91,8 @@ impl reedline::Completer for ReedCompleter {
         candidates
             .into_iter()
             .map(|c| reedline::Suggestion {
-                value: c.0.to_string_lossy().into_owned(),
-                description: c.1.map(|x| x.to_string()),
+                value: c.get_value().to_string_lossy().into_owned(),
+                description: c.get_help().map(|x| x.to_string()),
                 style: None,
                 extra: None,
                 span,
