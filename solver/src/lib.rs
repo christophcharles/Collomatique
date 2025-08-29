@@ -13,6 +13,7 @@
 pub mod examples;
 pub mod generics;
 pub mod solver;
+pub mod tools;
 
 pub use generics::{BaseProblem, BaseVariable, ExtraVariable, ProblemConstraints, SoftConstraints};
 pub use solver::{
