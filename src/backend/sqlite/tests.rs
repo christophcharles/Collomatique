@@ -65,6 +65,40 @@ WHERE id = 1
 }
 
 #[sqlx::test]
+async fn general_data_get_3(pool: SqlitePool) {
+    let store = prepare_empty_db(pool).await;
+
+    let _ = sqlx::query!(
+        r#"
+UPDATE general_data
+SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2,"week_count":25,"periodicity_cuts":[10],"costs_adjustements":{"max_interrogations_per_day_for_single_student":2,"max_interrogations_per_day_for_all_students":3,"interrogations_per_week_range_for_single_student":5,"interrogations_per_week_range_for_all_students":2,"balancing":4}}'
+WHERE id = 1
+        "#
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap();
+
+    let general_data = store.general_data_get().await.unwrap();
+
+    let general_data_expected = GeneralData {
+        interrogations_per_week: Some(2..5),
+        max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
+        week_count: NonZeroU32::new(25).unwrap(),
+        periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
+        costs_adjustements: CostsAdjustements {
+            max_interrogations_per_day_for_single_student: 2,
+            max_interrogations_per_day_for_all_students: 3,
+            interrogations_per_week_range_for_single_student: 5,
+            interrogations_per_week_range_for_all_students: 2,
+            balancing: 4,
+        },
+    };
+
+    assert_eq!(general_data, general_data_expected);
+}
+
+#[sqlx::test]
 async fn general_data_set(pool: SqlitePool) {
     let mut store = prepare_empty_db(pool).await;
 
