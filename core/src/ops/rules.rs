@@ -99,7 +99,7 @@ impl RulesUpdateOp {
                                 },
                             ),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Rule(re) = e {
@@ -140,7 +140,7 @@ impl RulesUpdateOp {
                                 },
                             ),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Rule(re) = e {
@@ -168,7 +168,7 @@ impl RulesUpdateOp {
                         collomatique_state_colloscopes::Op::Rule(
                             collomatique_state_colloscopes::RuleOp::Remove(*rule_id),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("All data should be valid at this point");
 
@@ -205,7 +205,7 @@ impl RulesUpdateOp {
                         collomatique_state_colloscopes::Op::Rule(
                             collomatique_state_colloscopes::RuleOp::Update(*rule_id, rule),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("No error should be possible at this point");
                 assert!(result.is_none());
@@ -215,19 +215,22 @@ impl RulesUpdateOp {
         }
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            RulesUpdateOp::AddNewRule(_desc, _rule) => "Ajouter une règle".into(),
-            RulesUpdateOp::UpdateRule(_id, _desc, _rule) => "Modifier une règle".into(),
-            RulesUpdateOp::DeleteRule(_id) => "Supprimer une règle".into(),
-            Self::UpdatePeriodStatusForRule(_rule_id, _period_id, status) => {
-                if *status {
-                    "Activer une règle sur une période".into()
-                } else {
-                    "Désactiver une règle sur une période".into()
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::Rules,
+            match self {
+                RulesUpdateOp::AddNewRule(_desc, _rule) => "Ajouter une règle".into(),
+                RulesUpdateOp::UpdateRule(_id, _desc, _rule) => "Modifier une règle".into(),
+                RulesUpdateOp::DeleteRule(_id) => "Supprimer une règle".into(),
+                Self::UpdatePeriodStatusForRule(_rule_id, _period_id, status) => {
+                    if *status {
+                        "Activer une règle sur une période".into()
+                    } else {
+                        "Désactiver une règle sur une période".into()
+                    }
                 }
-            }
-        }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -254,7 +257,7 @@ impl RulesUpdateOp {
                                 },
                             ),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Rule(re) = e {
@@ -295,7 +298,7 @@ impl RulesUpdateOp {
                                 },
                             ),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Rule(re) = e {
@@ -323,7 +326,7 @@ impl RulesUpdateOp {
                         collomatique_state_colloscopes::Op::Rule(
                             collomatique_state_colloscopes::RuleOp::Remove(*rule_id),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("All data should be valid at this point");
 
@@ -360,7 +363,7 @@ impl RulesUpdateOp {
                         collomatique_state_colloscopes::Op::Rule(
                             collomatique_state_colloscopes::RuleOp::Update(*rule_id, rule),
                         ),
-                        (OpCategory::Rules, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("No error should be possible at this point");
                 assert!(result.is_none());

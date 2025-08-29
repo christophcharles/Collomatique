@@ -124,7 +124,7 @@ impl AssignmentsUpdateOp {
                                 *status,
                             ),
                         ),
-                        (OpCategory::Assignments, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Assignment(ae) = e {
@@ -224,7 +224,7 @@ impl AssignmentsUpdateOp {
                     }
                 }
 
-                *data = session.commit((OpCategory::Assignments, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(())
             }
@@ -276,33 +276,36 @@ impl AssignmentsUpdateOp {
                     assert!(result.is_none());
                 }
 
-                *data = session.commit((OpCategory::Assignments, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(())
             }
         }
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            AssignmentsUpdateOp::Assign(_, _, _, status) => {
-                if *status {
-                    "Inscrire un élève à une matière".into()
-                } else {
-                    "Désinscrire un élève d'une matière".into()
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::Assignments,
+            match self {
+                AssignmentsUpdateOp::Assign(_, _, _, status) => {
+                    if *status {
+                        "Inscrire un élève à une matière".into()
+                    } else {
+                        "Désinscrire un élève d'une matière".into()
+                    }
                 }
-            }
-            AssignmentsUpdateOp::DuplicatePreviousPeriod(_) => {
-                "Dupliquer les inscriptions d'un période".into()
-            }
-            AssignmentsUpdateOp::AssignAll(_, _, status) => {
-                if *status {
-                    "Inscrire tous les élèves à une matière".into()
-                } else {
-                    "Désinscrire tous les élèves d'une matière".into()
+                AssignmentsUpdateOp::DuplicatePreviousPeriod(_) => {
+                    "Dupliquer les inscriptions d'un période".into()
                 }
-            }
-        }
+                AssignmentsUpdateOp::AssignAll(_, _, status) => {
+                    if *status {
+                        "Inscrire tous les élèves à une matière".into()
+                    } else {
+                        "Désinscrire tous les élèves d'une matière".into()
+                    }
+                }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -328,7 +331,7 @@ impl AssignmentsUpdateOp {
                                 *status,
                             ),
                         ),
-                        (OpCategory::Assignments, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Assignment(ae) = e {
@@ -428,7 +431,7 @@ impl AssignmentsUpdateOp {
                     }
                 }
 
-                *data = session.commit((OpCategory::Assignments, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(())
             }
@@ -480,7 +483,7 @@ impl AssignmentsUpdateOp {
                     assert!(result.is_none());
                 }
 
-                *data = session.commit((OpCategory::Assignments, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(())
             }

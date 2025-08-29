@@ -209,29 +209,34 @@ impl GeneralPlanningUpdateOp {
         todo!()
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            GeneralPlanningUpdateOp::DeleteFirstWeek => "Effacer le début des colles".into(),
-            GeneralPlanningUpdateOp::UpdateFirstWeek(_date) => "Changer le début des colles".into(),
-            GeneralPlanningUpdateOp::AddNewPeriod(_week_count) => "Ajouter une période".into(),
-            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_period_id, _week_count) => {
-                "Modifier une période".into()
-            }
-            GeneralPlanningUpdateOp::DeletePeriod(_period_id) => "Supprimer une période".into(),
-            GeneralPlanningUpdateOp::CutPeriod(_period_id, _new_week_count) => {
-                "Découper une période".into()
-            }
-            GeneralPlanningUpdateOp::MergeWithPreviousPeriod(_period_id) => {
-                "Fusionner deux périodes".into()
-            }
-            GeneralPlanningUpdateOp::UpdateWeekStatus(_period_id, _week_num, state) => {
-                if *state {
-                    "Ajouter une semaine de colle".into()
-                } else {
-                    "Supprimer une semaine de colle".into()
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::GeneralPlanning,
+            match self {
+                GeneralPlanningUpdateOp::DeleteFirstWeek => "Effacer le début des colles".into(),
+                GeneralPlanningUpdateOp::UpdateFirstWeek(_date) => {
+                    "Changer le début des colles".into()
                 }
-            }
-        }
+                GeneralPlanningUpdateOp::AddNewPeriod(_week_count) => "Ajouter une période".into(),
+                GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_period_id, _week_count) => {
+                    "Modifier une période".into()
+                }
+                GeneralPlanningUpdateOp::DeletePeriod(_period_id) => "Supprimer une période".into(),
+                GeneralPlanningUpdateOp::CutPeriod(_period_id, _new_week_count) => {
+                    "Découper une période".into()
+                }
+                GeneralPlanningUpdateOp::MergeWithPreviousPeriod(_period_id) => {
+                    "Fusionner deux périodes".into()
+                }
+                GeneralPlanningUpdateOp::UpdateWeekStatus(_period_id, _week_num, state) => {
+                    if *state {
+                        "Ajouter une semaine de colle".into()
+                    } else {
+                        "Supprimer une semaine de colle".into()
+                    }
+                }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -433,7 +438,7 @@ impl GeneralPlanningUpdateOp {
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
                         ),
-                        (OpCategory::GeneralPlanning, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("Deleting first week should always work");
                 if result.is_some() {
@@ -449,7 +454,7 @@ impl GeneralPlanningUpdateOp {
                                 date.clone(),
                             )),
                         ),
-                        (OpCategory::GeneralPlanning, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("Updating first week should always work");
                 if result.is_some() {
@@ -473,7 +478,7 @@ impl GeneralPlanningUpdateOp {
                                 }
                             },
                         ),
-                        (OpCategory::GeneralPlanning, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("Adding a period should never fail");
                 match result {
@@ -497,7 +502,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::Op::Period(
                         collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                     ),
-                    (OpCategory::GeneralPlanning, self.get_desc()),
+                    self.get_desc(),
                 ) {
                     Ok(r) => r,
                     Err(collomatique_state_colloscopes::Error::Period(
@@ -648,7 +653,7 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit((OpCategory::GeneralPlanning, self.get_desc()));
+                *data = session.commit(self.get_desc());
                 Ok(None)
             }
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
@@ -813,7 +818,7 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit((OpCategory::GeneralPlanning, self.get_desc()));
+                *data = session.commit(self.get_desc());
                 Ok(Some(new_id))
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -979,7 +984,7 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit((OpCategory::GeneralPlanning, self.get_desc()));
+                *data = session.commit(self.get_desc());
                 Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
@@ -1006,7 +1011,7 @@ impl GeneralPlanningUpdateOp {
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                         ),
-                        (OpCategory::GeneralPlanning, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("At this point, parameters should be valid");
                 if result.is_some() {

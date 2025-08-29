@@ -82,7 +82,7 @@ impl IncompatibilitiesUpdateOp {
                                 incompat.clone()
                             )
                         ),
-                        (OpCategory::Incompatibilities, self.get_desc()),
+                        self.get_desc(),
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
                         match ie {
                             collomatique_state_colloscopes::IncompatError::InvalidSubjectId(id) => AddNewIncompatError::InvalidSubjectId(id),
@@ -106,7 +106,7 @@ impl IncompatibilitiesUpdateOp {
                                 incompat.clone()
                             )
                         ),
-                        (OpCategory::Incompatibilities, self.get_desc()),
+                        self.get_desc(),
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
                         match ie {
                             collomatique_state_colloscopes::IncompatError::InvalidIncompatId(id) => UpdateIncompatError::InvalidIncompatId(id),
@@ -128,7 +128,7 @@ impl IncompatibilitiesUpdateOp {
                         collomatique_state_colloscopes::Op::Incompat(
                             collomatique_state_colloscopes::IncompatOp::Remove(*incompat_id),
                         ),
-                        (OpCategory::Incompatibilities, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
@@ -150,18 +150,21 @@ impl IncompatibilitiesUpdateOp {
         }
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            IncompatibilitiesUpdateOp::AddNewIncompat(_) => {
-                "Ajouter une incompatibilité horaire".into()
-            }
-            IncompatibilitiesUpdateOp::DeleteIncompat(_) => {
-                "Supprimer une incompatibilité horaire".into()
-            }
-            IncompatibilitiesUpdateOp::UpdateIncompat(_, _) => {
-                "Modifier une incompatibilité horaire".into()
-            }
-        }
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::Incompatibilities,
+            match self {
+                IncompatibilitiesUpdateOp::AddNewIncompat(_) => {
+                    "Ajouter une incompatibilité horaire".into()
+                }
+                IncompatibilitiesUpdateOp::DeleteIncompat(_) => {
+                    "Supprimer une incompatibilité horaire".into()
+                }
+                IncompatibilitiesUpdateOp::UpdateIncompat(_, _) => {
+                    "Modifier une incompatibilité horaire".into()
+                }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -185,7 +188,7 @@ impl IncompatibilitiesUpdateOp {
                                 incompat.clone()
                             )
                         ),
-                        (OpCategory::Incompatibilities, self.get_desc()),
+                        self.get_desc(),
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
                         match ie {
                             collomatique_state_colloscopes::IncompatError::InvalidSubjectId(id) => AddNewIncompatError::InvalidSubjectId(id),
@@ -209,7 +212,7 @@ impl IncompatibilitiesUpdateOp {
                                 incompat.clone()
                             )
                         ),
-                        (OpCategory::Incompatibilities, self.get_desc()),
+                        self.get_desc(),
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
                         match ie {
                             collomatique_state_colloscopes::IncompatError::InvalidIncompatId(id) => UpdateIncompatError::InvalidIncompatId(id),
@@ -250,7 +253,7 @@ impl IncompatibilitiesUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Incompatibilities, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
