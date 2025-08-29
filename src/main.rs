@@ -222,6 +222,18 @@ enum WeekPatternCommand {
         /// List of weeks to add separated by spaces (already existing weeks in pattern are ignored)
         weeks: Vec<NonZeroU32>,
     },
+    /// Delete weeks from existing week pattern
+    DeleteWeeks {
+        /// Name of the week pattern
+        name: String,
+        /// If multiple week patterns have the same name, select which one to use.
+        /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        week_pattern_number: Option<NonZeroUsize>,
+        /// List of weeks to remove separated by spaces (weeks not in pattern are ignored)
+        weeks: Vec<NonZeroU32>,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -969,6 +981,44 @@ async fn week_pattern_command(
             week_pattern
                 .weeks
                 .extend(weeks.into_iter().map(|w| Week::new(w.get() - 1)));
+
+            if let Err(e) = app_state
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                    handle,
+                    week_pattern,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::WeekNumberTooBig(_week) => {
+                        panic!("The week pattern should be valid as it was checked beforehand")
+                    }
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
+        }
+        WeekPatternCommand::DeleteWeeks {
+            name,
+            week_pattern_number,
+            weeks,
+        } => {
+            use collomatique::backend::Week;
+
+            let (id, mut week_pattern) =
+                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let handle = app_state.get_week_pattern_handle(id);
+
+            let weeks_to_remove: BTreeSet<_> =
+                weeks.into_iter().map(|w| Week::new(w.get() - 1)).collect();
+
+            week_pattern.weeks = week_pattern
+                .weeks
+                .difference(&weeks_to_remove)
+                .copied()
+                .collect();
 
             if let Err(e) = app_state
                 .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
