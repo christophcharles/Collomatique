@@ -3,14 +3,17 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use crate::rpc::{
-    cmd_msg::{ExtensionDesc, MsgSlotId, MsgStudentId, MsgWeekPatternId, OpenFileDialogMsg},
+    cmd_msg::{
+        ExtensionDesc, MsgIncompatId, MsgSlotId, MsgStudentId, MsgWeekPatternId, OpenFileDialogMsg,
+    },
     error_msg::{
-        AddNewSlotError, AddNewStudentError, AddNewSubjectError, AddNewTeacherError,
-        AssignAllError, AssignError, AssignmentsError, CutPeriodError, DeletePeriodError,
-        DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
-        DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningError,
+        AddNewIncompatError, AddNewSlotError, AddNewStudentError, AddNewSubjectError,
+        AddNewTeacherError, AssignAllError, AssignError, AssignmentsError, CutPeriodError,
+        DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
+        DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
+        DuplicatePreviousPeriodError, GeneralPlanningError, IncompatibilitiesError,
         MergeWithPreviousPeriodError, MoveDownError, MoveSlotDownError, MoveSlotUpError,
-        MoveUpError, SlotsError, StudentsError, SubjectsError, TeachersError,
+        MoveUpError, SlotsError, StudentsError, SubjectsError, TeachersError, UpdateIncompatError,
         UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError,
         UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
         WeekPatternsError,
@@ -31,6 +34,10 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<students::Student>()?;
     m.add_class::<time::NaiveMondayDate>()?;
     m.add_class::<time::NaiveDate>()?;
+    m.add_class::<slots::Slot>()?;
+    m.add_class::<slots::SlotParameters>()?;
+    m.add_class::<week_patterns::WeekPattern>()?;
+    m.add_class::<incompatibilities::Incompat>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
@@ -92,6 +99,7 @@ mod students;
 use students::{Student, StudentId};
 mod week_patterns;
 use week_patterns::{WeekPattern, WeekPatternId};
+mod incompatibilities;
 mod slots;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
@@ -1069,6 +1077,109 @@ impl Session {
                             parameters: data.clone().into(),
                         })
                         .collect(),
+                )
+            })
+            .collect()
+    }
+
+    fn incompats_add(
+        self_: PyRef<'_, Self>,
+        incompat: incompatibilities::Incompat,
+    ) -> PyResult<incompatibilities::IncompatId> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::Incompats(
+                crate::rpc::cmd_msg::IncompatibilitiesCmdMsg::AddNewIncompat(incompat.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::IncompatId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::AddNewIncompat(e))) => {
+                match e {
+                    AddNewIncompatError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                    AddNewIncompatError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                        format!("Invalid week pattern id {:?}", id),
+                    )),
+                    AddNewIncompatError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(
+                        format!("Schedule incompatibility slot overlaps with next day",),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn incompats_update(
+        self_: PyRef<'_, Self>,
+        id: incompatibilities::IncompatId,
+        new_incompat: incompatibilities::Incompat,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::Incompats(
+                crate::rpc::cmd_msg::IncompatibilitiesCmdMsg::UpdateIncompat(
+                    id.into(),
+                    new_incompat.into(),
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::UpdateIncompat(e))) => {
+                match e {
+                    UpdateIncompatError::InvalidIncompatId(id) => Err(PyValueError::new_err(
+                        format!("Invalid incompat id {:?}", id),
+                    )),
+                    UpdateIncompatError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                    UpdateIncompatError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                        format!("Invalid week pattern id {:?}", id),
+                    )),
+                    UpdateIncompatError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(
+                        format!("Schedule incompatibility slot overlaps with next day",),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn incompats_delete(self_: PyRef<'_, Self>, id: incompatibilities::IncompatId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::Incompats(
+                crate::rpc::cmd_msg::IncompatibilitiesCmdMsg::DeleteIncompat(id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::DeleteIncompat(e))) => {
+                match e {
+                    DeleteIncompatError::InvalidIncompatId(id) => Err(PyValueError::new_err(
+                        format!("Invalid incompat id {:?}", id),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn incompats_get_list(
+        self_: PyRef<'_, Self>,
+    ) -> BTreeMap<incompatibilities::IncompatId, incompatibilities::Incompat> {
+        self_
+            .token
+            .get_data()
+            .get_incompats()
+            .incompat_map
+            .iter()
+            .map(|(incompat_id, incompat)| {
+                (
+                    MsgIncompatId::from(*incompat_id).into(),
+                    incompat.clone().into(),
                 )
             })
             .collect()
