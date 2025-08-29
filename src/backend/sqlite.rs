@@ -142,23 +142,31 @@ CREATE TABLE "subject_groups" (
     PRIMARY KEY("subject_group_id" AUTOINCREMENT)
 );
 
-CREATE TABLE "subjects" (
-    "subject_id"	INTEGER NOT NULL,
+CREATE TABLE "group_lists" (
+    "group_list_id"	INTEGER NOT NULL,
     "name"	TEXT NOT NULL,
-    "subject_group_id"	INTEGER NOT NULL,
-    "duration"	INTEGER NOT NULL,
-    "incompat_id"	INTEGER,
-    "min_students_per_group"	INTEGER NOT NULL,
-    "max_students_per_group"	INTEGER NOT NULL,
-    "period"	INTEGER NOT NULL,
-    "period_is_strict"	INTEGER NOT NULL,
-    "is_tutorial"	INTEGER NOT NULL,
-    "max_groups_per_slot"	INTEGER NOT NULL,
-    "balance_teachers"	INTEGER NOT NULL,
-    "balance_timeslots"	INTEGER NOT NULL,
-    FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
-    FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
-    PRIMARY KEY("subject_id" AUTOINCREMENT)
+    PRIMARY KEY("group_list_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "subjects" (
+	"subject_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	"subject_group_id"	INTEGER NOT NULL,
+	"duration"	INTEGER NOT NULL,
+	"incompat_id"	INTEGER,
+	"min_students_per_group"	INTEGER NOT NULL,
+	"max_students_per_group"	INTEGER NOT NULL,
+	"period"	INTEGER NOT NULL,
+	"period_is_strict"	INTEGER NOT NULL,
+	"is_tutorial"	INTEGER NOT NULL,
+	"max_groups_per_slot"	INTEGER NOT NULL,
+	"balance_teachers"	INTEGER NOT NULL,
+	"balance_timeslots"	INTEGER NOT NULL,
+	"group_list_id"	INTEGER NOT NULL,
+	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
+	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
+	PRIMARY KEY("subject_id" AUTOINCREMENT)
 );
 
 CREATE TABLE "groupings" (
@@ -217,20 +225,6 @@ CREATE TABLE "student_subjects" (
     FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
     FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
     PRIMARY KEY("subject_id","student_id")
-);
-
-CREATE TABLE "group_lists" (
-    "group_list_id"	INTEGER NOT NULL,
-    "name"	TEXT NOT NULL,
-    PRIMARY KEY("group_list_id" AUTOINCREMENT)
-);
-
-CREATE TABLE "group_list_subjects" (
-    "subject_id"	INTEGER NOT NULL,
-    "group_list_id"	INTEGER NOT NULL,
-    FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
-    FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
-    PRIMARY KEY("subject_id","group_list_id")
 );
 
 CREATE TABLE "groups" (

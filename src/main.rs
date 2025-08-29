@@ -1,4 +1,4 @@
-//use anyhow::anyhow;
+use anyhow::anyhow;
 use anyhow::Result;
 use clap::Parser;
 
@@ -12,12 +12,12 @@ struct Args {
     db: std::path::PathBuf,
 }
 
-//use sqlx::sqlite::SqlitePool;
+use sqlx::sqlite::SqlitePool;
 
 use collomatique::backend::sqlite;
 
 use serde::{Deserialize, Serialize};
-use std::num::NonZeroU32; //, NonZeroUsize};
+use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct GeneralDataDb {
@@ -33,7 +33,7 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Stor
     }
 }
 
-/*async fn generate_general_data(
+async fn generate_general_data(
     db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::GeneralData> {
     let teacher_count_req =
@@ -94,7 +94,7 @@ FROM incompat_group_items NATURAL JOIN weeks
 
     for x in &incompat_group_items_data {
         use collomatique::gen::colloscope::{IncompatibilityGroup, SlotStart, SlotWithDuration};
-        use collomatique::gen::time::{Time, Weekday};
+        use collomatique::time::{Time, Weekday};
 
         let slot = SlotWithDuration {
             start: SlotStart {
@@ -423,7 +423,7 @@ fn add_slots_to_subjects(
 
     for slot in slots_data {
         use collomatique::gen::colloscope::{SlotRef, SlotStart, SlotWithTeacher};
-        use collomatique::gen::time::{Time, Weekday};
+        use collomatique::time::{Time, Weekday};
 
         let subject_index = subject_id_map[&slot.subject_id];
 
@@ -574,7 +574,7 @@ struct StudentInGroupRecord {
 
 #[derive(Clone, Debug)]
 struct GroupRecord {
-    subject_id: Option<i64>,
+    subject_id: i64,
     group_id: i64,
     extendable: i64,
 }
@@ -588,11 +588,7 @@ fn construct_group_info(
     let mut temp_group_infos: BTreeMap<i64, BTreeMap<i64, _>> = BTreeMap::new();
 
     for group_record in groups_data {
-        match temp_group_infos.get_mut(
-            &group_record.subject_id.expect(
-                "Why this is an option is beyond me, but if this fails, you have the reason",
-            ),
-        ) {
+        match temp_group_infos.get_mut(&group_record.subject_id) {
             Some(map) => {
                 map.insert(
                     group_record.group_id,
@@ -604,16 +600,14 @@ fn construct_group_info(
             }
             None => {
                 temp_group_infos.insert(
-                    group_record.subject_id.expect("Why this is an option is beyond me, but if this fails, you have the reason"),
-                    BTreeMap::from([
-                        (
-                            group_record.group_id,
-                            GroupInfo {
-                                students: BTreeSet::new(),
-                                is_extendable: group_record.extendable == 1,
-                            }
-                        )
-                    ])
+                    group_record.subject_id,
+                    BTreeMap::from([(
+                        group_record.group_id,
+                        GroupInfo {
+                            students: BTreeSet::new(),
+                            is_extendable: group_record.extendable == 1,
+                        },
+                    )]),
                 );
             }
         }
@@ -684,8 +678,8 @@ FROM time_slots NATURAL JOIN weeks"
         StudentInGroupRecord,
         "
 SELECT subject_id, group_id, student_id
-FROM group_list_subjects
-JOIN group_lists ON group_list_subjects.group_list_id = group_lists.group_list_id
+FROM subjects
+JOIN group_lists ON subjects.group_list_id = group_lists.group_list_id
 JOIN group_items ON group_lists.group_list_id = group_items.group_list_id;
         "
     )
@@ -694,10 +688,9 @@ JOIN group_items ON group_lists.group_list_id = group_items.group_list_id;
         GroupRecord,
         "
 SELECT subject_id, group_list_items.group_id, extendable
-FROM group_list_subjects
-JOIN group_list_items ON group_list_subjects.group_list_id = group_list_items.group_list_id
-JOIN groups ON group_list_items.group_id = groups.group_id
-JOIN group_lists On group_lists.group_list_id = group_list_subjects.group_list_id;
+FROM subjects
+JOIN group_list_items ON subjects.group_list_id = group_list_items.group_list_id
+JOIN groups ON group_list_items.group_id = groups.group_id;
         "
     )
     .fetch_all(db_conn);
@@ -865,7 +858,7 @@ async fn generate_grouping_incompats(
     }
 
     Ok(set)
-}*/
+}
 
 /*async fn get_colloscope_id(db_conn: &SqlitePool, colloscope: Option<String>) -> Result<i64> {
     match colloscope {
@@ -886,7 +879,7 @@ async fn generate_grouping_incompats(
     }
 }*/
 
-/*async fn generate_colloscope_data(
+async fn generate_colloscope_data(
     db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::ValidatedData> {
     use collomatique::gen::colloscope::*;
@@ -907,7 +900,7 @@ async fn generate_grouping_incompats(
         slot_groupings.list,
         grouping_incompats.await?,
     )?)
-}*/
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -916,10 +909,7 @@ async fn main() -> Result<()> {
     println!("Opening database...");
     let storage = connect_db(args.create, args.db.as_path()).await?;
 
-    use collomatique::backend::Storage;
-    println!("{:?}", storage.week_patterns_get_all().await?);
-
-    /*let pool = storage.get_pool();
+    let pool = storage.get_pool();
 
     let data = generate_colloscope_data(pool).await?;
 
@@ -944,7 +934,7 @@ async fn main() -> Result<()> {
         }))
         .build();
 
-    println!("{}", problem);*/
+    println!("{}", problem);
 
     /*let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
 
@@ -978,7 +968,7 @@ async fn main() -> Result<()> {
         );
     }*/
 
-    /*let general_initializer = collomatique::ilp::initializers::Random::with_p(
+    let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
         0.01,
     )
@@ -1009,7 +999,7 @@ async fn main() -> Result<()> {
             cost,
             ilp_translator.read_solution(sol.as_ref())
         );
-    }*/
+    }
 
     Ok(())
 }
