@@ -94,6 +94,7 @@ pub trait Manager: private::ManagerInternal {
     fn apply(
         &mut self,
         op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
+        name: String,
     ) -> Result<(), <<Self as private::ManagerInternal>::Data as InMemoryData>::Error> {
         let annotated_op = self.get_in_memory_data_mut().annotate(op);
 
@@ -108,7 +109,8 @@ pub trait Manager: private::ManagerInternal {
         self.get_in_memory_data_mut().apply(&rev_op.forward)?;
 
         let aggregated_op = crate::history::AggregatedOp::new(vec![rev_op]);
-        self.get_modification_history_mut().store(aggregated_op);
+        self.get_modification_history_mut()
+            .store(aggregated_op, name);
 
         Ok(())
     }

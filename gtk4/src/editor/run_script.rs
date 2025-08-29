@@ -257,7 +257,10 @@ impl Component for Dialog {
                     .take()
                     .expect("there should be some current state to accept");
                 sender
-                    .output(DialogOutput::NewData(app_session.commit()))
+                    .output(DialogOutput::NewData(app_session.commit(format!(
+                        "Exécution de \"{}\"",
+                        self.path.to_string_lossy()
+                    ))))
                     .unwrap();
             }
             DialogInput::ProcessFinished => {

@@ -199,7 +199,7 @@ impl<T: Operation> AggregatedOp<T> {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ModificationHistory<T: Operation> {
     /// Actual history of operations
-    history: VecDeque<AggregatedOp<T>>,
+    history: VecDeque<(AggregatedOp<T>, String)>,
 
     /// Points to the place of the next operation to store in history
     history_pointer: usize,
@@ -287,13 +287,31 @@ impl<T: Operation> ModificationHistory<T> {
     /// if some operation was cancelled and remained in history
     /// to be able to apply them, they will be discarded and this branch
     /// of history is lost.
-    pub fn store(&mut self, aggregated_op: AggregatedOp<T>) {
+    pub fn store(&mut self, aggregated_op: AggregatedOp<T>, name: String) {
         self.history.truncate(self.history_pointer);
 
         self.history_pointer += 1;
-        self.history.push_back(aggregated_op);
+        self.history.push_back((aggregated_op, name));
 
         self.truncate_history_as_needed();
+    }
+
+    /// Returns the name of the last operation if it exists
+    pub fn get_undo_name(&self) -> Option<&str> {
+        if self.history_pointer == 0 {
+            return None;
+        }
+
+        Some(&self.history[self.history_pointer - 1].1)
+    }
+
+    /// Returns the name of the next operation if it exists
+    pub fn get_redo_name(&self) -> Option<&str> {
+        if self.history_pointer == self.history.len() {
+            return None;
+        }
+
+        Some(&self.history[self.history_pointer].1)
     }
 
     /// Returns `true` if there is at least one operation to undo in history
@@ -327,7 +345,7 @@ impl<T: Operation> ModificationHistory<T> {
 
         let last_ops = self.history[self.history_pointer].clone();
 
-        Some(last_ops.rev())
+        Some(last_ops.0.rev())
     }
 
     /// Redo the last cancelled operation
@@ -348,7 +366,7 @@ impl<T: Operation> ModificationHistory<T> {
         let new_ops = self.history[self.history_pointer].clone();
         self.history_pointer += 1;
 
-        Some(new_ops)
+        Some(new_ops.0)
     }
 
     /// Builds an aggregated operation corresponding to the full history
@@ -369,7 +387,7 @@ impl<T: Operation> ModificationHistory<T> {
             self.history
                 .iter()
                 .take(self.history_pointer)
-                .flat_map(|aggregated_ops| aggregated_ops.inner().iter())
+                .flat_map(|aggregated_ops| aggregated_ops.0.inner().iter())
                 .cloned()
                 .collect(),
         )
