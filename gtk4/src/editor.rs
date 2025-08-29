@@ -84,9 +84,9 @@ enum ToastInfo {
 #[repr(usize)]
 enum PanelNumbers {
     GeneralPlanning = 0,
-    WeekPatterns = 1,
-    Subjects = 2,
-    Teachers = 3,
+    Subjects = 1,
+    Teachers = 2,
+    WeekPatterns = 3,
     Students = 4,
     Assignments = 5,
 }
@@ -95,9 +95,9 @@ impl PanelNumbers {
     fn iter() -> impl Iterator<Item = PanelNumbers> {
         [
             PanelNumbers::GeneralPlanning,
-            PanelNumbers::WeekPatterns,
             PanelNumbers::Subjects,
             PanelNumbers::Teachers,
+            PanelNumbers::WeekPatterns,
             PanelNumbers::Students,
             PanelNumbers::Assignments,
         ]
