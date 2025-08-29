@@ -309,7 +309,7 @@ pub struct Student {
 #[pymethods]
 impl Student {
     #[new]
-    fn new(surname: String, firstname: String) -> Self {
+    fn new(firstname: String, surname: String) -> Self {
         Student {
             surname,
             firstname,

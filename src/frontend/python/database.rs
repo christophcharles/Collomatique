@@ -6,11 +6,18 @@ use super::*;
 mod classes;
 use classes::*;
 
+mod utils;
+
 #[pymodule]
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    use utils::*;
+
     m.add_class::<WeekPattern>()?;
     m.add_class::<Teacher>()?;
     m.add_class::<Student>()?;
+
+    m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
+
     Ok(())
 }
 
