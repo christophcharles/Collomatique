@@ -96,6 +96,15 @@ pub struct GroupsDesc {
     not_assigned: BTreeSet<usize>,
 }
 
+impl GroupsDesc {
+    fn students_iterator(&self) -> impl Iterator<Item = &usize> {
+        self.assigned_to_group
+            .iter()
+            .flat_map(|group| group.students.iter())
+            .chain(self.not_assigned.iter())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_interrogation: RangeInclusive<NonZeroUsize>,
@@ -392,6 +401,11 @@ pub enum Variable {
         student: usize,
         group: usize,
     },
+    ExactPeriodicity {
+        subject: usize,
+        student: usize,
+        week_modulo: u32,
+    },
 }
 
 impl std::fmt::Display for Variable {
@@ -419,6 +433,11 @@ impl std::fmt::Display for Variable {
                 student,
                 group,
             } => write!(f, "G_{}_{}_{}", *subject, *student, *group),
+            Variable::ExactPeriodicity {
+                subject,
+                student,
+                week_modulo,
+            } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
         }
     }
 }
@@ -551,11 +570,38 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
+    fn build_exact_periodicity_variables(&self) -> Vec<Variable> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .filter_map(|(i, subject)| {
+                if !subject.period_is_strict {
+                    return None;
+                }
+
+                let student_iterator = subject.groups.students_iterator();
+
+                Some(student_iterator.flat_map(move |j| {
+                    (0..subject.period.get())
+                        .into_iter()
+                        .map(move |k| Variable::ExactPeriodicity {
+                            subject: i,
+                            student: *j,
+                            week_modulo: k,
+                        })
+                }))
+            })
+            .flatten()
+            .collect()
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_fixed_group_variables())
             .add_variables(self.build_dynamic_group_variables())
             .add_variables(self.build_in_group_variables())
+            .add_variables(self.build_exact_periodicity_variables())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
