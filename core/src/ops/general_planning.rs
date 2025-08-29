@@ -197,9 +197,292 @@ impl GeneralPlanningUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<PreCleaningOp<GeneralPlanningUpdateWarning>> {
-        todo!()
+        match self {
+            GeneralPlanningUpdateOp::DeleteFirstWeek => None,
+            GeneralPlanningUpdateOp::UpdateFirstWeek(_) => None,
+            GeneralPlanningUpdateOp::AddNewPeriod(_) => None,
+            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_, _) => None,
+            GeneralPlanningUpdateOp::CutPeriod(_, _) => None,
+            GeneralPlanningUpdateOp::UpdateWeekStatus(_, _, _) => None,
+            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
+                                *subject_id,
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                                *subject_id,
+                                *period_id,
+                                true,
+                            ))],
+                        });
+                    }
+                }
+
+                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
+                                *rule_id, *period_id,
+                            ),
+                            ops: vec![UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
+                                *rule_id, *period_id, true,
+                            ))],
+                        });
+                    }
+                }
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        let mut new_student = student.clone();
+                        new_student.excluded_periods.remove(period_id);
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(
+                                *student_id,
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
+                                *student_id,
+                                new_student,
+                            ))],
+                        });
+                    }
+                }
+
+                let Some(period_assignments) =
+                    data.get_data().get_assignments().period_map.get(period_id)
+                else {
+                    return None;
+                };
+
+                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    if let Some(student_id) = assigned_students.first() {
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                *period_id,
+                                *student_id,
+                                *subject_id,
+                                false,
+                            ))],
+                        });
+                    }
+                }
+
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, group_list_id) in subject_map {
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                                *group_list_id,
+                                *subject_id,
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::GroupLists(
+                                GroupListsUpdateOp::AssignGroupListToSubject(
+                                    *period_id,
+                                    *subject_id,
+                                    None,
+                                ),
+                            )],
+                        });
+                    }
+                }
+
+                None
+            }
+            GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
+                let Some(pos) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                if pos == 0 {
+                    return None;
+                }
+                let previous_id = data.get_data().get_periods().ordered_period_list[pos - 1].0;
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id)
+                        != subject.excluded_periods.contains(&previous_id)
+                    {
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
+                                *subject_id,
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                                *subject_id,
+                                *period_id,
+                                !subject.excluded_periods.contains(&previous_id),
+                            ))],
+                        });
+                    }
+                }
+
+                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                    if rule.excluded_periods.contains(period_id)
+                        != rule.excluded_periods.contains(&previous_id)
+                    {
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
+                                *rule_id, *period_id,
+                            ),
+                            ops: vec![UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
+                                *rule_id,
+                                *period_id,
+                                !rule.excluded_periods.contains(&previous_id),
+                            ))],
+                        });
+                    }
+                }
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id)
+                        != student.excluded_periods.contains(&previous_id)
+                    {
+                        let mut new_student = student.clone();
+                        if student.excluded_periods.contains(&previous_id) {
+                            new_student.excluded_periods.insert(*period_id);
+                        } else {
+                            new_student.excluded_periods.remove(period_id);
+                        }
+                        return Some(PreCleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(
+                                *student_id,
+                                *period_id,
+                            ),
+                            ops: vec![UpdateOp::Students(StudentsUpdateOp::UpdateStudent(
+                                *student_id,
+                                new_student,
+                            ))],
+                        });
+                    }
+                }
+
+                let Some(period_assignments) = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .cloned()
+                else {
+                    return None;
+                };
+
+                let Some(previous_assignments) = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(&previous_id)
+                else {
+                    return None;
+                };
+
+                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    match previous_assignments.subject_map.get(subject_id) {
+                        None => {
+                            for student_id in assigned_students {
+                                return Some(PreCleaningOp {
+                                    warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
+                                    ops: vec![
+                                        UpdateOp::Assignments(
+                                            AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, false)
+                                        )
+                                    ],
+                                });
+                            }
+                        }
+                        Some(previous_students) => {
+                            for (student_id, _student) in
+                                &data.get_data().get_students().student_map
+                            {
+                                if assigned_students.contains(student_id)
+                                    != previous_students.contains(student_id)
+                                {
+                                    return Some(PreCleaningOp {
+                                        warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
+                                        ops: vec![
+                                            UpdateOp::Assignments(
+                                                AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, previous_students.contains(student_id))
+                                            )
+                                        ],
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    let previous_map = data
+                        .get_data()
+                        .get_group_lists()
+                        .subjects_associations
+                        .get(&previous_id)
+                        .expect("There should be an association map for previous period");
+
+                    for (subject_id, group_list_id) in subject_map {
+                        match previous_map.get(subject_id) {
+                            Some(group_list_id_2) => {
+                                if *group_list_id == *group_list_id_2 {
+                                    continue;
+                                }
+                                return Some(PreCleaningOp {
+                                    warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                                        *group_list_id,
+                                        *subject_id,
+                                        *period_id,
+                                    ),
+                                    ops: vec![UpdateOp::GroupLists(
+                                        GroupListsUpdateOp::AssignGroupListToSubject(
+                                            *period_id,
+                                            *subject_id,
+                                            Some(*group_list_id_2),
+                                        ),
+                                    )],
+                                });
+                            }
+                            None => {
+                                return Some(PreCleaningOp {
+                                    warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                                        *group_list_id,
+                                        *subject_id,
+                                        *period_id,
+                                    ),
+                                    ops: vec![UpdateOp::GroupLists(
+                                        GroupListsUpdateOp::AssignGroupListToSubject(
+                                            *period_id,
+                                            *subject_id,
+                                            None,
+                                        ),
+                                    )],
+                                });
+                            }
+                        }
+                    }
+                }
+
+                None
+            }
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
@@ -208,7 +491,362 @@ impl GeneralPlanningUpdateOp {
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::PeriodId>, GeneralPlanningUpdateError> {
-        todo!()
+        match self {
+            GeneralPlanningUpdateOp::DeleteFirstWeek => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Deleting first week should always work");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
+            }
+            GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(
+                                date.clone(),
+                            )),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Updating first week should always work");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
+            }
+            GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
+                let new_desc = vec![true; *week_count];
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            match data.get_data().get_periods().ordered_period_list.last() {
+                                Some((id, _)) => {
+                                    collomatique_state_colloscopes::PeriodOp::AddAfter(
+                                        *id, new_desc,
+                                    )
+                                }
+                                None => {
+                                    collomatique_state_colloscopes::PeriodOp::AddFront(new_desc)
+                                }
+                            },
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Adding a period should never fail");
+                match result {
+                    Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => Ok(Some(id)),
+                    _ => panic!("Unexpected result! {:?}", result),
+                }
+            }
+            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .ok_or(UpdatePeriodWeekCountError::InvalidPeriodId(*period_id))?;
+                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                desc.resize(*week_count, desc.last().copied().unwrap_or(true));
+
+                let result = match data.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                    ),
+                    self.get_desc(),
+                ) {
+                    Ok(r) => r,
+                    Err(collomatique_state_colloscopes::Error::Period(
+                        collomatique_state_colloscopes::PeriodError::InvalidPeriodId(_),
+                    )) => {
+                        panic!(
+                                "Period Id {:?} should be valid at this point but InvalidPeriodId received", *period_id
+                            )
+                    }
+                    Err(e) => {
+                        panic!("Unexpected error for UpdatePeriodWeekCount! {:?}", e);
+                    }
+                };
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
+            }
+            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
+
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+
+                Ok(None)
+            }
+            GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .ok_or(CutPeriodError::InvalidPeriodId(*period_id))?;
+                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                if *new_week_count > desc.len() {
+                    Err(CutPeriodError::RemainingWeekCountTooBig(
+                        *new_week_count,
+                        desc.len(),
+                    ))?;
+                }
+
+                let new_desc = desc.split_off(*new_week_count);
+
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
+
+                let result = session
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::AddAfter(
+                                *period_id, new_desc,
+                            ),
+                        ),
+                        "Ajouter une période".into(),
+                    )
+                    .expect("At this point, period id should be valid");
+                let new_id = match result {
+                    Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => id,
+                    _ => panic!("Unexpected result! {:?}", result),
+                };
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        let mut new_subject = subject.clone();
+                        new_subject.excluded_periods.insert(new_id.clone());
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Subject(
+                                    collomatique_state_colloscopes::SubjectOp::Update(
+                                        *subject_id,
+                                        new_subject,
+                                    ),
+                                ),
+                                "Dupliquer l'état de la période découpée sur une matière".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        let mut new_rule = rule.clone();
+                        new_rule.excluded_periods.insert(new_id.clone());
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Rule(
+                                    collomatique_state_colloscopes::RuleOp::Update(
+                                        *rule_id, new_rule,
+                                    ),
+                                ),
+                                "Dupliquer l'état de la période découpée sur une règle".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        let mut new_student = student.clone();
+                        new_student.excluded_periods.insert(new_id.clone());
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Student(
+                                    collomatique_state_colloscopes::StudentOp::Update(
+                                        *student_id,
+                                        new_student,
+                                    ),
+                                ),
+                                "Dupliquer l'état de la période découpée sur un élève".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                let period_assignments = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .expect("Period id should be valid at this point")
+                    .clone();
+
+                for (subject_id, assigned_students) in period_assignments.subject_map {
+                    for student_id in assigned_students {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Assignment(
+                                    collomatique_state_colloscopes::AssignmentOp::Assign(
+                                        new_id, student_id, subject_id, true,
+                                    ),
+                                ),
+                                "Dupliquer l'affectation d'un élève sur la période découpée".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, group_list_id) in subject_map {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                        new_id,
+                                        *subject_id,
+                                        Some(*group_list_id),
+                                    ),
+                                ),
+                                "Dupliquer une association de liste de groupes sur la période découpée".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                let result = session
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        ),
+                        "Raccourcir une période".into(),
+                    )
+                    .expect("At this point, period id should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+
+                *data = session.commit(self.get_desc());
+                Ok(Some(new_id))
+            }
+            GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .ok_or(MergeWithPreviousPeriodError::InvalidPeriodId(*period_id))?;
+                if pos == 0 {
+                    Err(MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith)?;
+                }
+                let previous_id = data.get_data().get_periods().ordered_period_list[pos - 1].0;
+
+                let mut prev_desc = data.get_data().get_periods().ordered_period_list[pos - 1]
+                    .1
+                    .clone();
+                let desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                prev_desc.extend(desc);
+
+                let mut session = collomatique_state::AppSession::<_, _>::new(data.clone());
+
+                let result = session
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(
+                                previous_id,
+                                prev_desc,
+                            ),
+                        ),
+                        (
+                            OpCategory::GeneralPlanning,
+                            "Prolongement d'une période".to_string(),
+                        ),
+                    )
+                    .expect("At this point, period id should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+
+                let result =
+                    UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::DeletePeriod(*period_id))
+                        .apply(&mut session)
+                        .expect("All data should be valid at this point");
+
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+
+                *data = session.commit(self.get_desc());
+                Ok(None)
+            }
+            GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
+                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                if *week_num >= desc.len() {
+                    Err(UpdateWeekStatusError::InvalidWeekNumber(
+                        *week_num,
+                        desc.len(),
+                    ))?;
+                }
+
+                desc[*week_num] = *state;
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("At this point, parameters should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
