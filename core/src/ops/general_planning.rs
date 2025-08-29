@@ -198,7 +198,7 @@ impl GeneralPlanningUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<GeneralPlanningUpdateWarning>> {
+    ) -> Option<CleaningOp<GeneralPlanningUpdateWarning>> {
         match self {
             GeneralPlanningUpdateOp::DeleteFirstWeek => None,
             GeneralPlanningUpdateOp::UpdateFirstWeek(_) => None,
@@ -209,7 +209,7 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
                 for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
                                 *subject_id,
                                 *period_id,
@@ -225,7 +225,7 @@ impl GeneralPlanningUpdateOp {
 
                 for (rule_id, rule) in &data.get_data().get_rules().rule_map {
                     if rule.excluded_periods.contains(period_id) {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
                                 *rule_id, *period_id,
                             ),
@@ -240,7 +240,7 @@ impl GeneralPlanningUpdateOp {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.remove(period_id);
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(
                                 *student_id,
                                 *period_id,
@@ -261,7 +261,7 @@ impl GeneralPlanningUpdateOp {
 
                 for (subject_id, assigned_students) in &period_assignments.subject_map {
                     if let Some(student_id) = assigned_students.first() {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(
                                 *period_id,
                             ),
@@ -282,7 +282,7 @@ impl GeneralPlanningUpdateOp {
                     .get(period_id)
                 {
                     for (subject_id, group_list_id) in subject_map {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
                                 *group_list_id,
                                 *subject_id,
@@ -314,9 +314,9 @@ impl GeneralPlanningUpdateOp {
 
                 for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
                     if subject.excluded_periods.contains(period_id)
-                        != subject.excluded_periods.contains(&previous_id)
+                        || subject.excluded_periods.contains(&previous_id)
                     {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
                                 *subject_id,
                                 *period_id,
@@ -324,7 +324,7 @@ impl GeneralPlanningUpdateOp {
                             op: UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
                                 *subject_id,
                                 *period_id,
-                                !subject.excluded_periods.contains(&previous_id),
+                                true,
                             )),
                         });
                     }
@@ -332,16 +332,14 @@ impl GeneralPlanningUpdateOp {
 
                 for (rule_id, rule) in &data.get_data().get_rules().rule_map {
                     if rule.excluded_periods.contains(period_id)
-                        != rule.excluded_periods.contains(&previous_id)
+                        || rule.excluded_periods.contains(&previous_id)
                     {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
                                 *rule_id, *period_id,
                             ),
                             op: UpdateOp::Rules(RulesUpdateOp::UpdatePeriodStatusForRule(
-                                *rule_id,
-                                *period_id,
-                                !rule.excluded_periods.contains(&previous_id),
+                                *rule_id, *period_id, true,
                             )),
                         });
                     }
@@ -349,15 +347,11 @@ impl GeneralPlanningUpdateOp {
 
                 for (student_id, student) in &data.get_data().get_students().student_map {
                     if student.excluded_periods.contains(period_id)
-                        != student.excluded_periods.contains(&previous_id)
+                        || student.excluded_periods.contains(&previous_id)
                     {
                         let mut new_student = student.clone();
-                        if student.excluded_periods.contains(&previous_id) {
-                            new_student.excluded_periods.insert(*period_id);
-                        } else {
-                            new_student.excluded_periods.remove(period_id);
-                        }
-                        return Some(PreCleaningOp {
+                        new_student.excluded_periods.remove(period_id);
+                        return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(
                                 *student_id,
                                 *period_id,
@@ -393,7 +387,7 @@ impl GeneralPlanningUpdateOp {
                     match previous_assignments.subject_map.get(subject_id) {
                         None => {
                             for student_id in assigned_students {
-                                return Some(PreCleaningOp {
+                                return Some(CleaningOp {
                                     warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
                                     op: UpdateOp::Assignments(
                                             AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, false)
@@ -406,12 +400,12 @@ impl GeneralPlanningUpdateOp {
                                 &data.get_data().get_students().student_map
                             {
                                 if assigned_students.contains(student_id)
-                                    != previous_students.contains(student_id)
+                                    || previous_students.contains(student_id)
                                 {
-                                    return Some(PreCleaningOp {
+                                    return Some(CleaningOp {
                                         warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
                                         op: UpdateOp::Assignments(
-                                            AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, previous_students.contains(student_id))
+                                            AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, false)
                                         ),
                                     });
                                 }
@@ -426,51 +420,19 @@ impl GeneralPlanningUpdateOp {
                     .subjects_associations
                     .get(period_id)
                 {
-                    let previous_map = data
-                        .get_data()
-                        .get_group_lists()
-                        .subjects_associations
-                        .get(&previous_id)
-                        .expect("There should be an association map for previous period");
-
                     for (subject_id, group_list_id) in subject_map {
-                        match previous_map.get(subject_id) {
-                            Some(group_list_id_2) => {
-                                if *group_list_id == *group_list_id_2 {
-                                    continue;
-                                }
-                                return Some(PreCleaningOp {
-                                    warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
-                                        *group_list_id,
-                                        *subject_id,
-                                        *period_id,
-                                    ),
-                                    op: UpdateOp::GroupLists(
-                                        GroupListsUpdateOp::AssignGroupListToSubject(
-                                            *period_id,
-                                            *subject_id,
-                                            Some(*group_list_id_2),
-                                        ),
-                                    ),
-                                });
-                            }
-                            None => {
-                                return Some(PreCleaningOp {
-                                    warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
-                                        *group_list_id,
-                                        *subject_id,
-                                        *period_id,
-                                    ),
-                                    op: UpdateOp::GroupLists(
-                                        GroupListsUpdateOp::AssignGroupListToSubject(
-                                            *period_id,
-                                            *subject_id,
-                                            None,
-                                        ),
-                                    ),
-                                });
-                            }
-                        }
+                        return Some(CleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                                *group_list_id,
+                                *subject_id,
+                                *period_id,
+                            ),
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                                *period_id,
+                                *subject_id,
+                                None,
+                            )),
+                        });
                     }
                 }
 
@@ -776,7 +738,7 @@ impl GeneralPlanningUpdateOp {
 
                 prev_desc.extend(desc);
 
-                let mut session = collomatique_state::AppSession::<_, _>::new(data.clone());
+                let mut session = AppSession::new(data.clone());
 
                 let result = session
                     .apply(
@@ -796,10 +758,17 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                let result =
-                    UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::DeletePeriod(*period_id))
-                        .apply(&mut session)
-                        .expect("All data should be valid at this point");
+                let result = session
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
+                        ),
+                        (
+                            OpCategory::GeneralPlanning,
+                            "Suppression effective de la période".to_string(),
+                        ),
+                    )
+                    .expect("All data should be valid at this point");
 
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);

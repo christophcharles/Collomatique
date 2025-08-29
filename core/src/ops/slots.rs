@@ -126,14 +126,14 @@ impl SlotsUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<SlotsUpdateWarning>> {
+    ) -> Option<CleaningOp<SlotsUpdateWarning>> {
         match self {
             SlotsUpdateOp::AddNewSlot(_desc, _slot) => None,
             SlotsUpdateOp::UpdateSlot(_id, _slot) => None,
             SlotsUpdateOp::DeleteSlot(slot_id) => {
                 for (rule_id, rule) in &data.get_data().get_rules().rule_map {
                     if rule.desc.references_slot(*slot_id) {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SlotsUpdateWarning::LooseRuleReferencingSlot(
                                 *slot_id, *rule_id,
                             ),

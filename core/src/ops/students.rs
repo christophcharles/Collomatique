@@ -129,7 +129,7 @@ impl StudentsUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<StudentsUpdateWarning>> {
+    ) -> Option<CleaningOp<StudentsUpdateWarning>> {
         match self {
             Self::AddNewStudent(_student) => None,
             Self::DeleteStudent(student_id) => {
@@ -149,7 +149,7 @@ impl StudentsUpdateOp {
                                 }
                             ).collect(),
                         };
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: StudentsUpdateWarning::LoosePrefilledGroup(
                                 *student_id,
                                 *group_list_id,
@@ -163,7 +163,7 @@ impl StudentsUpdateOp {
                     if group_list.params.excluded_students.contains(student_id) {
                         let mut new_params = group_list.params.clone();
                         new_params.excluded_students.remove(student_id);
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: StudentsUpdateWarning::LooseExclusionFromGroupList(
                                 *student_id,
                                 *group_list_id,
@@ -184,7 +184,7 @@ impl StudentsUpdateOp {
 
                     for (subject_id, assigned_students) in &period_assignments.subject_map {
                         if assigned_students.contains(student_id) {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
                                     *student_id,
                                     *period_id,
@@ -219,7 +219,7 @@ impl StudentsUpdateOp {
 
                     for (subject_id, assigned_students) in &period_assignments.subject_map {
                         if assigned_students.contains(student_id) {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
                                     *student_id,
                                     *period_id,

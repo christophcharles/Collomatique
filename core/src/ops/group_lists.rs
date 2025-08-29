@@ -191,7 +191,7 @@ impl GroupListsUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<GroupListsUpdateWarning>> {
+    ) -> Option<CleaningOp<GroupListsUpdateWarning>> {
         match self {
             GroupListsUpdateOp::AddNewGroupList(_params) => None,
             GroupListsUpdateOp::UpdateGroupList(group_list_id, params) => {
@@ -213,7 +213,7 @@ impl GroupListsUpdateOp {
                     }
                 }
                 if !students_to_exclude.is_empty() {
-                    return Some(PreCleaningOp {
+                    return Some(CleaningOp {
                         warning: GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList(
                             *group_list_id,
                             students_to_exclude,
@@ -238,7 +238,7 @@ impl GroupListsUpdateOp {
                 };
 
                 if !old_group_list.prefilled_groups.is_empty() {
-                    Some(PreCleaningOp {
+                    Some(CleaningOp {
                         warning: GroupListsUpdateWarning::LooseWholePrefilledGroupList(
                             *group_list_id,
                         ),
@@ -254,7 +254,7 @@ impl GroupListsUpdateOp {
                 {
                     for (subject_id, associated_id) in subject_map {
                         if *group_list_id == *associated_id {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: GroupListsUpdateWarning::LooseSubjectAssociation(
                                     *group_list_id,
                                     *subject_id,

@@ -11,9 +11,10 @@
 //! to a simple command in a cli or a click of a button in a gui.
 //!
 
-use collomatique_state::traits::Manager;
+use collomatique_state::{traits::Manager, AppSession};
 use collomatique_state_colloscopes::Data;
 
+use std::collections::BTreeSet;
 use thiserror::Error;
 
 pub mod general_planning;
@@ -186,85 +187,74 @@ impl UpdateWarning {
             UpdateWarning::Rules(w) => w.build_desc_from_data(data),
         }
     }
-
-    fn from_iter<T: Into<UpdateWarning>>(iter: impl IntoIterator<Item = T>) -> Vec<UpdateWarning> {
-        iter.into_iter().map(|x| x.into()).collect()
-    }
 }
 
 #[derive(Clone, Debug)]
-struct PreCleaningOp<T: Clone + std::fmt::Debug> {
+pub(crate) struct CleaningOp<T: Clone + std::fmt::Debug> {
     warning: T,
     op: UpdateOp,
 }
 
-impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> PreCleaningOp<T> {
-    fn into_general_warning(self) -> PreCleaningOp<UpdateWarning> {
-        PreCleaningOp {
+impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> CleaningOp<T> {
+    fn into_general_warning(self) -> CleaningOp<UpdateWarning> {
+        CleaningOp {
             warning: self.warning.into(),
             op: self.op,
         }
     }
 }
 
-impl PreCleaningOp<UpdateWarning> {
+impl CleaningOp<UpdateWarning> {
     fn downcast<T: Clone + std::fmt::Debug + Into<UpdateWarning>>(
-        x: Option<PreCleaningOp<T>>,
+        x: Option<CleaningOp<T>>,
     ) -> Option<Self> {
         x.map(|x| x.into_general_warning())
-    }
-
-    fn build_desc_from_data<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
-        &self,
-        data: &T,
-    ) -> Option<CleaningOpDesc> {
-        Some(CleaningOpDesc {
-            warning_desc: self.warning.build_desc_from_data(data)?,
-            warning: self.warning.clone(),
-            op: self.op.clone(),
-        })
     }
 }
 
 #[derive(Clone, Debug)]
-struct CleaningOpDesc {
-    warning_desc: String,
-    warning: UpdateWarning,
-    op: UpdateOp,
+pub struct RecApplyResult {
+    pub warnings: BTreeSet<(UpdateWarning, String)>,
+    pub new_id: Option<collomatique_state_colloscopes::NewId>,
+}
+
+pub struct DryResult<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>> {
+    pub rec_apply_result: RecApplyResult,
+    pub session: collomatique_state::AppSession<T, (OpCategory, String)>,
 }
 
 impl UpdateOp {
     fn get_next_cleaning_op<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<UpdateWarning>> {
+    ) -> Option<CleaningOp<UpdateWarning>> {
         match self {
             UpdateOp::GeneralPlanning(period_op) => {
-                PreCleaningOp::downcast(period_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(period_op.get_next_cleaning_op(data))
             }
             UpdateOp::Subjects(subject_op) => {
-                PreCleaningOp::downcast(subject_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(subject_op.get_next_cleaning_op(data))
             }
             UpdateOp::Teachers(teacher_op) => {
-                PreCleaningOp::downcast(teacher_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(teacher_op.get_next_cleaning_op(data))
             }
             UpdateOp::Students(student_op) => {
-                PreCleaningOp::downcast(student_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(student_op.get_next_cleaning_op(data))
             }
             UpdateOp::Assignments(assignment_op) => {
-                PreCleaningOp::downcast(assignment_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(assignment_op.get_next_cleaning_op(data))
             }
             UpdateOp::WeekPatterns(week_pattern_op) => {
-                PreCleaningOp::downcast(week_pattern_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(week_pattern_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Slots(slot_op) => PreCleaningOp::downcast(slot_op.get_next_cleaning_op(data)),
+            UpdateOp::Slots(slot_op) => CleaningOp::downcast(slot_op.get_next_cleaning_op(data)),
             UpdateOp::Incompatibilities(incompat_op) => {
-                PreCleaningOp::downcast(incompat_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(incompat_op.get_next_cleaning_op(data))
             }
             UpdateOp::GroupLists(group_list_op) => {
-                PreCleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
+                CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Rules(rule_op) => PreCleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
+            UpdateOp::Rules(rule_op) => CleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
         }
     }
 
@@ -315,6 +305,28 @@ impl UpdateOp {
             }
         }
     }
+
+    fn rec_apply_no_session<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &mut T,
+    ) -> Result<RecApplyResult, UpdateError> {
+        let mut warnings = BTreeSet::new();
+
+        while let Some(cleaning_op) = self.get_next_cleaning_op(data) {
+            let warning_desc = cleaning_op
+                .warning
+                .build_desc_from_data(data)
+                .expect("Warning should have a desc when applied on same state");
+            warnings.insert((cleaning_op.warning, warning_desc));
+
+            let result = cleaning_op.op.rec_apply_no_session(data)?;
+            warnings.extend(result.warnings);
+        }
+
+        let new_id = self.apply_no_cleaning(data)?;
+
+        Ok(RecApplyResult { warnings, new_id })
+    }
 }
 
 impl UpdateOp {
@@ -333,37 +345,32 @@ impl UpdateOp {
         }
     }
 
+    pub fn dry_apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &T,
+    ) -> Result<DryResult<T>, UpdateError> {
+        let mut session = AppSession::new(data.clone());
+
+        let rec_apply_result = self.rec_apply_no_session(&mut session)?;
+
+        Ok(DryResult {
+            rec_apply_result,
+            session,
+        })
+    }
+
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<UpdateWarning> {
-        match self {
-            UpdateOp::GeneralPlanning(period_op) => {
-                UpdateWarning::from_iter(period_op.get_warnings(data))
-            }
-            UpdateOp::Subjects(subject_op) => {
-                UpdateWarning::from_iter(subject_op.get_warnings(data))
-            }
-            UpdateOp::Teachers(teacher_op) => {
-                UpdateWarning::from_iter(teacher_op.get_warnings(data))
-            }
-            UpdateOp::Students(student_op) => {
-                UpdateWarning::from_iter(student_op.get_warnings(data))
-            }
-            UpdateOp::Assignments(assignment_op) => {
-                UpdateWarning::from_iter(assignment_op.get_warnings(data))
-            }
-            UpdateOp::WeekPatterns(week_pattern_op) => {
-                UpdateWarning::from_iter(week_pattern_op.get_warnings(data))
-            }
-            UpdateOp::Slots(slot_op) => UpdateWarning::from_iter(slot_op.get_warnings(data)),
-            UpdateOp::Incompatibilities(incompat_op) => {
-                UpdateWarning::from_iter(incompat_op.get_warnings(data))
-            }
-            UpdateOp::GroupLists(group_list_op) => {
-                UpdateWarning::from_iter(group_list_op.get_warnings(data))
-            }
-            UpdateOp::Rules(rule_op) => UpdateWarning::from_iter(rule_op.get_warnings(data)),
+        match self.dry_apply(data) {
+            Ok(dry_result) => dry_result
+                .rec_apply_result
+                .warnings
+                .into_iter()
+                .map(|x| x.0)
+                .collect(),
+            Err(_) => vec![],
         }
     }
 
@@ -371,47 +378,10 @@ impl UpdateOp {
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {
-        match self {
-            UpdateOp::GeneralPlanning(period_op) => {
-                let result = period_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Subjects(subject_op) => {
-                let result = subject_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Teachers(teacher_op) => {
-                let result = teacher_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Students(student_op) => {
-                let result = student_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Assignments(assignment_op) => {
-                assignment_op.apply(data)?;
-                Ok(None)
-            }
-            UpdateOp::WeekPatterns(week_pattern_op) => {
-                let result = week_pattern_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Slots(slot_op) => {
-                let result = slot_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Incompatibilities(incompat_op) => {
-                let result = incompat_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::GroupLists(group_list_op) => {
-                let result = group_list_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-            UpdateOp::Rules(rule_op) => {
-                let result = rule_op.apply(data)?;
-                Ok(result.map(|x| x.into()))
-            }
-        }
+        let dry_result = self.dry_apply(data)?;
+
+        *data = dry_result.session.commit(self.get_desc());
+
+        Ok(dry_result.rec_apply_result.new_id)
     }
 }

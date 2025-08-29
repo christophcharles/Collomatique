@@ -64,7 +64,7 @@ impl IncompatibilitiesUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<PreCleaningOp<IncompatibilitiesUpdateWarning>> {
+    ) -> Option<CleaningOp<IncompatibilitiesUpdateWarning>> {
         None
     }
 

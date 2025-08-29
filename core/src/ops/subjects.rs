@@ -209,7 +209,7 @@ impl SubjectsUpdateOp {
     >(
         &self,
         data: &T,
-    ) -> Option<PreCleaningOp<SubjectsUpdateWarning>> {
+    ) -> Option<CleaningOp<SubjectsUpdateWarning>> {
         match self {
             Self::AddNewSubject(_) => None,
             Self::MoveSubjectUp(_) => None,
@@ -232,7 +232,7 @@ impl SubjectsUpdateOp {
                         if teacher.subjects.contains(subject_id) {
                             let mut new_teacher = teacher.clone();
                             new_teacher.subjects.remove(subject_id);
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseInterrogationDataForTeacher(
                                     *teacher_id,
                                     *subject_id,
@@ -249,7 +249,7 @@ impl SubjectsUpdateOp {
                         &data.get_data().get_group_lists().subjects_associations
                     {
                         if let Some(group_list_id) = subject_map.get(subject_id) {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseGroupListAssociation(
                                     *subject_id,
                                     *group_list_id,
@@ -273,7 +273,7 @@ impl SubjectsUpdateOp {
                         .get(subject_id)
                         .expect("Subject should have associated slots at this point");
                     for (slot_id, _slot) in &subject_slots.ordered_slots {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
                             op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
                         });
@@ -301,7 +301,7 @@ impl SubjectsUpdateOp {
                             .expect("subject_id should be available in subject map at this point");
 
                         for student_id in assigned_students {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
                                     *period_id,
                                     *subject_id,
@@ -323,7 +323,7 @@ impl SubjectsUpdateOp {
                         .get(period_id)
                     {
                         if let Some(group_list_id) = subject_map.get(subject_id) {
-                            return Some(PreCleaningOp {
+                            return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseGroupListAssociation(
                                     *subject_id,
                                     *group_list_id,
@@ -348,7 +348,7 @@ impl SubjectsUpdateOp {
                     if teacher.subjects.contains(subject_id) {
                         let mut new_teacher = teacher.clone();
                         new_teacher.subjects.remove(subject_id);
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationDataForTeacher(
                                 *teacher_id,
                                 *subject_id,
@@ -365,7 +365,7 @@ impl SubjectsUpdateOp {
                     &data.get_data().get_group_lists().subjects_associations
                 {
                     if let Some(group_list_id) = subject_map.get(subject_id) {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseGroupListAssociation(
                                 *subject_id,
                                 *group_list_id,
@@ -382,7 +382,7 @@ impl SubjectsUpdateOp {
 
                 for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
                     if incompat.subject_id == *subject_id {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseScheduleIncompat(
                                 *subject_id,
                                 *incompat_id,
@@ -397,7 +397,7 @@ impl SubjectsUpdateOp {
                 if let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
                 {
                     for (slot_id, _slot) in &subject_slots.ordered_slots {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
                             op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
                         });
@@ -420,7 +420,7 @@ impl SubjectsUpdateOp {
                         .expect("Assignment data is inconsistent and does not have a required subject entry");
 
                     for student_id in assigned_students {
-                        return Some(PreCleaningOp {
+                        return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
                                 *period_id,
                                 *subject_id,
