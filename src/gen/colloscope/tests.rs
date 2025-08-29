@@ -41,7 +41,7 @@ fn trivial_validated_data() {
 fn simple_validated_data() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -185,7 +185,7 @@ fn simple_validated_data() {
 fn invalid_students_per_interrogation() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -232,7 +232,7 @@ fn invalid_students_per_interrogation() {
 fn subject_slot_overlaps_next_day() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -310,7 +310,7 @@ fn incompatibility_slot_overlaps_next_day() {
 fn invalid_teacher_number() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -392,7 +392,7 @@ fn invalid_incompatibility_number() {
 fn slot_ref_has_invalid_subject() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -473,7 +473,7 @@ fn slot_ref_has_invalid_subject() {
 fn slot_ref_has_invalid_slot() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -554,7 +554,7 @@ fn slot_ref_has_invalid_slot() {
 fn grouping_incompact_invalid_ref() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -664,7 +664,7 @@ fn invalid_interrogations_per_week() {
 fn duplicated_groups() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -767,7 +767,7 @@ fn duplicated_groups() {
 fn duplicated_student() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -879,7 +879,7 @@ fn duplicated_student() {
 fn duplicated_student_not_assigned() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -989,7 +989,7 @@ fn duplicated_student_not_assigned() {
 fn invalid_student_in_group() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1088,7 +1088,7 @@ fn invalid_student_in_group() {
 fn invalid_student_not_assigned() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1181,7 +1181,7 @@ fn invalid_student_not_assigned() {
 fn empty_group() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1297,7 +1297,7 @@ fn empty_group() {
 fn extensible_empty_group() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1409,7 +1409,7 @@ fn extensible_empty_group() {
 fn group_too_large() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1521,7 +1521,7 @@ fn group_too_large() {
 fn non_extensible_too_small_group() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1637,7 +1637,7 @@ fn non_extensible_too_small_group() {
 fn too_few_groups() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1748,7 +1748,7 @@ fn too_few_groups() {
 fn too_many_groups() {
     let general = GeneralData {
         teacher_count: 1,
-        week_count: NonZeroU32::new(1).unwrap(),
+        week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
@@ -1864,6 +1864,89 @@ fn too_many_groups() {
             0,
             NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap()
         ))
+    );
+}
+
+#[test]
+fn no_full_period() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = SlotGroupingList::new();
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        )
+        .err(),
+        Some(Error::SubjectWithPeriodicityTooBig(2, 1))
     );
 }
 
