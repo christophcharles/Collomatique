@@ -10,7 +10,7 @@
 //! be implemented. Similarly if you implement [SimpleProblemConstraints], [crate::ProblemConstraints]
 //! will automatically be implemented.
 
-use crate::{BaseProblem, ExtraVariable};
+use crate::{tools::AggregatedVariableConstraintDesc, BaseProblem, BaseVariable, ExtraVariable};
 use collomatique_ilp::{
     ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
 };
@@ -187,5 +187,83 @@ pub trait SimpleProblemConstraints<T: BaseProblem>: Send + Sync {
     ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
     {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
+    }
+}
+
+impl<T: SimpleBaseProblem> crate::BaseProblem for T {
+    type MainVariable = <Self as SimpleBaseProblem>::MainVariable;
+    type StructureVariable = <Self as SimpleBaseProblem>::StructureVariable;
+    type StructureConstraintDesc = AggregatedVariableConstraintDesc<
+        crate::generics::BaseVariable<Self::MainVariable, Self::StructureVariable>,
+    >;
+    type PartialSolution = <Self as SimpleBaseProblem>::PartialSolution;
+
+    fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable> {
+        <Self as SimpleBaseProblem>::main_variables(self)
+    }
+    fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable> {
+        let mut output = BTreeMap::new();
+        for aggregated_var in self.aggregated_variables() {
+            let (name, desc) = aggregated_var.get_variable_def();
+            let BaseVariable::Structure(v) = name else {
+                panic!(
+                    "An aggregated variable has a main variable name: {:?}",
+                    name
+                );
+            };
+
+            if output.insert(v.clone(), desc).is_some() {
+                panic!("Duplicated name for aggregated variable: {:?}", v);
+            }
+        }
+        output
+    }
+    fn structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )> {
+        let mut constraints = vec![];
+
+        for aggregated_var in self.aggregated_variables() {
+            constraints.extend(aggregated_var.get_structure_constraints());
+        }
+
+        constraints
+    }
+    fn partial_solution_to_configuration(
+        &self,
+        sol: &Self::PartialSolution,
+    ) -> Option<ConfigData<Self::MainVariable>> {
+        <Self as SimpleBaseProblem>::partial_solution_to_configuration(self, sol)
+    }
+    fn configuration_to_partial_solution(
+        &self,
+        config: &ConfigData<Self::MainVariable>,
+    ) -> Self::PartialSolution {
+        <Self as SimpleBaseProblem>::configuration_to_partial_solution(self, config)
+    }
+    fn reconstruct_structure_variables(
+        &self,
+        config: &ConfigData<Self::MainVariable>,
+    ) -> ConfigData<Self::StructureVariable> {
+        let mut temp_config = config.transmute(|x| BaseVariable::Main(x.clone()));
+
+        for aggregated_var in self.aggregated_variables() {
+            if let Some(value) = aggregated_var.reconstruct_structure_variable(&temp_config) {
+                temp_config = temp_config.set(aggregated_var.get_variable_def().0, value);
+            }
+        }
+
+        temp_config
+            .retain(|name, _val| match name {
+                BaseVariable::Main(_) => false,
+                BaseVariable::Structure(_) => true,
+            })
+            .into_transmuted(|x| match x {
+                BaseVariable::Structure(s) => s,
+                _ => unreachable!(),
+            })
     }
 }
