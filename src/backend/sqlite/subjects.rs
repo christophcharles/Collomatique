@@ -371,8 +371,27 @@ VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13);
     Ok(Id(subject_id))
 }
 
-pub async fn remove(_pool: &SqlitePool, _index: Id) -> std::result::Result<(), IdError<Error, Id>> {
-    todo!()
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+    let subject_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let count = sqlx::query!("DELETE FROM subjects WHERE subject_id = ?", subject_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .rows_affected();
+
+    if count > 1 {
+        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+            "Multiple subjects with id {:?}",
+            index
+        ))));
+    } else if count == 0 {
+        return Err(IdError::InvalidId(index));
+    }
+
+    Ok(())
 }
 
 pub async fn update(
