@@ -121,7 +121,7 @@ fn icon_button<'a>(
     label: &'a str,
     message: Option<GuiMessage>,
 ) -> Element<'a, GuiMessage> {
-    let btn = button(container(tools::icon(ico)).center_x(20))
+    let btn = button(container(tools::icon(ico)).center_x(25).center_y(25))
         .style(style)
         .padding(2);
     let btn = match message {
@@ -135,8 +135,8 @@ fn icon_button<'a>(
 }
 
 pub fn view(state: &State) -> Element<GuiMessage> {
-    column![
-        row![
+    row![
+        column![
             icon_button(
                 tools::Icon::New,
                 button::primary,
@@ -149,17 +149,17 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 "Ouvrir un colloscope existant",
                 Some(Message::OpenClicked.into())
             ),
-            Space::with_width(2),
+            Space::with_height(2),
             icon_button(
                 tools::Icon::SaveAs,
                 button::primary,
                 "Enregistrer sous",
                 None
             ),
-            Space::with_width(20),
+            Space::with_height(20),
             icon_button(tools::Icon::Undo, button::primary, "Annuler", None),
             icon_button(tools::Icon::Redo, button::primary, "Rétablir", None),
-            Space::with_width(Length::Fill),
+            Space::with_height(Length::Fill),
             icon_button(
                 tools::Icon::Close,
                 button::danger,
@@ -169,60 +169,56 @@ pub fn view(state: &State) -> Element<GuiMessage> {
         ]
         .spacing(2)
         .padding(0),
-        row![
-            container(
-                column![
-                    button("Groupements")
-                        .width(Length::Fill)
-                        .style(if state.panel == Panel::SubjectGroups {
-                            button::primary
-                        } else {
-                            button::text
-                        })
-                        .on_press(Message::PanelChanged(Panel::SubjectGroups).into()),
-                    button("Matières")
-                        .width(Length::Fill)
-                        .style(if state.panel == Panel::Subjects {
-                            button::primary
-                        } else {
-                            button::text
-                        })
-                        .on_press(Message::PanelChanged(Panel::Subjects).into()),
-                    button("Enseignants")
-                        .width(Length::Fill)
-                        .style(if state.panel == Panel::Teachers {
-                            button::primary
-                        } else {
-                            button::text
-                        })
-                        .on_press(Message::PanelChanged(Panel::Teachers).into()),
-                    button("Élèves")
-                        .width(Length::Fill)
-                        .style(if state.panel == Panel::Students {
-                            button::primary
-                        } else {
-                            button::text
-                        })
-                        .on_press(Message::PanelChanged(Panel::Students).into()),
-                ]
-                .width(Length::Fill)
-                .spacing(2)
-            )
-            .padding(5)
-            .height(Length::Fill)
-            .center_x(200)
-            .style(iced::widget::container::bordered_box),
-            center(text(match state.panel {
-                Panel::SubjectGroups => "Panneau groupements",
-                Panel::Subjects => "Panneau matières",
-                Panel::Teachers => "Panneau enseignants",
-                Panel::Students => "Panneau élèves",
-            }))
-            .padding(5)
-            .style(container::bordered_box)
-        ]
-        .spacing(5)
-        .padding(0),
+        container(
+            column![
+                button("Groupements")
+                    .width(Length::Fill)
+                    .style(if state.panel == Panel::SubjectGroups {
+                        button::primary
+                    } else {
+                        button::text
+                    })
+                    .on_press(Message::PanelChanged(Panel::SubjectGroups).into()),
+                button("Matières")
+                    .width(Length::Fill)
+                    .style(if state.panel == Panel::Subjects {
+                        button::primary
+                    } else {
+                        button::text
+                    })
+                    .on_press(Message::PanelChanged(Panel::Subjects).into()),
+                button("Enseignants")
+                    .width(Length::Fill)
+                    .style(if state.panel == Panel::Teachers {
+                        button::primary
+                    } else {
+                        button::text
+                    })
+                    .on_press(Message::PanelChanged(Panel::Teachers).into()),
+                button("Élèves")
+                    .width(Length::Fill)
+                    .style(if state.panel == Panel::Students {
+                        button::primary
+                    } else {
+                        button::text
+                    })
+                    .on_press(Message::PanelChanged(Panel::Students).into()),
+            ]
+            .width(Length::Fill)
+            .spacing(2)
+        )
+        .padding(5)
+        .height(Length::Fill)
+        .center_x(200)
+        .style(iced::widget::container::bordered_box),
+        center(text(match state.panel {
+            Panel::SubjectGroups => "Panneau groupements",
+            Panel::Subjects => "Panneau matières",
+            Panel::Teachers => "Panneau enseignants",
+            Panel::Students => "Panneau élèves",
+        }))
+        .padding(5)
+        .style(container::bordered_box)
     ]
     .spacing(5)
     .padding(5)
