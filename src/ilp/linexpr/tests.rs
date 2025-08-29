@@ -1,5 +1,7 @@
 use super::*;
 
+use std::collections::BTreeMap;
+
 #[test]
 fn expr_display() {
     let expr = 2 * Expr::from("a") - 3 * Expr::from("b") + 4 * Expr::from("c");
@@ -20,20 +22,58 @@ fn expr_display() {
 
 #[test]
 fn expr_add() {
-    let expr1 = -2* Expr::from("a") + 3 *  Expr::from("b") + 2;
-    let expr2 = -4 *  Expr::from("b") + 5 * Expr::from("c") + 3;
+    let expr1 = Expr {
+        coefs: BTreeMap::from([
+            ("a".into(), -2),
+            ("b".into(), 3),
+        ]),
+        constant: 2,
+    };
+    let expr2 = Expr {
+        coefs: BTreeMap::from([
+            ("b".into(), -4),
+            ("c".into(), 5),
+        ]),
+        constant: 3,
+    };
 
-    let expr3 = -2 * Expr::from("a") -  Expr::from("b") + 5 * Expr::from("c") + 5;
+    let expr3 = Expr {
+        coefs: BTreeMap::from([
+            ("a".into(), -2),
+            ("b".into(), -1),
+            ("c".into(), 5),
+        ]),
+        constant: 5,
+    };
 
     assert_eq!(expr1 + expr2, expr3);
 }
 
 #[test]
 fn expr_sub() {
-    let expr1 = -2* Expr::from("a") + 3 *  Expr::from("b") + 2;
-    let expr2 = -4 *  Expr::from("b") + 5 * Expr::from("c") + 3;
+    let expr1 = Expr {
+        coefs: BTreeMap::from([
+            ("a".into(), -2),
+            ("b".into(), 3),
+        ]),
+        constant: 2,
+    };
+    let expr2 = Expr {
+        coefs: BTreeMap::from([
+            ("b".into(), -4),
+            ("c".into(), 5),
+        ]),
+        constant: 3,
+    };
 
-    let expr3 = -2 * Expr::from("a") + 7* Expr::from("b") - 5 * Expr::from("c") - 1;
+    let expr3 = Expr {
+        coefs: BTreeMap::from([
+            ("a".into(), -2),
+            ("b".into(), 7),
+            ("c".into(), -5),
+        ]),
+        constant: -1,
+    };
 
     assert_eq!(expr1 - expr2, expr3);
 }
