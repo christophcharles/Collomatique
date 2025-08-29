@@ -113,7 +113,7 @@ pub enum VariableType {
     Binary,
 }
 
-/// Complete description of a variable possible range of values.
+/// Complete description of the possible range of values for a variable.
 ///
 /// The description is built using a builder pattern by starting with a call to
 /// [Variable::integer], [Variable::binary] or [Variable::continuous].
