@@ -31,6 +31,14 @@ pub enum DecodeError {
     InvalidStartDate,
     #[error("Invalid ID found in file")]
     InvalidId,
+    #[error("Periods were already decoded from a previous block")]
+    PeriodsAlreadyDecoded,
+    #[error("Students were already decoded from a previous block")]
+    StudentsAlreadyDecoded,
+    #[error("Subjects were already decoded from a previous block")]
+    SubjectsAlreadyDecoded,
+    #[error("Teachers were already decoded from a previous block")]
+    TeachersAlreadyDecoded,
 }
 
 impl From<collomatique_state::tools::IdError> for DecodeError {

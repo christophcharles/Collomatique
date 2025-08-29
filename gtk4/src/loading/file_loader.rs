@@ -125,6 +125,10 @@ impl FileLoader {
                 "Type de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
                 version
             ),
+            DecodeError::PeriodsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de périodes)".into(),
+            DecodeError::StudentsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs d'élèves)".into(),
+            DecodeError::SubjectsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de matières)".into(),
+            DecodeError::TeachersAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de colleurs)".into(),
         }
     }
 }

@@ -8,7 +8,9 @@ pub fn decode_entry(
     subject_list: json::subject_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    assert!(pre_data.subjects.ordered_subject_list.is_empty());
+    if !pre_data.subjects.ordered_subject_list.is_empty() {
+        return Err(DecodeError::SubjectsAlreadyDecoded);
+    }
 
     let mut ids = BTreeSet::new();
     for (id, subject) in subject_list.ordered_subject_list {
