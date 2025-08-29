@@ -1659,11 +1659,17 @@ impl<'a> IlpTranslator<'a> {
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_dynamic_group_assignment_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_student_in_group_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_periodicity_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_student_not_in_last_period_variables())
+            .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
+            .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .add_constraints(self.build_one_interrogation_per_period_contraints())
@@ -1684,6 +1690,7 @@ impl<'a> IlpTranslator<'a> {
 
     pub fn problem(&self) -> Problem<Variable> {
         self.problem_builder()
+            .simplify_trivial_constraints()
             .build()
             .expect("Automatically built problem should be valid")
     }
