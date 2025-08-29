@@ -508,11 +508,66 @@ async fn general_command(
 }
 
 async fn week_pattern_command(
-    _command: WeekPatternCommand,
-    _app_state: &mut AppState<sqlite::Store>,
+    command: WeekPatternCommand,
+    app_state: &mut AppState<sqlite::Store>,
     _new_line_needed: bool,
 ) -> Result<()> {
-    return Err(anyhow!("Week pattern commands not yet implemented"));
+    use collomatique::backend::{Week, WeekPattern};
+    use collomatique::frontend::state::{Operation, UpdateError};
+    use std::collections::BTreeSet;
+
+    match command {
+        WeekPatternCommand::New {
+            name,
+            prefill,
+            force,
+        } => {
+            if !force {
+                let week_patterns = app_state
+                    .get_backend_logic()
+                    .week_patterns_get_all()
+                    .await?;
+                for (_, week_pattern) in &week_patterns {
+                    if week_pattern.name == name {
+                        return Err(anyhow!(format!(
+                            "A week pattern with name \"{}\" already exists",
+                            name
+                        )));
+                    }
+                }
+            }
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+
+            let pattern = WeekPattern {
+                name,
+                weeks: match prefill {
+                    Some(prefill) => {
+                        let weeks = (0..general_data.week_count.get()).into_iter();
+                        match prefill {
+                            WeekPatternPrefill::All => weeks.map(|w| Week::new(w)).collect(),
+                            WeekPatternPrefill::Odd => {
+                                weeks.step_by(2).map(|w| Week::new(w)).collect()
+                            }
+                            WeekPatternPrefill::Even => {
+                                weeks.skip(1).step_by(2).map(|w| Week::new(w)).collect()
+                            }
+                        }
+                    }
+                    None => BTreeSet::new(),
+                },
+            };
+
+            if let Err(e) = app_state.apply(Operation::WeekPatternsAdd(pattern)).await {
+                let err = match e {
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+        }
+    }
+
+    return Ok(());
 }
 
 struct ReedCompleter {}
