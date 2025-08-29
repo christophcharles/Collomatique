@@ -9,6 +9,7 @@ use crate::ilp::{Config, FeasableConfig, Problem};
 pub struct Optimizer<'a> {
     problem: &'a Problem,
     init_config: Config,
+    temp_profile: fn(usize) -> f64,
 }
 
 impl<'a> Optimizer<'a> {
@@ -18,11 +19,16 @@ impl<'a> Optimizer<'a> {
         Optimizer {
             problem,
             init_config,
+            temp_profile: Self::default_temp_profile,
         }
     }
 
     pub fn set_init_config(&mut self, init_config: Config) {
         self.init_config = init_config;
+    }
+
+    pub fn set_temp_profile(&mut self, temp_profile: fn(usize) -> f64) {
+        self.temp_profile = temp_profile;
     }
 
     pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>>(
@@ -37,7 +43,12 @@ impl<'a> Optimizer<'a> {
             previous_config: None,
             current_config: self.init_config.clone(),
             k: 0,
+            temp_profile: self.temp_profile,
         }
+    }
+
+    fn default_temp_profile(k: usize) -> f64 {
+        1000000. / (k as f64)
     }
 }
 
@@ -51,6 +62,7 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<
     current_config: Config,
 
     k: usize,
+    temp_profile: fn(usize) -> f64,
 }
 
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
@@ -75,7 +87,7 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
 
         let acceptance = match self.previous_config {
             Some((_, old_cost)) => {
-                let temp = Self::temp_profile(1000, self.k);
+                let temp = (self.temp_profile)(self.k);
                 (-(config_cost - old_cost) / temp).exp()
             }
             None => 1.0,
@@ -94,13 +106,6 @@ impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
 }
 
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> OptimizerIterator<'b, 'a, 'c, R, S> {
-    fn temp_profile(max_iter: usize, k: usize) -> f64 {
-        f64::max(
-            1000.0 * ((max_iter as f64) - (k as f64)) / (max_iter as f64),
-            0.,
-        )
-    }
-
     pub fn best_in(self, max_iter: usize) -> Option<(FeasableConfig<'a>, f64)> {
         self.take(max_iter)
             .min_by(|x, y| x.1.partial_cmp(&y.1).expect("Non NaN"))
