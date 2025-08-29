@@ -16,9 +16,9 @@ struct Cli {
     /// Create new database - won't override an existing one
     #[arg(short, long, default_value_t = false)]
     create: bool,
-    /// Sqlite file (to open or create) that contains the database.
+    /// Collomatique file (to open or create) that contains the colloscope info.
     /// A file must be given if using cli rather than gui
-    db: Option<std::path::PathBuf>,
+    path: Option<std::path::PathBuf>,
     /// Command to run on the file.
     /// If no command is provided, the GUI will be opened.
     /// You can open an interactive shell command line via the special shell command
@@ -32,11 +32,6 @@ enum CliCommandOrShell {
     Global(CliCommand),
     /// Open a shell command line rather than opening a GUI
     Shell,
-    /// Backup the database in json
-    Backup {
-        /// Output json file
-        out: std::path::PathBuf,
-    },
 }
 
 fn main() -> Result<()> {
@@ -44,15 +39,15 @@ fn main() -> Result<()> {
 
     match args.command {
         Some(cmd) => {
-            let Some(db) = args.db else {
+            let Some(path) = args.path else {
                 return Err(anyhow!(
                     "You must specify a database file when using cli commands."
                 ));
             };
-            cli::run_cli(args.create, db, cmd)?;
+            cli::run_cli(args.create, path, cmd)?;
         }
         None => {
-            gui::run_gui(args.create, args.db)?;
+            gui::run_gui(args.create, args.path)?;
         }
     }
 
