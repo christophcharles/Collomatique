@@ -20,8 +20,11 @@ pub struct Database {
 #[pymethods]
 impl Database {
     fn general_data_get(self_: PyRef<'_, Self>) -> PyResult<GeneralData> {
-        let Answer::GeneralDataGet(val) =
-            SessionConnection::send_command(self_.py(), &self_.sender, Command::GeneralDataGet)?
+        let Answer::GeneralData(GeneralDataAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GeneralData(GeneralDataCommand::Get),
+        )?
         else {
             panic!("Bad answer type");
         };
@@ -30,10 +33,10 @@ impl Database {
     }
 
     fn general_data_set(self_: PyRef<'_, Self>, general_data: GeneralData) -> PyResult<()> {
-        let Answer::GeneralDataSet = SessionConnection::send_command(
+        let Answer::GeneralData(GeneralDataAnswer::Set) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::GeneralDataSet(general_data),
+            Command::GeneralData(GeneralDataCommand::Set(general_data)),
         )?
         else {
             panic!("Bad answer type");
@@ -45,11 +48,12 @@ impl Database {
     fn week_patterns_get_all(
         self_: PyRef<'_, Self>,
     ) -> PyResult<BTreeMap<WeekPatternHandle, WeekPattern>> {
-        let Answer::WeekPatternsGetAll(val) = SessionConnection::send_command(
-            self_.py(),
-            &self_.sender,
-            Command::WeekPatternsGetAll,
-        )?
+        let Answer::WeekPatterns(WeekPatternsAnswer::GetAll(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::WeekPatterns(WeekPatternsCommand::GetAll),
+            )?
         else {
             panic!("Bad answer type");
         };
@@ -61,10 +65,10 @@ impl Database {
         self_: PyRef<'_, Self>,
         handle: WeekPatternHandle,
     ) -> PyResult<WeekPattern> {
-        let Answer::WeekPatternsGet(val) = SessionConnection::send_command(
+        let Answer::WeekPatterns(WeekPatternsAnswer::Get(val)) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::WeekPatternsGet(handle),
+            Command::WeekPatterns(WeekPatternsCommand::Get(handle)),
         )?
         else {
             panic!("Bad answer type");
@@ -74,10 +78,10 @@ impl Database {
     }
 
     fn week_patterns_create(self_: PyRef<'_, Self>, pattern: WeekPattern) -> PyResult<()> {
-        let Answer::WeekPatternsCreate = SessionConnection::send_command(
+        let Answer::WeekPatterns(WeekPatternsAnswer::Create) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::WeekPatternsCreate(pattern),
+            Command::WeekPatterns(WeekPatternsCommand::Create(pattern)),
         )?
         else {
             panic!("Bad answer type");
@@ -91,10 +95,10 @@ impl Database {
         handle: WeekPatternHandle,
         pattern: WeekPattern,
     ) -> PyResult<()> {
-        let Answer::WeekPatternsUpdate = SessionConnection::send_command(
+        let Answer::WeekPatterns(WeekPatternsAnswer::Update) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::WeekPatternsUpdate(handle, pattern),
+            Command::WeekPatterns(WeekPatternsCommand::Update(handle, pattern)),
         )?
         else {
             panic!("Bad answer type");
@@ -104,10 +108,10 @@ impl Database {
     }
 
     fn week_patterns_remove(self_: PyRef<'_, Self>, handle: WeekPatternHandle) -> PyResult<()> {
-        let Answer::WeekPatternsRemove = SessionConnection::send_command(
+        let Answer::WeekPatterns(WeekPatternsAnswer::Remove) = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
-            Command::WeekPatternsRemove(handle),
+            Command::WeekPatterns(WeekPatternsCommand::Remove(handle)),
         )?
         else {
             panic!("Bad answer type");
@@ -124,14 +128,24 @@ use crate::frontend::state::{self, Operation, UpdateError};
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    GeneralDataGet,
-    GeneralDataSet(GeneralData),
-    WeekPatternsGetAll,
-    WeekPatternsGet(WeekPatternHandle),
-    WeekPatternsCreate(WeekPattern),
-    WeekPatternsUpdate(WeekPatternHandle, WeekPattern),
-    WeekPatternsRemove(WeekPatternHandle),
+    GeneralData(GeneralDataCommand),
+    WeekPatterns(WeekPatternsCommand),
     Exit,
+}
+
+#[derive(Debug, Clone)]
+pub enum GeneralDataCommand {
+    Get,
+    Set(GeneralData),
+}
+
+#[derive(Debug, Clone)]
+pub enum WeekPatternsCommand {
+    GetAll,
+    Get(WeekPatternHandle),
+    Create(WeekPattern),
+    Update(WeekPatternHandle, WeekPattern),
+    Remove(WeekPatternHandle),
 }
 
 #[derive(Debug)]
@@ -149,13 +163,23 @@ impl std::error::Error for PythonError {}
 
 #[derive(Debug)]
 pub enum Answer {
-    GeneralDataGet(GeneralData),
-    GeneralDataSet,
-    WeekPatternsGetAll(BTreeMap<WeekPatternHandle, WeekPattern>),
-    WeekPatternsGet(WeekPattern),
-    WeekPatternsCreate,
-    WeekPatternsUpdate,
-    WeekPatternsRemove,
+    GeneralData(GeneralDataAnswer),
+    WeekPatterns(WeekPatternsAnswer),
+}
+
+#[derive(Debug)]
+pub enum GeneralDataAnswer {
+    Get(GeneralData),
+    Set,
+}
+
+#[derive(Debug)]
+pub enum WeekPatternsAnswer {
+    GetAll(BTreeMap<WeekPatternHandle, WeekPattern>),
+    Get(WeekPattern),
+    Create,
+    Update,
+    Remove,
 }
 
 #[derive(Debug)]
@@ -228,20 +252,20 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_job<T: state::Manager>(
-        command: &Command,
+    async fn execute_general_data_job<T: state::Manager>(
+        general_data_command: &GeneralDataCommand,
         manager: &mut T,
-    ) -> PyResult<Answer> {
-        match command {
-            Command::GeneralDataGet => {
+    ) -> PyResult<GeneralDataAnswer> {
+        match general_data_command {
+            GeneralDataCommand::Get => {
                 let general_data = manager
                     .general_data_get()
                     .await
                     .map_err(|e| PyException::new_err(e.to_string()))?;
 
-                Ok(Answer::GeneralDataGet(general_data.into()))
+                Ok(GeneralDataAnswer::Get(general_data.into()))
             }
-            Command::GeneralDataSet(general_data) => {
+            GeneralDataCommand::Set(general_data) => {
                 manager
                     .apply(Operation::GeneralData(general_data.into()))
                     .await
@@ -256,9 +280,17 @@ impl<'scope> SessionConnection<'scope> {
                         _ => panic!("Unexpected error!"),
                     })?;
 
-                Ok(Answer::GeneralDataSet)
+                Ok(GeneralDataAnswer::Set)
             }
-            Command::WeekPatternsGetAll => {
+        }
+    }
+
+    async fn execute_week_patterns_job<T: state::Manager>(
+        week_patterns_command: &WeekPatternsCommand,
+        manager: &mut T,
+    ) -> PyResult<WeekPatternsAnswer> {
+        match week_patterns_command {
+            WeekPatternsCommand::GetAll => {
                 let result = manager
                     .week_patterns_get_all()
                     .await
@@ -269,9 +301,9 @@ impl<'scope> SessionConnection<'scope> {
                     })
                     .collect::<BTreeMap<_, _>>();
 
-                Ok(Answer::WeekPatternsGetAll(result))
+                Ok(WeekPatternsAnswer::GetAll(result))
             }
-            Command::WeekPatternsGet(handle) => {
+            WeekPatternsCommand::Get(handle) => {
                 let result =
                     manager
                         .week_patterns_get(handle.handle)
@@ -283,9 +315,9 @@ impl<'scope> SessionConnection<'scope> {
                             IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
                         })?;
 
-                Ok(Answer::WeekPatternsGet(result.into()))
+                Ok(WeekPatternsAnswer::Get(result.into()))
             }
-            Command::WeekPatternsCreate(pattern) => {
+            WeekPatternsCommand::Create(pattern) => {
                 manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Create(pattern.into()),
@@ -299,9 +331,9 @@ impl<'scope> SessionConnection<'scope> {
                         _ => panic!("Unexpected error!"),
                     })?;
 
-                Ok(Answer::WeekPatternsCreate)
+                Ok(WeekPatternsAnswer::Create)
             }
-            Command::WeekPatternsUpdate(handle, pattern) => {
+            WeekPatternsCommand::Update(handle, pattern) => {
                 manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Update(handle.handle, pattern.into()),
@@ -318,9 +350,9 @@ impl<'scope> SessionConnection<'scope> {
                         _ => panic!("Unexpected error!"),
                     })?;
 
-                Ok(Answer::WeekPatternsUpdate)
+                Ok(WeekPatternsAnswer::Update)
             }
-            Command::WeekPatternsRemove(handle) => {
+            WeekPatternsCommand::Remove(handle) => {
                 manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Remove(handle.handle),
@@ -337,7 +369,24 @@ impl<'scope> SessionConnection<'scope> {
                         _ => panic!("Unexpected error!"),
                     })?;
 
-                Ok(Answer::WeekPatternsRemove)
+                Ok(WeekPatternsAnswer::Remove)
+            }
+        }
+    }
+
+    async fn execute_job<T: state::Manager>(
+        command: &Command,
+        manager: &mut T,
+    ) -> PyResult<Answer> {
+        match command {
+            Command::GeneralData(general_data_command) => {
+                let answer = Self::execute_general_data_job(general_data_command, manager).await?;
+                Ok(Answer::GeneralData(answer))
+            }
+            Command::WeekPatterns(week_patterns_command) => {
+                let answer =
+                    Self::execute_week_patterns_job(week_patterns_command, manager).await?;
+                Ok(Answer::WeekPatterns(answer))
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
