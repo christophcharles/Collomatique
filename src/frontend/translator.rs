@@ -1,4 +1,4 @@
-use crate::backend::*;
+use crate::json::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::{NonZeroU32, NonZeroUsize};
 use thiserror::Error;
@@ -87,7 +87,7 @@ impl<StorageError: std::fmt::Debug + std::error::Error> GenColloscopeError<Stora
 
 type GenColloscopeResult<R, T> = Result<
     R,
-    GenColloscopeError<<<T as Manager>::InternalStorage as crate::backend::Storage>::InternalError>,
+    GenColloscopeError<<<T as Manager>::InternalStorage as crate::json::Storage>::InternalError>,
 >;
 
 struct GenColloscopeData {
@@ -508,7 +508,7 @@ impl GenColloscopeTranslator {
                 }
             };
 
-            use crate::backend::BalancingConstraints as BC;
+            use crate::json::BalancingConstraints as BC;
             let constraints = match orig_subject.balancing_requirements.constraints {
                 BC::OptimizeOnly => BalancingConstraints::OptimizeOnly,
                 BC::OverallOnly => BalancingConstraints::OverallOnly,

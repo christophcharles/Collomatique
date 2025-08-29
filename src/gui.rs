@@ -138,7 +138,7 @@ pub fn run_gui(create: bool, path: Option<std::path::PathBuf>) -> Result<()> {
                                         .into(),
                                     )
                                 } else {
-                                    match collomatique::backend::json::JsonStore::new()
+                                    match collomatique::json::json::JsonStore::new()
                                         .to_json_file(file)
                                     {
                                         Ok(_) => iced::Task::done(GuiMessage::FileSelected(Some(

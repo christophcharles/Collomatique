@@ -1,4 +1,4 @@
-use collomatique::backend::json;
+use collomatique::json::json;
 use collomatique::frontend::state::Manager;
 use thiserror::Error;
 
@@ -19,7 +19,7 @@ pub enum Panel {
 struct AppStateBox {
     state: std::sync::Arc<
         std::sync::RwLock<
-            Option<collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>>,
+            Option<collomatique::frontend::state::AppState<collomatique::json::json::JsonStore>>,
         >,
     >,
 }
@@ -29,14 +29,14 @@ impl AppStateBox {
         &self,
     ) -> std::sync::RwLockReadGuard<
         '_,
-        Option<collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>>,
+        Option<collomatique::frontend::state::AppState<collomatique::json::json::JsonStore>>,
     > {
         self.state.read().unwrap()
     }
 
     fn extract(
         &mut self,
-    ) -> Option<collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>>
+    ) -> Option<collomatique::frontend::state::AppState<collomatique::json::json::JsonStore>>
     {
         let mut lock = self.state.write().unwrap();
 
@@ -44,7 +44,7 @@ impl AppStateBox {
     }
 
     fn new(
-        value: collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>,
+        value: collomatique::frontend::state::AppState<collomatique::json::json::JsonStore>,
     ) -> Self {
         AppStateBox {
             state: std::sync::Arc::new(std::sync::RwLock::new(Some(value))),
@@ -57,20 +57,20 @@ pub struct State {
     panel: Panel,
     path: Option<std::path::PathBuf>,
     app_state: AppStateBox,
-    init_state: collomatique::backend::json::JsonStore,
+    init_state: collomatique::json::json::JsonStore,
 }
 
 #[derive(Debug, Error, Clone)]
 pub enum OpenCollomatiqueFileError {
     #[error("Erreur à l'ouverture json : {0}")]
-    JsonError(std::sync::Arc<collomatique::backend::json::FromJsonError>),
+    JsonError(std::sync::Arc<collomatique::json::json::FromJsonError>),
     #[error("Erreur d'entrée/sortie : {0}")]
     IOError(std::sync::Arc<std::io::Error>),
 }
 
-impl From<collomatique::backend::json::OpenError> for OpenCollomatiqueFileError {
-    fn from(value: collomatique::backend::json::OpenError) -> Self {
-        use collomatique::backend::json::OpenError;
+impl From<collomatique::json::json::OpenError> for OpenCollomatiqueFileError {
+    fn from(value: collomatique::json::json::OpenError) -> Self {
+        use collomatique::json::json::OpenError;
         match value {
             OpenError::IO(error) => OpenCollomatiqueFileError::IOError(std::sync::Arc::new(error)),
             OpenError::FromJsonError(error) => {
@@ -80,8 +80,8 @@ impl From<collomatique::backend::json::OpenError> for OpenCollomatiqueFileError 
     }
 }
 
-impl From<collomatique::backend::json::FromJsonError> for OpenCollomatiqueFileError {
-    fn from(value: collomatique::backend::json::FromJsonError) -> Self {
+impl From<collomatique::json::json::FromJsonError> for OpenCollomatiqueFileError {
+    fn from(value: collomatique::json::json::FromJsonError) -> Self {
         OpenCollomatiqueFileError::JsonError(std::sync::Arc::new(value))
     }
 }
@@ -96,7 +96,7 @@ pub type OpenCollomatiqueFileResult<T> = std::result::Result<T, OpenCollomatique
 
 impl State {
     pub fn new_with_empty_file() -> OpenCollomatiqueFileResult<Self> {
-        use collomatique::backend::Logic;
+        use collomatique::json::Logic;
         use collomatique::frontend::state::AppState;
 
         let logic = Logic::new(json::JsonStore::new());
@@ -114,7 +114,7 @@ impl State {
     pub async fn new_with_existing_file(
         file: std::path::PathBuf,
     ) -> OpenCollomatiqueFileResult<Self> {
-        use collomatique::backend::Logic;
+        use collomatique::json::Logic;
         use collomatique::frontend::state::AppState;
 
         let content = tokio::fs::read_to_string(&file).await?;
@@ -152,10 +152,10 @@ impl State {
 }
 
 type UndoErr = collomatique::frontend::state::UndoError<
-    <collomatique::backend::json::JsonStore as collomatique::backend::Storage>::InternalError,
+    <collomatique::json::json::JsonStore as collomatique::json::Storage>::InternalError,
 >;
 type RedoErr = collomatique::frontend::state::RedoError<
-    <collomatique::backend::json::JsonStore as collomatique::backend::Storage>::InternalError,
+    <collomatique::json::json::JsonStore as collomatique::json::Storage>::InternalError,
 >;
 
 #[derive(Error, Debug, Clone)]

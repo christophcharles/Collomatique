@@ -4,7 +4,7 @@ mod handles;
 mod history;
 pub mod update;
 
-use crate::backend;
+use crate::json;
 use history::{
     AnnotatedColloscopesOperation, AnnotatedGroupListsOperation,
     AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation, AnnotatedIncompatsOperation,
@@ -26,7 +26,7 @@ use self::history::AggregatedOperations;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
-    GeneralData(backend::GeneralData),
+    GeneralData(json::GeneralData),
     WeekPatterns(WeekPatternsOperation),
     Teachers(TeachersOperation),
     Students(StudentsOperation),
@@ -44,80 +44,80 @@ pub enum Operation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WeekPatternsOperation {
-    Create(backend::WeekPattern),
+    Create(json::WeekPattern),
     Remove(WeekPatternHandle),
-    Update(WeekPatternHandle, backend::WeekPattern),
+    Update(WeekPatternHandle, json::WeekPattern),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TeachersOperation {
-    Create(backend::Teacher),
+    Create(json::Teacher),
     Remove(TeacherHandle),
-    Update(TeacherHandle, backend::Teacher),
+    Update(TeacherHandle, json::Teacher),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StudentsOperation {
-    Create(backend::Student),
+    Create(json::Student),
     Remove(StudentHandle),
-    Update(StudentHandle, backend::Student),
+    Update(StudentHandle, json::Student),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubjectGroupsOperation {
-    Create(backend::SubjectGroup),
+    Create(json::SubjectGroup),
     Remove(SubjectGroupHandle),
-    Update(SubjectGroupHandle, backend::SubjectGroup),
+    Update(SubjectGroupHandle, json::SubjectGroup),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IncompatsOperation {
-    Create(backend::Incompat<WeekPatternHandle>),
+    Create(json::Incompat<WeekPatternHandle>),
     Remove(IncompatHandle),
-    Update(IncompatHandle, backend::Incompat<WeekPatternHandle>),
+    Update(IncompatHandle, json::Incompat<WeekPatternHandle>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GroupListsOperation {
-    Create(backend::GroupList<StudentHandle>),
+    Create(json::GroupList<StudentHandle>),
     Remove(GroupListHandle),
-    Update(GroupListHandle, backend::GroupList<StudentHandle>),
+    Update(GroupListHandle, json::GroupList<StudentHandle>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubjectsOperation {
-    Create(backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>),
+    Create(json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>),
     Remove(SubjectHandle),
     Update(
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TimeSlotsOperation {
-    Create(backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>),
+    Create(json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>),
     Remove(TimeSlotHandle),
     Update(
         TimeSlotHandle,
-        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
     ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GroupingsOperation {
-    Create(backend::Grouping<TimeSlotHandle>),
+    Create(json::Grouping<TimeSlotHandle>),
     Remove(GroupingHandle),
-    Update(GroupingHandle, backend::Grouping<TimeSlotHandle>),
+    Update(GroupingHandle, json::Grouping<TimeSlotHandle>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GroupingIncompatsOperation {
-    Create(backend::GroupingIncompat<GroupingHandle>),
+    Create(json::GroupingIncompat<GroupingHandle>),
     Remove(GroupingIncompatHandle),
     Update(
         GroupingIncompatHandle,
-        backend::GroupingIncompat<GroupingHandle>,
+        json::GroupingIncompat<GroupingHandle>,
     ),
 }
 
@@ -129,27 +129,27 @@ pub enum RegisterStudentOperation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ColloscopesOperation {
-    Create(backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>),
+    Create(json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>),
     Remove(ColloscopeHandle),
     Update(
         ColloscopeHandle,
-        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+        json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
     ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SlotSelectionsOperation {
-    Create(backend::SlotSelection<SubjectHandle, TimeSlotHandle>),
+    Create(json::SlotSelection<SubjectHandle, TimeSlotHandle>),
     Remove(SlotSelectionHandle),
     Update(
         SlotSelectionHandle,
-        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+        json::SlotSelection<SubjectHandle, TimeSlotHandle>,
     ),
 }
 
 #[derive(Debug)]
-pub struct AppState<T: backend::Storage> {
-    backend_logic: backend::Logic<T>,
+pub struct AppState<T: json::Storage> {
+    backend_logic: json::Logic<T>,
     mod_history: ModificationHistory,
     handle_managers: handles::ManagerCollection<T>,
 }
@@ -170,8 +170,8 @@ pub enum RedoError<T: std::fmt::Debug + std::error::Error> {
     InternalError(#[from] T),
 }
 
-impl<T: backend::Storage> AppState<T> {
-    pub fn new(backend_logic: backend::Logic<T>) -> Self {
+impl<T: json::Storage> AppState<T> {
+    pub fn new(backend_logic: json::Logic<T>) -> Self {
         AppState {
             backend_logic,
             mod_history: ModificationHistory::new(),
@@ -180,7 +180,7 @@ impl<T: backend::Storage> AppState<T> {
     }
 
     pub fn with_max_history_size(
-        backend_logic: backend::Logic<T>,
+        backend_logic: json::Logic<T>,
         max_history_size: Option<usize>,
     ) -> Self {
         AppState {
@@ -199,13 +199,13 @@ impl<T: backend::Storage> AppState<T> {
     }
 }
 
-impl<S: backend::Storage> update::private::ManagerInternal for AppState<S> {
+impl<S: json::Storage> update::private::ManagerInternal for AppState<S> {
     type Storage = S;
 
-    fn get_backend_logic(&self) -> &backend::Logic<S> {
+    fn get_backend_logic(&self) -> &json::Logic<S> {
         &self.backend_logic
     }
-    fn get_backend_logic_mut(&mut self) -> &mut backend::Logic<S> {
+    fn get_backend_logic_mut(&mut self) -> &mut json::Logic<S> {
         &mut self.backend_logic
     }
 
@@ -279,10 +279,10 @@ impl<'a, T: update::Manager> Drop for AppSession<'a, T> {
 impl<'a, T: update::Manager> ManagerInternal for AppSession<'a, T> {
     type Storage = T::Storage;
 
-    fn get_backend_logic(&self) -> &backend::Logic<Self::Storage> {
+    fn get_backend_logic(&self) -> &json::Logic<Self::Storage> {
         <T as ManagerInternal>::get_backend_logic(&self.op_manager)
     }
-    fn get_backend_logic_mut(&mut self) -> &mut backend::Logic<Self::Storage> {
+    fn get_backend_logic_mut(&mut self) -> &mut json::Logic<Self::Storage> {
         self.op_manager.get_backend_logic_mut()
     }
 

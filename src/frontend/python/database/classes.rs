@@ -77,8 +77,8 @@ impl GeneralData {
     }
 }
 
-impl From<&backend::GeneralData> for GeneralData {
-    fn from(value: &backend::GeneralData) -> Self {
+impl From<&json::GeneralData> for GeneralData {
+    fn from(value: &json::GeneralData) -> Self {
         GeneralData {
             interrogations_per_week_range: value
                 .interrogations_per_week
@@ -105,22 +105,22 @@ impl From<&backend::GeneralData> for GeneralData {
     }
 }
 
-impl From<backend::GeneralData> for GeneralData {
-    fn from(value: backend::GeneralData) -> Self {
+impl From<json::GeneralData> for GeneralData {
+    fn from(value: json::GeneralData) -> Self {
         GeneralData::from(&value)
     }
 }
 
-impl From<&GeneralData> for backend::GeneralData {
+impl From<&GeneralData> for json::GeneralData {
     fn from(value: &GeneralData) -> Self {
-        backend::GeneralData {
+        json::GeneralData {
             interrogations_per_week: value
                 .interrogations_per_week_range
                 .map(|tuple| tuple.0..tuple.1),
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
             periodicity_cuts: value.periodicity_cuts.clone(),
-            costs_adjustments: backend::CostsAdjustments {
+            costs_adjustments: json::CostsAdjustments {
                 max_interrogations_per_day_for_single_student: value
                     .max_interrogations_per_day_for_single_student_cost,
                 max_interrogations_per_day_for_all_students: value
@@ -136,9 +136,9 @@ impl From<&GeneralData> for backend::GeneralData {
     }
 }
 
-impl From<GeneralData> for backend::GeneralData {
+impl From<GeneralData> for json::GeneralData {
     fn from(value: GeneralData) -> Self {
-        backend::GeneralData::from(&value)
+        json::GeneralData::from(&value)
     }
 }
 
@@ -213,8 +213,8 @@ impl WeekPattern {
     }
 }
 
-impl From<&backend::WeekPattern> for WeekPattern {
-    fn from(value: &backend::WeekPattern) -> Self {
+impl From<&json::WeekPattern> for WeekPattern {
+    fn from(value: &json::WeekPattern) -> Self {
         WeekPattern {
             name: value.name.clone(),
             weeks: value.weeks.iter().map(|w| w.get()).collect(),
@@ -222,24 +222,24 @@ impl From<&backend::WeekPattern> for WeekPattern {
     }
 }
 
-impl From<backend::WeekPattern> for WeekPattern {
-    fn from(value: backend::WeekPattern) -> Self {
+impl From<json::WeekPattern> for WeekPattern {
+    fn from(value: json::WeekPattern) -> Self {
         WeekPattern::from(&value)
     }
 }
 
-impl From<&WeekPattern> for backend::WeekPattern {
+impl From<&WeekPattern> for json::WeekPattern {
     fn from(value: &WeekPattern) -> Self {
-        backend::WeekPattern {
+        json::WeekPattern {
             name: value.name.clone(),
-            weeks: value.weeks.iter().map(|x| backend::Week::new(*x)).collect(),
+            weeks: value.weeks.iter().map(|x| json::Week::new(*x)).collect(),
         }
     }
 }
 
-impl From<WeekPattern> for backend::WeekPattern {
+impl From<WeekPattern> for json::WeekPattern {
     fn from(value: WeekPattern) -> Self {
-        backend::WeekPattern::from(&value)
+        json::WeekPattern::from(&value)
     }
 }
 
@@ -315,8 +315,8 @@ impl Teacher {
     }
 }
 
-impl From<&backend::Teacher> for Teacher {
-    fn from(value: &backend::Teacher) -> Self {
+impl From<&json::Teacher> for Teacher {
+    fn from(value: &json::Teacher) -> Self {
         Teacher {
             surname: value.surname.clone(),
             firstname: value.firstname.clone(),
@@ -325,15 +325,15 @@ impl From<&backend::Teacher> for Teacher {
     }
 }
 
-impl From<backend::Teacher> for Teacher {
-    fn from(value: backend::Teacher) -> Self {
+impl From<json::Teacher> for Teacher {
+    fn from(value: json::Teacher) -> Self {
         Teacher::from(&value)
     }
 }
 
-impl From<&Teacher> for backend::Teacher {
+impl From<&Teacher> for json::Teacher {
     fn from(value: &Teacher) -> Self {
-        backend::Teacher {
+        json::Teacher {
             surname: value.surname.clone(),
             firstname: value.firstname.clone(),
             contact: value.contact.clone(),
@@ -341,9 +341,9 @@ impl From<&Teacher> for backend::Teacher {
     }
 }
 
-impl From<Teacher> for backend::Teacher {
+impl From<Teacher> for json::Teacher {
     fn from(value: Teacher) -> Self {
-        backend::Teacher::from(&value)
+        json::Teacher::from(&value)
     }
 }
 
@@ -435,8 +435,8 @@ impl Student {
     }
 }
 
-impl From<&backend::Student> for Student {
-    fn from(value: &backend::Student) -> Self {
+impl From<&json::Student> for Student {
+    fn from(value: &json::Student) -> Self {
         Student {
             surname: value.surname.clone(),
             firstname: value.firstname.clone(),
@@ -447,15 +447,15 @@ impl From<&backend::Student> for Student {
     }
 }
 
-impl From<backend::Student> for Student {
-    fn from(value: backend::Student) -> Self {
+impl From<json::Student> for Student {
+    fn from(value: json::Student) -> Self {
         Student::from(&value)
     }
 }
 
-impl From<&Student> for backend::Student {
+impl From<&Student> for json::Student {
     fn from(value: &Student) -> Self {
-        backend::Student {
+        json::Student {
             surname: value.surname.clone(),
             firstname: value.firstname.clone(),
             email: value.email.clone(),
@@ -465,9 +465,9 @@ impl From<&Student> for backend::Student {
     }
 }
 
-impl From<Student> for backend::Student {
+impl From<Student> for json::Student {
     fn from(value: Student) -> Self {
-        backend::Student::from(&value)
+        json::Student::from(&value)
     }
 }
 
@@ -537,8 +537,8 @@ impl SubjectGroup {
     }
 }
 
-impl From<&backend::SubjectGroup> for SubjectGroup {
-    fn from(value: &backend::SubjectGroup) -> Self {
+impl From<&json::SubjectGroup> for SubjectGroup {
+    fn from(value: &json::SubjectGroup) -> Self {
         SubjectGroup {
             name: value.name.clone(),
             optional: value.optional,
@@ -546,24 +546,24 @@ impl From<&backend::SubjectGroup> for SubjectGroup {
     }
 }
 
-impl From<backend::SubjectGroup> for SubjectGroup {
-    fn from(value: backend::SubjectGroup) -> Self {
+impl From<json::SubjectGroup> for SubjectGroup {
+    fn from(value: json::SubjectGroup) -> Self {
         SubjectGroup::from(&value)
     }
 }
 
-impl From<&SubjectGroup> for backend::SubjectGroup {
+impl From<&SubjectGroup> for json::SubjectGroup {
     fn from(value: &SubjectGroup) -> Self {
-        backend::SubjectGroup {
+        json::SubjectGroup {
             name: value.name.clone(),
             optional: value.optional,
         }
     }
 }
 
-impl From<SubjectGroup> for backend::SubjectGroup {
+impl From<SubjectGroup> for json::SubjectGroup {
     fn from(value: SubjectGroup) -> Self {
-        backend::SubjectGroup::from(&value)
+        json::SubjectGroup::from(&value)
     }
 }
 
@@ -794,8 +794,8 @@ impl SlotStart {
     }
 }
 
-impl From<&backend::SlotStart> for SlotStart {
-    fn from(value: &backend::SlotStart) -> Self {
+impl From<&json::SlotStart> for SlotStart {
+    fn from(value: &json::SlotStart) -> Self {
         SlotStart {
             day: value.day.into(),
             time: value.time.clone().into(),
@@ -803,24 +803,24 @@ impl From<&backend::SlotStart> for SlotStart {
     }
 }
 
-impl From<backend::SlotStart> for SlotStart {
-    fn from(value: backend::SlotStart) -> Self {
+impl From<json::SlotStart> for SlotStart {
+    fn from(value: json::SlotStart) -> Self {
         SlotStart::from(&value)
     }
 }
 
-impl From<&SlotStart> for backend::SlotStart {
+impl From<&SlotStart> for json::SlotStart {
     fn from(value: &SlotStart) -> Self {
-        backend::SlotStart {
+        json::SlotStart {
             day: value.day.into(),
             time: value.time.clone().into(),
         }
     }
 }
 
-impl From<SlotStart> for backend::SlotStart {
+impl From<SlotStart> for json::SlotStart {
     fn from(value: SlotStart) -> Self {
-        backend::SlotStart::from(&value)
+        json::SlotStart::from(&value)
     }
 }
 
@@ -861,8 +861,8 @@ impl IncompatSlot {
     }
 }
 
-impl From<&backend::IncompatSlot<state::WeekPatternHandle>> for IncompatSlot {
-    fn from(value: &backend::IncompatSlot<state::WeekPatternHandle>) -> Self {
+impl From<&json::IncompatSlot<state::WeekPatternHandle>> for IncompatSlot {
+    fn from(value: &json::IncompatSlot<state::WeekPatternHandle>) -> Self {
         IncompatSlot {
             week_pattern_handle: value.week_pattern_id.into(),
             start: value.start.clone().into(),
@@ -871,15 +871,15 @@ impl From<&backend::IncompatSlot<state::WeekPatternHandle>> for IncompatSlot {
     }
 }
 
-impl From<backend::IncompatSlot<state::WeekPatternHandle>> for IncompatSlot {
-    fn from(value: backend::IncompatSlot<state::WeekPatternHandle>) -> Self {
+impl From<json::IncompatSlot<state::WeekPatternHandle>> for IncompatSlot {
+    fn from(value: json::IncompatSlot<state::WeekPatternHandle>) -> Self {
         IncompatSlot::from(&value)
     }
 }
 
-impl From<&IncompatSlot> for backend::IncompatSlot<state::WeekPatternHandle> {
+impl From<&IncompatSlot> for json::IncompatSlot<state::WeekPatternHandle> {
     fn from(value: &IncompatSlot) -> Self {
-        backend::IncompatSlot {
+        json::IncompatSlot {
             week_pattern_id: value.week_pattern_handle.clone().into(),
             start: value.start.clone().into(),
             duration: value.duration,
@@ -887,9 +887,9 @@ impl From<&IncompatSlot> for backend::IncompatSlot<state::WeekPatternHandle> {
     }
 }
 
-impl From<IncompatSlot> for backend::IncompatSlot<state::WeekPatternHandle> {
+impl From<IncompatSlot> for json::IncompatSlot<state::WeekPatternHandle> {
     fn from(value: IncompatSlot) -> Self {
-        backend::IncompatSlot::from(&value)
+        json::IncompatSlot::from(&value)
     }
 }
 
@@ -937,8 +937,8 @@ impl Incompat {
     }
 }
 
-impl From<&backend::Incompat<state::WeekPatternHandle>> for Incompat {
-    fn from(value: &backend::Incompat<state::WeekPatternHandle>) -> Self {
+impl From<&json::Incompat<state::WeekPatternHandle>> for Incompat {
+    fn from(value: &json::Incompat<state::WeekPatternHandle>) -> Self {
         Incompat {
             name: value.name.clone(),
             max_count: value.max_count,
@@ -951,21 +951,21 @@ impl From<&backend::Incompat<state::WeekPatternHandle>> for Incompat {
     }
 }
 
-impl From<backend::Incompat<state::WeekPatternHandle>> for Incompat {
-    fn from(value: backend::Incompat<state::WeekPatternHandle>) -> Self {
+impl From<json::Incompat<state::WeekPatternHandle>> for Incompat {
+    fn from(value: json::Incompat<state::WeekPatternHandle>) -> Self {
         Incompat::from(&value)
     }
 }
 
-impl From<&Incompat> for backend::Incompat<state::WeekPatternHandle> {
+impl From<&Incompat> for json::Incompat<state::WeekPatternHandle> {
     fn from(value: &Incompat) -> Self {
-        backend::Incompat {
+        json::Incompat {
             name: value.name.clone(),
             max_count: value.max_count,
             groups: value
                 .groups
                 .iter()
-                .map(|x| backend::IncompatGroup {
+                .map(|x| json::IncompatGroup {
                     slots: x.iter().map(|y| y.into()).collect(),
                 })
                 .collect(),
@@ -973,9 +973,9 @@ impl From<&Incompat> for backend::Incompat<state::WeekPatternHandle> {
     }
 }
 
-impl From<Incompat> for backend::Incompat<state::WeekPatternHandle> {
+impl From<Incompat> for json::Incompat<state::WeekPatternHandle> {
     fn from(value: Incompat) -> Self {
-        backend::Incompat::from(&value)
+        json::Incompat::from(&value)
     }
 }
 
@@ -1053,8 +1053,8 @@ impl Group {
     }
 }
 
-impl From<&backend::Group> for Group {
-    fn from(value: &backend::Group) -> Self {
+impl From<&json::Group> for Group {
+    fn from(value: &json::Group) -> Self {
         Group {
             name: value.name.clone(),
             extendable: value.extendable,
@@ -1062,24 +1062,24 @@ impl From<&backend::Group> for Group {
     }
 }
 
-impl From<backend::Group> for Group {
-    fn from(value: backend::Group) -> Self {
+impl From<json::Group> for Group {
+    fn from(value: json::Group) -> Self {
         Group::from(&value)
     }
 }
 
-impl From<&Group> for backend::Group {
+impl From<&Group> for json::Group {
     fn from(value: &Group) -> Self {
-        backend::Group {
+        json::Group {
             name: value.name.clone(),
             extendable: value.extendable,
         }
     }
 }
 
-impl From<Group> for backend::Group {
+impl From<Group> for json::Group {
     fn from(value: Group) -> Self {
-        backend::Group::from(&value)
+        json::Group::from(&value)
     }
 }
 
@@ -1130,8 +1130,8 @@ impl GroupList {
     }
 }
 
-impl From<&backend::GroupList<state::StudentHandle>> for GroupList {
-    fn from(value: &backend::GroupList<state::StudentHandle>) -> Self {
+impl From<&json::GroupList<state::StudentHandle>> for GroupList {
+    fn from(value: &json::GroupList<state::StudentHandle>) -> Self {
         GroupList {
             name: value.name.clone(),
             groups: value.groups.iter().map(|x| x.into()).collect(),
@@ -1144,15 +1144,15 @@ impl From<&backend::GroupList<state::StudentHandle>> for GroupList {
     }
 }
 
-impl From<backend::GroupList<state::StudentHandle>> for GroupList {
-    fn from(value: backend::GroupList<state::StudentHandle>) -> Self {
+impl From<json::GroupList<state::StudentHandle>> for GroupList {
+    fn from(value: json::GroupList<state::StudentHandle>) -> Self {
         GroupList::from(&value)
     }
 }
 
-impl From<&GroupList> for backend::GroupList<state::StudentHandle> {
+impl From<&GroupList> for json::GroupList<state::StudentHandle> {
     fn from(value: &GroupList) -> Self {
-        backend::GroupList {
+        json::GroupList {
             name: value.name.clone(),
             groups: value.groups.iter().map(|x| x.into()).collect(),
             students_mapping: value
@@ -1164,9 +1164,9 @@ impl From<&GroupList> for backend::GroupList<state::StudentHandle> {
     }
 }
 
-impl From<GroupList> for backend::GroupList<state::StudentHandle> {
+impl From<GroupList> for json::GroupList<state::StudentHandle> {
     fn from(value: GroupList) -> Self {
-        backend::GroupList::from(&value)
+        json::GroupList::from(&value)
     }
 }
 
@@ -1257,9 +1257,9 @@ impl BalancingConstraints {
     }
 }
 
-impl From<&crate::backend::BalancingConstraints> for BalancingConstraints {
-    fn from(value: &crate::backend::BalancingConstraints) -> Self {
-        use crate::backend::BalancingConstraints as BC;
+impl From<&crate::json::BalancingConstraints> for BalancingConstraints {
+    fn from(value: &crate::json::BalancingConstraints) -> Self {
+        use crate::json::BalancingConstraints as BC;
         match value {
             BC::OptimizeOnly => BalancingConstraints::OptimizeOnly,
             BC::OverallOnly => BalancingConstraints::OverallOnly,
@@ -1282,15 +1282,15 @@ impl From<&crate::backend::BalancingConstraints> for BalancingConstraints {
     }
 }
 
-impl From<crate::backend::BalancingConstraints> for BalancingConstraints {
-    fn from(value: crate::backend::BalancingConstraints) -> Self {
+impl From<crate::json::BalancingConstraints> for BalancingConstraints {
+    fn from(value: crate::json::BalancingConstraints) -> Self {
         BalancingConstraints::from(&value)
     }
 }
 
-impl From<&BalancingConstraints> for crate::backend::BalancingConstraints {
+impl From<&BalancingConstraints> for crate::json::BalancingConstraints {
     fn from(value: &BalancingConstraints) -> Self {
-        use crate::backend::BalancingConstraints as BC;
+        use crate::json::BalancingConstraints as BC;
         match value {
             BalancingConstraints::OptimizeOnly => BC::OptimizeOnly,
             BalancingConstraints::OverallOnly => BC::OverallOnly,
@@ -1313,9 +1313,9 @@ impl From<&BalancingConstraints> for crate::backend::BalancingConstraints {
     }
 }
 
-impl From<BalancingConstraints> for crate::backend::BalancingConstraints {
+impl From<BalancingConstraints> for crate::json::BalancingConstraints {
     fn from(value: BalancingConstraints) -> Self {
-        crate::backend::BalancingConstraints::from(&value)
+        crate::json::BalancingConstraints::from(&value)
     }
 }
 
@@ -1352,9 +1352,9 @@ impl BalancingSlotSelections {
     }
 }
 
-impl From<&crate::backend::BalancingSlotSelections> for BalancingSlotSelections {
-    fn from(value: &crate::backend::BalancingSlotSelections) -> Self {
-        use crate::backend::BalancingSlotSelections as BSS;
+impl From<&crate::json::BalancingSlotSelections> for BalancingSlotSelections {
+    fn from(value: &crate::json::BalancingSlotSelections) -> Self {
+        use crate::json::BalancingSlotSelections as BSS;
         match value {
             BSS::Manual => BalancingSlotSelections::Manual,
             BSS::Teachers => BalancingSlotSelections::Teachers,
@@ -1364,15 +1364,15 @@ impl From<&crate::backend::BalancingSlotSelections> for BalancingSlotSelections 
     }
 }
 
-impl From<crate::backend::BalancingSlotSelections> for BalancingSlotSelections {
-    fn from(value: crate::backend::BalancingSlotSelections) -> Self {
+impl From<crate::json::BalancingSlotSelections> for BalancingSlotSelections {
+    fn from(value: crate::json::BalancingSlotSelections) -> Self {
         BalancingSlotSelections::from(&value)
     }
 }
 
-impl From<&BalancingSlotSelections> for crate::backend::BalancingSlotSelections {
+impl From<&BalancingSlotSelections> for crate::json::BalancingSlotSelections {
     fn from(value: &BalancingSlotSelections) -> Self {
-        use crate::backend::BalancingSlotSelections as BSS;
+        use crate::json::BalancingSlotSelections as BSS;
         match value {
             BalancingSlotSelections::Manual => BSS::Manual,
             BalancingSlotSelections::Teachers => BSS::Teachers,
@@ -1382,9 +1382,9 @@ impl From<&BalancingSlotSelections> for crate::backend::BalancingSlotSelections 
     }
 }
 
-impl From<BalancingSlotSelections> for crate::backend::BalancingSlotSelections {
+impl From<BalancingSlotSelections> for crate::json::BalancingSlotSelections {
     fn from(value: BalancingSlotSelections) -> Self {
-        crate::backend::BalancingSlotSelections::from(&value)
+        crate::json::BalancingSlotSelections::from(&value)
     }
 }
 
@@ -1479,11 +1479,11 @@ impl Subject {
 
 impl
     From<
-        &backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>,
+        &json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>,
     > for Subject
 {
     fn from(
-        value: &backend::Subject<
+        value: &json::Subject<
             state::SubjectGroupHandle,
             state::IncompatHandle,
             state::GroupListHandle,
@@ -1510,11 +1510,11 @@ impl
 }
 
 impl
-    From<backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>>
+    From<json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>>
     for Subject
 {
     fn from(
-        value: backend::Subject<
+        value: json::Subject<
             state::SubjectGroupHandle,
             state::IncompatHandle,
             state::GroupListHandle,
@@ -1525,10 +1525,10 @@ impl
 }
 
 impl From<&Subject>
-    for backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>
+    for json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>
 {
     fn from(value: &Subject) -> Self {
-        backend::Subject {
+        json::Subject {
             name: value.name.clone(),
             subject_group_id: value.subject_group_handle.clone().into(),
             incompat_id: value.incompat_handle.clone().map(|x| x.into()),
@@ -1539,7 +1539,7 @@ impl From<&Subject>
             period_is_strict: value.period_is_strict,
             is_tutorial: value.is_tutorial,
             max_groups_per_slot: value.max_groups_per_slot,
-            balancing_requirements: backend::BalancingRequirements {
+            balancing_requirements: json::BalancingRequirements {
                 constraints: value.balancing_constraints.into(),
                 slot_selections: value.balancing_slot_selections.into(),
             },
@@ -1548,10 +1548,10 @@ impl From<&Subject>
 }
 
 impl From<Subject>
-    for backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>
+    for json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>
 {
     fn from(value: Subject) -> Self {
-        backend::Subject::from(&value)
+        json::Subject::from(&value)
     }
 }
 
@@ -1648,11 +1648,11 @@ impl TimeSlot {
     }
 }
 
-impl From<&backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>>
+impl From<&json::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>>
     for TimeSlot
 {
     fn from(
-        value: &backend::TimeSlot<
+        value: &json::TimeSlot<
             state::SubjectHandle,
             state::TeacherHandle,
             state::WeekPatternHandle,
@@ -1669,11 +1669,11 @@ impl From<&backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::
     }
 }
 
-impl From<backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>>
+impl From<json::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>>
     for TimeSlot
 {
     fn from(
-        value: backend::TimeSlot<
+        value: json::TimeSlot<
             state::SubjectHandle,
             state::TeacherHandle,
             state::WeekPatternHandle,
@@ -1684,10 +1684,10 @@ impl From<backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::W
 }
 
 impl From<&TimeSlot>
-    for backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>
+    for json::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>
 {
     fn from(value: &TimeSlot) -> Self {
-        backend::TimeSlot {
+        json::TimeSlot {
             subject_id: value.subject_handle.clone().into(),
             teacher_id: value.teacher_handle.clone().into(),
             start: value.start.clone().into(),
@@ -1699,10 +1699,10 @@ impl From<&TimeSlot>
 }
 
 impl From<TimeSlot>
-    for backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>
+    for json::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>
 {
     fn from(value: TimeSlot) -> Self {
-        backend::TimeSlot::from(&value)
+        json::TimeSlot::from(&value)
     }
 }
 
@@ -1778,8 +1778,8 @@ impl Grouping {
     }
 }
 
-impl From<&backend::Grouping<state::TimeSlotHandle>> for Grouping {
-    fn from(value: &backend::Grouping<state::TimeSlotHandle>) -> Self {
+impl From<&json::Grouping<state::TimeSlotHandle>> for Grouping {
+    fn from(value: &json::Grouping<state::TimeSlotHandle>) -> Self {
         Grouping {
             name: value.name.clone(),
             slots: value.slots.iter().map(|x| x.into()).collect(),
@@ -1787,24 +1787,24 @@ impl From<&backend::Grouping<state::TimeSlotHandle>> for Grouping {
     }
 }
 
-impl From<backend::Grouping<state::TimeSlotHandle>> for Grouping {
-    fn from(value: backend::Grouping<state::TimeSlotHandle>) -> Self {
+impl From<json::Grouping<state::TimeSlotHandle>> for Grouping {
+    fn from(value: json::Grouping<state::TimeSlotHandle>) -> Self {
         Grouping::from(&value)
     }
 }
 
-impl From<&Grouping> for backend::Grouping<state::TimeSlotHandle> {
+impl From<&Grouping> for json::Grouping<state::TimeSlotHandle> {
     fn from(value: &Grouping) -> Self {
-        backend::Grouping {
+        json::Grouping {
             name: value.name.clone(),
             slots: value.slots.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<Grouping> for backend::Grouping<state::TimeSlotHandle> {
+impl From<Grouping> for json::Grouping<state::TimeSlotHandle> {
     fn from(value: Grouping) -> Self {
-        backend::Grouping::from(&value)
+        json::Grouping::from(&value)
     }
 }
 
@@ -1881,8 +1881,8 @@ impl GroupingIncompat {
     }
 }
 
-impl From<&backend::GroupingIncompat<state::GroupingHandle>> for GroupingIncompat {
-    fn from(value: &backend::GroupingIncompat<state::GroupingHandle>) -> Self {
+impl From<&json::GroupingIncompat<state::GroupingHandle>> for GroupingIncompat {
+    fn from(value: &json::GroupingIncompat<state::GroupingHandle>) -> Self {
         GroupingIncompat {
             max_count: value.max_count,
             groupings: value.groupings.iter().map(|x| x.into()).collect(),
@@ -1890,24 +1890,24 @@ impl From<&backend::GroupingIncompat<state::GroupingHandle>> for GroupingIncompa
     }
 }
 
-impl From<backend::GroupingIncompat<state::GroupingHandle>> for GroupingIncompat {
-    fn from(value: backend::GroupingIncompat<state::GroupingHandle>) -> Self {
+impl From<json::GroupingIncompat<state::GroupingHandle>> for GroupingIncompat {
+    fn from(value: json::GroupingIncompat<state::GroupingHandle>) -> Self {
         GroupingIncompat::from(&value)
     }
 }
 
-impl From<&GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle> {
+impl From<&GroupingIncompat> for json::GroupingIncompat<state::GroupingHandle> {
     fn from(value: &GroupingIncompat) -> Self {
-        backend::GroupingIncompat {
+        json::GroupingIncompat {
             max_count: value.max_count,
             groupings: value.groupings.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle> {
+impl From<GroupingIncompat> for json::GroupingIncompat<state::GroupingHandle> {
     fn from(value: GroupingIncompat) -> Self {
-        backend::GroupingIncompat::from(&value)
+        json::GroupingIncompat::from(&value)
     }
 }
 
@@ -1943,8 +1943,8 @@ impl SlotGroup {
     }
 }
 
-impl From<&backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
-    fn from(value: &backend::SlotGroup<state::TimeSlotHandle>) -> Self {
+impl From<&json::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
+    fn from(value: &json::SlotGroup<state::TimeSlotHandle>) -> Self {
         SlotGroup {
             count: value.count,
             slots: value.slots.iter().map(|x| x.into()).collect(),
@@ -1952,24 +1952,24 @@ impl From<&backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
     }
 }
 
-impl From<backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
-    fn from(value: backend::SlotGroup<state::TimeSlotHandle>) -> Self {
+impl From<json::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
+    fn from(value: json::SlotGroup<state::TimeSlotHandle>) -> Self {
         SlotGroup::from(&value)
     }
 }
 
-impl From<&SlotGroup> for backend::SlotGroup<state::TimeSlotHandle> {
+impl From<&SlotGroup> for json::SlotGroup<state::TimeSlotHandle> {
     fn from(value: &SlotGroup) -> Self {
-        backend::SlotGroup {
+        json::SlotGroup {
             count: value.count,
             slots: value.slots.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<SlotGroup> for backend::SlotGroup<state::TimeSlotHandle> {
+impl From<SlotGroup> for json::SlotGroup<state::TimeSlotHandle> {
     fn from(value: SlotGroup) -> Self {
-        backend::SlotGroup::from(&value)
+        json::SlotGroup::from(&value)
     }
 }
 
@@ -2049,8 +2049,8 @@ impl SlotSelection {
     }
 }
 
-impl From<&backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
-    fn from(value: &backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
+impl From<&json::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
+    fn from(value: &json::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
         SlotSelection {
             subject_handle: value.subject_id.into(),
             slot_groups: value.slot_groups.iter().map(|x| x.into()).collect(),
@@ -2058,23 +2058,23 @@ impl From<&backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> 
     }
 }
 
-impl From<backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
-    fn from(value: backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
+impl From<json::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
+    fn from(value: json::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
         SlotSelection::from(&value)
     }
 }
 
-impl From<&SlotSelection> for backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
+impl From<&SlotSelection> for json::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
     fn from(value: &SlotSelection) -> Self {
-        backend::SlotSelection {
+        json::SlotSelection {
             subject_id: (&value.subject_handle).into(),
             slot_groups: value.slot_groups.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<SlotSelection> for backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
+impl From<SlotSelection> for json::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
     fn from(value: SlotSelection) -> Self {
-        backend::SlotSelection::from(&value)
+        json::SlotSelection::from(&value)
     }
 }

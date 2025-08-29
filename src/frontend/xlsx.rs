@@ -2,7 +2,7 @@ use super::state::{
     GroupListHandle, IncompatHandle, StudentHandle, SubjectGroupHandle, SubjectHandle,
     TeacherHandle,
 };
-use crate::backend;
+use crate::json;
 
 use rust_xlsxwriter::*;
 use thiserror::Error;
@@ -86,7 +86,7 @@ const BORDER_SMALL: FormatBorder = FormatBorder::Thin;
 
 fn build_main_worksheet_first_line(
     worksheet: &mut Worksheet,
-    colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    colloscope: &json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
 ) -> Result<u16> {
     let week_count = colloscope
         .subjects
@@ -254,8 +254,8 @@ impl VerticalPosition {
 fn build_main_worksheet_timeslot(
     worksheet: &mut Worksheet,
     start_line: u32,
-    time_slot: backend::ColloscopeTimeSlot<TeacherHandle>,
-    group_list: &backend::ColloscopeGroupList<StudentHandle>,
+    time_slot: json::ColloscopeTimeSlot<TeacherHandle>,
+    group_list: &json::ColloscopeGroupList<StudentHandle>,
     week_count: u16,
     position: VerticalPosition,
 ) -> Result<u32> {
@@ -329,10 +329,10 @@ fn build_main_worksheet_timeslot(
 fn build_main_worksheet_teacher(
     worksheet: &mut Worksheet,
     start_line: u32,
-    time_slots: Vec<backend::ColloscopeTimeSlot<TeacherHandle>>,
-    group_list: &backend::ColloscopeGroupList<StudentHandle>,
+    time_slots: Vec<json::ColloscopeTimeSlot<TeacherHandle>>,
+    group_list: &json::ColloscopeGroupList<StudentHandle>,
     teacher_handle: TeacherHandle,
-    teachers: &BTreeMap<TeacherHandle, backend::Teacher>,
+    teachers: &BTreeMap<TeacherHandle, json::Teacher>,
     week_count: u16,
     position: VerticalPosition,
 ) -> Result<u32> {
@@ -383,12 +383,12 @@ fn build_main_worksheet_teacher(
 fn build_main_worksheet_subject(
     worksheet: &mut Worksheet,
     start_line: u32,
-    subject: backend::ColloscopeSubject<TeacherHandle, StudentHandle>,
+    subject: json::ColloscopeSubject<TeacherHandle, StudentHandle>,
     subject_handle: SubjectHandle,
-    teachers: &BTreeMap<TeacherHandle, backend::Teacher>,
+    teachers: &BTreeMap<TeacherHandle, json::Teacher>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
     week_count: u16,
 ) -> Result<u32> {
@@ -452,15 +452,15 @@ fn build_main_worksheet_subject_group(
     start_line: u32,
     selected_subjects: Vec<(
         SubjectHandle,
-        backend::ColloscopeSubject<TeacherHandle, StudentHandle>,
+        json::ColloscopeSubject<TeacherHandle, StudentHandle>,
     )>,
     subject_group_handle: SubjectGroupHandle,
-    teachers: &BTreeMap<TeacherHandle, backend::Teacher>,
+    teachers: &BTreeMap<TeacherHandle, json::Teacher>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
-    subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
+    subject_groups: &BTreeMap<SubjectGroupHandle, json::SubjectGroup>,
     week_count: u16,
 ) -> Result<u32> {
     let mut current_line = start_line;
@@ -547,13 +547,13 @@ fn build_empty_line(worksheet: &mut Worksheet, start_line: u32, week_count: u16)
 
 fn build_main_worksheet(
     worksheet: &mut Worksheet,
-    colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
-    teachers: &BTreeMap<TeacherHandle, backend::Teacher>,
+    colloscope: &json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    teachers: &BTreeMap<TeacherHandle, json::Teacher>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
-    subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
+    subject_groups: &BTreeMap<SubjectGroupHandle, json::SubjectGroup>,
 ) -> Result<()> {
     worksheet.set_name("Colloscope")?;
     worksheet.set_landscape();
@@ -631,7 +631,7 @@ const ROW_FIRST_STUDENT: u32 = 3;
 
 fn build_groups_worksheet_first_columns(
     worksheet: &mut Worksheet,
-    students: &BTreeMap<StudentHandle, backend::Student>,
+    students: &BTreeMap<StudentHandle, json::Student>,
 ) -> Result<BTreeMap<StudentHandle, u32>> {
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
@@ -701,12 +701,12 @@ fn build_groups_worksheet_first_columns(
 fn build_groups_worksheet_subject(
     worksheet: &mut Worksheet,
     start_col: u16,
-    subject: backend::ColloscopeSubject<TeacherHandle, StudentHandle>,
+    subject: json::ColloscopeSubject<TeacherHandle, StudentHandle>,
     subject_handle: SubjectHandle,
     student_line_map: &BTreeMap<StudentHandle, u32>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
     position: HorizontalPosition,
 ) -> Result<u16> {
@@ -782,15 +782,15 @@ fn build_groups_worksheet_subject_group(
     start_col: u16,
     selected_subjects: Vec<(
         SubjectHandle,
-        backend::ColloscopeSubject<TeacherHandle, StudentHandle>,
+        json::ColloscopeSubject<TeacherHandle, StudentHandle>,
     )>,
     subject_group_handle: SubjectGroupHandle,
     student_line_map: &BTreeMap<StudentHandle, u32>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
-    subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
+    subject_groups: &BTreeMap<SubjectGroupHandle, json::SubjectGroup>,
 ) -> Result<u16> {
     let mut current_col = start_col;
     let count = selected_subjects.len();
@@ -836,13 +836,13 @@ fn build_groups_worksheet_subject_group(
 
 fn build_groups_worksheet(
     worksheet: &mut Worksheet,
-    colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    colloscope: &json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
-    subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
-    students: &BTreeMap<StudentHandle, backend::Student>,
+    subject_groups: &BTreeMap<SubjectGroupHandle, json::SubjectGroup>,
+    students: &BTreeMap<StudentHandle, json::Student>,
 ) -> Result<()> {
     worksheet.set_name("Groupes")?;
 
@@ -874,14 +874,14 @@ fn build_groups_worksheet(
 }
 
 pub fn export_colloscope_to_xlsx(
-    colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
-    teachers: &BTreeMap<TeacherHandle, backend::Teacher>,
+    colloscope: &json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    teachers: &BTreeMap<TeacherHandle, json::Teacher>,
     subjects: &BTreeMap<
         SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
-    subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
-    students: &BTreeMap<StudentHandle, backend::Student>,
+    subject_groups: &BTreeMap<SubjectGroupHandle, json::SubjectGroup>,
+    students: &BTreeMap<StudentHandle, json::Student>,
     file: &std::path::Path,
 ) -> Result<()> {
     let mut workbook = Workbook::new();

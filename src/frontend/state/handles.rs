@@ -65,16 +65,16 @@ impl_handle!(GroupingIncompatHandle);
 impl_handle!(ColloscopeHandle);
 impl_handle!(SlotSelectionHandle);
 
-use crate::backend;
+use crate::json;
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
-pub(super) struct Manager<Id: backend::OrdId, H: Handle> {
+pub(super) struct Manager<Id: json::OrdId, H: Handle> {
     id_to_handle_map: BTreeMap<Id, H>,
     handle_to_id_map: Vec<Option<Id>>,
 }
 
-impl<Id: backend::OrdId, H: Handle> Manager<Id, H> {
+impl<Id: json::OrdId, H: Handle> Manager<Id, H> {
     fn new() -> Self {
         Manager {
             id_to_handle_map: BTreeMap::new(),
@@ -128,7 +128,7 @@ impl<Id: backend::OrdId, H: Handle> Manager<Id, H> {
 }
 
 #[derive(Debug)]
-pub struct ManagerCollection<T: backend::Storage> {
+pub struct ManagerCollection<T: json::Storage> {
     pub(super) week_patterns: Manager<T::WeekPatternId, WeekPatternHandle>,
     pub(super) teachers: Manager<T::TeacherId, TeacherHandle>,
     pub(super) students: Manager<T::StudentId, StudentHandle>,
@@ -143,7 +143,7 @@ pub struct ManagerCollection<T: backend::Storage> {
     pub(super) slot_selections: Manager<T::SlotSelectionId, SlotSelectionHandle>,
 }
 
-impl<T: backend::Storage> ManagerCollection<T> {
+impl<T: json::Storage> ManagerCollection<T> {
     pub(super) fn new() -> Self {
         ManagerCollection {
             week_patterns: Manager::new(),
