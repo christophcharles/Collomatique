@@ -5,6 +5,7 @@ async fn prepare_empty_db(pool: sqlx::SqlitePool) -> Store {
     Store { pool }
 }
 
+mod colloscopes;
 mod group_lists;
 mod grouping_incompats;
 mod groupings;
