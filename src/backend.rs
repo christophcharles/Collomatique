@@ -143,7 +143,7 @@ where
     Id: std::fmt::Debug,
     CrossId1: std::fmt::Debug,
     CrossId2: std::fmt::Debug,
-    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
 {
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId1(CrossId1),
@@ -151,6 +151,30 @@ where
     InvalidCrossId2(CrossId2),
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId3(CrossId3),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Cross3IdWithDepError<T, Id, CrossId1, CrossId2, CrossId3, DepId>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
+    DepId: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId3(CrossId3),
+    #[error("Dependancy of id {0:?} blocks modification of this data")]
+    BlockingDependancy(DepId),
     #[error("Id {0:?} is invalid")]
     InvalidId(Id),
     #[error("Backend internal error: {0:?}")]
@@ -552,20 +576,20 @@ pub struct SubjectGroup {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotStart {
-    day: crate::time::Weekday,
-    time: crate::time::Time,
+    pub day: crate::time::Weekday,
+    pub time: crate::time::Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatSlot<WeekPatternId: OrdId> {
-    week_pattern_id: WeekPatternId,
-    start: SlotStart,
-    duration: NonZeroU32,
+    pub week_pattern_id: WeekPatternId,
+    pub start: SlotStart,
+    pub duration: NonZeroU32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatGroup<WeekPatternId: OrdId> {
-    slots: BTreeSet<IncompatSlot<WeekPatternId>>,
+    pub slots: BTreeSet<IncompatSlot<WeekPatternId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -931,7 +955,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn teachers_patterns_remove(
+    pub async fn teachers_remove(
         &mut self,
         index: T::TeacherId,
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TeacherId, Vec<T::TimeSlotId>>>
@@ -1034,8 +1058,8 @@ impl<T: Storage> Logic<T> {
             .subject_groups_update(index, subject_group)
             .await
     }
-    pub async fn subject_groups_can_remove(
-        &mut self,
+    pub async fn subject_groups_check_can_remove(
+        &self,
         index: T::SubjectGroupId,
     ) -> std::result::Result<
         Vec<SubjectGroupDependancy<T::SubjectId, T::StudentId>>,
@@ -1086,7 +1110,7 @@ impl<T: Storage> Logic<T> {
         >,
     > {
         let dependancies = self
-            .subject_groups_can_remove(index)
+            .subject_groups_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1165,8 +1189,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn incompats_can_remove(
-        &mut self,
+    pub async fn incompats_check_can_remove(
+        &self,
         index: T::IncompatId,
     ) -> std::result::Result<
         Vec<IncompatDependancy<T::SubjectId, T::StudentId>>,
@@ -1215,7 +1239,7 @@ impl<T: Storage> Logic<T> {
         >,
     > {
         let dependancies = self
-            .incompats_can_remove(index)
+            .incompats_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1316,8 +1340,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn group_lists_can_remove(
-        &mut self,
+    pub async fn group_lists_check_can_remove(
+        &self,
         index: T::GroupListId,
     ) -> std::result::Result<Vec<T::SubjectId>, IdError<T::InternalError, T::GroupListId>> {
         if !self.group_lists_check_id(index).await? {
@@ -1341,7 +1365,7 @@ impl<T: Storage> Logic<T> {
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::GroupListId, Vec<T::SubjectId>>>
     {
         let dependancies = self
-            .group_lists_can_remove(index)
+            .group_lists_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1428,31 +1452,59 @@ impl<T: Storage> Logic<T> {
         subject: &Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
     ) -> std::result::Result<
         (),
-        Cross3IdError<
+        Cross3IdWithDepError<
             T::InternalError,
             T::SubjectId,
             T::SubjectGroupId,
             T::IncompatId,
             T::GroupListId,
+            T::StudentId,
         >,
     > {
         if !self.subjects_check_id(index).await? {
-            return Err(Cross3IdError::InvalidId(index));
+            return Err(Cross3IdWithDepError::InvalidId(index));
+        }
+
+        let current_subject = self.subjects_get(index).await.map_err(|e| match e {
+            IdError::InvalidId(id) => panic!(
+                "Subject group id {:?} should be valid as it was already checked",
+                id
+            ),
+            IdError::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+        })?;
+
+        if current_subject.subject_group_id != subject.subject_group_id {
+            let students = self.students_get_all().await?;
+            for (student_id, _student) in students {
+                let subject_group_id = subject.subject_group_id;
+                let subject_group_for_student = self.subject_group_for_student_get(student_id, subject_group_id)
+                    .await
+                    .map_err(
+                        |e| match e {
+                            Id2Error::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+                            Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid as it was returned from students_get_all", id1),
+                            Id2Error::InvalidId2(id2) => panic!("Subject group id {:?} should be valid as it was already checked", id2),
+                        }
+                    )?;
+                if subject_group_for_student == Some(index) {
+                    return Err(Cross3IdWithDepError::BlockingDependancy(student_id));
+                }
+            }
         }
 
         let data_status = self.subjects_check_data(subject).await?;
         match data_status {
-            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
-            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
-            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
+            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
+            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
                 unsafe { self.storage.subjects_update_unchecked(index, subject) }.await?;
                 Ok(())
             }
         }
     }
-    pub async fn subjects_can_remove(
-        &mut self,
+    pub async fn subjects_check_can_remove(
+        &self,
         index: T::SubjectId,
     ) -> std::result::Result<
         Vec<SubjectDependancy<T::TimeSlotId, T::StudentId>>,
@@ -1500,7 +1552,7 @@ impl<T: Storage> Logic<T> {
         >,
     > {
         let dependancies = self
-            .subjects_can_remove(index)
+            .subjects_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1606,8 +1658,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn time_slots_can_remove(
-        &mut self,
+    pub async fn time_slots_check_can_remove(
+        &self,
         index: T::TimeSlotId,
     ) -> std::result::Result<Vec<T::GroupingId>, IdError<T::InternalError, T::TimeSlotId>> {
         if !self.time_slots_check_id(index).await? {
@@ -1631,7 +1683,7 @@ impl<T: Storage> Logic<T> {
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TimeSlotId, Vec<T::GroupingId>>>
     {
         let dependancies = self
-            .time_slots_can_remove(index)
+            .time_slots_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1706,8 +1758,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn groupings_can_remove(
-        &mut self,
+    pub async fn groupings_check_can_remove(
+        &self,
         index: T::GroupingId,
     ) -> std::result::Result<Vec<T::GroupingIncompatId>, IdError<T::InternalError, T::GroupingId>>
     {
@@ -1734,7 +1786,7 @@ impl<T: Storage> Logic<T> {
         CheckedIdError<T::InternalError, T::GroupingId, Vec<T::GroupingIncompatId>>,
     > {
         let dependancies = self
-            .groupings_can_remove(index)
+            .groupings_check_can_remove(index)
             .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
@@ -1828,8 +1880,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
-    pub async fn grouping_incompats_can_remove(
-        &mut self,
+    pub async fn grouping_incompats_check_can_remove(
+        &self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::GroupingIncompatId>> {
         if !self.grouping_incompats_check_id(index).await? {
@@ -1842,7 +1894,7 @@ impl<T: Storage> Logic<T> {
         &mut self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::GroupingIncompatId>> {
-        self.grouping_incompats_can_remove(index).await?;
+        self.grouping_incompats_check_can_remove(index).await?;
 
         unsafe { self.storage.grouping_incompats_remove_unchecked(index) }.await?;
         Ok(())

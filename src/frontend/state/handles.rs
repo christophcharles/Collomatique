@@ -1,19 +1,61 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WeekPatternHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TeacherHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StudentHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SubjectGroupHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct IncompatHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GroupListHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SubjectHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TimeSlotHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GroupingHandle(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GroupingIncompatHandle(usize);
 
 pub(super) trait Handle: Send + Sync + Clone + Copy {
     fn new(value: usize) -> Self;
     fn get(self) -> usize;
 }
 
-impl Handle for WeekPatternHandle {
-    fn new(value: usize) -> Self {
-        WeekPatternHandle(value)
-    }
-    fn get(self) -> usize {
-        self.0
-    }
+macro_rules! impl_handle {
+    ($HandleType:ident) => {
+        impl Handle for $HandleType {
+            fn new(value: usize) -> Self {
+                $HandleType(value)
+            }
+            fn get(self) -> usize {
+                self.0
+            }
+        }
+    };
 }
+
+impl_handle!(WeekPatternHandle);
+impl_handle!(TeacherHandle);
+impl_handle!(StudentHandle);
+impl_handle!(SubjectGroupHandle);
+impl_handle!(IncompatHandle);
+impl_handle!(GroupListHandle);
+impl_handle!(SubjectHandle);
+impl_handle!(TimeSlotHandle);
+impl_handle!(GroupingHandle);
+impl_handle!(GroupingIncompatHandle);
 
 use crate::backend;
 use std::collections::BTreeMap;
@@ -80,12 +122,30 @@ impl<Id: backend::OrdId, H: Handle> Manager<Id, H> {
 #[derive(Debug)]
 pub struct ManagerCollection<T: backend::Storage> {
     pub(super) week_patterns: Manager<T::WeekPatternId, WeekPatternHandle>,
+    pub(super) teachers: Manager<T::TeacherId, TeacherHandle>,
+    pub(super) students: Manager<T::StudentId, StudentHandle>,
+    pub(super) subject_groups: Manager<T::SubjectGroupId, SubjectGroupHandle>,
+    pub(super) incompats: Manager<T::IncompatId, IncompatHandle>,
+    pub(super) group_lists: Manager<T::GroupListId, GroupListHandle>,
+    pub(super) subjects: Manager<T::SubjectId, SubjectHandle>,
+    pub(super) time_slots: Manager<T::TimeSlotId, TimeSlotHandle>,
+    pub(super) groupings: Manager<T::GroupingId, GroupingHandle>,
+    pub(super) grouping_incompats: Manager<T::GroupingIncompatId, GroupingIncompatHandle>,
 }
 
 impl<T: backend::Storage> ManagerCollection<T> {
     pub(super) fn new() -> Self {
         ManagerCollection {
             week_patterns: Manager::new(),
+            teachers: Manager::new(),
+            students: Manager::new(),
+            subject_groups: Manager::new(),
+            incompats: Manager::new(),
+            group_lists: Manager::new(),
+            subjects: Manager::new(),
+            time_slots: Manager::new(),
+            groupings: Manager::new(),
+            grouping_incompats: Manager::new(),
         }
     }
 }
