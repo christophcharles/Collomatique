@@ -63,6 +63,22 @@ impl SessionPeriods {
         data.get_periods().into()
     }
 
+    fn set_first_week(_self: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
+        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(match first_week {
+                Some(week) => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateFirstWeek(
+                    collomatique_time::NaiveMondayDate::from(week).into_inner(),
+                ),
+                None => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeleteFirstWeek,
+            }),
+        ))
+        .expect("Valid result message");
+
+        if result != ResultMsg::Ack {
+            panic!("Unexpected result: {:?}", result)
+        }
+    }
+
     fn add(_self: PyRef<'_, Self>, week_count: usize) {
         let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(

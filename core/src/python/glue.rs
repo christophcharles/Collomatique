@@ -3,6 +3,8 @@ use pyo3::prelude::*;
 #[pymodule]
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Session>()?;
+    m.add_class::<time::NaiveMondayDate>()?;
+    m.add_class::<time::NaiveDate>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
