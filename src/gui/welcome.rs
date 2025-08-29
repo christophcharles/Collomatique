@@ -1,5 +1,5 @@
 use iced::widget::{button, center, column, container};
-use iced::{Element, Length};
+use iced::{Element, Length, Task};
 
 use super::{GuiMessage, GuiState};
 
@@ -9,12 +9,14 @@ pub enum Message {
     OpenClicked,
 }
 
-pub fn update(state: &mut GuiState, message: Message) {
+pub fn update(_state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     match message {
-        Message::NewClicked => {
-            *state = GuiState::Editor(super::editor::State::default());
-        }
-        Message::OpenClicked => {}
+        Message::NewClicked => Task::done(GuiMessage::DialogMessage(
+            super::dialogs::Message::OpenNewFile,
+        )),
+        Message::OpenClicked => Task::done(GuiMessage::DialogMessage(
+            super::dialogs::Message::OpenExistingFile,
+        )),
     }
 }
 
