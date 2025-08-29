@@ -114,6 +114,7 @@ impl FactoryComponent for PeriodEntry {
             },
             #[local_ref]
             column_view_widget -> gtk::ColumnView {
+                add_css_class: "frame",
                 #[watch]
                 set_visible: !self.data.filtered_students.is_empty(),
             },
