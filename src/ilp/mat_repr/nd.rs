@@ -158,41 +158,6 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
     type Problem = NdProblem<V>;
     type Precomputation = (Array1<i32>, Array1<i32>);
 
-    fn max_distance_to_constraint(&self, problem: &NdProblem<V>) -> f32 {
-        let mut max_dist = 0.0f32;
-        let p = problem.leq_mat.shape()[1];
-
-        let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
-
-        for (i, v) in leq_column.iter().copied().enumerate() {
-            let mut norm2 = 0.0f32;
-            for j in 0..p {
-                norm2 += (problem.leq_mat[(i, j)] as f32).powi(2);
-            }
-            let dist = ((v as f32) / norm2.sqrt()).min(0.0f32);
-
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-
-        let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
-
-        for (i, v) in eq_column.iter().copied().enumerate() {
-            let mut norm2 = 0.0f32;
-            for j in 0..p {
-                norm2 += (problem.eq_mat[(i, j)] as f32).powi(2);
-            }
-            let dist = ((v as f32) / norm2.sqrt()).abs();
-
-            if dist > max_dist {
-                max_dist = dist;
-            }
-        }
-
-        max_dist
-    }
-
     fn precompute(&self, problem: &Self::Problem) -> Self::Precomputation {
         let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
         let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
@@ -274,14 +239,6 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
             }
         }
         true
-    }
-
-    fn neighbour(&self, i: usize) -> Self {
-        let mut neighbour = self.clone();
-
-        neighbour.values[i] = 1 - neighbour.values[i];
-
-        neighbour
     }
 
     unsafe fn get_unchecked(&self, i: usize) -> i32 {
