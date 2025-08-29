@@ -17,6 +17,7 @@ pub enum AnnotatedOperation {
     GroupingIncompats(AnnotatedGroupingIncompatsOperation),
     RegisterStudent(AnnotatedRegisterStudentOperation),
     Colloscopes(AnnotatedColloscopesOperation),
+    SlotSelections(AnnotatedSlotSelectionsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,6 +134,19 @@ pub enum AnnotatedColloscopesOperation {
     Update(
         handles::ColloscopeHandle,
         backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedSlotSelectionsOperation {
+    Create(
+        handles::SlotSelectionHandle,
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+    ),
+    Remove(handles::SlotSelectionHandle),
+    Update(
+        handles::SlotSelectionHandle,
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
     ),
 }
 
@@ -364,6 +378,26 @@ impl AnnotatedColloscopesOperation {
     }
 }
 
+impl AnnotatedSlotSelectionsOperation {
+    fn annotate<T: backend::Storage>(
+        op: SlotSelectionsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            SlotSelectionsOperation::Create(slot_selection) => {
+                let handle = handle_managers.slot_selections.create_handle();
+                AnnotatedSlotSelectionsOperation::Create(handle, slot_selection)
+            }
+            SlotSelectionsOperation::Remove(handle) => {
+                AnnotatedSlotSelectionsOperation::Remove(handle)
+            }
+            SlotSelectionsOperation::Update(handle, slot_selection) => {
+                AnnotatedSlotSelectionsOperation::Update(handle, slot_selection)
+            }
+        }
+    }
+}
+
 impl AnnotatedOperation {
     pub fn annotate<T: backend::Storage>(
         op: Operation,
@@ -406,6 +440,9 @@ impl AnnotatedOperation {
             ),
             Operation::Colloscopes(op) => AnnotatedOperation::Colloscopes(
                 AnnotatedColloscopesOperation::annotate(op, handle_managers),
+            ),
+            Operation::SlotSelections(op) => AnnotatedOperation::SlotSelections(
+                AnnotatedSlotSelectionsOperation::annotate(op, handle_managers),
             ),
         }
     }

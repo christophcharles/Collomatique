@@ -104,6 +104,14 @@ pub enum UpdateError<IntError: std::error::Error> {
     ColloscopeBadSubject(SubjectHandle),
     #[error("Colloscope references a bad student (probably removed) of id {0:?}")]
     ColloscopeBadStudent(StudentHandle),
+    #[error("Slot selection corresponding to handle {0:?} was previously removed")]
+    SlotSelectionRemoved(SlotSelectionHandle),
+    #[error("Slot selection references a bad subject (probably removed) of id {0:?}")]
+    SlotSelectionBadSubject(SubjectHandle),
+    #[error(
+        "Slot selection references a bad time slot (removed or with wrong subject) of id {0:?}"
+    )]
+    SlotSelectionBadTimeSlot(TimeSlotHandle),
 }
 
 #[derive(Debug, Error)]
@@ -132,6 +140,8 @@ pub enum RevError<IntError: std::error::Error> {
     GroupingIncompatRemoved(GroupingIncompatHandle),
     #[error("Colloscope corresponding to handle {0:?} was previously removed")]
     ColloscopeRemoved(ColloscopeHandle),
+    #[error("Slot selection corresponding to handle {0:?} was previously removed")]
+    SlotSelectionRemoved(SlotSelectionHandle),
 }
 
 impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntError> {
@@ -151,6 +161,7 @@ impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntEr
                 UpdateError::GroupingIncompatRemoved(handle)
             }
             RevError::ColloscopeRemoved(handle) => UpdateError::ColloscopeRemoved(handle),
+            RevError::SlotSelectionRemoved(handle) => UpdateError::SlotSelectionRemoved(handle),
         }
     }
 }
@@ -169,6 +180,7 @@ pub enum ReturnHandle {
     Grouping(GroupingHandle),
     GroupingIncompat(GroupingIncompatHandle),
     Colloscope(ColloscopeHandle),
+    SlotSelection(SlotSelectionHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -482,6 +494,26 @@ pub trait Manager: ManagerInternal {
         colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
     ) -> Result<
         backend::DataStatusWithId3<TeacherHandle, SubjectHandle, StudentHandle>,
+        <Self::InternalStorage as backend::Storage>::InternalError,
+    >;
+    async fn slot_selections_get_all(
+        &mut self,
+    ) -> Result<
+        BTreeMap<SlotSelectionHandle, backend::SlotSelection<SubjectHandle, TimeSlotHandle>>,
+        <Self::InternalStorage as backend::Storage>::InternalError,
+    >;
+    async fn slot_selections_get(
+        &mut self,
+        handle: SlotSelectionHandle,
+    ) -> Result<
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+        IdError<<Self::InternalStorage as backend::Storage>::InternalError, SlotSelectionHandle>,
+    >;
+    async fn slot_selections_check_data(
+        &mut self,
+        slot_selection: &backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+    ) -> Result<
+        backend::DataStatusWithId2<SubjectHandle, TimeSlotHandle>,
         <Self::InternalStorage as backend::Storage>::InternalError,
     >;
 
@@ -1925,6 +1957,109 @@ impl<T: ManagerInternal> Manager for T {
                     panic!("StudentId was taken from a handle manager and thus should be valid")
                 }
                 backend::DataStatusWithId3::Ok => backend::DataStatusWithId3::Ok,
+            };
+
+            Ok(status)
+        }
+    }
+
+    fn slot_selections_get(
+        &mut self,
+        handle: SlotSelectionHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, SlotSelectionHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().slot_selections;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let colloscope = self
+                .get_backend_logic()
+                .slot_selections_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_slot_selection_to_handles(
+                colloscope,
+                self.get_handle_managers_mut(),
+            ))
+        }
+    }
+
+    fn slot_selections_get_all(
+        &mut self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<SlotSelectionHandle, backend::SlotSelection<SubjectHandle, TimeSlotHandle>>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async {
+            let slot_selections_backend =
+                self.get_backend_logic().slot_selections_get_all().await?;
+
+            let slot_selections = slot_selections_backend
+                .into_iter()
+                .map(|(id, slot_selection)| {
+                    let handle = self
+                        .get_handle_managers_mut()
+                        .slot_selections
+                        .get_handle(id);
+                    let slot_selection = private::convert_slot_selection_to_handles(
+                        slot_selection,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, slot_selection)
+                })
+                .collect();
+
+            Ok(slot_selections)
+        }
+    }
+
+    fn slot_selections_check_data(
+        &mut self,
+        slot_selection: &backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId2<SubjectHandle, TimeSlotHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async {
+            let slot_selection_backend = match private::convert_slot_selection_from_handles(
+                slot_selection.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .slot_selections_check_data(&slot_selection_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId2::BadCrossId1(_id) => {
+                    panic!("TeacherId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId2::BadCrossId2(time_slot_id) => {
+                    backend::DataStatusWithId2::BadCrossId2(
+                        self.get_handle_managers_mut()
+                            .time_slots
+                            .get_handle(time_slot_id),
+                    )
+                }
+                backend::DataStatusWithId2::Ok => backend::DataStatusWithId2::Ok,
             };
 
             Ok(status)
@@ -3419,6 +3554,118 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_slot_selections_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedSlotSelectionsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedSlotSelectionsOperation::Create(slot_selection_handle, slot_selection) => {
+                let slot_selection_backend = match convert_slot_selection_from_handles(
+                    slot_selection.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId2::Ok => {
+                            panic!("DataStatusWithId2::Ok is not an error")
+                        }
+                        backend::DataStatusWithId2::BadCrossId1(subject_handle) => {
+                            return Err(UpdateError::SlotSelectionBadSubject(subject_handle))
+                        }
+                        backend::DataStatusWithId2::BadCrossId2(time_slot_handle) => {
+                            return Err(UpdateError::SlotSelectionBadTimeSlot(time_slot_handle))
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .slot_selections_add(&slot_selection_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross2Error::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::Cross2Error::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross2Error::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .slot_selections
+                    .update_handle(*slot_selection_handle, Some(new_id));
+                Ok(ReturnHandle::SlotSelection(*slot_selection_handle))
+            }
+            AnnotatedSlotSelectionsOperation::Remove(slot_selection_handle) => {
+                let slot_selection_id = manager
+                    .get_handle_managers()
+                    .slot_selections
+                    .get_id(*slot_selection_handle)
+                    .ok_or(UpdateError::SlotSelectionRemoved(*slot_selection_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .slot_selections_remove(slot_selection_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => UpdateError::Internal(int_err),
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .slot_selections
+                    .update_handle(*slot_selection_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedSlotSelectionsOperation::Update(slot_selection_handle, slot_selection) => {
+                let slot_selection_backend = match convert_slot_selection_from_handles(
+                    slot_selection.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId2::Ok => {
+                            panic!("DataStatusWithId2::Ok is not an error")
+                        }
+                        backend::DataStatusWithId2::BadCrossId1(subject_handle) => {
+                            return Err(UpdateError::SlotSelectionBadSubject(subject_handle))
+                        }
+                        backend::DataStatusWithId2::BadCrossId2(time_slot_handle) => {
+                            return Err(UpdateError::SlotSelectionBadTimeSlot(time_slot_handle))
+                        }
+                    },
+                };
+                let slot_selection_id = manager
+                    .get_handle_managers()
+                    .slot_selections
+                    .get_id(*slot_selection_handle)
+                    .ok_or(UpdateError::SlotSelectionRemoved(*slot_selection_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .slot_selections_update(slot_selection_id, &slot_selection_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross2IdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::Cross2IdError::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross2IdError::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross2IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -3441,6 +3688,9 @@ pub(super) mod private {
                 update_register_student_state(manager, op).await
             }
             AnnotatedOperation::Colloscopes(op) => update_colloscopes_state(manager, op).await,
+            AnnotatedOperation::SlotSelections(op) => {
+                update_slot_selections_state(manager, op).await
+            }
         }
     }
 
@@ -4183,6 +4433,69 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_slot_selections_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedSlotSelectionsOperation,
+    ) -> Result<
+        AnnotatedSlotSelectionsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedSlotSelectionsOperation::Create(handle, _slot_selection) => {
+                AnnotatedSlotSelectionsOperation::Remove(*handle)
+            }
+            AnnotatedSlotSelectionsOperation::Remove(handle) => {
+                let slot_selection_id = manager
+                    .get_handle_managers()
+                    .slot_selections
+                    .get_id(*handle)
+                    .ok_or(RevError::SlotSelectionRemoved(*handle))?;
+                let slot_selection = manager
+                    .get_backend_logic()
+                    .slot_selections_get(slot_selection_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedSlotSelectionsOperation::Create(
+                    *handle,
+                    convert_slot_selection_to_handles(
+                        slot_selection,
+                        manager.get_handle_managers_mut(),
+                    ),
+                )
+            }
+            AnnotatedSlotSelectionsOperation::Update(handle, _new_slot_selection) => {
+                let slot_selection_id = manager
+                    .get_handle_managers()
+                    .slot_selections
+                    .get_id(*handle)
+                    .ok_or(RevError::SlotSelectionRemoved(*handle))?;
+                let slot_selection = manager
+                    .get_backend_logic()
+                    .slot_selections_get(slot_selection_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedSlotSelectionsOperation::Update(
+                    *handle,
+                    convert_slot_selection_to_handles(
+                        slot_selection,
+                        manager.get_handle_managers_mut(),
+                    ),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
     pub async fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
@@ -4229,6 +4542,9 @@ pub(super) mod private {
             AnnotatedOperation::Colloscopes(op) => {
                 AnnotatedOperation::Colloscopes(build_backward_colloscopes_op(manager, op).await?)
             }
+            AnnotatedOperation::SlotSelections(op) => AnnotatedOperation::SlotSelections(
+                build_backward_slot_selections_op(manager, op).await?,
+            ),
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
@@ -4643,6 +4959,86 @@ pub(super) mod private {
                                 }
                             })?,
                     ))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    pub fn convert_slot_group_to_handles<T: backend::Storage>(
+        slot_group: backend::SlotGroup<T::TimeSlotId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::SlotGroup<TimeSlotHandle> {
+        backend::SlotGroup {
+            count: slot_group.count,
+            slots: slot_group
+                .slots
+                .into_iter()
+                .map(|time_slot_id| handle_managers.time_slots.get_handle(time_slot_id))
+                .collect(),
+        }
+    }
+
+    pub fn convert_slot_selection_to_handles<T: backend::Storage>(
+        slot_selection: backend::SlotSelection<T::SubjectId, T::TimeSlotId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::SlotSelection<SubjectHandle, TimeSlotHandle> {
+        backend::SlotSelection {
+            subject_id: handle_managers
+                .subjects
+                .get_handle(slot_selection.subject_id),
+            slot_groups: slot_selection
+                .slot_groups
+                .into_iter()
+                .map(|slot_group| convert_slot_group_to_handles(slot_group, handle_managers))
+                .collect(),
+        }
+    }
+
+    pub fn convert_slot_group_from_handles<T: backend::Storage>(
+        slot_group: backend::SlotGroup<TimeSlotHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<backend::SlotGroup<T::TimeSlotId>, backend::DataStatusWithId<TimeSlotHandle>> {
+        Ok(backend::SlotGroup {
+            count: slot_group.count,
+            slots: slot_group
+                .slots
+                .into_iter()
+                .map(|time_slot_id| {
+                    handle_managers
+                        .time_slots
+                        .get_id(time_slot_id)
+                        .ok_or(backend::DataStatusWithId::BadCrossId(time_slot_id))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    pub fn convert_slot_selection_from_handles<T: backend::Storage>(
+        slot_selection: backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<
+        backend::SlotSelection<T::SubjectId, T::TimeSlotId>,
+        backend::DataStatusWithId2<SubjectHandle, TimeSlotHandle>,
+    > {
+        Ok(backend::SlotSelection {
+            subject_id: handle_managers
+                .subjects
+                .get_id(slot_selection.subject_id)
+                .ok_or(backend::DataStatusWithId2::BadCrossId1(
+                    slot_selection.subject_id,
+                ))?,
+            slot_groups: slot_selection
+                .slot_groups
+                .into_iter()
+                .map(|slot_group| {
+                    convert_slot_group_from_handles(slot_group, handle_managers).map_err(
+                        |e| match e {
+                            backend::DataStatusWithId::Ok => panic!("not an error"),
+                            backend::DataStatusWithId::BadCrossId(id) => {
+                                backend::DataStatusWithId2::BadCrossId2(id)
+                            }
+                        },
+                    )
                 })
                 .collect::<Result<_, _>>()?,
         })

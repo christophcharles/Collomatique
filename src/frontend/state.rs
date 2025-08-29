@@ -8,10 +8,10 @@ use crate::backend;
 use history::{
     AnnotatedColloscopesOperation, AnnotatedGroupListsOperation,
     AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation, AnnotatedIncompatsOperation,
-    AnnotatedOperation, AnnotatedRegisterStudentOperation, AnnotatedStudentsOperation,
-    AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation, AnnotatedTeachersOperation,
-    AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation, ModificationHistory,
-    ReversibleOperation,
+    AnnotatedOperation, AnnotatedRegisterStudentOperation, AnnotatedSlotSelectionsOperation,
+    AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation,
+    AnnotatedTeachersOperation, AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation,
+    ModificationHistory, ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
@@ -39,6 +39,7 @@ pub enum Operation {
     GroupingIncompats(GroupingIncompatsOperation),
     RegisterStudent(RegisterStudentOperation),
     Colloscopes(ColloscopesOperation),
+    SlotSelections(SlotSelectionsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,6 +134,16 @@ pub enum ColloscopesOperation {
     Update(
         ColloscopeHandle,
         backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SlotSelectionsOperation {
+    Create(backend::SlotSelection<SubjectHandle, TimeSlotHandle>),
+    Remove(SlotSelectionHandle),
+    Update(
+        SlotSelectionHandle,
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
     ),
 }
 
