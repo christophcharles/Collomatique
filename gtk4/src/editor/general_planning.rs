@@ -57,26 +57,31 @@ impl GeneralPlanningUpdateOp {
         data: &mut AppState<Data>,
     ) -> Result<(), collomatique_state_colloscopes::Error> {
         match self {
-            GeneralPlanningUpdateOp::DeleteFirstWeek => {
-                data.apply(collomatique_state_colloscopes::Op::Period(
+            GeneralPlanningUpdateOp::DeleteFirstWeek => data.apply(
+                collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
-                ))
-            }
-            GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
-                data.apply(collomatique_state_colloscopes::Op::Period(
+                ),
+                "Effacer première semaine".into(),
+            ),
+            GeneralPlanningUpdateOp::UpdateFirstWeek(date) => data.apply(
+                collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(date.clone())),
-                ))
-            }
+                ),
+                "Changer première semaine".into(),
+            ),
             GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
                 let new_desc = vec![true; *week_count];
-                data.apply(collomatique_state_colloscopes::Op::Period(
-                    match data.get_data().get_periods().ordered_period_list.last() {
-                        Some((id, _)) => {
-                            collomatique_state_colloscopes::PeriodOp::AddAfter(*id, new_desc)
-                        }
-                        None => collomatique_state_colloscopes::PeriodOp::AddFront(new_desc),
-                    },
-                ))
+                data.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        match data.get_data().get_periods().ordered_period_list.last() {
+                            Some((id, _)) => {
+                                collomatique_state_colloscopes::PeriodOp::AddAfter(*id, new_desc)
+                            }
+                            None => collomatique_state_colloscopes::PeriodOp::AddFront(new_desc),
+                        },
+                    ),
+                    "Ajouter une période".into(),
+                )
             }
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
                 let pos = data
@@ -90,15 +95,19 @@ impl GeneralPlanningUpdateOp {
 
                 desc.resize(*week_count, desc.last().copied().unwrap_or(true));
 
-                data.apply(collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                ))
+                data.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                    ),
+                    "Modifier une période".into(),
+                )
             }
-            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                data.apply(collomatique_state_colloscopes::Op::Period(
+            GeneralPlanningUpdateOp::DeletePeriod(period_id) => data.apply(
+                collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
-                ))
-            }
+                ),
+                "Effacer une période".into(),
+            ),
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
                 let pos = data
                     .get_data()
@@ -112,14 +121,20 @@ impl GeneralPlanningUpdateOp {
 
                 let mut session = collomatique_state::AppSession::new(data.clone());
 
-                session.apply(collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                ))?;
-                session.apply(collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, new_desc),
-                ))?;
+                session.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                    ),
+                    "Racourcir une période".into(),
+                )?;
+                session.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, new_desc),
+                    ),
+                    "Ajouter une période".into(),
+                )?;
 
-                *data = session.commit();
+                *data = session.commit("Découper une période".into());
                 Ok(())
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -142,14 +157,20 @@ impl GeneralPlanningUpdateOp {
 
                 let mut session = collomatique_state::AppSession::new(data.clone());
 
-                session.apply(collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::Update(previous_id, prev_desc),
-                ))?;
-                session.apply(collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
-                ))?;
+                session.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::Update(previous_id, prev_desc),
+                    ),
+                    "Prolongement d'une période".into(),
+                )?;
+                session.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
+                    ),
+                    "Suppression d'une période".into(),
+                )?;
 
-                *data = session.commit();
+                *data = session.commit("Fusionner deux périodes".into());
                 Ok(())
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
@@ -163,9 +184,16 @@ impl GeneralPlanningUpdateOp {
                     .clone();
                 desc[*week_num] = *state;
 
-                data.apply(collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                ))
+                data.apply(
+                    collomatique_state_colloscopes::Op::Period(
+                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                    ),
+                    if *state {
+                        "Ajouter une semaine de colle".into()
+                    } else {
+                        "Enlever une semaine de colle".into()
+                    },
+                )
             }
         }
     }
