@@ -1,13 +1,16 @@
 //! Solution submodule of [crate::base].
-//! 
+//!
 //! This submodule defines the various types to describe a colloscope.
-//! 
+//!
 //! The main such structure is [Colloscope] which describes
 //! a (partially completed or not) colloscope.
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-pub trait Identifier : Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync {}
+pub trait Identifier:
+    Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync
+{
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
@@ -46,7 +49,12 @@ pub struct DatedGroupAssignment<GroupListId: Identifier, StudentId: Identifier> 
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubjectInterrogations<TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
+pub struct SubjectInterrogations<
+    TeacherId: Identifier,
+    InterrogationId: Identifier,
+    GroupListId: Identifier,
+    StudentId: Identifier,
+> {
     duration: collomatique_time::NonZeroDurationInMinutes,
     starting_group_assignment: GroupAssignment<GroupListId, StudentId>,
     other_group_assignments: Vec<DatedGroupAssignment<GroupListId, StudentId>>,
@@ -54,9 +62,17 @@ pub struct SubjectInterrogations<TeacherId: Identifier, InterrogationId: Identif
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Colloscope<SubjectId: Identifier, TeacherId: Identifier, InterrogationId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
+pub struct Colloscope<
+    SubjectId: Identifier,
+    TeacherId: Identifier,
+    InterrogationId: Identifier,
+    GroupListId: Identifier,
+    StudentId: Identifier,
+> {
     week_count: usize,
-    subject_map: BTreeMap<SubjectId, SubjectInterrogations<TeacherId, InterrogationId, GroupListId, StudentId>>,
+    subject_map: BTreeMap<
+        SubjectId,
+        SubjectInterrogations<TeacherId, InterrogationId, GroupListId, StudentId>,
+    >,
     group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
 }
-
