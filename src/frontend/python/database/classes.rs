@@ -81,16 +81,24 @@ pub struct WeekPatternHandle {
 #[pyclass(eq)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeekPattern {
-    #[pyo3(set,get)]
+    #[pyo3(set, get)]
     name: String,
-    #[pyo3(set,get)]
+    #[pyo3(set, get)]
     weeks: BTreeSet<u32>,
 }
 
 #[pymethods]
 impl WeekPattern {
+    #[new]
+    fn new(name: String) -> Self {
+        WeekPattern {
+            name,
+            weeks: BTreeSet::new(),
+        }
+    }
+
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let weeks_vec : Vec<_> = self_.weeks.iter().map(|x| x.to_string()).collect();
+        let weeks_vec: Vec<_> = self_.weeks.iter().map(|x| x.to_string()).collect();
         let output = format!(
             "{{ name = {}, weeks = [{}] }}",
             self_.name,
@@ -130,4 +138,3 @@ impl From<WeekPattern> for backend::WeekPattern {
         backend::WeekPattern::from(&value)
     }
 }
-
