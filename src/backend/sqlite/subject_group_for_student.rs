@@ -32,24 +32,7 @@ pub async fn set(
     student_id: students::Id,
     subject_group_id: subject_groups::Id,
     subject_id: Option<subjects::Id>,
-) -> std::result::Result<(), CrossId2Error<Error, students::Id, subject_groups::Id, subjects::Id>> {
-    if !check_student_id(pool, student_id).await? {
-        return Err(CrossId2Error::InvalidId1(student_id));
-    }
-    if !check_subject_group_id(pool, subject_group_id).await? {
-        return Err(CrossId2Error::InvalidId2(subject_group_id));
-    }
-    if let Some(id) = subject_id {
-        let subject = subjects::get(pool, id).await.map_err(|e| match e {
-            IdError::InvalidId(inv_id) => CrossId2Error::InvalidCrossId(inv_id),
-            IdError::InternalError(int_err) => CrossId2Error::InternalError(int_err),
-        })?;
-
-        if subject.subject_group_id != subject_group_id {
-            return Err(CrossId2Error::InvalidCrossId(id));
-        }
-    }
-
+) -> std::result::Result<(), Error> {
     let _ = sqlx::query!(
         r#"
 DELETE FROM student_subjects

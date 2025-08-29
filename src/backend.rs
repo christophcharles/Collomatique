@@ -59,17 +59,20 @@ where
 }
 
 #[derive(Error, Debug)]
-pub enum CrossId2Error<T, Id1, Id2, CrossId>
+pub enum CrossId3Error<T, Id1, Id2, Id3, CrossId>
 where
     T: std::fmt::Debug + std::error::Error,
     Id1: std::fmt::Debug,
     Id2: std::fmt::Debug,
+    Id3: std::fmt::Debug,
     CrossId: std::fmt::Debug,
 {
     #[error("Id {0:?} is invalid")]
     InvalidId1(Id1),
     #[error("Id {0:?} is invalid")]
     InvalidId2(Id2),
+    #[error("Id {0:?} is invalid")]
+    InvalidId3(Id3),
     #[error("Id {0:?} is invalid")]
     InvalidCrossId(CrossId),
     #[error("Backend internal error: {0:?}")]
@@ -1457,10 +1460,7 @@ pub trait Storage: Send + Sync {
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
         subject_id: Option<Self::SubjectId>,
-    ) -> std::result::Result<
-        (),
-        CrossId2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId, Self::SubjectId>,
-    >;
+    ) -> std::result::Result<(), Self::InternalError>;
     async fn subject_group_for_student_get(
         &self,
         student_id: Self::StudentId,
@@ -1469,6 +1469,51 @@ pub trait Storage: Send + Sync {
         Option<Self::SubjectId>,
         Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
     >;
+    async fn subject_group_for_student_set(
+        &mut self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+        subject_id: Option<Self::SubjectId>,
+    ) -> std::result::Result<
+        (),
+        CrossId3Error<
+            Self::InternalError,
+            Self::StudentId,
+            Self::SubjectGroupId,
+            Self::SubjectId,
+            Self::SubjectId,
+        >,
+    > {
+        async move {
+            let students = self.students_get_all().await?;
+            if !students.contains_key(&student_id) {
+                return Err(CrossId3Error::InvalidId1(student_id));
+            }
+            let subject_groups = self.subject_groups_get_all().await?;
+            if !subject_groups.contains_key(&subject_group_id) {
+                return Err(CrossId3Error::InvalidId2(subject_group_id));
+            }
+            if let Some(id) = subject_id {
+                let subject = self.subjects_get(id).await.map_err(|e| match e {
+                    IdError::InternalError(int_err) => CrossId3Error::InternalError(int_err),
+                    IdError::InvalidId(_) => CrossId3Error::InvalidId3(id),
+                })?;
+                if subject.subject_group_id != subject_group_id {
+                    return Err(CrossId3Error::InvalidCrossId(id));
+                }
+            }
+            unsafe {
+                self.subject_group_for_student_set_unchecked(
+                    student_id,
+                    subject_group_id,
+                    subject_id,
+                )
+            }
+            .await?;
+            Ok(())
+        }
+    }
+
     async unsafe fn incompat_for_student_set_unchecked(
         &mut self,
         student_id: Self::StudentId,
