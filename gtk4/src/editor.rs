@@ -15,6 +15,12 @@ pub enum EditorInput {
         data: collomatique_state_colloscopes::Data,
         dirty: bool,
     },
+    CloseFileClicked,
+}
+
+#[derive(Debug)]
+pub enum EditorOutput {
+    RequestCloseFile,
 }
 
 pub struct EditorPanel {
@@ -58,7 +64,7 @@ relm4::new_stateless_action!(CloseAction, EditorActionGroup, "close");
 #[relm4::component(pub)]
 impl SimpleComponent for EditorPanel {
     type Input = EditorInput;
-    type Output = ();
+    type Output = EditorOutput;
     type Init = ();
 
     view! {
@@ -158,7 +164,7 @@ impl SimpleComponent for EditorPanel {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = EditorPanel {
             file_name: None,
@@ -194,8 +200,9 @@ impl SimpleComponent for EditorPanel {
             })
         };
         let close_action: RelmAction<CloseAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(EditorInput::CloseFileClicked);
             })
         };
 
@@ -214,7 +221,7 @@ impl SimpleComponent for EditorPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             EditorInput::NewFile {
                 file_name,
@@ -224,6 +231,9 @@ impl SimpleComponent for EditorPanel {
                 self.file_name = file_name;
                 self.data = AppState::new(data);
                 self.dirty = dirty;
+            }
+            EditorInput::CloseFileClicked => {
+                sender.output(EditorOutput::RequestCloseFile).unwrap();
             }
         }
     }
