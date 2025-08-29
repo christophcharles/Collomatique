@@ -8,6 +8,7 @@ pub struct Solver {
     disable_logging: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Objective {
     None,
     MinimumDistance,
@@ -122,13 +123,7 @@ impl Solver {
                         // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
                         1. - 2. * value
                     }
-                    Objective::MinimumObjectiveFn => {
-                        /*match problem.get_objective_fn().get(var) {
-                            Some(coef) => coef.into(),
-                            None => 0.,
-                        }*/
-                        0.
-                    }
+                    Objective::MinimumObjectiveFn => 0.,
                     Objective::None => 0.,
                 };
 
@@ -136,6 +131,19 @@ impl Solver {
                 (var.clone(), col)
             })
             .collect();
+
+        let obj_cols: Vec<_> = if objective == Objective::MinimumObjectiveFn {
+            problem
+                .get_objective_terms()
+                .iter()
+                .map(|obj_term| {
+                    let col = highs_problem.add_column(obj_term.coef, 0.0..=f64::INFINITY);
+                    col
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         for constraint in problem.get_constraints() {
             let variables = constraint.variables();
@@ -155,6 +163,32 @@ impl Solver {
                     highs_problem.add_row(..=neg_constant, row_factors);
                 }
             };
+        }
+
+        if objective == Objective::MinimumObjectiveFn {
+            for (i, obj_term) in problem.get_objective_terms().iter().enumerate() {
+                for expr in &obj_term.exprs {
+                    let variables = expr.variables();
+                    let row_factors = variables
+                        .iter()
+                        .map(|var| {
+                            let col = cols[var];
+                            let weight = f64::from(expr.get(var).unwrap());
+
+                            (col, weight)
+                        })
+                        .chain(std::iter::once({
+                            let col = obj_cols[i];
+                            let weight = -1.;
+
+                            (col, weight)
+                        }));
+
+                    let neg_constant = f64::from(-expr.get_constant());
+
+                    highs_problem.add_row(..=neg_constant, row_factors);
+                }
+            }
         }
 
         HighsProblem {
