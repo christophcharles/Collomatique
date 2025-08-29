@@ -5,6 +5,7 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssignmentsCmdMsg {
     Assign(MsgPeriodId, MsgStudentId, MsgSubjectId, bool),
+    DuplicatePreviousPeriod(MsgPeriodId),
 }
 
 impl AssignmentsCmdMsg {
@@ -25,6 +26,15 @@ impl AssignmentsCmdMsg {
                     return Err(error_msg::AssignError::InvalidSubjectId(subject_id).into());
                 };
                 AssignmentsUpdateOp::Assign(period_id, student_id, subject_id, status)
+            }
+            AssignmentsCmdMsg::DuplicatePreviousPeriod(period_id) => {
+                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                    return Err(error_msg::DuplicatePreviousPeriodError::InvalidPeriodId(
+                        period_id,
+                    )
+                    .into());
+                };
+                AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id)
             }
         })
     }

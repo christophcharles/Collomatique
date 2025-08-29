@@ -8,12 +8,15 @@ pub enum AssignmentsUpdateOp {
         collomatique_state_colloscopes::SubjectId,
         bool,
     ),
+    DuplicatePreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
 #[derive(Debug, Error)]
 pub enum AssignmentsUpdateError {
     #[error(transparent)]
     Assign(#[from] AssignError),
+    #[error(transparent)]
+    DuplicatePreviousPeriod(#[from] DuplicatePreviousPeriodError),
 }
 
 #[derive(Debug, Error)]
@@ -45,6 +48,17 @@ pub enum AssignError {
     ),
 }
 
+#[derive(Debug, Error)]
+pub enum DuplicatePreviousPeriodError {
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+
+    /// trying to override first period
+    #[error("given period ({0:?}) is the first period")]
+    FirstPeriodHasNoPreviousPeriod(collomatique_state_colloscopes::PeriodId),
+}
+
 impl AssignmentsUpdateOp {
     pub fn get_desc(&self) -> String {
         match self {
@@ -54,6 +68,9 @@ impl AssignmentsUpdateOp {
                 } else {
                     "Désinscrire un élève d'une matière".into()
                 }
+            }
+            AssignmentsUpdateOp::DuplicatePreviousPeriod(_) => {
+                "Dupliquer les inscriptions d'un période".into()
             }
         }
     }
@@ -101,6 +118,77 @@ impl AssignmentsUpdateOp {
                     })?;
 
                 assert!(result.is_none());
+
+                Ok(())
+            }
+            Self::DuplicatePreviousPeriod(period_id) => {
+                let Some(position) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return Err(
+                        DuplicatePreviousPeriodError::InvalidPeriodId(period_id.clone()).into(),
+                    );
+                };
+
+                if position == 0 {
+                    return Err(
+                        DuplicatePreviousPeriodError::FirstPeriodHasNoPreviousPeriod(
+                            period_id.clone(),
+                        )
+                        .into(),
+                    );
+                }
+
+                let previous_period_id =
+                    data.get_data().get_periods().ordered_period_list[position - 1].0;
+                let current_period_assignments = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .expect("Period id should be valid at this point");
+                let previous_period_assignments = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(&previous_period_id)
+                    .expect("Previous period id should be valid at this point");
+
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    for (subject_id, _) in &current_period_assignments.subject_map {
+                        let Some(previous_assigned_students) =
+                            previous_period_assignments.subject_map.get(subject_id)
+                        else {
+                            continue;
+                        };
+
+                        let previous_status = previous_assigned_students.contains(student_id);
+
+                        session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Assignment(
+                                    collomatique_state_colloscopes::AssignmentOp::Assign(
+                                        *period_id,
+                                        *student_id,
+                                        *subject_id,
+                                        previous_status,
+                                    ),
+                                ),
+                                "Dupliquer l'affectation de la période précédente".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                    }
+                }
+
+                *data = session.commit(self.get_desc());
 
                 Ok(())
             }
