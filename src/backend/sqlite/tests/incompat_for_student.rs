@@ -204,14 +204,16 @@ async fn incompat_for_student_get(pool: sqlx::SqlitePool) {
 async fn incompat_for_student_set(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .incompat_for_student_set(
-            super::super::students::Id(1),
-            super::super::incompats::Id(4),
-            false,
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompat_for_student_set_unchecked(
+                super::super::students::Id(1),
+                super::super::incompats::Id(4),
+                false,
+            )
+            .await
+            .unwrap();
+    }
 
     let value = store
         .incompat_for_student_get(
@@ -223,14 +225,16 @@ async fn incompat_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(value, false);
 
-    store
-        .incompat_for_student_set(
-            super::super::students::Id(5),
-            super::super::incompats::Id(4),
-            true,
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompat_for_student_set_unchecked(
+                super::super::students::Id(5),
+                super::super::incompats::Id(4),
+                true,
+            )
+            .await
+            .unwrap();
+    }
 
     let value = store
         .incompat_for_student_get(
@@ -242,14 +246,16 @@ async fn incompat_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(value, true);
 
-    store
-        .incompat_for_student_set(
-            super::super::students::Id(23),
-            super::super::incompats::Id(7),
-            false,
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompat_for_student_set_unchecked(
+                super::super::students::Id(23),
+                super::super::incompats::Id(7),
+                false,
+            )
+            .await
+            .unwrap();
+    }
 
     let value = store
         .incompat_for_student_get(
@@ -261,14 +267,16 @@ async fn incompat_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(value, false);
 
-    store
-        .incompat_for_student_set(
-            super::super::students::Id(23),
-            super::super::incompats::Id(7),
-            true,
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompat_for_student_set_unchecked(
+                super::super::students::Id(23),
+                super::super::incompats::Id(7),
+                true,
+            )
+            .await
+            .unwrap();
+    }
 
     let value = store
         .incompat_for_student_get(

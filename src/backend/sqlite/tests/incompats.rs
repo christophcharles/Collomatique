@@ -265,8 +265,8 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    let id = store
-        .incompats_add(&Incompat {
+    let id = unsafe {
+        store.incompats_add_unchecked(&Incompat {
             name: String::from("LV2 - Allemand"),
             max_count: 0,
             groups: BTreeSet::from([
@@ -302,8 +302,9 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 },
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::incompats::Id(1));
 
@@ -382,8 +383,8 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    let id = store
-        .incompats_add(&Incompat {
+    let id = unsafe {
+        store.incompats_add_unchecked(&Incompat {
             name: String::from("LV2 - Allemand"),
             max_count: 0,
             groups: BTreeSet::from([
@@ -419,13 +420,14 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 },
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::incompats::Id(1));
 
-    let id = store
-        .incompats_add(&Incompat {
+    let id = unsafe {
+        store.incompats_add_unchecked(&Incompat {
             name: String::from("Repas midi - lundi"),
             max_count: 2,
             groups: BTreeSet::from([
@@ -461,8 +463,9 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 },
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::incompats::Id(2));
 
@@ -586,10 +589,12 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .incompats_remove(super::super::incompats::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompats_remove_unchecked(super::super::incompats::Id(2))
+            .await
+            .unwrap();
+    }
 
     let incompats = store.incompats_get_all().await.unwrap();
 
@@ -695,13 +700,15 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .incompats_remove(super::super::incompats::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompats_remove_unchecked(super::super::incompats::Id(2))
+            .await
+            .unwrap();
+    }
 
-    let id = store
-        .incompats_add(&Incompat {
+    let id = unsafe {
+        store.incompats_add_unchecked(&Incompat {
             name: String::from("Repas midi - lundi"),
             max_count: 2,
             groups: BTreeSet::from([
@@ -737,8 +744,9 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                 },
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::incompats::Id(4));
 
@@ -885,38 +893,40 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .incompats_update(
-            super::super::incompats::Id(2),
-            &Incompat {
-                name: String::from("Repas midi - mercredi"),
-                max_count: 1,
-                groups: BTreeSet::from([
-                    IncompatGroup {
-                        slots: BTreeSet::from([IncompatSlot {
-                            week_pattern_id: super::super::week_patterns::Id(1),
-                            start: SlotStart {
-                                day: crate::time::Weekday::Wednesday,
-                                time: crate::time::Time::from_hm(11, 0).unwrap(),
-                            },
-                            duration: NonZeroU32::new(60).unwrap(),
-                        }]),
-                    },
-                    IncompatGroup {
-                        slots: BTreeSet::from([IncompatSlot {
-                            week_pattern_id: super::super::week_patterns::Id(1),
-                            start: SlotStart {
-                                day: crate::time::Weekday::Wednesday,
-                                time: crate::time::Time::from_hm(12, 0).unwrap(),
-                            },
-                            duration: NonZeroU32::new(60).unwrap(),
-                        }]),
-                    },
-                ]),
-            },
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .incompats_update_unchecked(
+                super::super::incompats::Id(2),
+                &Incompat {
+                    name: String::from("Repas midi - mercredi"),
+                    max_count: 1,
+                    groups: BTreeSet::from([
+                        IncompatGroup {
+                            slots: BTreeSet::from([IncompatSlot {
+                                week_pattern_id: super::super::week_patterns::Id(1),
+                                start: SlotStart {
+                                    day: crate::time::Weekday::Wednesday,
+                                    time: crate::time::Time::from_hm(11, 0).unwrap(),
+                                },
+                                duration: NonZeroU32::new(60).unwrap(),
+                            }]),
+                        },
+                        IncompatGroup {
+                            slots: BTreeSet::from([IncompatSlot {
+                                week_pattern_id: super::super::week_patterns::Id(1),
+                                start: SlotStart {
+                                    day: crate::time::Weekday::Wednesday,
+                                    time: crate::time::Time::from_hm(12, 0).unwrap(),
+                                },
+                                duration: NonZeroU32::new(60).unwrap(),
+                            }]),
+                        },
+                    ]),
+                },
+            )
+            .await
+            .unwrap();
+    }
 
     let incompats = store.incompats_get_all().await.unwrap();
 
