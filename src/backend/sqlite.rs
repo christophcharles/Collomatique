@@ -690,9 +690,8 @@ impl Storage for Store {
     unsafe fn subjects_remove_unchecked(
         &mut self,
         index: Self::SubjectId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         subjects::remove(&self.pool, index)
     }
     unsafe fn subjects_update_unchecked(
