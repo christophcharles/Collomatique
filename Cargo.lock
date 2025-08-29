@@ -271,7 +271,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "collomatique-core",
+ "libadwaita",
  "relm4",
+ "tokio",
 ]
 
 [[package]]
