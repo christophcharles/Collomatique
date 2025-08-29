@@ -11,7 +11,7 @@ pub struct AppInit {
 }
 
 struct FileDesc {
-    _file_name: Option<PathBuf>,
+    file_name: Option<PathBuf>,
 }
 
 pub struct AppModel {
@@ -26,6 +26,20 @@ pub enum AppInput {
 
 pub struct AppWidgets {}
 
+impl AppModel {
+    fn generate_title(&self) -> String {
+        match &self.current_file {
+            Some(file_desc) => match &file_desc.file_name {
+                Some(path) => {
+                    format!("Collomatique - {}", path.to_string_lossy())
+                }
+                None => "Collomatique - Fichier sans nom".into(),
+            },
+            None => "Collomatique".into(),
+        }
+    }
+}
+
 #[relm4::component(async, pub)]
 impl AsyncComponent for AppModel {
     type Input = AppInput;
@@ -38,7 +52,8 @@ impl AsyncComponent for AppModel {
         root_window = adw::ApplicationWindow {
             set_default_width: 800,
             set_default_height: 600,
-            set_title: Some("Collomatique"),
+            #[watch]
+            set_title: Some(&model.generate_title()),
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
                 adw::HeaderBar::new(),
@@ -109,7 +124,7 @@ impl AsyncComponent for AppModel {
         let model = AppModel {
             current_file: if params.new || params.file_name.is_some() {
                 Some(FileDesc {
-                    _file_name: params.file_name,
+                    file_name: params.file_name,
                 })
             } else {
                 None
@@ -127,7 +142,7 @@ impl AsyncComponent for AppModel {
     ) {
         match message {
             AppInput::OpenNewColloscope => {
-                self.current_file = Some(FileDesc { _file_name: None });
+                self.current_file = Some(FileDesc { file_name: None });
             }
             AppInput::OpenExistingColloscope => {
                 // Ignore for now
