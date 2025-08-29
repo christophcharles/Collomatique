@@ -20,26 +20,35 @@ where
     ),
 }
 
-use backend::IdError;
+use backend::{IdError, WeekPatternDependancy};
 
 #[trait_variant::make(Send)]
 pub trait Manager: ManagerInternal {
     fn get_backend_logic(&self) -> &backend::Logic<Self::Storage>;
-    fn get_week_pattern_handle(
-        &mut self,
-        id: <Self::Storage as backend::Storage>::WeekPatternId,
-    ) -> handles::WeekPatternHandle;
 
     async fn general_data_get(
         &self,
     ) -> Result<backend::GeneralData, <Self::Storage as backend::Storage>::InternalError>;
     async fn week_patterns_get_all(
         &mut self,
-    ) -> Result<BTreeMap<handles::WeekPatternHandle, backend::WeekPattern>, <Self::Storage as backend::Storage>::InternalError>;
+    ) -> Result<
+        BTreeMap<WeekPatternHandle, backend::WeekPattern>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
     async fn week_patterns_get(
         &self,
-        handle: handles::WeekPatternHandle,
-    ) -> Result<backend::WeekPattern, IdError<<Self::Storage as backend::Storage>::InternalError, handles::WeekPatternHandle>>;
+        handle: WeekPatternHandle,
+    ) -> Result<
+        backend::WeekPattern,
+        IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
+    >;
+    async fn week_patterns_check_can_remove(
+        &mut self,
+        handle: WeekPatternHandle,
+    ) -> Result<
+        Vec<WeekPatternDependancy<IncompatHandle, TimeSlotHandle>>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
+    >;
 
     async fn apply(&mut self, op: Operation) -> Result<(), UpdateError<Self::Storage>>;
     fn can_undo(&self) -> bool;
@@ -57,50 +66,113 @@ impl<T: ManagerInternal> Manager for T {
         <Self as ManagerInternal>::get_backend_logic(self)
     }
 
-    fn get_week_pattern_handle(
+    fn general_data_get(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Result<backend::GeneralData, <Self::Storage as backend::Storage>::InternalError>,
+    > + Send {
+        async { self.get_backend_logic().general_data_get().await }
+    }
+
+    fn week_patterns_get_all(
         &mut self,
-        id: <Self::Storage as backend::Storage>::WeekPatternId,
-    ) -> handles::WeekPatternHandle {
-        self.get_handle_managers_mut().week_patterns.get_handle(id)
-    }
-
-    fn general_data_get(&self) -> impl core::future::Future<Output = Result<backend::GeneralData, <Self::Storage as backend::Storage> ::InternalError> > +Send {
-        async {
-            self.get_backend_logic().general_data_get().await
-        }
-    }
-
-    fn week_patterns_get_all(&mut self) -> impl core::future::Future<Output = Result<BTreeMap<handles::WeekPatternHandle,backend::WeekPattern> , <Self::Storage as backend::Storage> ::InternalError> > +Send {
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<WeekPatternHandle, backend::WeekPattern>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
         async {
             let week_patterns_backend = self.get_backend_logic().week_patterns_get_all().await?;
 
             let handle_manager = &mut self.get_handle_managers_mut().week_patterns;
-            let week_patterns = week_patterns_backend.into_iter().map(
-                |(id, week_pattern)| {
+            let week_patterns = week_patterns_backend
+                .into_iter()
+                .map(|(id, week_pattern)| {
                     let handle = handle_manager.get_handle(id);
                     (handle, week_pattern)
-                }
-            ).collect();
+                })
+                .collect();
 
             Ok(week_patterns)
         }
     }
 
-    fn week_patterns_get(&self,handle:handles::WeekPatternHandle) -> impl core::future::Future<Output = Result<backend::WeekPattern,IdError< <Self::Storage as backend::Storage> ::InternalError,handles::WeekPatternHandle> > > +Send {
+    fn week_patterns_get(
+        &self,
+        handle: WeekPatternHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::WeekPattern,
+            IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
+        >,
+    > + Send {
         async move {
             let handle_manager = &self.get_handle_managers().week_patterns;
             let Some(index) = handle_manager.get_id(handle) else {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let week_pattern = self.get_backend_logic().week_patterns_get(index).await.map_err(
-                |e| match e {
+            let week_pattern = self
+                .get_backend_logic()
+                .week_patterns_get(index)
+                .await
+                .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(id) => panic!("Week pattern id {:?} should be valid as it was computed from handle {:?}", id, handle),
-                }
-            )?;
+                    IdError::InvalidId(id) => panic!(
+                        "Week pattern id {:?} should be valid as it was computed from handle {:?}",
+                        id, handle
+                    ),
+                })?;
 
             Ok(week_pattern)
+        }
+    }
+
+    fn week_patterns_check_can_remove(
+        &mut self,
+        handle: WeekPatternHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<WeekPatternDependancy<IncompatHandle, TimeSlotHandle>>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().week_patterns;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let week_pattern_deps_backend = self
+                .get_backend_logic()
+                .week_patterns_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(id) => panic!(
+                        "Week pattern id {:?} should be valid as it was computed from handle {:?}",
+                        id, handle
+                    ),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let incompat_handle_manager = &mut handle_managers.incompats;
+            let time_slot_handle_manager = &mut handle_managers.time_slots;
+
+            let week_pattern_deps = week_pattern_deps_backend
+                .into_iter()
+                .map(|dep| match dep {
+                    WeekPatternDependancy::Incompat(id) => {
+                        WeekPatternDependancy::Incompat(incompat_handle_manager.get_handle(id))
+                    }
+                    WeekPatternDependancy::TimeSlot(id) => {
+                        WeekPatternDependancy::TimeSlot(time_slot_handle_manager.get_handle(id))
+                    }
+                })
+                .collect();
+
+            Ok(week_pattern_deps)
         }
     }
 

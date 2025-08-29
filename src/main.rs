@@ -532,11 +532,9 @@ async fn week_count_command(
             if force {
                 let mut session = AppSession::new(app_state);
 
-                let week_patterns = session.get_backend_logic().week_patterns_get_all().await?;
+                let week_patterns = session.week_patterns_get_all().await?;
 
-                for (wp_id, mut wp) in week_patterns {
-                    let handle = session.get_week_pattern_handle(wp_id);
-
+                for (handle, mut wp) in week_patterns {
                     wp.weeks = wp
                         .weeks
                         .into_iter()
@@ -790,19 +788,16 @@ async fn get_week_pattern(
     name: &str,
     week_pattern_number: Option<NonZeroUsize>,
 ) -> Result<(
-    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::WeekPatternId,
+    collomatique::frontend::state::WeekPatternHandle,
     collomatique::backend::WeekPattern,
 )> {
     use collomatique::frontend::state::Manager;
 
-    let week_patterns = app_state
-        .get_backend_logic()
-        .week_patterns_get_all()
-        .await?;
+    let week_patterns = app_state.week_patterns_get_all().await?;
 
     let relevant_week_patterns: Vec<_> = week_patterns
         .into_iter()
-        .filter(|(_id, week_pattern)| week_pattern.name == name)
+        .filter(|(_handle, week_pattern)| week_pattern.name == name)
         .collect();
 
     if relevant_week_patterns.is_empty() {
@@ -917,11 +912,10 @@ async fn week_pattern_command(
         } => {
             use collomatique::backend::IdError;
 
-            let (id, _week_pattern) =
+            let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
             let dependancies = app_state
-                .get_backend_logic()
-                .week_patterns_check_can_remove(id)
+                .week_patterns_check_can_remove(handle)
                 .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => anyhow::Error::from(int_err),
@@ -941,7 +935,6 @@ async fn week_pattern_command(
                 ));
             }
 
-            let handle = app_state.get_week_pattern_handle(id);
             if let Err(e) = app_state
                 .apply(Operation::WeekPatterns(WeekPatternsOperation::Remove(
                     handle,
@@ -969,9 +962,8 @@ async fn week_pattern_command(
                 week_patterns_check_existing_names(app_state, &new_name).await?;
             }
 
-            let (id, week_pattern) =
+            let (handle, week_pattern) =
                 get_week_pattern(app_state, &old_name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let new_week_pattern = WeekPattern {
                 name: new_name,
@@ -1029,9 +1021,8 @@ async fn week_pattern_command(
             week_pattern_number,
             pattern,
         } => {
-            let (id, _week_pattern) =
+            let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let new_week_pattern = WeekPattern {
@@ -1061,9 +1052,8 @@ async fn week_pattern_command(
             name,
             week_pattern_number,
         } => {
-            let (id, _week_pattern) =
+            let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let new_week_pattern = WeekPattern {
                 name,
@@ -1102,9 +1092,8 @@ async fn week_pattern_command(
                 }
             }
 
-            let (id, mut week_pattern) =
+            let (handle, mut week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             week_pattern
                 .weeks
@@ -1135,9 +1124,8 @@ async fn week_pattern_command(
         } => {
             use collomatique::backend::Week;
 
-            let (id, mut week_pattern) =
+            let (handle, mut week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let handle = app_state.get_week_pattern_handle(id);
 
             let weeks_to_remove: BTreeSet<_> =
                 weeks.into_iter().map(|w| Week::new(w.get() - 1)).collect();

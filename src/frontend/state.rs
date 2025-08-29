@@ -12,6 +12,10 @@ use history::{
 };
 use update::private::ManagerInternal;
 
+pub use handles::{
+    GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle, StudentHandle,
+    SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle, WeekPatternHandle,
+};
 pub use update::{Manager, UpdateError};
 
 use self::history::AggregatedOperations;
@@ -32,8 +36,8 @@ pub enum GeneralOperation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WeekPatternsOperation {
     Create(backend::WeekPattern),
-    Remove(handles::WeekPatternHandle),
-    Update(handles::WeekPatternHandle, backend::WeekPattern),
+    Remove(WeekPatternHandle),
+    Update(WeekPatternHandle, backend::WeekPattern),
 }
 
 #[derive(Debug)]
