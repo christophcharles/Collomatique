@@ -157,6 +157,7 @@
 
 pub mod linexpr;
 pub mod mat_repr;
+pub mod objectives;
 pub mod solvers;
 
 #[cfg(test)]
@@ -166,6 +167,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
 pub use linexpr::{Constraint, LinExpr};
+pub use objectives::{Objective, ObjectiveSense};
 
 use mat_repr::{ConfigRepr, ProblemRepr};
 
@@ -504,28 +506,6 @@ impl Variable {
     /// ```
     pub fn get_max(&self) -> Option<f64> {
         self.max.map(|x| x.into_inner())
-    }
-}
-
-/// Sense for the objectiove function
-///
-/// This enum represents the sense in which
-/// we try to optimize the objective function
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum ObjectiveSense {
-    /// Minimize the objective function (default)
-    #[default]
-    Minimize,
-    /// Maximize the objective function
-    Maximize,
-}
-
-impl std::fmt::Display for ObjectiveSense {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ObjectiveSense::Minimize => write!(f, "Minimize"),
-            ObjectiveSense::Maximize => write!(f, "Maximize"),
-        }
     }
 }
 
