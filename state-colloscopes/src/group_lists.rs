@@ -39,6 +39,8 @@ pub struct GroupList {
 /// Parameters for a single group list
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupListParameters {
+    /// Name for the list
+    pub name: String,
     /// Range of possible count of students per group
     pub students_per_group: RangeInclusive<NonZeroU32>,
     /// Range of possible number of groups in the list
@@ -57,6 +59,7 @@ impl GroupListParameters {
         external_data: GroupListParametersExternalData,
     ) -> GroupListParameters {
         GroupListParameters {
+            name: external_data.name,
             students_per_group: external_data.students_per_group,
             group_count: external_data.group_count,
             excluded_students: external_data
@@ -197,6 +200,8 @@ pub struct GroupListExternalData {
 /// This should be used when extracting from a file for instance
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupListParametersExternalData {
+    /// Name for the list
+    pub name: String,
     /// Range of possible count of students per group
     pub students_per_group: RangeInclusive<NonZeroU32>,
     /// Range of possible number of groups in the list
@@ -262,6 +267,7 @@ impl GroupListParametersExternalData {
 impl From<GroupListParameters> for GroupListParametersExternalData {
     fn from(value: GroupListParameters) -> Self {
         GroupListParametersExternalData {
+            name: value.name,
             students_per_group: value.students_per_group,
             group_count: value.group_count,
             excluded_students: value
