@@ -49,11 +49,19 @@ pub struct Teachers {
 
 impl Teachers {
     fn generate_teachers_count_text(&self) -> String {
-        format!(
-            "<i>{} colleurs sur {} affichés</i>",
-            self.current_list.len(),
-            self.teachers.teacher_map.len(),
-        )
+        if self.current_list.len() == 0 || self.current_list.len() == 1 {
+            format!(
+                "<i>{} colleur sur {} affiché</i>",
+                self.current_list.len(),
+                self.teachers.teacher_map.len(),
+            )
+        } else {
+            format!(
+                "<i>{} colleurs sur {} affichés</i>",
+                self.current_list.len(),
+                self.teachers.teacher_map.len(),
+            )
+        }
     }
 }
 
