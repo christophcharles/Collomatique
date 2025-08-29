@@ -432,6 +432,7 @@ struct SubjectRecord {
     max_students_per_slot: i64,
     period: i64,
     period_is_strict: i64,
+    is_tutorial: i64,
 }
 
 fn generate_bare_subjects(
@@ -471,7 +472,7 @@ fn generate_bare_subjects(
                 )
                 .expect("Valid non-zero period for subject"),
                 period_is_strict: x.period_is_strict != 0,
-                is_tutorial: false,
+                is_tutorial: x.is_tutorial != 0,
                 duration: NonZeroU32::new(
                     u32::try_from(x.duration).expect("Valid u32 for subject duration"),
                 )
@@ -763,7 +764,10 @@ async fn generate_subjects(
     student_id_map: &std::collections::BTreeMap<i64, usize>,
     collo_id: i64,
 ) -> Result<SubjectsData> {
-    let subject_data = sqlx::query_as!(SubjectRecord, "SELECT subject_id AS id, duration, min_students_per_slot, max_students_per_slot, period, period_is_strict FROM subjects")
+    let subject_data = sqlx::query_as!(SubjectRecord, "
+SELECT subject_id AS id, duration, min_students_per_slot, max_students_per_slot, period, period_is_strict, is_tutorial
+FROM subjects
+        ")
         .fetch_all(db_conn)
         .await?;
     let slots_data_req = sqlx::query_as!(
