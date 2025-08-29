@@ -466,6 +466,10 @@ impl<'a> IlpTranslator<'a> {
         self.data.general.week_count.get() % subject.period.get() != 0
     }
 
+    fn subject_needs_periodicity_variables(&self, subject: &Subject) -> bool {
+        subject.period_is_strict || self.is_last_period_incomplete(subject)
+    }
+
     fn build_group_in_slot_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
@@ -558,7 +562,7 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .filter_map(|(i, subject)| {
-                if (!subject.period_is_strict) && (!self.is_last_period_incomplete(subject)) {
+                if !self.subject_needs_periodicity_variables(subject) {
                     return None;
                 }
 
@@ -1071,6 +1075,47 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_one_periodicity_choice_per_student_constraint_for_student(
+        &self,
+        i: usize,
+        subject: &Subject,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for week_modulo in 0..subject.period.get() {
+            expr = expr
+                + Expr::var(Variable::Periodicity {
+                    subject: i,
+                    student,
+                    week_modulo,
+                });
+        }
+
+        expr.eq(&Expr::constant(1))
+    }
+
+    fn build_one_periodicity_choice_per_student_constraints(
+        &self,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if !self.subject_needs_periodicity_variables(subject) {
+                continue;
+            }
+            for student in subject.groups.students_iterator().copied() {
+                constraints.insert(
+                    self.build_one_periodicity_choice_per_student_constraint_for_student(
+                        i, subject, student,
+                    ),
+                );
+            }
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -1084,6 +1129,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_students_per_group_count_constraints())
             .add_constraints(self.build_student_in_single_group_constraints())
             .add_constraints(self.build_dynamic_groups_constraints())
+            .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
