@@ -7,6 +7,8 @@
 use assignments::{Assignments, AssignmentsExternalData};
 use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
+use slots::Slots;
+use slots::SlotsExternalData;
 use std::collections::BTreeSet;
 use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
@@ -31,6 +33,7 @@ pub use subjects::{
 
 pub mod assignments;
 pub mod periods;
+pub mod slots;
 pub mod students;
 pub mod subjects;
 pub mod teachers;
@@ -89,6 +92,7 @@ struct InnerData {
     students: students::Students,
     assignments: assignments::Assignments,
     week_patterns: week_patterns::WeekPatterns,
+    slots: slots::Slots,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -308,6 +312,8 @@ pub enum FromDataError {
     IdError(#[from] tools::IdError),
     #[error("Inconsistent assignments")]
     InconsistentAssignments,
+    #[error("Error in slots data")]
+    InconsistentSlots,
 }
 
 /// Potential new id returned by annotation
@@ -756,6 +762,7 @@ impl Data {
             StudentsExternalData::default(),
             AssignmentsExternalData::default(),
             WeekPatternsExternalData::default(),
+            SlotsExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -771,19 +778,26 @@ impl Data {
         students: students::StudentsExternalData,
         assignments: assignments::AssignmentsExternalData,
         week_patterns: week_patterns::WeekPatternsExternalData,
+        slots: slots::SlotsExternalData,
     ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
         let teacher_ids = teachers.teacher_map.keys().copied();
         let week_patterns_ids = week_patterns.week_pattern_map.keys().copied();
+        let slot_ids = slots
+            .subject_map
+            .iter()
+            .flat_map(|(_subject_id, subject_slots)| {
+                subject_slots.ordered_slots.iter().map(|(id, _d)| *id)
+            });
         let id_issuer = IdIssuer::new(
             student_ids,
             period_ids,
             subject_ids,
             teacher_ids,
             week_patterns_ids,
-            vec![].into_iter(),
+            slot_ids,
         )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
@@ -791,6 +805,8 @@ impl Data {
             .iter()
             .map(|(id, _d)| *id)
             .collect();
+        let week_pattern_ids: std::collections::BTreeSet<_> =
+            week_patterns.week_pattern_map.keys().copied().collect();
         if !subjects.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
@@ -803,6 +819,9 @@ impl Data {
         if !assignments.validate_all(&period_ids, &students, &subjects) {
             return Err(FromDataError::InconsistentAssignments);
         }
+        if !slots.validate_all(&subjects, &week_pattern_ids, &teachers) {
+            return Err(FromDataError::InconsistentSlots);
+        }
 
         // Ids have been validated
         let students = unsafe { Students::from_external_data(students) };
@@ -811,6 +830,7 @@ impl Data {
         let teachers = unsafe { Teachers::from_external_data(teachers) };
         let assignments = unsafe { Assignments::from_external_data(assignments) };
         let week_patterns = unsafe { WeekPatterns::from_external_data(week_patterns) };
+        let slots = unsafe { Slots::from_external_data(slots) };
 
         let data = Data {
             id_issuer,
@@ -821,6 +841,7 @@ impl Data {
                 students,
                 assignments,
                 week_patterns,
+                slots,
             },
         };
 
@@ -854,9 +875,14 @@ impl Data {
         &self.inner_data.assignments
     }
 
-    /// Get the subjects
+    /// Get the week patterns
     pub fn get_week_patterns(&self) -> &week_patterns::WeekPatterns {
         &self.inner_data.week_patterns
+    }
+
+    /// Get the slots
+    pub fn get_slots(&self) -> &slots::Slots {
+        &self.inner_data.slots
     }
 
     /// Used internally
