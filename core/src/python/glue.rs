@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use pyo3::prelude::*;
 
 use crate::rpc::{
@@ -45,13 +47,17 @@ pub struct Session {
     token: Token,
 }
 
+mod common;
+use common::PersonWithContact;
 mod general_planning;
 use general_planning::{Period, PeriodId};
 mod subjects;
 use subjects::{Subject, SubjectId};
+mod teachers;
 mod time;
+use teachers::{Teacher, TeacherId};
 
-use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId};
+use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
 #[pymethods]
 impl Session {
@@ -368,7 +374,7 @@ impl Session {
         }
     }
 
-    fn subjects_update_period_statis(
+    fn subjects_update_period_status(
         self_: PyRef<'_, Self>,
         subject_id: SubjectId,
         period_id: PeriodId,
@@ -410,6 +416,17 @@ impl Session {
                 id: MsgSubjectId::from(*id).into(),
                 parameters: data.parameters.clone().into(),
             })
+            .collect()
+    }
+
+    fn teachers_get_list(self_: PyRef<'_, Self>) -> BTreeMap<TeacherId, Teacher> {
+        self_
+            .token
+            .get_data()
+            .get_teachers()
+            .teacher_map
+            .iter()
+            .map(|(id, data)| (MsgTeacherId::from(*id).into(), data.clone().into()))
             .collect()
     }
 }
