@@ -41,6 +41,10 @@ pub enum DecodeError {
     TeachersAlreadyDecoded,
     #[error("Student assignments data is inconsistent")]
     InconsistentAssignmentData,
+    #[error("Subjects were decoded before periods")]
+    SubjectsDecodedBeforePeriods,
+    #[error("Assignments were decoded before periods")]
+    AssignmentsDecodedBeforePeriods,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {

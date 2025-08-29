@@ -130,6 +130,8 @@ impl FileLoader {
             DecodeError::SubjectsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de matières)".into(),
             DecodeError::TeachersAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de colleurs)".into(),
             DecodeError::InconsistentAssignmentData => "Le fichier est mal formé et est probablement corrompu.\n(Données d'affectations des élèves aux matières incohérentes)".into(),
+            DecodeError::SubjectsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des matières avant le bloc des périodes)".into(),
+            DecodeError::AssignmentsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des affectations avant le bloc des périodes)".into(),
         }
     }
 }

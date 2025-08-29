@@ -17,6 +17,26 @@ pub fn decode_entry(
         if !ids.insert(id) {
             return Err(DecodeError::DuplicatedID);
         }
+
+        for (period_id, _) in &pre_data.periods.ordered_period_list {
+            if subject.excluded_periods.contains(period_id) {
+                continue;
+            }
+            let period_assignment = pre_data
+                .assignments
+                .period_map
+                .get_mut(period_id)
+                .expect("Period ids should be consistent even in pre_data");
+
+            if period_assignment.subject_exclusion_map.contains_key(&id) {
+                panic!("Subject {} should not be present in pre_data", id);
+            }
+
+            period_assignment
+                .subject_exclusion_map
+                .insert(id, BTreeSet::new());
+        }
+
         pre_data
             .subjects
             .ordered_subject_list
