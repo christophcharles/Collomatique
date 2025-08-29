@@ -4,6 +4,9 @@ use crate::{Variable, UsableData, Constraint, linexpr::EqSymbol};
 use ndarray::{Array1, Array2};
 use std::collections::BTreeMap;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Clone, Default)]
 pub struct NdProblem<V: UsableData> {
     mat: Array2<f64>,
