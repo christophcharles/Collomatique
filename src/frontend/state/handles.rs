@@ -78,8 +78,8 @@ impl<Id: backend::OrdId, H: Handle> Manager<Id, H> {
 }
 
 #[derive(Debug)]
-pub(super) struct ManagerCollection<T: backend::Storage> {
-    pub week_patterns: Manager<T::WeekPatternId, WeekPatternHandle>,
+pub struct ManagerCollection<T: backend::Storage> {
+    pub(super) week_patterns: Manager<T::WeekPatternId, WeekPatternHandle>,
 }
 
 impl<T: backend::Storage> ManagerCollection<T> {

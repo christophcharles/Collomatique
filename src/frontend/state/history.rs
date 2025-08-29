@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use super::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,7 +106,7 @@ impl AggregatedOperations {
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ModificationHistory {
-    history: std::collections::VecDeque<AggregatedOperations>,
+    history: VecDeque<AggregatedOperations>,
     history_pointer: usize,
     max_history_size: Option<usize>,
 }
@@ -198,5 +200,16 @@ impl ModificationHistory {
         self.history_pointer += 1;
 
         Some(new_ops)
+    }
+
+    pub fn build_aggregated_ops(&self) -> AggregatedOperations {
+        AggregatedOperations::new(
+            self.history
+                .iter()
+                .take(self.history_pointer)
+                .flat_map(|aggregated_ops| aggregated_ops.inner().iter())
+                .cloned()
+                .collect(),
+        )
     }
 }
