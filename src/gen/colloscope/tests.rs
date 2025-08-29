@@ -5491,118 +5491,6 @@ fn dynamic_groups_group_in_slot_inequalities() {
 }
 
 #[test]
-fn group_in_slot_needs_student() {
-    let general = GeneralData {
-        teacher_count: 2,
-        week_count: NonZeroU32::new(2).unwrap(),
-        interrogations_per_week: None,
-    };
-
-    let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
-        period: NonZeroU32::new(2).unwrap(),
-        period_is_strict: true,
-        duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-        ],
-        groups: GroupsDesc {
-            prefilled_groups: vec![
-                GroupDesc {
-                    students: BTreeSet::from([0, 1, 2]),
-                    can_be_extended: false,
-                },
-                GroupDesc {
-                    students: BTreeSet::new(),
-                    can_be_extended: true,
-                },
-            ],
-            not_assigned: BTreeSet::from([3, 4, 5]),
-        },
-    }];
-    let incompatibilities = vec![];
-    let students = vec![
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-    ];
-    let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatSet::new();
-
-    let data = ValidatedData::new(
-        general,
-        subjects,
-        incompatibilities,
-        students,
-        slot_groupings,
-        grouping_incompats,
-    )
-    .unwrap();
-
-    let ilp_translator = data.ilp_translator();
-    let group_in_slot_needs_student_constraints =
-        ilp_translator.build_group_in_slot_needs_student_constraints();
-
-    use crate::ilp::linexpr::Expr;
-
-    #[rustfmt::skip]
-    let gis_0_0_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 1 });
-    #[rustfmt::skip]
-    let gis_0_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 1 });
-
-    #[rustfmt::skip]
-    let dga_0_0_1_3 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 3 });
-    #[rustfmt::skip]
-    let dga_0_0_1_4 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 4 });
-    #[rustfmt::skip]
-    let dga_0_0_1_5 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 5 });
-    #[rustfmt::skip]
-    let dga_0_1_1_3 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 3 });
-    #[rustfmt::skip]
-    let dga_0_1_1_4 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 4 });
-    #[rustfmt::skip]
-    let dga_0_1_1_5 = Expr::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 5 });
-
-    #[rustfmt::skip]
-    let expected_result = BTreeSet::from([
-        gis_0_0_1.leq(&(&dga_0_0_1_3 + &dga_0_0_1_4 + &dga_0_0_1_5)),
-        gis_0_1_1.leq(&(&dga_0_1_1_3 + &dga_0_1_1_4 + &dga_0_1_1_5)),
-    ]);
-
-    assert_eq!(group_in_slot_needs_student_constraints, expected_result);
-}
-
-#[test]
 fn one_periodicity_choice_per_student() {
     let general = GeneralData {
         teacher_count: 2,
@@ -7317,6 +7205,9 @@ fn colloscope_with_dynamic_groups() {
         (&dga_1_0_1_4 + &dga_1_1_1_4).eq(&Expr::constant(1)),
         (&dga_1_0_1_5 + &dga_1_1_1_5).eq(&Expr::constant(1)),
 
+        // At most one interrogation per period for groups without fixed students
+        (&gis_1_0_1 + &gis_1_1_1).leq(&Expr::constant(1)),
+
         // One interrogation at one time maximum for a given student
         (&gis_0_0_0 + &gis_1_0_0).leq(&Expr::constant(1)),
         (&gis_0_1_0 + &gis_1_1_0).leq(&Expr::constant(1)),
@@ -7395,16 +7286,108 @@ fn colloscope_with_dynamic_groups() {
         dga_1_1_1_3.leq(&sig_1_3_1),
         dga_1_1_1_4.leq(&sig_1_4_1),
         dga_1_1_1_5.leq(&sig_1_5_1),
-
-        // Group in slot only if at least one dynamic student (if relevant)
-        (&dga_0_0_0_2 + &dga_0_0_0_4 + &dga_0_0_0_5).geq(&gis_0_0_0),
-        (&dga_0_1_0_2 + &dga_0_1_0_4 + &dga_0_1_0_5).geq(&gis_0_1_0),
-        (&dga_0_0_1_2 + &dga_0_0_1_4 + &dga_0_0_1_5).geq(&gis_0_0_1),
-        (&dga_0_1_1_2 + &dga_0_1_1_4 + &dga_0_1_1_5).geq(&gis_0_1_1),
-
-        (&dga_1_0_1_3 + &dga_1_0_1_4 + &dga_1_0_1_5).geq(&gis_1_0_1),
-        (&dga_1_1_1_3 + &dga_1_1_1_4 + &dga_1_1_1_5).geq(&gis_1_1_1),
     ]);
 
     assert_eq!(constraints, expected_result);
+}
+
+#[test]
+fn at_most_one_interrogation_per_empty_group() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            prefilled_groups: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+    }];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatSet::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let at_most_one_interrogation_per_period_for_empty_groups_contraints =
+        ilp_translator.build_at_most_one_interrogation_per_period_for_empty_groups_contraints();
+
+    use crate::ilp::linexpr::Expr;
+
+    #[rustfmt::skip]
+    let gis_0_0_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 1 });
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        (&gis_0_0_1 + &gis_0_1_1).leq(&Expr::constant(1)),
+    ]);
+
+    assert_eq!(
+        at_most_one_interrogation_per_period_for_empty_groups_contraints,
+        expected_result
+    );
 }
