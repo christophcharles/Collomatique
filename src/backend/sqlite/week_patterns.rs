@@ -136,3 +136,48 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
 
     Ok(())
 }
+
+pub async fn update(
+    pool: &SqlitePool,
+    index: Id,
+    pattern: WeekPattern,
+) -> std::result::Result<(), IdError<Error, Id>> {
+    let week_pattern_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let row_affected = sqlx::query!(
+        "UPDATE week_patterns SET name = ?1 WHERE week_pattern_id = ?2",
+        pattern.name,
+        week_pattern_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if row_affected != 1 {
+        return Err(IdError::InvalidId(index));
+    }
+
+    let _ = sqlx::query!(
+        "DELETE FROM weeks WHERE week_pattern_id = ?",
+        week_pattern_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    for Week(week) in pattern.weeks.iter().copied() {
+        let _ = sqlx::query!(
+            "INSERT INTO weeks (week_pattern_id, week) VALUES (?1, ?2)",
+            week_pattern_id,
+            week
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?;
+    }
+
+    Ok(())
+}
