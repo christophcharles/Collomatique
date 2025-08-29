@@ -28,6 +28,7 @@ pub enum GeneralPlanningInput {
     EditPeriodClicked(collomatique_state_colloscopes::PeriodId),
     CutPeriodClicked(collomatique_state_colloscopes::PeriodId),
     DeletePeriodClicked(collomatique_state_colloscopes::PeriodId),
+    WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
 #[derive(Debug)]
@@ -45,6 +46,7 @@ pub enum GeneralPlanningUpdateOp {
     UpdatePeriodWeekCount(collomatique_state_colloscopes::PeriodId, usize),
     DeletePeriod(collomatique_state_colloscopes::PeriodId),
     CutPeriod(collomatique_state_colloscopes::PeriodId, usize),
+    UpdateWeekStatus(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
 impl GeneralPlanningUpdateOp {
@@ -117,6 +119,21 @@ impl GeneralPlanningUpdateOp {
 
                 session.commit();
                 Ok(())
+            }
+            GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .expect("period id should be valid");
+                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+                desc[*week_num] = *state;
+
+                data.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                ))
             }
         }
     }
@@ -273,6 +290,9 @@ impl Component for GeneralPlanning {
                 periods_display::EntryOutput::DeleteClicked(period_id) => {
                     GeneralPlanningInput::DeletePeriodClicked(period_id)
                 }
+                periods_display::EntryOutput::WeekStatusUpdated(period_id, num, state) => {
+                    GeneralPlanningInput::WeekStatusUpdated(period_id, num, state)
+                }
             });
         let model = GeneralPlanning {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -311,8 +331,8 @@ impl Component for GeneralPlanning {
 
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods_list,
-                    new_data.iter(),
-                    |data| periods_display::EntryInput::UpdateData(data.clone()),
+                    new_data.into_iter(),
+                    |data| periods_display::EntryInput::UpdateData(data),
                 );
             }
             GeneralPlanningInput::DeleteFirstWeekClicked => {
@@ -382,6 +402,11 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::DeletePeriodClicked(period_id) => sender
                 .output(GeneralPlanningUpdateOp::DeletePeriod(period_id))
+                .unwrap(),
+            GeneralPlanningInput::WeekStatusUpdated(period_id, week_num, state) => sender
+                .output(GeneralPlanningUpdateOp::UpdateWeekStatus(
+                    period_id, week_num, state,
+                ))
                 .unwrap(),
         }
     }
