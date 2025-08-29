@@ -2,8 +2,8 @@ use gtk::prelude::{TextBufferExt, TextViewExt, WidgetExt};
 use relm4::{gtk, Component};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt};
 
-use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 use collomatique_rpc::{CmdMsg, InitMsg, OutMsg};
 
@@ -31,6 +31,7 @@ pub struct RpcLogger {
     buffer_op: Option<BufferOp>,
     child_process: Option<tokio::process::Child>,
     launching: bool,
+    child_stdin: Option<tokio::process::ChildStdin>,
 }
 
 impl RpcLogger {
@@ -46,6 +47,7 @@ pub enum LoggerCommandOutput {
     ProcessLaunched(std::io::Result<tokio::process::Child>, InitMsg),
     NewStdoutData(String, BufReader<tokio::process::ChildStdout>),
     NewStderrData(String, BufReader<tokio::process::ChildStderr>),
+    MsgSent(std::io::Result<()>, tokio::process::ChildStdin),
 }
 
 #[relm4::component(pub)]
@@ -87,6 +89,7 @@ impl Component for RpcLogger {
             buffer_op: None,
             child_process: None,
             launching: false,
+            child_stdin: None,
         };
 
         let widgets = view_output!();
@@ -118,16 +121,17 @@ impl Component for RpcLogger {
             }
             RpcLoggerInput::KillProcess => {
                 if let Some(mut child) = self.child_process.take() {
+                    self.child_stdin = None;
                     sender.oneshot_command(async move {
                         LoggerCommandOutput::ProcessKilled(child.kill().await)
                     });
                 }
             }
             RpcLoggerInput::SendMsg(out_msg) => {
-                if self.child_process.is_none() {
+                if self.child_stdin.is_none() {
                     panic!("No running child process to send a message to");
                 }
-                self.send_text_cmd(out_msg.into_text_msg());
+                self.send_text_cmd(sender.clone(), out_msg.into_text_msg());
             }
         }
     }
@@ -203,7 +207,7 @@ impl Component for RpcLogger {
                             self.wait_stderr_data(sender.clone(), stderr_buf);
                         }
 
-                        self.send_text_cmd(init_msg.into_text_msg());
+                        self.send_text_cmd(sender.clone(), init_msg.into_text_msg());
                         self.schedule_check(sender);
                     }
                     Err(e) => {
@@ -227,6 +231,17 @@ impl Component for RpcLogger {
                 // Process content and turn into command
                 if self.child_process.is_some() {
                     self.wait_stderr_data(sender, stderr_buf);
+                }
+            }
+            LoggerCommandOutput::MsgSent(result, child_stdin) => {
+                self.child_stdin = Some(child_stdin);
+                if let Err(e) = result {
+                    sender
+                        .output(RpcLoggerOutput::Error(format!(
+                            "Envoie dans une RPC : {}",
+                            e.to_string()
+                        )))
+                        .unwrap();
                 }
             }
         }
@@ -302,5 +317,15 @@ impl RpcLogger {
         });
     }
 
-    fn send_text_cmd(&mut self, _cmd: String) {}
+    fn send_text_cmd(&mut self, sender: ComponentSender<Self>, cmd: String) {
+        if let Some(child) = &mut self.child_process {
+            let mut child_stdin = child.stdin.take().expect("No other command being sent");
+            sender.oneshot_command(async move {
+                LoggerCommandOutput::MsgSent(
+                    child_stdin.write_all(cmd.as_bytes()).await,
+                    child_stdin,
+                )
+            });
+        }
+    }
 }
