@@ -35,6 +35,7 @@ rustPlatform.buildRustPackage rec {
         gdk-pixbuf
         glib
         gtk4
+        libadwaita
         wayland
         adwaita-icon-theme
     ];

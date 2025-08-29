@@ -1,5 +1,5 @@
-use gtk::prelude::GtkWindowExt;
-use relm4::{gtk, ComponentParts, ComponentSender, SimpleComponent};
+use gtk::prelude::{GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::{adw, gtk, ComponentParts, ComponentSender, SimpleComponent};
 
 pub struct AppModel {}
 
@@ -16,14 +16,18 @@ impl SimpleComponent for AppModel {
 
     view! {
         #[root]
-        root_window = gtk::ApplicationWindow {
+        root_window = adw::ApplicationWindow {
             set_default_width: 800,
             set_default_height: 600,
             set_title: Some("Collomatique"),
-            #[wrap(Some)]
-            set_child = &gtk::Label {
-                set_label: "Stub",
-            },
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                adw::HeaderBar::new(),
+                gtk::Label {
+                    set_vexpand: true,
+                    set_label: "Stub",
+                },
+            }
         }
     }
 
