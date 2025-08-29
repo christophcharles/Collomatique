@@ -12,7 +12,7 @@ pub trait Operation: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq {}
 /// that represents the complete state of a file
 /// in memory.
 ///
-/// It is built upon by the core crate to have
+/// It is built upon by the state crate to have
 /// a consistent modification history, sessions, etc.
 pub trait InMemoryData: Send + Sync + std::fmt::Debug {
     /// Non-annotated type for the operations

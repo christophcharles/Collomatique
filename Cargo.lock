@@ -258,20 +258,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "collomatique-core"
-version = "0.1.0"
-dependencies = [
- "collomatique-solver",
- "collomatique-solver-colloscopes",
- "thiserror",
-]
-
-[[package]]
 name = "collomatique-gtk4"
 version = "0.1.0"
 dependencies = [
  "clap",
- "collomatique-core",
+ "collomatique-state",
  "libadwaita",
  "relm4",
  "tokio",
@@ -311,10 +302,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-state"
+version = "0.1.0"
+dependencies = [
+ "collomatique-solver",
+ "collomatique-solver-colloscopes",
+ "thiserror",
+]
+
+[[package]]
 name = "collomatique-storage"
 version = "0.1.0"
 dependencies = [
- "collomatique-core",
+ "collomatique-state",
 ]
 
 [[package]]
