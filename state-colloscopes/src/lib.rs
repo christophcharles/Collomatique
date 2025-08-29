@@ -11,7 +11,7 @@ use subjects::{Subjects, SubjectsExternalData};
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::{PeriodId, StudentId, SubjectId};
+pub use ids::{PeriodId, StudentId, SubjectId, TeacherId};
 pub mod ops;
 pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp};
 use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp};
@@ -186,6 +186,7 @@ pub enum NewId {
     StudentId(StudentId),
     PeriodId(PeriodId),
     SubjectId(SubjectId),
+    TeacherId(TeacherId),
 }
 
 impl From<StudentId> for NewId {
@@ -203,6 +204,12 @@ impl From<PeriodId> for NewId {
 impl From<SubjectId> for NewId {
     fn from(value: SubjectId) -> Self {
         NewId::SubjectId(value)
+    }
+}
+
+impl From<TeacherId> for NewId {
+    fn from(value: TeacherId) -> Self {
+        NewId::TeacherId(value)
     }
 }
 
