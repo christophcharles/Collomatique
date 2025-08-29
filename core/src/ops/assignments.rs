@@ -104,7 +104,7 @@ impl AssignmentsUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<AssignmentsUpdateWarning>> {
+    ) -> Option<PreCleaningOp<AssignmentsUpdateWarning>> {
         None
     }
 

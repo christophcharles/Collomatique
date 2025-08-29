@@ -209,7 +209,7 @@ impl SubjectsUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<SubjectsUpdateWarning>> {
+    ) -> Option<PreCleaningOp<SubjectsUpdateWarning>> {
         todo!()
     }
 

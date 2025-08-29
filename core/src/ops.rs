@@ -193,23 +193,23 @@ impl UpdateWarning {
 }
 
 #[derive(Clone, Debug)]
-struct CleaningOp<T: Clone + std::fmt::Debug> {
+struct PreCleaningOp<T: Clone + std::fmt::Debug> {
     warning: T,
     ops: Vec<UpdateOp>,
 }
 
-impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> CleaningOp<T> {
-    fn into_general_warning(self) -> CleaningOp<UpdateWarning> {
-        CleaningOp {
+impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> PreCleaningOp<T> {
+    fn into_general_warning(self) -> PreCleaningOp<UpdateWarning> {
+        PreCleaningOp {
             warning: self.warning.into(),
             ops: self.ops,
         }
     }
 }
 
-impl CleaningOp<UpdateWarning> {
+impl PreCleaningOp<UpdateWarning> {
     fn downcast<T: Clone + std::fmt::Debug + Into<UpdateWarning>>(
-        x: Option<CleaningOp<T>>,
+        x: Option<PreCleaningOp<T>>,
     ) -> Option<Self> {
         x.map(|x| x.into_general_warning())
     }
@@ -219,7 +219,8 @@ impl CleaningOp<UpdateWarning> {
         data: &T,
     ) -> Option<CleaningOpDesc> {
         Some(CleaningOpDesc {
-            warning: self.warning.build_desc_from_data(data)?,
+            warning_desc: self.warning.build_desc_from_data(data)?,
+            warning: self.warning.clone(),
             ops: self.ops.clone(),
         })
     }
@@ -227,7 +228,8 @@ impl CleaningOp<UpdateWarning> {
 
 #[derive(Clone, Debug)]
 struct CleaningOpDesc {
-    warning: String,
+    warning_desc: String,
+    warning: UpdateWarning,
     ops: Vec<UpdateOp>,
 }
 
@@ -235,34 +237,34 @@ impl UpdateOp {
     fn get_next_cleaning_op<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> Option<CleaningOp<UpdateWarning>> {
+    ) -> Option<PreCleaningOp<UpdateWarning>> {
         match self {
             UpdateOp::GeneralPlanning(period_op) => {
-                CleaningOp::downcast(period_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(period_op.get_next_cleaning_op(data))
             }
             UpdateOp::Subjects(subject_op) => {
-                CleaningOp::downcast(subject_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(subject_op.get_next_cleaning_op(data))
             }
             UpdateOp::Teachers(teacher_op) => {
-                CleaningOp::downcast(teacher_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(teacher_op.get_next_cleaning_op(data))
             }
             UpdateOp::Students(student_op) => {
-                CleaningOp::downcast(student_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(student_op.get_next_cleaning_op(data))
             }
             UpdateOp::Assignments(assignment_op) => {
-                CleaningOp::downcast(assignment_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(assignment_op.get_next_cleaning_op(data))
             }
             UpdateOp::WeekPatterns(week_pattern_op) => {
-                CleaningOp::downcast(week_pattern_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(week_pattern_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Slots(slot_op) => CleaningOp::downcast(slot_op.get_next_cleaning_op(data)),
+            UpdateOp::Slots(slot_op) => PreCleaningOp::downcast(slot_op.get_next_cleaning_op(data)),
             UpdateOp::Incompatibilities(incompat_op) => {
-                CleaningOp::downcast(incompat_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(incompat_op.get_next_cleaning_op(data))
             }
             UpdateOp::GroupLists(group_list_op) => {
-                CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
+                PreCleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
-            UpdateOp::Rules(rule_op) => CleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
+            UpdateOp::Rules(rule_op) => PreCleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
         }
     }
 

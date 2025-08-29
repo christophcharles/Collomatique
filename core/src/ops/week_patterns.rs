@@ -109,7 +109,7 @@ impl WeekPatternsUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<WeekPatternsUpdateWarning>> {
+    ) -> Option<PreCleaningOp<WeekPatternsUpdateWarning>> {
         todo!()
     }
 

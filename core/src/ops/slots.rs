@@ -126,7 +126,7 @@ impl SlotsUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<SlotsUpdateWarning>> {
+    ) -> Option<PreCleaningOp<SlotsUpdateWarning>> {
         todo!()
     }
 

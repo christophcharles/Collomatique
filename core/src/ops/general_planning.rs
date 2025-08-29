@@ -198,7 +198,7 @@ impl GeneralPlanningUpdateOp {
     >(
         &self,
         _data: &T,
-    ) -> Option<CleaningOp<GeneralPlanningUpdateWarning>> {
+    ) -> Option<PreCleaningOp<GeneralPlanningUpdateWarning>> {
         todo!()
     }
 
