@@ -544,7 +544,7 @@ impl<T: ManagerInternal> Manager for T {
     ) -> impl core::future::Future<
         Output = Result<backend::GeneralData, <Self::Storage as backend::Storage>::InternalError>,
     > + Send {
-        async { self.get_backend_logic().general_data_get().await }
+        async { self.get_backend_logic().general_data_get() }
     }
 
     fn week_patterns_get_all(
@@ -556,7 +556,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let week_patterns_backend = self.get_backend_logic().week_patterns_get_all().await?;
+            let week_patterns_backend = self.get_backend_logic().week_patterns_get_all()?;
 
             let handle_manager = &mut self.get_handle_managers_mut().week_patterns;
             let week_patterns = week_patterns_backend
@@ -589,7 +589,6 @@ impl<T: ManagerInternal> Manager for T {
             let week_pattern = self
                 .get_backend_logic()
                 .week_patterns_get(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -617,7 +616,6 @@ impl<T: ManagerInternal> Manager for T {
             let week_pattern_deps_backend = self
                 .get_backend_logic()
                 .week_patterns_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -652,11 +650,7 @@ impl<T: ManagerInternal> Manager for T {
             WeekPatternError<<Self::Storage as backend::Storage>::InternalError>,
         >,
     > + Send {
-        async {
-            self.get_backend_logic()
-                .week_patterns_check_data(pattern)
-                .await
-        }
+        async { self.get_backend_logic().week_patterns_check_data(pattern) }
     }
 
     fn teachers_get_all(
@@ -668,7 +662,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let teachers_backend = self.get_backend_logic().teachers_get_all().await?;
+            let teachers_backend = self.get_backend_logic().teachers_get_all()?;
 
             let handle_manager = &mut self.get_handle_managers_mut().teachers;
             let teachers = teachers_backend
@@ -698,14 +692,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let teacher =
-                self.get_backend_logic()
-                    .teachers_get(index)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                    })?;
+            let teacher = self
+                .get_backend_logic()
+                .teachers_get(index)
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
 
             Ok(teacher)
         }
@@ -729,7 +722,6 @@ impl<T: ManagerInternal> Manager for T {
             let teacher_deps_backend = self
                 .get_backend_logic()
                 .teachers_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -768,7 +760,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let students_backend = self.get_backend_logic().students_get_all().await?;
+            let students_backend = self.get_backend_logic().students_get_all()?;
 
             let handle_manager = &mut self.get_handle_managers_mut().students;
             let students = students_backend
@@ -798,14 +790,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let student =
-                self.get_backend_logic()
-                    .students_get(index)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                    })?;
+            let student = self
+                .get_backend_logic()
+                .students_get(index)
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
 
             Ok(student)
         }
@@ -829,7 +820,6 @@ impl<T: ManagerInternal> Manager for T {
             let student_deps_backend = self
                 .get_backend_logic()
                 .students_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -868,7 +858,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let subject_groups_backend = self.get_backend_logic().subject_groups_get_all().await?;
+            let subject_groups_backend = self.get_backend_logic().subject_groups_get_all()?;
 
             let handle_manager = &mut self.get_handle_managers_mut().subject_groups;
             let subject_groups = subject_groups_backend
@@ -898,14 +888,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let subject_group = self
-                .get_backend_logic()
-                .subject_groups_get(index)
-                .await
-                .map_err(|e| match e {
-                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                })?;
+            let subject_group =
+                self.get_backend_logic()
+                    .subject_groups_get(index)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                    })?;
 
             Ok(subject_group)
         }
@@ -929,7 +918,6 @@ impl<T: ManagerInternal> Manager for T {
             let subject_group_deps_backend = self
                 .get_backend_logic()
                 .subject_groups_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -973,7 +961,6 @@ impl<T: ManagerInternal> Manager for T {
             let incompat = self
                 .get_backend_logic()
                 .incompats_get(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -995,7 +982,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let incompats_backend = self.get_backend_logic().incompats_get_all().await?;
+            let incompats_backend = self.get_backend_logic().incompats_get_all()?;
 
             let incompats = incompats_backend
                 .into_iter()
@@ -1033,8 +1020,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .incompats_check_data(&incompat_backend)
-                .await?;
+                .incompats_check_data(&incompat_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId::BadCrossId(_id) => {
@@ -1065,7 +1051,6 @@ impl<T: ManagerInternal> Manager for T {
             let incompat_deps_backend = self
                 .get_backend_logic()
                 .incompats_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1106,14 +1091,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let group_list = self
-                .get_backend_logic()
-                .group_lists_get(index)
-                .await
-                .map_err(|e| match e {
-                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                })?;
+            let group_list =
+                self.get_backend_logic()
+                    .group_lists_get(index)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                    })?;
 
             Ok(private::convert_group_list_to_handles(
                 group_list,
@@ -1131,7 +1115,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let group_lists_backend = self.get_backend_logic().group_lists_get_all().await?;
+            let group_lists_backend = self.get_backend_logic().group_lists_get_all()?;
 
             let group_lists = group_lists_backend
                 .into_iter()
@@ -1169,8 +1153,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .group_lists_check_data(&group_list_backend)
-                .await?;
+                .group_lists_check_data(&group_list_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithIdAndInvalidState::BadCrossId(_id) => {
@@ -1206,7 +1189,6 @@ impl<T: ManagerInternal> Manager for T {
             let group_list_deps_backend = self
                 .get_backend_logic()
                 .group_lists_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1239,14 +1221,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let subject =
-                self.get_backend_logic()
-                    .subjects_get(index)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                    })?;
+            let subject = self
+                .get_backend_logic()
+                .subjects_get(index)
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
 
             Ok(private::convert_subject_to_handles(
                 subject,
@@ -1267,7 +1248,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let subjects_backend = self.get_backend_logic().subjects_get_all().await?;
+            let subjects_backend = self.get_backend_logic().subjects_get_all()?;
 
             let subjects = subjects_backend
                 .into_iter()
@@ -1305,8 +1286,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .subjects_check_data(&subject_backend)
-                .await?;
+                .subjects_check_data(&subject_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId3::BadCrossId1(_id) => {
@@ -1352,7 +1332,6 @@ impl<T: ManagerInternal> Manager for T {
             let subject_deps_backend = self
                 .get_backend_logic()
                 .subjects_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1407,14 +1386,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let time_slot = self
-                .get_backend_logic()
-                .time_slots_get(index)
-                .await
-                .map_err(|e| match e {
-                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                })?;
+            let time_slot =
+                self.get_backend_logic()
+                    .time_slots_get(index)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                    })?;
 
             Ok(private::convert_time_slot_to_handles(
                 time_slot,
@@ -1435,7 +1413,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let time_slots_backend = self.get_backend_logic().time_slots_get_all().await?;
+            let time_slots_backend = self.get_backend_logic().time_slots_get_all()?;
 
             let time_slots = time_slots_backend
                 .into_iter()
@@ -1473,8 +1451,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .time_slots_check_data(&time_slot_backend)
-                .await?;
+                .time_slots_check_data(&time_slot_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId3::BadCrossId1(_id) => {
@@ -1511,7 +1488,6 @@ impl<T: ManagerInternal> Manager for T {
             let time_slot_deps_backend = self
                 .get_backend_logic()
                 .time_slots_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1559,7 +1535,6 @@ impl<T: ManagerInternal> Manager for T {
             let grouping = self
                 .get_backend_logic()
                 .groupings_get(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1581,7 +1556,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let groupings_backend = self.get_backend_logic().groupings_get_all().await?;
+            let groupings_backend = self.get_backend_logic().groupings_get_all()?;
 
             let groupings = groupings_backend
                 .into_iter()
@@ -1619,8 +1594,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .groupings_check_data(&grouping_backend)
-                .await?;
+                .groupings_check_data(&grouping_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId::BadCrossId(_id) => {
@@ -1651,7 +1625,6 @@ impl<T: ManagerInternal> Manager for T {
             let grouping_deps_backend = self
                 .get_backend_logic()
                 .groupings_check_can_remove(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1687,7 +1660,6 @@ impl<T: ManagerInternal> Manager for T {
             let grouping_incompat = self
                 .get_backend_logic()
                 .grouping_incompats_get(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -1709,10 +1681,8 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let grouping_incompats_backend = self
-                .get_backend_logic()
-                .grouping_incompats_get_all()
-                .await?;
+            let grouping_incompats_backend =
+                self.get_backend_logic().grouping_incompats_get_all()?;
 
             let grouping_incompats = grouping_incompats_backend
                 .into_iter()
@@ -1753,8 +1723,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .grouping_incompats_check_data(&grouping_incompat_backend)
-                .await?;
+                .grouping_incompats_check_data(&grouping_incompat_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId::BadCrossId(_id) => {
@@ -1796,7 +1765,6 @@ impl<T: ManagerInternal> Manager for T {
             let subject_id = self
                 .get_backend_logic()
                 .subject_group_for_student_get(student_id, subject_group_id)
-                .await
                 .map_err(|e| match e {
                     backend::Id2Error::InternalError(int_err) => {
                         backend::Id2Error::InternalError(int_err)
@@ -1845,7 +1813,6 @@ impl<T: ManagerInternal> Manager for T {
             let output = self
                 .get_backend_logic()
                 .incompat_for_student_get(student_id, incompat_id)
-                .await
                 .map_err(|e| match e {
                     backend::Id2Error::InternalError(int_err) => {
                         backend::Id2Error::InternalError(int_err)
@@ -1877,14 +1844,13 @@ impl<T: ManagerInternal> Manager for T {
                 return Err(IdError::InvalidId(handle));
             };
 
-            let colloscope = self
-                .get_backend_logic()
-                .colloscopes_get(index)
-                .await
-                .map_err(|e| match e {
-                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
-                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
-                })?;
+            let colloscope =
+                self.get_backend_logic()
+                    .colloscopes_get(index)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                    })?;
 
             Ok(private::convert_colloscope_to_handles(
                 colloscope,
@@ -1905,7 +1871,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let colloscopes_backend = self.get_backend_logic().colloscopes_get_all().await?;
+            let colloscopes_backend = self.get_backend_logic().colloscopes_get_all()?;
 
             let colloscopes = colloscopes_backend
                 .into_iter()
@@ -1943,8 +1909,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .colloscopes_check_data(&colloscope_backend)
-                .await?;
+                .colloscopes_check_data(&colloscope_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId3::BadCrossId1(_id) => {
@@ -1981,7 +1946,6 @@ impl<T: ManagerInternal> Manager for T {
             let colloscope = self
                 .get_backend_logic()
                 .slot_selections_get(index)
-                .await
                 .map_err(|e| match e {
                     IdError::InternalError(int_err) => IdError::InternalError(int_err),
                     IdError::InvalidId(_id) => IdError::InvalidId(handle),
@@ -2003,8 +1967,7 @@ impl<T: ManagerInternal> Manager for T {
         >,
     > + Send {
         async {
-            let slot_selections_backend =
-                self.get_backend_logic().slot_selections_get_all().await?;
+            let slot_selections_backend = self.get_backend_logic().slot_selections_get_all()?;
 
             let slot_selections = slot_selections_backend
                 .into_iter()
@@ -2045,8 +2008,7 @@ impl<T: ManagerInternal> Manager for T {
 
             let status_backend = self
                 .get_backend_logic()
-                .slot_selections_check_data(&slot_selection_backend)
-                .await?;
+                .slot_selections_check_data(&slot_selection_backend)?;
 
             let status = match status_backend {
                 backend::DataStatusWithId2::BadCrossId1(_id) => {
@@ -2175,7 +2137,6 @@ pub(super) mod private {
         manager
             .get_backend_logic_mut()
             .general_data_set(&general_data)
-            .await
             .map_err(|e| match e {
                 backend::CheckedError::CheckFailed(data) => {
                     let translated_data = data
@@ -2203,7 +2164,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .week_patterns_add(pattern)
-                    .await
                     .map_err(|e| match e {
                         backend::WeekPatternError::WeekNumberTooBig(week_number) => {
                             UpdateError::WeekNumberTooBig(week_number)
@@ -2227,7 +2187,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .week_patterns_remove(week_pattern_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2275,7 +2234,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .week_patterns_update(week_pattern_id, pattern)
-                    .await
                     .map_err(|e| match e {
                         backend::WeekPatternIdError::WeekNumberTooBig(week_number) => {
                             UpdateError::WeekNumberTooBig(week_number)
@@ -2301,7 +2259,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .teachers_add(teacher)
-                    .await
                     .map_err(|e| UpdateError::Internal(e))?;
                 manager
                     .get_handle_managers_mut()
@@ -2318,7 +2275,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .teachers_remove(teacher_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2366,7 +2322,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .teachers_update(teacher_id, teacher)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -2389,7 +2344,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .students_add(student)
-                    .await
                     .map_err(|e| UpdateError::Internal(e))?;
                 manager
                     .get_handle_managers_mut()
@@ -2406,7 +2360,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .students_remove(student_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2454,7 +2407,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .students_update(student_id, student)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -2477,7 +2429,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .subject_groups_add(subject_group)
-                    .await
                     .map_err(|e| UpdateError::Internal(e))?;
                 manager
                     .get_handle_managers_mut()
@@ -2494,7 +2445,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .subject_groups_remove(subject_group_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2542,7 +2492,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .subject_groups_update(student_id, subject_group)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -2577,7 +2526,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .incompats_add(&incompat_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossError::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -2601,7 +2549,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .incompats_remove(incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2651,7 +2598,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .incompats_update(incompat_id, &incompat_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossIdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -2694,7 +2640,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .group_lists_add(&group_list_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::InvalidCrossError::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -2721,7 +2666,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .group_lists_remove(group_list_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2771,7 +2715,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .group_lists_update(group_list_id, &group_list_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::InvalidCrossIdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -2820,7 +2763,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .subjects_add(&subject_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross3Error::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -2850,7 +2792,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .subjects_remove(subject_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -2924,7 +2865,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .subjects_update(subject_id, &subject_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross3IdWithDepError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -2981,7 +2921,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .time_slots_add(&time_slot_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross3Error::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -3011,7 +2950,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .time_slots_remove(time_slot_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3079,7 +3017,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .time_slots_update(time_slot_id, &time_slot_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross3IdWithDepError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -3133,7 +3070,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .groupings_add(&grouping_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossError::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -3157,7 +3093,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .groupings_remove(grouping_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CheckedIdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3207,7 +3142,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .groupings_update(grouping_id, &grouping_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossIdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -3250,7 +3184,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .grouping_incompats_add(&grouping_incompat_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossError::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -3276,7 +3209,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .grouping_incompats_remove(grouping_incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3317,7 +3249,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .grouping_incompats_update(grouping_incompat_id, &grouping_incompat_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossIdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -3369,7 +3300,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .subject_group_for_student_set(student_id, subject_group_id, subject_id)
-                    .await
                     .map_err(|e| match e {
                         backend::CrossId3Error::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -3414,7 +3344,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .incompat_for_student_set(student_id, incompat_id, *enabled)
-                    .await
                     .map_err(|e| match e {
                         backend::Id2Error::InternalError(int_err) => UpdateError::Internal(int_err),
                         backend::Id2Error::InvalidId1(id) => {
@@ -3459,7 +3388,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .colloscopes_add(&colloscope_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross3Error::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -3489,7 +3417,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .colloscopes_remove(colloscope_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3531,7 +3458,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .colloscopes_update(colloscope_id, &colloscope_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross3IdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -3580,7 +3506,6 @@ pub(super) mod private {
                 let new_id = manager
                     .get_backend_logic_mut()
                     .slot_selections_add(&slot_selection_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross2Error::InternalError(int_err) => {
                             UpdateError::Internal(int_err)
@@ -3607,7 +3532,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .slot_selections_remove(slot_selection_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3646,7 +3570,6 @@ pub(super) mod private {
                 manager
                     .get_backend_logic_mut()
                     .slot_selections_update(slot_selection_id, &slot_selection_backend)
-                    .await
                     .map_err(|e| match e {
                         backend::Cross2IdError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -3740,7 +3663,7 @@ pub(super) mod private {
     pub async fn build_backward_general_data<T: ManagerInternal>(
         manager: &T,
     ) -> Result<backend::GeneralData, <T::Storage as backend::Storage>::InternalError> {
-        manager.get_backend_logic().general_data_get().await
+        manager.get_backend_logic().general_data_get()
     }
 
     pub async fn build_backward_week_patterns_op<T: ManagerInternal>(
@@ -3763,7 +3686,6 @@ pub(super) mod private {
                 let pattern = manager
                     .get_backend_logic()
                     .week_patterns_get(week_pattern_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3781,7 +3703,6 @@ pub(super) mod private {
                 let pattern = manager
                     .get_backend_logic()
                     .week_patterns_get(week_pattern_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3812,7 +3733,6 @@ pub(super) mod private {
                 let teacher = manager
                     .get_backend_logic()
                     .teachers_get(teacher_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3830,7 +3750,6 @@ pub(super) mod private {
                 let teacher = manager
                     .get_backend_logic()
                     .teachers_get(teacher_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3861,7 +3780,6 @@ pub(super) mod private {
                 let student = manager
                     .get_backend_logic()
                     .students_get(student_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3879,7 +3797,6 @@ pub(super) mod private {
                 let teacher = manager
                     .get_backend_logic()
                     .students_get(student_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3912,7 +3829,6 @@ pub(super) mod private {
                 let subject_group = manager
                     .get_backend_logic()
                     .subject_groups_get(subject_group_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3930,7 +3846,6 @@ pub(super) mod private {
                 let subject_group = manager
                     .get_backend_logic()
                     .subject_groups_get(subject_group_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3963,7 +3878,6 @@ pub(super) mod private {
                 let incompat = manager
                     .get_backend_logic()
                     .incompats_get(incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -3984,7 +3898,6 @@ pub(super) mod private {
                 let incompat = manager
                     .get_backend_logic()
                     .incompats_get(incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4020,7 +3933,6 @@ pub(super) mod private {
                 let group_list = manager
                     .get_backend_logic()
                     .group_lists_get(group_list_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4041,7 +3953,6 @@ pub(super) mod private {
                 let group_list = manager
                     .get_backend_logic()
                     .group_lists_get(group_list_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4075,7 +3986,6 @@ pub(super) mod private {
                 let subject = manager
                     .get_backend_logic()
                     .subjects_get(subject_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4096,7 +4006,6 @@ pub(super) mod private {
                 let subject = manager
                     .get_backend_logic()
                     .subjects_get(subject_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4132,7 +4041,6 @@ pub(super) mod private {
                 let time_slot = manager
                     .get_backend_logic()
                     .time_slots_get(time_slot_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4153,7 +4061,6 @@ pub(super) mod private {
                 let time_slot = manager
                     .get_backend_logic()
                     .time_slots_get(time_slot_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4189,7 +4096,6 @@ pub(super) mod private {
                 let grouping = manager
                     .get_backend_logic()
                     .groupings_get(grouping_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4210,7 +4116,6 @@ pub(super) mod private {
                 let grouping = manager
                     .get_backend_logic()
                     .groupings_get(grouping_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4246,7 +4151,6 @@ pub(super) mod private {
                 let grouping_incompat = manager
                     .get_backend_logic()
                     .grouping_incompats_get(grouping_incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4270,7 +4174,6 @@ pub(super) mod private {
                 let grouping_incompat = manager
                     .get_backend_logic()
                     .grouping_incompats_get(grouping_incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4316,7 +4219,6 @@ pub(super) mod private {
                 let current_subject_id = manager
                     .get_backend_logic()
                     .subject_group_for_student_get(student_id, subject_group_id)
-                    .await
                     .map_err(|e| match e {
                         backend::Id2Error::InternalError(int_err) => RevError::Internal(int_err),
                         backend::Id2Error::InvalidId1(_) => {
@@ -4355,7 +4257,6 @@ pub(super) mod private {
                 let current_enabled = manager
                     .get_backend_logic()
                     .incompat_for_student_get(student_id, incompat_id)
-                    .await
                     .map_err(|e| match e {
                         backend::Id2Error::InternalError(int_err) => RevError::Internal(int_err),
                         backend::Id2Error::InvalidId1(_) => {
@@ -4396,7 +4297,6 @@ pub(super) mod private {
                 let colloscope = manager
                     .get_backend_logic()
                     .colloscopes_get(colloscope_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4417,7 +4317,6 @@ pub(super) mod private {
                 let colloscope = manager
                     .get_backend_logic()
                     .colloscopes_get(colloscope_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4453,7 +4352,6 @@ pub(super) mod private {
                 let slot_selection = manager
                     .get_backend_logic()
                     .slot_selections_get(slot_selection_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
@@ -4477,7 +4375,6 @@ pub(super) mod private {
                 let slot_selection = manager
                     .get_backend_logic()
                     .slot_selections_get(slot_selection_id)
-                    .await
                     .map_err(|e| match e {
                         backend::IdError::InvalidId(id) => {
                             panic!("id ({:?}) from the handle manager should be valid", id)
