@@ -38,6 +38,10 @@ pub enum CliCommand {
         /// is usually unusable.
         #[arg(short, long, default_value_t = false)]
         quick: bool,
+        /// EXPERIMENTAL: use HiGHS solver
+        #[cfg(feature = "highs")]
+        #[arg(long, default_value_t = false)]
+        highs: bool,
     },
     /// Create, remove or run python script
     Python {
@@ -376,6 +380,7 @@ async fn solve_command(
     force: bool,
     verbose: bool,
     quick: bool,
+    #[cfg(feature = "highs")] highs: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
@@ -420,9 +425,22 @@ async fn solve_command(
     pb.enable_steady_tick(Duration::from_millis(100));
 
     use crate::ilp::solvers::FeasabilitySolver;
-    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
     let minimize_objective = !quick;
-    let config_opt = solver.solve(&problem, minimize_objective);
+
+    #[cfg(feature = "highs")]
+    let config_opt = if highs {
+        let solver = crate::ilp::solvers::highs::Solver::with_disable_logging(!verbose);
+        solver.solve(&problem, minimize_objective)
+    } else {
+        let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
+        solver.solve(&problem, minimize_objective)
+    };
+
+    #[cfg(not(feature = "highs"))]
+    let config_opt = {
+        let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
+        solver.solve(&problem, minimize_objective)
+    };
 
     pb.finish_with_message("Done. Found valid colloscope");
 
@@ -1356,7 +1374,20 @@ pub async fn execute_cli_command(
             force,
             verbose,
             quick,
-        } => solve_command(name, force, verbose, quick, app_state).await,
+            #[cfg(feature = "highs")]
+            highs,
+        } => {
+            solve_command(
+                name,
+                force,
+                verbose,
+                quick,
+                #[cfg(feature = "highs")]
+                highs,
+                app_state,
+            )
+            .await
+        }
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
