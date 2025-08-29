@@ -247,6 +247,10 @@ pub enum TeacherError {
     /// The teacher is referenced by a slot
     #[error("teacher id ({0:?}) is referenced by a slot ({1:?})")]
     TeacherStillHasAssociatedSlots(TeacherId, SlotId),
+
+    /// The teacher is referenced by slots for a bad subject
+    #[error("teacher id ({0:?}) gives interrogation in a now forbidden subject ({1:?})")]
+    TeacherStillHasAssociatedSlotsInSubject(TeacherId, SubjectId),
 }
 
 /// Errors for assignment operations
@@ -1576,6 +1580,20 @@ impl Data {
                 let Some(current_teacher) = self.inner_data.teachers.teacher_map.get_mut(id) else {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 };
+
+                for (subject_id, subject_slots) in &self.inner_data.slots.subject_map {
+                    if new_teacher.subjects.contains(subject_id) {
+                        continue;
+                    }
+                    for (_slot_id, slot) in &subject_slots.ordered_slots {
+                        if *id == slot.teacher_id {
+                            return Err(TeacherError::TeacherStillHasAssociatedSlotsInSubject(
+                                *id,
+                                *subject_id,
+                            ));
+                        }
+                    }
+                }
 
                 *current_teacher = new_teacher.clone();
 
