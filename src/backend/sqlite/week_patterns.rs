@@ -90,7 +90,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, WeekPattern>> {
     Ok(output)
 }
 
-pub async fn add(pool: &SqlitePool, pattern: WeekPattern) -> Result<Id> {
+pub async fn add(pool: &SqlitePool, pattern: &WeekPattern) -> Result<Id> {
     let mut conn = pool.acquire().await?;
 
     let id = sqlx::query!("INSERT INTO week_patterns (name) VALUES (?)", pattern.name)
@@ -140,7 +140,7 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
 pub async fn update(
     pool: &SqlitePool,
     index: Id,
-    pattern: WeekPattern,
+    pattern: &WeekPattern,
 ) -> std::result::Result<(), IdError<Error, Id>> {
     let week_pattern_id = index.0;
 

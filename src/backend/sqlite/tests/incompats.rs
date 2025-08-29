@@ -266,7 +266,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     ).execute(&store.pool).await.unwrap();
 
     let id = store
-        .incompats_add(Incompat {
+        .incompats_add(&Incompat {
             name: String::from("LV2 - Allemand"),
             max_count: 0,
             groups: BTreeSet::from([
@@ -383,7 +383,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     ).execute(&store.pool).await.unwrap();
 
     let id = store
-        .incompats_add(Incompat {
+        .incompats_add(&Incompat {
             name: String::from("LV2 - Allemand"),
             max_count: 0,
             groups: BTreeSet::from([
@@ -425,7 +425,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     assert_eq!(id, super::super::incompats::Id(1));
 
     let id = store
-        .incompats_add(Incompat {
+        .incompats_add(&Incompat {
             name: String::from("Repas midi - lundi"),
             max_count: 2,
             groups: BTreeSet::from([
