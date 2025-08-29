@@ -375,11 +375,55 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
         Self::default()
     }
 
+    /// Sets the definition of a variable and declares it at the same time.
+    ///
+    /// This is the primary function (along with [ProblemBuilder::set_variables])
+    /// used to declare variables. It takes a name and a description of type [Variable].
+    ///
+    /// If the variable is already declared, its description is simply overwritten.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType};
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variable("A", Variable::binary())
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let variables = problem.get_variables();
+    /// assert_eq!(variables.len(), 1);
+    /// assert_eq!(variables["A"].get_type(), VariableType::Binary);
+    /// ```
     pub fn set_variable<T: Into<V>>(mut self, name: T, var: Variable) -> Self {
         self.variables.insert(name.into(), var);
         self
     }
 
+    /// Sets the definition of multiple variables and declares them at the same time.
+    ///
+    /// This function is very similar to [ProblemBuilder::set_variable] but is designed
+    /// to allow the declaration of multiple variables at once.
+    ///
+    /// If a variable is already declared, its description is simply overwritten.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType};
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variables([
+    ///         ("A", Variable::binary()),
+    ///         ("B", Variable::integer().min(0.0))
+    ///     ])
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let variables = problem.get_variables();
+    /// assert_eq!(variables.len(), 2);
+    /// assert_eq!(variables["A"].get_type(), VariableType::Binary);
+    /// assert_eq!(variables["A"].get_min(), None);
+    /// assert_eq!(variables["A"].get_max(), None);
+    /// assert_eq!(variables["B"].get_type(), VariableType::Integer);
+    /// assert_eq!(variables["B"].get_min(), Some(0.0));
+    /// assert_eq!(variables["B"].get_max(), None);
+    /// ```
     pub fn set_variables<U: Into<V>, T: IntoIterator<Item = (U, Variable)>>(
         mut self,
         vars: T,
@@ -390,21 +434,123 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
         self
     }
 
-    pub fn set_constraint(mut self, constraint: Constraint<V>, desc: C) -> Self {
-        self.constraints.insert(constraint, desc);
+    /// Add a constraint to the constructed problem
+    ///
+    /// This is the primary function (along with [ProblemBuilder::set_constraints])
+    /// used to add constraints. It takes a constraint (represented with [linexpr::Constraint])
+    /// and a description of this constraint (with the generic type C).
+    ///
+    /// If the exact same constraint already exists, the description of the constraint is simply
+    /// overwritten.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr};
+    /// let a = LinExpr::var("A");
+    /// let b = LinExpr::var("B");
+    ///
+    /// let constraint = (a + b).leq(&LinExpr::constant(1.));
+    ///
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variable("A", Variable::binary())
+    ///     .set_variable("B", Variable::binary())
+    ///     .set_constraint(constraint, "A + B <= 1")
+    ///     .build()
+    ///     .expect("No undeclared variables");
+    ///
+    /// let constraints = problem.get_constraints();
+    /// assert_eq!(constraints.len(), 1);
+    ///
+    /// let c = constraints.into_iter().next().unwrap().0.clone();
+    /// // Displays "1*A + 1*B + (-1) <= 0"
+    /// println!("{}", c);
+    /// # assert_eq!(format!("{}", c), "1*A + 1*B + (-1) <= 0");
+    /// ```
+    pub fn set_constraint<T: Into<C>>(mut self, constraint: Constraint<V>, desc: T) -> Self {
+        self.constraints.insert(constraint, desc.into());
         self
     }
 
-    pub fn set_constraints<T: IntoIterator<Item = (Constraint<V>, C)>>(
+    /// Add multiple constraints to the constructed problem.
+    ///
+    /// This function works mostly like [ProblemBuilder::set_constraint] and is
+    /// used to add constraints. It takes an iterator over tuples containing constraints (represented with [linexpr::Constraint])
+    /// and descriptions of these constraint (with the generic type C).
+    ///
+    /// If one of the constraints already exists, its description is simply overwritten.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr};
+    /// let a = LinExpr::var("A");
+    /// let b = LinExpr::var("B");
+    /// let c = LinExpr::var("C");
+    ///
+    /// let c1 = (&a + &b).leq(&LinExpr::constant(1.));
+    /// let c2 = (&a + &c).leq(&LinExpr::constant(1.));
+    ///
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variable("A", Variable::binary())
+    ///     .set_variable("B", Variable::binary())
+    ///     .set_variable("C", Variable::binary())
+    ///     .set_constraints([
+    ///         (c1, "A + B <= 1"),
+    ///         (c2, "A + C <= 1")
+    ///     ])
+    ///     .build()
+    ///     .expect("No undeclared variables");
+    ///
+    /// let constraints = problem.get_constraints();
+    /// assert_eq!(constraints.len(), 2);
+    ///
+    /// // Displays :
+    /// // "1) 1*A + 1*B + (-1) <= 0 (A + B <= 1)"
+    /// // "2) 1*A + 1*C + (-1) <= 0 (A + C <= 1)"
+    /// for (i,c) in constraints.into_iter().enumerate() {
+    ///     println!("{}) {} ({})", i+1, c.0, c.1);
+    /// #   if i == 0 {
+    /// #       assert_eq!(format!("{}) {} ({})", i+1, c.0, c.1), "1) 1*A + 1*B + (-1) <= 0 (A + B <= 1)");
+    /// #   } else {
+    /// #       assert_eq!(format!("{}) {} ({})", i+1, c.0, c.1), "2) 1*A + 1*C + (-1) <= 0 (A + C <= 1)");
+    /// #   }
+    /// }
+    /// // Note: the order is actually fixed by the lexicographical order
+    /// // since this is the Ord trait on String.
+    /// ```
+    pub fn set_constraints<U: Into<C>, T: IntoIterator<Item = (Constraint<V>, U)>>(
         mut self,
         constraints: T,
     ) -> Self {
         for (constraint, desc) in constraints {
-            self.constraints.insert(constraint, desc);
+            self.constraints.insert(constraint, desc.into());
         }
         self
     }
 
+    /// Set the objective function for the ILP problem
+    ///
+    /// This function can be used to set an objective function.
+    /// An objective function is just a linear expression that must be minimized or maximized.
+    ///
+    /// As a design choice, the sense must always be specified with the objective function.
+    ///
+    /// Be careful, all variables must be declared.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr, ObjectiveSense};
+    /// let a = LinExpr::<String>::var("A");
+    /// let b = LinExpr::<String>::var("B");
+    ///
+    /// let obj_func = a + b;
+    ///
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variable("A", Variable::binary())
+    ///     .set_variable("B", Variable::binary())
+    ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
+    ///     .build()
+    ///     .expect("No undeclared variables");
+    ///
+    /// assert_eq!(*problem.get_objective_function(), obj_func);
+    /// assert_eq!(problem.get_objective_sense(), ObjectiveSense::Maximize);
+    /// ```
     pub fn set_objective_function(mut self, obj_fn: LinExpr<V>, obj_sense: ObjectiveSense) -> Self {
         self.objective_func = obj_fn;
         self.objective_sense = obj_sense;
@@ -437,6 +583,49 @@ pub enum BuildError<V: UsableData, C: UsableData> {
 pub type BuildResult<T, V, C> = std::result::Result<T, BuildError<V, C>>;
 
 impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
+    /// Builds the underlying problem.
+    ///
+    /// Once you have constructed the problem using [ProblemBuilder::set_constraint],
+    /// [ProblemBuilder::set_constraints], declared the variables using [ProblemBuilder::set_variable]
+    /// or [ProblemBuilder::set_variables] and optionally defined an objective function with
+    /// [ProblemBuilder::set_objective_function], you can commit the result into a [Problem].
+    ///
+    /// This function does just that. It does a simple sanity check: all variables that appear in
+    /// the constraints and the objective function must be declared.
+    ///
+    /// If some variable is not declared, it returns an error.
+    /// ```should_panic
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr, ObjectiveSense};
+    /// let a = LinExpr::<String>::var("A");
+    /// let b = LinExpr::<String>::var("B");
+    ///
+    /// let obj_func = a.clone();
+    /// let c = (&a + &b).leq(&LinExpr::constant(1.));
+    ///
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_constraint(c, "A + B <= 1")
+    ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
+    ///     .build()
+    ///     .unwrap(); // Panics!
+    /// ```
+    ///
+    /// Otherwise, it returns the constructed problem.
+    /// ```
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr, ObjectiveSense};
+    /// let a = LinExpr::<String>::var("A");
+    /// let b = LinExpr::<String>::var("B");
+    ///
+    /// let obj_func = a.clone();
+    /// let c = (&a + &b).leq(&LinExpr::constant(1.));
+    ///
+    /// let problem = ProblemBuilder::<String,String>::new()
+    ///     .set_variable("A", Variable::binary())
+    ///     .set_variable("B", Variable::binary())
+    ///     .set_constraint(c, "A + B <= 1")
+    ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
+    ///     .build()
+    ///     .expect("No undeclared variables");
+    /// ```
     pub fn build(self) -> BuildResult<Problem<V, C>, V, C> {
         // Check that all the variables are declared in constraints
         for (constraint, desc) in &self.constraints {
@@ -502,7 +691,7 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         &self.variables
     }
 
-    pub fn get_objective_func(&self) -> &LinExpr<V> {
+    pub fn get_objective_function(&self) -> &LinExpr<V> {
         &self.objective_func
     }
 
