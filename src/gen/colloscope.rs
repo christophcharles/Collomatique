@@ -2412,13 +2412,31 @@ impl<'a> IlpTranslator<'a> {
 
     fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
         let soft_problem = self.problem_builder_soft().build();
+
+        let subjects = self.data.subjects.clone();
+
         let hard_problem_builder =
             self.problem_builder_hard()
                 .eval_fn(crate::debuggable!(move |x| {
+                    let vars = x.get_vars();
                     let soft_config = soft_problem
-                        .config_from(x.get_vars().iter())
+                        .config_from(&vars)
                         .expect("Variables should match");
-                    soft_config.compute_lhs_sq_norm2()
+                    let sq2_cost = soft_config.compute_lhs_sq_norm2();
+
+                    let mut manual_costs = 0.;
+                    for var in &vars {
+                        if let Variable::GroupInSlot {
+                            subject,
+                            slot,
+                            group: _,
+                        } = var
+                        {
+                            manual_costs += f64::from(subjects[*subject].slots[*slot].cost);
+                        }
+                    }
+
+                    sq2_cost + manual_costs
                 }));
         hard_problem_builder
     }
