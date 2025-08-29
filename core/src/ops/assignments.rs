@@ -183,17 +183,17 @@ impl AssignmentsUpdateOp {
                     .get_assignments()
                     .period_map
                     .get(period_id)
-                    .expect("Period id should be valid at this point");
+                    .expect("Period id should be valid at this point").clone();
                 let previous_period_assignments = data
                     .get_data()
                     .get_assignments()
                     .period_map
                     .get(&previous_period_id)
-                    .expect("Previous period id should be valid at this point");
+                    .expect("Previous period id should be valid at this point").clone();
 
-                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
+                let student_map = data.get_data().get_students().student_map.clone();
 
-                for (student_id, student) in &data.get_data().get_students().student_map {
+                for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
                         continue;
                     }
@@ -210,7 +210,7 @@ impl AssignmentsUpdateOp {
 
                         let previous_status = previous_assigned_students.contains(student_id);
 
-                        session
+                        data
                             .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
                                     collomatique_state_colloscopes::AssignmentOp::Assign(
@@ -220,13 +220,11 @@ impl AssignmentsUpdateOp {
                                         previous_status,
                                     ),
                                 ),
-                                "Dupliquer l'affectation de la période précédente".into(),
+                                self.get_desc(),
                             )
                             .expect("All data should be valid at this point");
                     }
                 }
-
-                *data = session.commit(self.get_desc());
 
                 Ok(())
             }
@@ -250,14 +248,13 @@ impl AssignmentsUpdateOp {
                     );
                 }
 
-                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
-
-                for (student_id, student) in &data.get_data().get_students().student_map {
+                let student_map = data.get_data().get_students().student_map.clone();
+                for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
                         continue;
                     }
 
-                    let result = session
+                    let result = data
                         .apply(
                             collomatique_state_colloscopes::Op::Assignment(
                                 collomatique_state_colloscopes::AssignmentOp::Assign(
@@ -267,18 +264,12 @@ impl AssignmentsUpdateOp {
                                     *status,
                                 ),
                             ),
-                            if *status {
-                                "Inscription d'un élève".into()
-                            } else {
-                                "Désinscription d'un élève".into()
-                            },
+                            self.get_desc(),
                         )
                         .expect("All data should be valid at this point");
 
                     assert!(result.is_none());
                 }
-
-                *data = session.commit(self.get_desc());
 
                 Ok(())
             }
