@@ -396,6 +396,12 @@ pub enum Command {
     Teachers(TeachersCommand),
     Students(StudentsCommand),
     SubjectGroups(SubjectGroupsCommand),
+    Incompats(IncompatsCommand),
+    GroupLists(GroupListsCommand),
+    Subjects(SubjectsCommand),
+    TimeSlots(TimeSlotsCommand),
+    Groupings(GroupingsCommand),
+    GroupingIncompats(GroupingIncompatsCommand),
     Undo,
     Redo,
     Exit,
@@ -443,6 +449,60 @@ pub enum SubjectGroupsCommand {
     Remove(SubjectGroupHandle),
 }
 
+#[derive(Debug, Clone)]
+pub enum IncompatsCommand {
+    GetAll,
+    Get(IncompatHandle),
+    Create(Incompat),
+    Update(IncompatHandle, Incompat),
+    Remove(IncompatHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum GroupListsCommand {
+    GetAll,
+    Get(GroupListHandle),
+    Create(GroupList),
+    Update(GroupListHandle, GroupList),
+    Remove(GroupListHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum SubjectsCommand {
+    GetAll,
+    Get(SubjectGroupHandle),
+    Create(SubjectGroup),
+    Update(SubjectGroupHandle, SubjectGroup),
+    Remove(SubjectGroupHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum TimeSlotsCommand {
+    GetAll,
+    Get(TimeSlotHandle),
+    Create(TimeSlot),
+    Update(TimeSlotHandle, TimeSlot),
+    Remove(TimeSlotHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum GroupingsCommand {
+    GetAll,
+    Get(GroupingHandle),
+    Create(Grouping),
+    Update(GroupingHandle, Grouping),
+    Remove(GroupingHandle),
+}
+
+#[derive(Debug, Clone)]
+pub enum GroupingIncompatsCommand {
+    GetAll,
+    Get(GroupingIncompatHandle),
+    Create(GroupingIncompat),
+    Update(GroupingIncompatHandle, GroupingIncompat),
+    Remove(GroupingIncompatHandle),
+}
+
 #[derive(Debug)]
 struct PythonError {
     int_err: Box<dyn std::error::Error + Send>,
@@ -463,6 +523,12 @@ pub enum Answer {
     Teachers(TeachersAnswer),
     Students(StudentsAnswer),
     SubjectGroups(SubjectGroupsAnswer),
+    Incompats(IncompatsAnswer),
+    GroupLists(GroupListsAnswer),
+    Subjects(SubjectsAnswer),
+    TimeSlots(TimeSlotsAnswer),
+    Groupings(GroupingsAnswer),
+    GroupingIncompats(GroupingIncompatsAnswer),
     Undo,
     Redo,
 }
@@ -505,6 +571,60 @@ pub enum SubjectGroupsAnswer {
     GetAll(BTreeMap<SubjectGroupHandle, SubjectGroup>),
     Get(SubjectGroup),
     Create(SubjectGroupHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum IncompatsAnswer {
+    GetAll(BTreeMap<IncompatHandle, Incompat>),
+    Get(Incompat),
+    Create(IncompatHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum GroupListsAnswer {
+    GetAll(BTreeMap<GroupListHandle, GroupList>),
+    Get(GroupList),
+    Create(GroupListHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum SubjectsAnswer {
+    GetAll(BTreeMap<SubjectHandle, Subject>),
+    Get(Subject),
+    Create(SubjectHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum TimeSlotsAnswer {
+    GetAll(BTreeMap<TimeSlotHandle, TimeSlot>),
+    Get(TimeSlot),
+    Create(TimeSlotHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum GroupingsAnswer {
+    GetAll(BTreeMap<GroupingHandle, Grouping>),
+    Get(Grouping),
+    Create(GroupingHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum GroupingIncompatsAnswer {
+    GetAll(BTreeMap<GroupingIncompatHandle, GroupingIncompat>),
+    Get(GroupingIncompat),
+    Create(GroupingIncompatHandle),
     Update,
     Remove,
 }
@@ -960,6 +1080,48 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
+    async fn execute_incompats_job<T: state::Manager>(
+        _incompats_command: &IncompatsCommand,
+        _manager: &mut T,
+    ) -> PyResult<IncompatsAnswer> {
+        todo!()
+    }
+
+    async fn execute_group_lists_job<T: state::Manager>(
+        _group_lists_command: &GroupListsCommand,
+        _manager: &mut T,
+    ) -> PyResult<GroupListsAnswer> {
+        todo!()
+    }
+
+    async fn execute_subjects_job<T: state::Manager>(
+        _subjects_command: &SubjectsCommand,
+        _manager: &mut T,
+    ) -> PyResult<SubjectsAnswer> {
+        todo!()
+    }
+
+    async fn execute_time_slots_job<T: state::Manager>(
+        _time_slots_command: &TimeSlotsCommand,
+        _manager: &mut T,
+    ) -> PyResult<TimeSlotsAnswer> {
+        todo!()
+    }
+
+    async fn execute_groupings_job<T: state::Manager>(
+        _groupings_command: &GroupingsCommand,
+        _manager: &mut T,
+    ) -> PyResult<GroupingsAnswer> {
+        todo!()
+    }
+
+    async fn execute_grouping_incompats_job<T: state::Manager>(
+        _grouping_incompats_command: &GroupingIncompatsCommand,
+        _manager: &mut T,
+    ) -> PyResult<GroupingIncompatsAnswer> {
+        todo!()
+    }
+
     async fn execute_job<T: state::Manager>(
         command: &Command,
         manager: &mut T,
@@ -986,6 +1148,32 @@ impl<'scope> SessionConnection<'scope> {
                 let answer =
                     Self::execute_subject_groups_job(subject_groups_command, manager).await?;
                 Ok(Answer::SubjectGroups(answer))
+            }
+            Command::Incompats(incompats_command) => {
+                let answer = Self::execute_incompats_job(incompats_command, manager).await?;
+                Ok(Answer::Incompats(answer))
+            }
+            Command::GroupLists(group_lists_command) => {
+                let answer = Self::execute_group_lists_job(group_lists_command, manager).await?;
+                Ok(Answer::GroupLists(answer))
+            }
+            Command::Subjects(subjects_command) => {
+                let answer = Self::execute_subjects_job(subjects_command, manager).await?;
+                Ok(Answer::Subjects(answer))
+            }
+            Command::TimeSlots(time_slots_command) => {
+                let answer = Self::execute_time_slots_job(time_slots_command, manager).await?;
+                Ok(Answer::TimeSlots(answer))
+            }
+            Command::Groupings(groupings_command) => {
+                let answer = Self::execute_groupings_job(groupings_command, manager).await?;
+                Ok(Answer::Groupings(answer))
+            }
+            Command::GroupingIncompats(grouping_incompats_command) => {
+                let answer =
+                    Self::execute_grouping_incompats_job(grouping_incompats_command, manager)
+                        .await?;
+                Ok(Answer::GroupingIncompats(answer))
             }
             Command::Undo => {
                 manager.undo().await.map_err(|e| match e {
