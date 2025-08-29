@@ -546,7 +546,7 @@ impl From<IncompatHandle> for state::IncompatHandle {
 }
 
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Weekday {
     Monday,
     Tuesday,
@@ -627,7 +627,7 @@ impl From<Weekday> for crate::time::Weekday {
 }
 
 #[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Time {
     #[pyo3(get)]
     hour: u32,
@@ -706,7 +706,7 @@ impl From<Time> for crate::time::Time {
 }
 
 #[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotStart {
     #[pyo3(set, get)]
     day: Weekday,
@@ -762,14 +762,14 @@ impl From<SlotStart> for backend::SlotStart {
     }
 }
 
-#[pyclass(eq)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncompatSlot {
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     week_pattern_handle: WeekPatternHandle,
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     start: SlotStart,
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     duration: NonZeroU32,
 }
 
@@ -839,7 +839,7 @@ pub struct Incompat {
     #[pyo3(set, get)]
     max_count: usize,
     #[pyo3(set, get)]
-    groups: BTreeSet<BTreeSet<IncompatSlot>>,
+    groups: Vec<BTreeSet<IncompatSlot>>,
 }
 
 #[pymethods]
@@ -849,7 +849,7 @@ impl Incompat {
         Incompat {
             name,
             max_count: 0,
-            groups: BTreeSet::new(),
+            groups: Vec::new(),
         }
     }
 
