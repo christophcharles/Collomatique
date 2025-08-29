@@ -79,10 +79,8 @@ fn test_sa() {
     sa_optimizer.set_init_config(config);
 
     let mut random_gen = crate::ilp::random::DefaultRndGen::new();
-    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new();
-    let solution = sa_optimizer
-        .iterate(dijkstra_solver, &mut random_gen)
-        .best_in(2);
+    let solver = crate::ilp::solvers::a_star::Solver::new();
+    let solution = sa_optimizer.iterate(solver, &mut random_gen).best_in(2);
     // There are only two solutions so only two iterations should even be enough to find the optimal one
 
     assert_eq!(
