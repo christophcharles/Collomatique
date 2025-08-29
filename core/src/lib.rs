@@ -1,7 +1,7 @@
 //! Collomatique-core
 //! ---
 //!
-//! This crate contains the main logic of Collomatique for solving colloscopes.
+//! This crate contains the main logic of Collomatique for solving colloscopes related problems.
 //! The goal for this crate is to fulfill the role of a translator. It takes a description
 //! of a colloscope (or at least the various constraints of a colloscope) and returns
 //! an ILP problem as described by the crate [collomatique-ilp].
