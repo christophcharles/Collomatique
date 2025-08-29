@@ -12,6 +12,23 @@
 //! already described, as well as the number of weeks. Thus we only have to complete a very simple schedule.
 //!
 //! The problem itself is described by [SimpleScheduleBase].
+//!
+//! Here a simple example of using the library to solve such a simple scheduling problem:
+//! ```
+//! # use collomatique_core::{examples::simple_schedule::SimpleScheduleBase, ProblemBuilder};
+//! let problem_desc = SimpleScheduleBase {
+//!     group_count: 2,
+//!     week_count: 2,
+//!     course_count: 2,
+//! };
+//!
+//! let problem = ProblemBuilder::new(problem_desc, 1.0).expect("Consistent ILP description").build();
+//!
+//! let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
+//! let solution = problem.solve(&solver).expect("There should be at least a solution").inner().inner();
+//!
+//! assert!(solution.is_complete());
+//! ```
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Variable};
 use std::collections::{BTreeMap, BTreeSet};
