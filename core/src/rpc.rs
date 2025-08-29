@@ -122,7 +122,10 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
     eprintln!("Payload received!");
 
     match init_msg {
-        InitMsg::RunPythonScript(script) => crate::python::run_python_script(script)?,
+        InitMsg::RunPythonScript(script) => {
+            crate::python::initialize();
+            crate::python::run_python_script(script)?;
+        }
     }
 
     eprintln!("Exiting...");
