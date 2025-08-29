@@ -35,6 +35,7 @@ enum GeneralCommand {
         #[arg(short, long, default_value_t = false)]
         force: bool,
     },
+    GetWeekCount,
 }
 
 use collomatique::backend::sqlite;
@@ -135,6 +136,11 @@ async fn general_command(
                 };
                 return Err(err);
             }
+        }
+        GeneralCommand::GetWeekCount => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let week_count = general_data.week_count.get();
+            print!("{}", week_count);
         }
     }
 
