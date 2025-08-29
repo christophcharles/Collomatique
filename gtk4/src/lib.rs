@@ -1,4 +1,4 @@
-use gtk::prelude::{BoxExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::{GtkWindowExt, WidgetExt};
 use relm4::component::{
     AsyncComponent, AsyncComponentParts, AsyncComponentSender, AsyncController,
     SimpleAsyncComponent,
@@ -28,17 +28,10 @@ enum AppState {
 }
 
 impl AppState {
-    fn is_welcome_screen(&self) -> bool {
+    fn get_screen_name(&self) -> &'static str {
         match self {
-            AppState::WelcomeScreen => true,
-            _ => false,
-        }
-    }
-
-    fn is_editor_screen(&self) -> bool {
-        match self {
-            AppState::EditorScreen => true,
-            _ => false,
+            AppState::WelcomeScreen => "welcome",
+            AppState::EditorScreen => "editor",
         }
     }
 }
@@ -66,27 +59,15 @@ impl SimpleAsyncComponent for AppModel {
         root_window = adw::ApplicationWindow {
             set_default_width: 800,
             set_default_height: 600,
-            gtk::Box {
+            gtk::Stack {
                 set_hexpand: true,
                 set_vexpand: true,
-
-                gtk::Box {
-                    set_hexpand: true,
-                    set_vexpand: true,
-                    #[watch]
-                    set_visible: model.state.is_welcome_screen(),
-
-                    append: model.controllers.welcome.widget(),
-                },
-                gtk::Box {
-                    set_hexpand: true,
-                    set_vexpand: true,
-                    #[watch]
-                    set_visible: model.state.is_editor_screen(),
-
-                    append: model.controllers.editor.widget(),
-                },
-            }
+                add_named: (model.controllers.welcome.widget(), Some("welcome")),
+                add_named: (model.controllers.editor.widget(), Some("editor")),
+                #[watch]
+                set_visible_child_name: model.state.get_screen_name(),
+                set_transition_type: gtk::StackTransitionType::Crossfade,
+            },
         }
     }
 
