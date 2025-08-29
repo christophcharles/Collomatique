@@ -127,3 +127,12 @@ impl From<collomatique_state_colloscopes::IncompatId> for MsgIncompatId {
         MsgIncompatId(value.inner())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgGroupListId(pub u64);
+
+impl From<collomatique_state_colloscopes::GroupListId> for MsgGroupListId {
+    fn from(value: collomatique_state_colloscopes::GroupListId) -> Self {
+        MsgGroupListId(value.inner())
+    }
+}

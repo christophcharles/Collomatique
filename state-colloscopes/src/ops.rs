@@ -34,6 +34,8 @@ pub enum Op {
     Slot(SlotOp),
     /// Operation on incompatibilities
     Incompat(IncompatOp),
+    /// Operation on group lists
+    GroupList(GroupListOp),
 }
 
 impl Operation for Op {}
@@ -199,6 +201,8 @@ pub enum AnnotatedOp {
     Slot(AnnotatedSlotOp),
     /// Operation on slots
     Incompat(AnnotatedIncompatOp),
+    /// Operation on group lists
+    GroupList(AnnotatedGroupListOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -246,6 +250,12 @@ impl From<AnnotatedSlotOp> for AnnotatedOp {
 impl From<AnnotatedIncompatOp> for AnnotatedOp {
     fn from(value: AnnotatedIncompatOp) -> Self {
         AnnotatedOp::Incompat(value)
+    }
+}
+
+impl From<AnnotatedGroupListOp> for AnnotatedOp {
+    fn from(value: AnnotatedGroupListOp) -> Self {
+        AnnotatedOp::GroupList(value)
     }
 }
 
@@ -397,6 +407,28 @@ pub enum AnnotatedIncompatOp {
     Update(IncompatId, incompats::Incompatibility),
 }
 
+/// Group list operation enumeration
+///
+/// Compared to [GroupListOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedGroupListOp {
+    /// Add a group list
+    /// First parameter is the group list id for the new group list
+    Add(GroupListId, group_lists::GroupListParameters),
+    /// Remove an existing group list
+    Remove(GroupListId),
+    /// Update a group list
+    Update(GroupListId, group_lists::GroupListParameters),
+    /// Change pre-fill for a group list
+    PreFill(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    /// Assign a group list to a subject
+    AssignToSubject(SubjectId, Option<GroupListId>),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -441,6 +473,10 @@ impl AnnotatedOp {
             }
             Op::Incompat(incompat_op) => {
                 let (op, id) = AnnotatedIncompatOp::annotate(incompat_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::GroupList(group_list_op) => {
+                let (op, id) = AnnotatedGroupListOp::annotate(group_list_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
         }
@@ -617,6 +653,36 @@ impl AnnotatedIncompatOp {
             IncompatOp::Update(incompat_id, incompat) => {
                 (AnnotatedIncompatOp::Update(incompat_id, incompat), None)
             }
+        }
+    }
+}
+
+impl AnnotatedGroupListOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [GroupListOp].
+    fn annotate(
+        group_list_op: GroupListOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedGroupListOp, Option<GroupListId>) {
+        match group_list_op {
+            GroupListOp::Add(params) => {
+                let new_id = id_issuer.get_group_list_id();
+                (AnnotatedGroupListOp::Add(new_id, params), Some(new_id))
+            }
+            GroupListOp::Remove(group_list_id) => {
+                (AnnotatedGroupListOp::Remove(group_list_id), None)
+            }
+            GroupListOp::Update(group_list_id, params) => {
+                (AnnotatedGroupListOp::Update(group_list_id, params), None)
+            }
+            GroupListOp::PreFill(group_list_id, map) => {
+                (AnnotatedGroupListOp::PreFill(group_list_id, map), None)
+            }
+            GroupListOp::AssignToSubject(subject_id, group_list_id) => (
+                AnnotatedGroupListOp::AssignToSubject(subject_id, group_list_id),
+                None,
+            ),
         }
     }
 }

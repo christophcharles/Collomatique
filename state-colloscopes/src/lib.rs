@@ -10,9 +10,10 @@ use group_lists::GroupLists;
 use group_lists::GroupListsExternalData;
 use incompats::Incompats;
 use incompats::IncompatsExternalData;
+use ops::AnnotatedGroupListOp;
 use periods::{Periods, PeriodsExternalData};
 use slots::{Slots, SlotsExternalData};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
 use teachers::{Teachers, TeachersExternalData};
@@ -389,9 +390,25 @@ pub enum IncompatError {
 /// These errors can be returned when trying to modify [Data] with a group list op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum GroupListError {
+    /// group list id is invalid
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(GroupListId),
+
+    /// The group list id already exists
+    #[error("group list id ({0:?}) already exists")]
+    GroupListIdAlreadyExists(GroupListId),
+
     /// student id is invalid
     #[error("invalid student id ({0:?})")]
     InvalidStudentId(StudentId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// subject does not have interrogations
+    #[error("subject id ({0:?}) has no interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
 
     /// empty group count range
     #[error("group_count range is empty")]
@@ -408,6 +425,10 @@ pub enum GroupListError {
     /// student prefilled group number is invalid
     #[error("Student id {0:?} is associated to a bad prefilled group number {1:?}")]
     StudentPrefilledGroupIsInvalid(StudentId, u32),
+
+    /// cannot remove group list as there are still prefilled groups
+    #[error("Group list still has prefilled groups and cannot be removed")]
+    RemainingPrefilledGroups,
 }
 
 /// Errors for colloscopes modification
@@ -431,6 +452,8 @@ pub enum Error {
     Slot(#[from] SlotError),
     #[error(transparent)]
     Incompat(#[from] IncompatError),
+    #[error(transparent)]
+    GroupList(#[from] GroupListError),
 }
 
 /// Errors for IDs
@@ -456,6 +479,7 @@ pub enum NewId {
     WeekPatternId(WeekPatternId),
     SlotId(SlotId),
     IncompatId(IncompatId),
+    GroupListId(GroupListId),
 }
 
 impl From<StudentId> for NewId {
@@ -500,6 +524,12 @@ impl From<IncompatId> for NewId {
     }
 }
 
+impl From<GroupListId> for NewId {
+    fn from(value: GroupListId) -> Self {
+        NewId::GroupListId(value)
+    }
+}
+
 impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
@@ -537,6 +567,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Incompat(incompat_op) => {
                 Ok(AnnotatedOp::Incompat(self.build_rev_incompat(incompat_op)?))
             }
+            AnnotatedOp::GroupList(group_list_op) => Ok(AnnotatedOp::GroupList(
+                self.build_rev_group_list(group_list_op)?,
+            )),
         }
     }
 
@@ -552,6 +585,7 @@ impl InMemoryData for Data {
             }
             AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
+            AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -1122,21 +1156,32 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// Checks that an incompat is valid
-    fn validate_group_list_internal(
-        group_list: &group_lists::GroupList,
+    fn validate_group_list_params_internal(
+        params: &group_lists::GroupListParameters,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        if group_list.params.group_count.is_empty() {
+        if params.group_count.is_empty() {
             return Err(GroupListError::GroupCountRangeIsEmpty);
         }
-        if group_list.params.students_per_group.is_empty() {
+        if params.students_per_group.is_empty() {
             return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
         }
-        for student_id in &group_list.params.excluded_students {
+        for student_id in &params.excluded_students {
             if !students.student_map.contains_key(student_id) {
                 return Err(GroupListError::InvalidStudentId(*student_id));
             }
         }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that an incompat is valid
+    fn validate_group_list_internal(
+        group_list: &group_lists::GroupList,
+        students: &students::Students,
+    ) -> Result<(), GroupListError> {
+        Self::validate_group_list_params_internal(&group_list.params, students)?;
         let max_group = group_list.params.group_count.end().clone();
         for (student_id, group_num) in &group_list.prefilled_groups {
             if !students.student_map.contains_key(student_id) {
@@ -2262,6 +2307,127 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply group list operations
+    fn apply_group_list(
+        &mut self,
+        group_list_op: &AnnotatedGroupListOp,
+    ) -> std::result::Result<(), GroupListError> {
+        match group_list_op {
+            AnnotatedGroupListOp::Add(new_id, params) => {
+                if self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .contains_key(new_id)
+                {
+                    return Err(GroupListError::GroupListIdAlreadyExists(*new_id));
+                };
+                let new_group_list = group_lists::GroupList {
+                    params: params.clone(),
+                    prefilled_groups: BTreeMap::new(),
+                };
+
+                self.validate_group_list(&new_group_list)?;
+
+                self.inner_data
+                    .group_lists
+                    .group_list_map
+                    .insert(*new_id, new_group_list);
+
+                Ok(())
+            }
+            AnnotatedGroupListOp::Remove(id) => {
+                let Some(old_group_list) = self.inner_data.group_lists.group_list_map.get(id)
+                else {
+                    return Err(GroupListError::InvalidGroupListId(*id));
+                };
+                if !old_group_list.prefilled_groups.is_empty() {
+                    return Err(GroupListError::RemainingPrefilledGroups);
+                }
+
+                self.inner_data.group_lists.group_list_map.remove(id);
+
+                Ok(())
+            }
+            AnnotatedGroupListOp::Update(group_list_id, new_params) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
+                };
+                let new_group_list = group_lists::GroupList {
+                    params: new_params.clone(),
+                    prefilled_groups: old_group_list.prefilled_groups.clone(),
+                };
+
+                self.validate_group_list(&new_group_list)?;
+
+                self.inner_data
+                    .group_lists
+                    .group_list_map
+                    .insert(*group_list_id, new_group_list);
+
+                Ok(())
+            }
+            AnnotatedGroupListOp::PreFill(group_list_id, prefilled_groups) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
+                };
+                let new_group_list = group_lists::GroupList {
+                    params: old_group_list.params.clone(),
+                    prefilled_groups: prefilled_groups.clone(),
+                };
+
+                self.validate_group_list(&new_group_list)?;
+
+                self.inner_data
+                    .group_lists
+                    .group_list_map
+                    .insert(*group_list_id, new_group_list);
+
+                Ok(())
+            }
+            AnnotatedGroupListOp::AssignToSubject(subject_id, group_list_id) => {
+                let Some(subject) = self.inner_data.subjects.find_subject(*subject_id) else {
+                    return Err(GroupListError::InvalidSubjectId(*subject_id));
+                };
+                if subject.parameters.interrogation_parameters.is_none() {
+                    return Err(GroupListError::SubjectHasNoInterrogation(*subject_id));
+                }
+
+                match group_list_id {
+                    Some(id) => {
+                        if !self.inner_data.group_lists.group_list_map.contains_key(id) {
+                            return Err(GroupListError::InvalidGroupListId(*id));
+                        };
+                        self.inner_data
+                            .group_lists
+                            .subjects_associations
+                            .insert(*subject_id, *id);
+                    }
+                    None => {
+                        self.inner_data
+                            .group_lists
+                            .subjects_associations
+                            .remove(subject_id);
+                    }
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -2724,6 +2890,81 @@ impl Data {
                 Ok(AnnotatedIncompatOp::Update(
                     *incompat_id,
                     old_incompat.clone(),
+                ))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a group list operation
+    fn build_rev_group_list(
+        &self,
+        group_list_op: &AnnotatedGroupListOp,
+    ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
+        match group_list_op {
+            AnnotatedGroupListOp::Add(new_id, _params) => {
+                Ok(AnnotatedGroupListOp::Remove(new_id.clone()))
+            }
+            AnnotatedGroupListOp::Remove(group_list_id) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
+                };
+
+                if !old_group_list.prefilled_groups.is_empty() {
+                    return Err(GroupListError::RemainingPrefilledGroups);
+                }
+
+                Ok(AnnotatedGroupListOp::Add(
+                    *group_list_id,
+                    old_group_list.params.clone(),
+                ))
+            }
+            AnnotatedGroupListOp::Update(group_list_id, _new_params) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
+                };
+
+                Ok(AnnotatedGroupListOp::Update(
+                    *group_list_id,
+                    old_group_list.params.clone(),
+                ))
+            }
+            AnnotatedGroupListOp::PreFill(group_list_id, _prefilled_groups) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
+                };
+
+                Ok(AnnotatedGroupListOp::PreFill(
+                    *group_list_id,
+                    old_group_list.prefilled_groups.clone(),
+                ))
+            }
+            AnnotatedGroupListOp::AssignToSubject(subject_id, _group_list_id) => {
+                let old_group_list_id = self
+                    .inner_data
+                    .group_lists
+                    .subjects_associations
+                    .get(subject_id)
+                    .cloned();
+                Ok(AnnotatedGroupListOp::AssignToSubject(
+                    subject_id.clone(),
+                    old_group_list_id,
                 ))
             }
         }
