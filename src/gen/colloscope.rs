@@ -187,6 +187,20 @@ impl Default for Subject {
     }
 }
 
+impl Subject {
+    fn is_student_concerned(&self, student: usize) -> bool {
+        if self.groups.not_assigned.contains(&student) {
+            return true;
+        }
+        for group in &self.groups.prefilled_groups {
+            if group.students.contains(&student) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 pub type SubjectList = Vec<Subject>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -1692,6 +1706,89 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_interrogations_per_week_optimizer_for_student(
+        &self,
+        goal: i32,
+        student: usize,
+        week: u32,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                // ignore tutorial sessions for interrogation count
+                continue;
+            }
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+                        expr = expr
+                            + Expr::var(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                                student,
+                            });
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student) {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
+        expr.eq(&Expr::constant(goal))
+    }
+
+    fn compute_average_interrogation_count_per_week(&self, student: usize) -> f64 {
+        let mut output = 0.;
+
+        for subject in &self.data.subjects {
+            if subject.is_student_concerned(student) {
+                let mean_interrogation_per_week = 1. / f64::from(subject.period.get());
+                output += mean_interrogation_per_week;
+            }
+        }
+
+        output
+    }
+
+    fn build_interrogations_per_week_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints: BTreeSet<Constraint<Variable>> = BTreeSet::new();
+
+        for (student, _) in self.data.students.iter().enumerate() {
+            let average = self.compute_average_interrogation_count_per_week(student);
+            // TODO : we must take an i32 because of the problem coefficients
+            //        this should not be a big problem but could be improved in the future
+            let average_i32 = average.round() as i32;
+
+            for week in 0..self.data.general.week_count.get() {
+                constraints.insert(self.build_interrogations_per_week_optimizer_for_student(
+                    average_i32,
+                    student,
+                    week,
+                ));
+            }
+        }
+
+        constraints
+    }
+
     fn build_max_interrogations_per_day_constraints_for_student(
         &self,
         max_count: NonZeroU32,
@@ -1764,6 +1861,80 @@ impl<'a> IlpTranslator<'a> {
                     constraints.extend(
                         self.build_max_interrogations_per_day_constraints_for_student(
                             max_count, student, week, day,
+                        ),
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
+    fn build_max_interrogations_per_day_optimizer_for_student(
+        &self,
+        student: usize,
+        week: u32,
+        day: time::Weekday,
+    ) -> Option<Constraint<Variable>> {
+        let mut expr = Expr::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                // ignore tutorial sessions for interrogation count
+                continue;
+            }
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+                if slot.start.weekday != day {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+                        expr = expr
+                            + Expr::var(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                                student,
+                            });
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student) {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
+        if expr == Expr::constant(0) {
+            return None;
+        }
+
+        Some(expr.eq(&Expr::constant(0)))
+    }
+
+    fn build_max_interrogations_per_day_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for week in 0..self.data.general.week_count.get() {
+            for day in time::Weekday::iter() {
+                for (student, _) in self.data.students.iter().enumerate() {
+                    constraints.extend(
+                        self.build_max_interrogations_per_day_optimizer_for_student(
+                            student, week, day,
                         ),
                     );
                 }
@@ -2162,7 +2333,29 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
+    fn problem_builder_soft(&self) -> ProblemBuilder<Variable> {
+        ProblemBuilder::new()
+            .add_variables(self.build_group_in_slot_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_dynamic_group_assignment_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_student_in_group_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_periodicity_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_student_not_in_last_period_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_use_grouping_variables())
+            .expect("Should not have duplicates")
+            .add_variables(self.build_incompat_group_for_student_variables())
+            .expect("Should not have duplicates")
+            .add_constraints(self.build_interrogations_per_week_optimizer())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_max_interrogations_per_day_optimizer())
+            .expect("Variables should be declared")
+    }
+
+    fn problem_builder_hard(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
             .expect("Should not have duplicates")
@@ -2214,6 +2407,19 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
             .add_constraints(self.build_balancing_constraints())
             .expect("Variables should be declared")
+    }
+
+    fn problem_builder_internal(&self) -> ProblemBuilder<Variable> {
+        let soft_problem = self.problem_builder_soft().build();
+        let hard_problem_builder =
+            self.problem_builder_hard()
+                .eval_fn(crate::debuggable!(move |x| {
+                    let soft_config = soft_problem
+                        .config_from(x.get_vars().iter())
+                        .expect("Variables should match");
+                    soft_config.compute_lhs_sq_norm2()
+                }));
+        hard_problem_builder
     }
 
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
