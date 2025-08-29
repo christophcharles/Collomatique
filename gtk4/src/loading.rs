@@ -9,6 +9,7 @@ mod file_loader;
 #[derive(Debug)]
 pub enum LoadingInput {
     Load(PathBuf),
+    StopLoading,
 
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
     Failed(PathBuf, String),
@@ -117,6 +118,9 @@ impl SimpleComponent for LoadingPanel {
                     .send(file_loader::FileLoadingInput::Load(path))
                     .unwrap();
                 self.worker = Some(worker);
+            }
+            LoadingInput::StopLoading => {
+                drop(self.worker.take());
             }
             LoadingInput::Failed(path, error) => {
                 sender.output(LoadingOutput::Failed(path, error)).unwrap();
