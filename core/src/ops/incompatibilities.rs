@@ -73,7 +73,81 @@ impl IncompatibilitiesUpdateOp {
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::IncompatId>, IncompatibilitiesUpdateError>
     {
-        todo!()
+        match self {
+            Self::AddNewIncompat(incompat) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Incompat(
+                            collomatique_state_colloscopes::IncompatOp::Add(
+                                incompat.clone()
+                            )
+                        ),
+                        (OpCategory::Incompatibilities, self.get_desc()),
+                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
+                        match ie {
+                            collomatique_state_colloscopes::IncompatError::InvalidSubjectId(id) => AddNewIncompatError::InvalidSubjectId(id),
+                            collomatique_state_colloscopes::IncompatError::InvalidWeekPatternId(id) => AddNewIncompatError::InvalidWeekPatternId(id),
+                            _ => panic!("Unexpected incompatibility error during AddNewIncompat: {:?}", ie),
+                        }
+                    } else {
+                        panic!("Unexpected error during AddNewIncompat: {:?}", e);
+                    })?;
+                let Some(collomatique_state_colloscopes::NewId::IncompatId(new_id)) = result else {
+                    panic!("Unexpected result from IncompatOp::Add");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateIncompat(incompat_id, incompat) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Incompat(
+                            collomatique_state_colloscopes::IncompatOp::Update(
+                                *incompat_id,
+                                incompat.clone()
+                            )
+                        ),
+                        (OpCategory::Incompatibilities, self.get_desc()),
+                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
+                        match ie {
+                            collomatique_state_colloscopes::IncompatError::InvalidIncompatId(id) => UpdateIncompatError::InvalidIncompatId(id),
+                            collomatique_state_colloscopes::IncompatError::InvalidSubjectId(id) => UpdateIncompatError::InvalidSubjectId(id),
+                            collomatique_state_colloscopes::IncompatError::InvalidWeekPatternId(id) => UpdateIncompatError::InvalidWeekPatternId(id),
+                            _ => panic!("Unexpected incompatibility error during UpdateIncompat: {:?}", ie),
+                        }
+                    } else {
+                        panic!("Unexpected error during UpdateIncompat: {:?}", e);
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteIncompat(incompat_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Incompat(
+                            collomatique_state_colloscopes::IncompatOp::Remove(*incompat_id),
+                        ),
+                        (OpCategory::Incompatibilities, self.get_desc()),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Incompat(ie) = e {
+                            match ie {
+                                collomatique_state_colloscopes::IncompatError::InvalidIncompatId(id) => {
+                                    DeleteIncompatError::InvalidIncompatId(id)
+                                }
+                                _ => panic!("Unexpected slot error during DeleteIncompat: {:?}", ie),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteIncompat: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> String {
