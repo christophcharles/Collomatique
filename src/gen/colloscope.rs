@@ -722,14 +722,14 @@ pub enum Variable {
         slot: usize,
         group: usize,
     },
-    GroupOnWeekSelection {
+    GroupOnSlotSelection {
         subject: usize,
-        week_selection: usize,
+        slot_selection: usize,
         group: usize,
     },
-    GroupOnWeekSelectionAuto {
+    GroupOnSlotSelectionAuto {
         subject: usize,
-        week_selection: usize,
+        slot_selection: usize,
         group: usize,
     },
     DynamicGroupAssignment {
@@ -764,16 +764,16 @@ impl std::fmt::Display for Variable {
                 slot,
                 group,
             } => write!(f, "GiS_{}_{}_{}", *subject, *slot, *group),
-            Variable::GroupOnWeekSelection {
+            Variable::GroupOnSlotSelection {
                 subject,
-                week_selection,
+                slot_selection,
                 group,
-            } => write!(f, "GoWS_{}_{}_{}", *subject, *week_selection, *group),
-            Variable::GroupOnWeekSelectionAuto {
+            } => write!(f, "GoSS_{}_{}_{}", *subject, *slot_selection, *group),
+            Variable::GroupOnSlotSelectionAuto {
                 subject,
-                week_selection,
+                slot_selection,
                 group,
-            } => write!(f, "GoWSA_{}_{}_{}", *subject, *week_selection, *group),
+            } => write!(f, "GoSSA_{}_{}_{}", *subject, *slot_selection, *group),
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -878,7 +878,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_group_on_week_selection_variables(&self) -> BTreeSet<Variable> {
+    fn build_group_on_slot_selection_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -890,9 +890,9 @@ impl<'a> IlpTranslator<'a> {
                         .enumerate()
                         .flat_map(move |(j, _ws)| {
                             subject.groups.prefilled_groups.iter().enumerate().map(
-                                move |(k, _group)| Variable::GroupOnWeekSelection {
+                                move |(k, _group)| Variable::GroupOnSlotSelection {
                                     subject: i,
-                                    week_selection: j,
+                                    slot_selection: j,
                                     group: k,
                                 },
                             )
@@ -902,7 +902,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_group_on_week_selection_auto_variables(&self) -> BTreeSet<Variable> {
+    fn build_group_on_slot_selection_auto_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -918,9 +918,9 @@ impl<'a> IlpTranslator<'a> {
                         .prefilled_groups
                         .iter()
                         .enumerate()
-                        .map(move |(k, _group)| Variable::GroupOnWeekSelectionAuto {
+                        .map(move |(k, _group)| Variable::GroupOnSlotSelectionAuto {
                             subject: i,
-                            week_selection: j,
+                            slot_selection: j,
                             group: k,
                         })
                 })
@@ -2031,7 +2031,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_type(
+    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_group(
         &self,
         i: usize,
         subject: &Subject,
@@ -2067,9 +2067,9 @@ impl<'a> IlpTranslator<'a> {
         let max_use = expected_use_per_group_max.ceil() as i32;
         let min_use = expected_use_per_group_min.floor() as i32;
 
-        let rhs_cond = Expr::var(Variable::GroupOnWeekSelection {
+        let rhs_cond = Expr::var(Variable::GroupOnSlotSelection {
             subject: i,
-            week_selection: j,
+            slot_selection: j,
             group: k,
         });
 
@@ -2083,7 +2083,7 @@ impl<'a> IlpTranslator<'a> {
         }
     }
 
-    fn build_balancing_constraints_for_subject_overall_only_internal_for_week_selection(
+    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_selection(
         &self,
         i: usize,
         subject: &Subject,
@@ -2116,7 +2116,7 @@ impl<'a> IlpTranslator<'a> {
             let relevant_slots = &slot_group.slots;
             let count = slot_group.count;
             for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
-                constraints.extend(self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_type(
+                constraints.extend(self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_group(
                     i, subject, j, week_span, relevant_slots, count, total_count, k
                 ));
             }
@@ -2135,7 +2135,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot_selection) in slot_selections.iter().enumerate() {
             constraints.extend(
-                self.build_balancing_constraints_for_subject_overall_only_internal_for_week_selection(
+                self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_selection(
                     i,
                     subject,
                     j,
@@ -2147,7 +2147,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type(
+    fn build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_group(
         &self,
         i: usize,
         subject: &Subject,
@@ -2180,15 +2180,15 @@ impl<'a> IlpTranslator<'a> {
 
         assert!(current_range_length <= window_size);
         let count_i32 = i32::try_from(count).expect("Slot count for balancing should fit in i32");
-        let gows = Expr::var(Variable::GroupOnWeekSelection {
+        let goss = Expr::var(Variable::GroupOnSlotSelection {
             subject: i,
-            week_selection: j,
+            slot_selection: j,
             group: k,
         });
         if current_range_length < window_size {
-            expr.leq(&(count_i32 * gows))
+            expr.leq(&(count_i32 * goss))
         } else {
-            expr.eq(&(count_i32 * gows))
+            expr.eq(&(count_i32 * goss))
         }
     }
 
@@ -2278,7 +2278,7 @@ impl<'a> IlpTranslator<'a> {
         )
     }
 
-    fn build_balancing_constraints_for_subject_strict_internal_for_week_selection(
+    fn build_balancing_constraints_for_subject_strict_internal_for_slot_selection(
         &self,
         i: usize,
         subject: &Subject,
@@ -2297,7 +2297,7 @@ impl<'a> IlpTranslator<'a> {
                 let relevant_slots = &slot_group.slots;
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                     output.insert(
-                        self.build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type(
+                        self.build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_group(
                             i,
                             subject,
                             j,
@@ -2326,7 +2326,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot_selection) in slot_selections.iter().enumerate() {
             constraints.extend(
-                self.build_balancing_constraints_for_subject_strict_internal_for_week_selection(
+                self.build_balancing_constraints_for_subject_strict_internal_for_slot_selection(
                     i,
                     subject,
                     j,
@@ -2373,7 +2373,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_balancing_optimizer_for_subject_and_week_selection_range_group_and_slot_type(
+    fn build_balancing_optimizer_for_subject_and_slot_selection_range_group_and_slot_group(
         &self,
         i: usize,
         subject: &Subject,
@@ -2406,15 +2406,15 @@ impl<'a> IlpTranslator<'a> {
 
         assert!(current_range_length <= window_size);
         let count_i32 = i32::try_from(count).expect("Slot count for balancing should fit in i32");
-        let gowsa = Expr::var(Variable::GroupOnWeekSelectionAuto {
+        let gossa = Expr::var(Variable::GroupOnSlotSelectionAuto {
             subject: i,
-            week_selection: j,
+            slot_selection: j,
             group: k,
         });
-        expr.eq(&(count_i32 * gowsa))
+        expr.eq(&(count_i32 * gossa))
     }
 
-    fn build_balancing_optimizer_for_subject_and_week_selection(
+    fn build_balancing_optimizer_for_subject_and_slot_selection(
         &self,
         i: usize,
         subject: &Subject,
@@ -2432,7 +2432,7 @@ impl<'a> IlpTranslator<'a> {
                 let count = slot_group.count;
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                     output.insert(
-                        self.build_balancing_optimizer_for_subject_and_week_selection_range_group_and_slot_type(
+                        self.build_balancing_optimizer_for_subject_and_slot_selection_range_group_and_slot_group(
                             i,
                             subject,
                             j,
@@ -2460,7 +2460,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot_selection) in data.iter().enumerate() {
             constraints.extend(
-                self.build_balancing_optimizer_for_subject_and_week_selection(
+                self.build_balancing_optimizer_for_subject_and_slot_selection(
                     i,
                     subject,
                     j,
@@ -2689,7 +2689,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_group_on_week_selection_constraints_at_least_one_slot_in_selection(
+    fn build_group_on_slot_selection_constraints_at_least_one_slot_in_selection(
         &self,
         i: usize,
         j: usize,
@@ -2697,9 +2697,9 @@ impl<'a> IlpTranslator<'a> {
         k: usize,
     ) -> Constraint<Variable> {
         let mut expr_sum = Expr::constant(0);
-        let expr_gows = Expr::var(Variable::GroupOnWeekSelection {
+        let expr_goss = Expr::var(Variable::GroupOnSlotSelection {
             subject: i,
-            week_selection: j,
+            slot_selection: j,
             group: k,
         });
 
@@ -2713,10 +2713,10 @@ impl<'a> IlpTranslator<'a> {
             expr_sum = expr_sum + &expr_gis;
         }
 
-        expr_gows.leq(&expr_sum)
+        expr_goss.leq(&expr_sum)
     }
 
-    fn build_group_on_week_selection_constraints_slot_allowed_if_in_selection(
+    fn build_group_on_slot_selection_constraints_slot_allowed_if_in_selection(
         &self,
         i: usize,
         k: usize,
@@ -2732,20 +2732,20 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot_selection) in slot_selections.iter().enumerate() {
             if slot_selection.contains_slot(slot) {
-                let expr_gows = Expr::var(Variable::GroupOnWeekSelection {
+                let expr_goss = Expr::var(Variable::GroupOnSlotSelection {
                     subject: i,
-                    week_selection: j,
+                    slot_selection: j,
                     group: k,
                 });
 
-                expr_sum = expr_sum + &expr_gows;
+                expr_sum = expr_sum + &expr_goss;
             }
         }
 
         expr_gis.leq(&expr_sum)
     }
 
-    fn build_group_on_week_selection_constraints_choice_for_subject_and_group(
+    fn build_group_on_slot_selection_constraints_choice_for_subject_and_group(
         &self,
         i: usize,
         k: usize,
@@ -2755,9 +2755,9 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, _slot_selection) in slot_selections.iter().enumerate() {
             choice_expr = choice_expr
-                + Expr::var(Variable::GroupOnWeekSelection {
+                + Expr::var(Variable::GroupOnSlotSelection {
                     subject: i,
-                    week_selection: j,
+                    slot_selection: j,
                     group: k,
                 });
         }
@@ -2765,14 +2765,14 @@ impl<'a> IlpTranslator<'a> {
         choice_expr.eq(&Expr::constant(1))
     }
 
-    fn build_group_on_week_selection_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_group_on_slot_selection_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
             if let Some(br) = &subject.balancing_requirements {
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                     let choice_constraint = self
-                        .build_group_on_week_selection_constraints_choice_for_subject_and_group(
+                        .build_group_on_slot_selection_constraints_choice_for_subject_and_group(
                             i,
                             k,
                             &br.slot_selections,
@@ -2781,7 +2781,7 @@ impl<'a> IlpTranslator<'a> {
 
                     for (j, slot_selection) in br.slot_selections.iter().enumerate() {
                         constraints.insert(
-                            self.build_group_on_week_selection_constraints_at_least_one_slot_in_selection(
+                            self.build_group_on_slot_selection_constraints_at_least_one_slot_in_selection(
                                 i,
                                 j,
                                 slot_selection,
@@ -2792,7 +2792,7 @@ impl<'a> IlpTranslator<'a> {
 
                     for (slot, _) in subject.slots.iter().enumerate() {
                         constraints.insert(
-                            self.build_group_on_week_selection_constraints_slot_allowed_if_in_selection(
+                            self.build_group_on_slot_selection_constraints_slot_allowed_if_in_selection(
                                 i,
                                 k,
                                 slot,
@@ -2807,7 +2807,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_group_on_week_selection_auto_constraints_at_least_one_slot_in_selection(
+    fn build_group_on_slot_selection_auto_constraints_at_least_one_slot_in_selection(
         &self,
         i: usize,
         j: usize,
@@ -2815,9 +2815,9 @@ impl<'a> IlpTranslator<'a> {
         k: usize,
     ) -> Constraint<Variable> {
         let mut expr_sum = Expr::constant(0);
-        let expr_gows = Expr::var(Variable::GroupOnWeekSelectionAuto {
+        let expr_goss = Expr::var(Variable::GroupOnSlotSelectionAuto {
             subject: i,
-            week_selection: j,
+            slot_selection: j,
             group: k,
         });
 
@@ -2831,10 +2831,10 @@ impl<'a> IlpTranslator<'a> {
             expr_sum = expr_sum + &expr_gis;
         }
 
-        expr_gows.leq(&expr_sum)
+        expr_goss.leq(&expr_sum)
     }
 
-    fn build_group_on_week_selection_auto_constraints_slot_allowed_if_in_selection(
+    fn build_group_on_slot_selection_auto_constraints_slot_allowed_if_in_selection(
         &self,
         i: usize,
         k: usize,
@@ -2850,20 +2850,20 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot_selection) in slot_selections.iter().enumerate() {
             if slot_selection.contains_slot(slot) {
-                let expr_gows = Expr::var(Variable::GroupOnWeekSelectionAuto {
+                let expr_goss = Expr::var(Variable::GroupOnSlotSelectionAuto {
                     subject: i,
-                    week_selection: j,
+                    slot_selection: j,
                     group: k,
                 });
 
-                expr_sum = expr_sum + &expr_gows;
+                expr_sum = expr_sum + &expr_goss;
             }
         }
 
         expr_gis.leq(&expr_sum)
     }
 
-    fn build_group_on_week_selection_auto_constraints_choice_for_subject_and_group(
+    fn build_group_on_slot_selection_auto_constraints_choice_for_subject_and_group(
         &self,
         i: usize,
         k: usize,
@@ -2873,9 +2873,9 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, _slot_selection) in slot_selections.iter().enumerate() {
             choice_expr = choice_expr
-                + Expr::var(Variable::GroupOnWeekSelectionAuto {
+                + Expr::var(Variable::GroupOnSlotSelectionAuto {
                     subject: i,
-                    week_selection: j,
+                    slot_selection: j,
                     group: k,
                 });
         }
@@ -2883,7 +2883,7 @@ impl<'a> IlpTranslator<'a> {
         choice_expr.eq(&Expr::constant(1))
     }
 
-    fn build_group_on_week_selection_auto_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_group_on_slot_selection_auto_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
@@ -2891,7 +2891,7 @@ impl<'a> IlpTranslator<'a> {
                 BalancingRequirements::balance_teachers_and_timeslots_from_slots(&subject.slots);
             for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                 let choice_constraint = self
-                    .build_group_on_week_selection_auto_constraints_choice_for_subject_and_group(
+                    .build_group_on_slot_selection_auto_constraints_choice_for_subject_and_group(
                         i,
                         k,
                         &slot_selections,
@@ -2900,7 +2900,7 @@ impl<'a> IlpTranslator<'a> {
 
                 for (j, slot_selection) in slot_selections.iter().enumerate() {
                     constraints.insert(
-                        self.build_group_on_week_selection_auto_constraints_at_least_one_slot_in_selection(
+                        self.build_group_on_slot_selection_auto_constraints_at_least_one_slot_in_selection(
                             i,
                             j,
                             slot_selection,
@@ -2911,7 +2911,7 @@ impl<'a> IlpTranslator<'a> {
 
                 for (slot, _) in subject.slots.iter().enumerate() {
                     constraints.insert(
-                        self.build_group_on_week_selection_auto_constraints_slot_allowed_if_in_selection(
+                        self.build_group_on_slot_selection_auto_constraints_slot_allowed_if_in_selection(
                             i,
                             k,
                             slot,
@@ -2937,9 +2937,9 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_incompat_group_for_student_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_group_on_week_selection_variables())
+            .add_variables(self.build_group_on_slot_selection_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_group_on_week_selection_auto_variables())
+            .add_variables(self.build_group_on_slot_selection_auto_variables())
             .expect("Should not have duplicates")
             .add_constraints(self.build_interrogations_per_week_optimizer())
             .expect("Variables should be declared")
@@ -2963,9 +2963,9 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_incompat_group_for_student_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_group_on_week_selection_variables())
+            .add_variables(self.build_group_on_slot_selection_variables())
             .expect("Should not have duplicates")
-            .add_variables(self.build_group_on_week_selection_auto_variables())
+            .add_variables(self.build_group_on_slot_selection_auto_variables())
             .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
@@ -2997,11 +2997,11 @@ impl<'a> IlpTranslator<'a> {
             .expect("Variables should be declared")
             .add_constraints(self.build_student_incompat_max_count_constraints())
             .expect("Variables should be declared")
-            .add_constraints(self.build_group_on_week_selection_constraints())
+            .add_constraints(self.build_group_on_slot_selection_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_balancing_constraints())
             .expect("Variables should be declared")
-            .add_constraints(self.build_group_on_week_selection_auto_constraints())
+            .add_constraints(self.build_group_on_slot_selection_auto_constraints())
             .expect("Variables should be declared")
     }
 
@@ -3087,7 +3087,7 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
             .collect();
-        let subject_week_selection_map = self
+        let subject_slot_selection_map = self
             .data
             .subjects
             .iter()
@@ -3103,7 +3103,7 @@ impl<'a> IlpTranslator<'a> {
                     .collect(),
             })
             .collect();
-        let subject_week_selection_auto_map = self
+        let subject_slot_selection_auto_map = self
             .data
             .subjects
             .iter()
@@ -3155,8 +3155,8 @@ impl<'a> IlpTranslator<'a> {
             period_length,
             period_count,
             subject_week_map,
-            subject_week_selection_map,
-            subject_week_selection_auto_map,
+            subject_slot_selection_map,
+            subject_slot_selection_auto_map,
             grouping_week_map,
             incompat_groups_week_map,
             max_steps,
@@ -3250,8 +3250,8 @@ pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     period_length: NonZeroU32,
     period_count: NonZeroU32,
     subject_week_map: Vec<Vec<u32>>,
-    subject_week_selection_map: Vec<Vec<BTreeSet<u32>>>,
-    subject_week_selection_auto_map: Vec<Vec<BTreeSet<u32>>>,
+    subject_slot_selection_map: Vec<Vec<BTreeSet<u32>>>,
+    subject_slot_selection_auto_map: Vec<Vec<BTreeSet<u32>>>,
     grouping_week_map: Vec<BTreeSet<u32>>,
     incompat_groups_week_map: Vec<BTreeSet<u32>>,
     max_steps: Option<usize>,
@@ -3390,12 +3390,8 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         false
     }
 
-    fn does_week_selection_cover_period(
-        &self,
-        week_selection: &BTreeSet<u32>,
-        period: u32,
-    ) -> bool {
-        for week in week_selection {
+    fn does_week_set_cover_period(&self, week_set: &BTreeSet<u32>, period: u32) -> bool {
+        for week in week_set {
             if self.is_week_in_period(*week, period) {
                 return true;
             }
@@ -3417,22 +3413,21 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
                 let week = self.subject_week_map[*subject][*slot];
                 self.is_week_in_period(week, period)
             }
-            Variable::GroupOnWeekSelection {
+            Variable::GroupOnSlotSelection {
                 subject,
-                week_selection,
+                slot_selection,
                 group: _,
             } => {
-                let week_selection = &self.subject_week_selection_map[*subject][*week_selection];
-                self.does_week_selection_cover_period(week_selection, period)
+                let week_set = &self.subject_slot_selection_map[*subject][*slot_selection];
+                self.does_week_set_cover_period(week_set, period)
             }
-            Variable::GroupOnWeekSelectionAuto {
+            Variable::GroupOnSlotSelectionAuto {
                 subject,
-                week_selection,
+                slot_selection,
                 group: _,
             } => {
-                let week_selection =
-                    &self.subject_week_selection_auto_map[*subject][*week_selection];
-                self.does_week_selection_cover_period(week_selection, period)
+                let week_set = &self.subject_slot_selection_auto_map[*subject][*slot_selection];
+                self.does_week_set_cover_period(week_set, period)
             }
             Variable::DynamicGroupAssignment {
                 subject,
