@@ -9,6 +9,7 @@ use std::num::{NonZeroU32, NonZeroUsize};
 
 pub struct Dialog {
     hidden: bool,
+    should_redraw: bool,
     params: collomatique_state_colloscopes::SubjectParameters,
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     periodicity_panel: PeriodicityPanel,
@@ -197,18 +198,16 @@ impl SimpleComponent for Dialog {
                             set_title: "Paramètres généraux",
                             set_margin_all: 5,
                             set_hexpand: true,
-                            #[name(name_entry)]
                             adw::EntryRow {
                                 set_hexpand: true,
                                 set_title: "Nom de la matière",
-                                #[track(model.params.name.as_str() != name_entry.text().as_str())]
+                                #[track(model.should_redraw)]
                                 set_text: &model.params.name,
                                 connect_text_notify[sender] => move |widget| {
                                     let text : String = widget.text().into();
                                     sender.input(DialogInput::UpdateName(text));
                                 },
                             },
-                            #[name(duration_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Durée d'une colle (en minutes)",
@@ -222,7 +221,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.params.duration.get().get() as f64 != duration_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.params.duration.get().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let duration_u32 = widget.value() as u32;
@@ -230,12 +229,11 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateDuration(duration));
                                 },
                             },
-                            #[name(duration_taken_into_account_entry)]
                             adw::SwitchRow {
                                 set_hexpand: true,
                                 set_title: "Durée compatibilisée",
                                 set_subtitle: "Pour équilibrer le nombre d'heures par semaine",
-                                #[track(model.params.take_duration_into_account != duration_taken_into_account_entry.is_active())]
+                                #[track(model.should_redraw)]
                                 set_active: model.params.take_duration_into_account,
                                 connect_active_notify[sender] => move |widget| {
                                     let duration_taken_into_account = widget.is_active();
@@ -248,7 +246,6 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Nombre d'élèves minimum et maximum dans les groupes"),
                             set_margin_all: 5,
                             set_hexpand: true,
-                            #[name(students_per_group_min_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Minimum",
@@ -263,7 +260,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.params.students_per_group.start().get() as f64 != students_per_group_min_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.params.students_per_group.start().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let students_per_group_min_u32 = widget.value() as u32;
@@ -271,7 +268,6 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateStudentsPerGroupMinimum(students_per_group_min));
                                 },
                             },
-                            #[name(students_per_group_max_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Maximum",
@@ -286,7 +282,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.params.students_per_group.end().get() as f64 != students_per_group_max_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.params.students_per_group.end().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let students_per_group_max_u32 = widget.value() as u32;
@@ -300,7 +296,6 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Nombre de groupes à coller simultanément"),
                             set_margin_all: 5,
                             set_hexpand: true,
-                            #[name(groups_per_interrogation_min_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Minimum",
@@ -315,7 +310,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.params.groups_per_interrogation.start().get() as f64 != groups_per_interrogation_min_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.params.groups_per_interrogation.start().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let groups_per_interrogation_min_u32 = widget.value() as u32;
@@ -323,7 +318,6 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateGroupsPerInterrogationMinimum(groups_per_interrogation_min));
                                 },
                             },
-                            #[name(groups_per_interrogation_max_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Maximum",
@@ -338,7 +332,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.params.groups_per_interrogation.end().get() as f64 != groups_per_interrogation_max_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.params.groups_per_interrogation.end().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let groups_per_interrogation_max_u32 = widget.value() as u32;
@@ -352,11 +346,10 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Périodicité des colles de la matière"),
                             set_margin_all: 5,
                             set_hexpand: true,
-                            #[name(periodicity_type_entry)]
                             adw::ComboRow {
                                 set_title: "Type de périodicité",
                                 set_model: Some(&Self::generate_periodicity_type_model()),
-                                #[track(model.periodicity_panel != Self::periocity_selected_to_enum(periodicity_type_entry.selected()))]
+                                #[track(model.should_redraw)]
                                 set_selected: Self::periodicity_enum_to_selected(model.periodicity_panel),
                                 connect_selected_notify[sender] => move |widget| {
                                     let selected = widget.selected() as u32;
@@ -370,7 +363,6 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             #[watch]
                             set_visible: model.periodicity_panel == PeriodicityPanel::ExactlyPeriodic,
-                            #[name(exactly_periodic_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Périodicité (en semaines)",
@@ -384,7 +376,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.exactly_periodic_params.get() as f64 != exactly_periodic_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.exactly_periodic_params.get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let periodicity_u32 = widget.value() as u32;
@@ -398,7 +390,6 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             #[watch]
                             set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryBlockOfWeeks,
-                            #[name(once_for_every_block_of_weeks_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Taille des blocs (en semaines)",
@@ -412,7 +403,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.once_for_every_block_of_weeks_params.get() as f64 != once_for_every_block_of_weeks_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.once_for_every_block_of_weeks_params.get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let periodicity_u32 = widget.value() as u32;
@@ -426,7 +417,6 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             #[watch]
                             set_visible: model.periodicity_panel == PeriodicityPanel::AmountInYear,
-                            #[name(amount_in_year_minimum_count_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Minimum de colles dans l'année",
@@ -441,14 +431,13 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(*model.amount_in_year_params.interrogation_count_in_year.start() as f64 != amount_in_year_minimum_count_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: *model.amount_in_year_params.interrogation_count_in_year.start() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let value = widget.value() as u32;
                                     sender.input(DialogInput::UpdateAmountInYearCountMinimum(value));
                                 },
                             },
-                            #[name(amount_in_year_maximum_count_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Maximum de colles dans l'année",
@@ -463,14 +452,13 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(*model.amount_in_year_params.interrogation_count_in_year.end() as f64 != amount_in_year_maximum_count_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: *model.amount_in_year_params.interrogation_count_in_year.end() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let value = widget.value() as u32;
                                     sender.input(DialogInput::UpdateAmountInYearCountMaximum(value));
                                 },
                             },
-                            #[name(amount_in_year_week_separation_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Séparation minimale (en semaines)",
@@ -484,7 +472,7 @@ impl SimpleComponent for Dialog {
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                #[track(model.amount_in_year_params.minimum_week_separation as f64 != amount_in_year_week_separation_entry.value())]
+                                #[track(model.should_redraw)]
                                 set_value: model.amount_in_year_params.minimum_week_separation as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let value = widget.value() as u32;
@@ -614,6 +602,7 @@ impl SimpleComponent for Dialog {
         let params = collomatique_state_colloscopes::SubjectParameters::default();
         let model = Dialog {
             hidden: true,
+            should_redraw: false,
             params: params.clone(),
             global_first_week: None,
             periodicity_panel: Self::periodicity_panel_from_params(&params),
@@ -630,9 +619,11 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.should_redraw = false;
         match msg {
             DialogInput::Show(global_first_week, params) => {
                 self.hidden = false;
+                self.should_redraw = true;
                 self.periodicity_panel = Self::periodicity_panel_from_params(&params);
                 self.exactly_periodic_params = Self::periodicity_from_params(&params);
                 self.once_for_every_block_of_weeks_params = Self::periodicity_from_params(&params);
