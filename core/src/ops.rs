@@ -22,12 +22,15 @@ pub mod subjects;
 pub use subjects::*;
 pub mod teachers;
 pub use teachers::*;
+pub mod students;
+pub use students::*;
 
 #[derive(Debug)]
 pub enum UpdateOp {
     GeneralPlanning(GeneralPlanningUpdateOp),
     Subjects(SubjectsUpdateOp),
     Teachers(TeachersUpdateOp),
+    Students(StudentsUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -38,6 +41,8 @@ pub enum UpdateError {
     Subjects(#[from] SubjectsUpdateError),
     #[error(transparent)]
     Teachers(#[from] TeachersUpdateError),
+    #[error(transparent)]
+    Students(#[from] StudentsUpdateError),
 }
 
 impl UpdateOp {
@@ -46,6 +51,7 @@ impl UpdateOp {
             UpdateOp::GeneralPlanning(period_op) => period_op.get_desc(),
             UpdateOp::Subjects(subject_op) => subject_op.get_desc(),
             UpdateOp::Teachers(teacher_op) => teacher_op.get_desc(),
+            UpdateOp::Students(student_op) => student_op.get_desc(),
         }
     }
 
@@ -64,6 +70,10 @@ impl UpdateOp {
             }
             UpdateOp::Teachers(teacher_op) => {
                 let result = teacher_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Students(student_op) => {
+                let result = student_op.apply(data)?;
                 Ok(result.map(|x| x.into()))
             }
         }
