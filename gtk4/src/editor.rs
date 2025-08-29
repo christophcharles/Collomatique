@@ -42,7 +42,12 @@ pub enum EditorInput {
     UndoClicked,
     RedoClicked,
     UpdateOp(collomatique_core::ops::UpdateOp),
-    CommitUpdateOp(collomatique_core::ops::UpdateOp),
+    CommitUpdateOp(
+        collomatique_state::AppState<
+            collomatique_state_colloscopes::Data,
+            collomatique_core::ops::Desc,
+        >,
+    ),
     ContinueOp,
     CancelOp,
     RunScriptClicked,
@@ -135,7 +140,12 @@ pub struct EditorPanel {
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
     pages_titles_map: BTreeMap<&'static str, &'static str>,
-    op_to_commit: Option<collomatique_core::ops::UpdateOp>,
+    state_to_commit: Option<
+        collomatique_state::AppState<
+            collomatique_state_colloscopes::Data,
+            collomatique_core::ops::Desc,
+        >,
+    >,
 
     show_particular_panel: Option<PanelNumbers>,
 
@@ -512,7 +522,7 @@ impl Component for EditorPanel {
             pages_names,
             pages_titles_map,
             show_particular_panel: None,
-            op_to_commit: None,
+            state_to_commit: None,
             error_dialog,
             general_planning,
             subjects,
@@ -617,41 +627,45 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::UpdateOp(op) => {
-                let warnings = op.get_warnings(&self.data);
-                if warnings.is_empty() {
-                    sender.input(EditorInput::CommitUpdateOp(op));
-                } else {
-                    self.op_to_commit = Some(op);
-                    self.warning_op_dialog
-                        .sender()
-                        .send(warning_op::DialogInput::Show(
-                            warnings
-                                .into_iter()
-                                .filter_map(|x| x.build_desc_from_data(&self.data))
-                                .collect(),
-                        ))
-                        .unwrap();
-                }
-            }
-            EditorInput::CommitUpdateOp(op) => {
-                match op.apply(&mut self.data) {
-                    Ok(_) => {
-                        self.dirty = true;
+                match op.dry_apply(&self.data) {
+                    Ok(dry_result) => {
+                        if dry_result.rec_apply_result.warnings.is_empty() {
+                            sender.input(EditorInput::CommitUpdateOp(dry_result.new_state));
+                        } else {
+                            self.state_to_commit = Some(dry_result.new_state);
+                            self.warning_op_dialog
+                                .sender()
+                                .send(warning_op::DialogInput::Show(
+                                    dry_result
+                                        .rec_apply_result
+                                        .warnings
+                                        .into_iter()
+                                        .map(|x| x.1)
+                                        .collect(),
+                                ))
+                                .unwrap();
+                        }
                     }
                     Err(e) => {
                         self.error_dialog
                             .sender()
                             .send(error_dialog::DialogInput::Show(e.to_string()))
                             .unwrap();
+                        // Update interface anyway, this is useful if we need to restore
+                        // some GUI element to the correct state in case of error
+                        self.send_msg_for_interface_update(sender);
                     }
                 }
+            }
+            EditorInput::CommitUpdateOp(new_state) => {
+                self.data = new_state;
                 // Update interface anyway, this is useful if we need to restore
                 // some GUI element to the correct state in case of error
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::ContinueOp => {
-                if let Some(op) = self.op_to_commit.take() {
-                    sender.input(EditorInput::CommitUpdateOp(op));
+                if let Some(new_state) = self.state_to_commit.take() {
+                    sender.input(EditorInput::CommitUpdateOp(new_state));
                 }
             }
             EditorInput::CancelOp => {

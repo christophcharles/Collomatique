@@ -183,13 +183,15 @@ impl AssignmentsUpdateOp {
                     .get_assignments()
                     .period_map
                     .get(period_id)
-                    .expect("Period id should be valid at this point").clone();
+                    .expect("Period id should be valid at this point")
+                    .clone();
                 let previous_period_assignments = data
                     .get_data()
                     .get_assignments()
                     .period_map
                     .get(&previous_period_id)
-                    .expect("Previous period id should be valid at this point").clone();
+                    .expect("Previous period id should be valid at this point")
+                    .clone();
 
                 let student_map = data.get_data().get_students().student_map.clone();
 
@@ -210,19 +212,18 @@ impl AssignmentsUpdateOp {
 
                         let previous_status = previous_assigned_students.contains(student_id);
 
-                        data
-                            .apply(
-                                collomatique_state_colloscopes::Op::Assignment(
-                                    collomatique_state_colloscopes::AssignmentOp::Assign(
-                                        *period_id,
-                                        *student_id,
-                                        *subject_id,
-                                        previous_status,
-                                    ),
+                        data.apply(
+                            collomatique_state_colloscopes::Op::Assignment(
+                                collomatique_state_colloscopes::AssignmentOp::Assign(
+                                    *period_id,
+                                    *student_id,
+                                    *subject_id,
+                                    previous_status,
                                 ),
-                                self.get_desc(),
-                            )
-                            .expect("All data should be valid at this point");
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("All data should be valid at this point");
                     }
                 }
 
