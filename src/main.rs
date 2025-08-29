@@ -495,7 +495,7 @@ async fn general_command(
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let interrogations_per_week = general_data.interrogations_per_week;
             match interrogations_per_week {
-                Some(value) => print!("{}..{}", value.start, value.end - 1),
+                Some(value) => print!("{}..={}", value.start, value.end - 1),
                 None => print!("none"),
             }
             if new_line_needed {
