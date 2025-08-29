@@ -18,10 +18,13 @@ pub enum ProcessWorkerOutput {
 #[derive(Debug)]
 pub enum ProcessWorkerCmdOutput {
     CheckRunning,
+    ProcessKilled(std::io::Result<()>),
+    ProcessLaunched(std::io::Result<tokio::process::Child>),
 }
 
 pub struct ProcessWorker {
-    child_process: Option<std::process::Child>,
+    child_process: Option<tokio::process::Child>,
+    launching: bool,
 }
 
 impl Component for ProcessWorker {
@@ -41,6 +44,7 @@ impl Component for ProcessWorker {
     ) -> ComponentParts<Self> {
         let model = ProcessWorker {
             child_process: None,
+            launching: false,
         };
 
         ComponentParts { model, widgets: () }
@@ -54,33 +58,29 @@ impl Component for ProcessWorker {
     ) {
         match msg {
             ProcessWorkerInput::RunScript(_script) => {
-                if self.child_process.is_some() {
+                if self.child_process.is_some() || self.launching {
                     panic!("A Python engine is already running!");
                 }
 
-                let child_result = std::process::Command::new(std::env::current_exe().unwrap())
-                    .arg("--python-engine")
-                    .stdin(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .spawn();
+                self.launching = true;
 
-                match child_result {
-                    Ok(child) => {
-                        self.child_process = Some(child);
-                        self.schedule_check(sender);
-                    }
-                    Err(e) => {
-                        sender
-                            .output(ProcessWorkerOutput::Error(e.to_string()))
-                            .unwrap();
-                    }
-                }
+                sender.oneshot_command(async move {
+                    ProcessWorkerCmdOutput::ProcessLaunched(
+                        tokio::process::Command::new(std::env::current_exe().unwrap())
+                            .arg("--python-engine")
+                            .stdin(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::piped())
+                            .stdout(std::process::Stdio::piped())
+                            .kill_on_drop(true)
+                            .spawn(),
+                    )
+                });
             }
             ProcessWorkerInput::KillScript => {
                 if let Some(mut child) = self.child_process.take() {
-                    child.kill().unwrap();
-                    child.wait().unwrap();
+                    sender.oneshot_command(async move {
+                        ProcessWorkerCmdOutput::ProcessKilled(child.kill().await)
+                    });
                 }
             }
             ProcessWorkerInput::SendStdin(_content) => {}
@@ -122,6 +122,34 @@ impl Component for ProcessWorker {
                             .output(ProcessWorkerOutput::Error(e.to_string()))
                             .unwrap();
                         self.schedule_check(sender);
+                    }
+                }
+            }
+            ProcessWorkerCmdOutput::ProcessKilled(result) => {
+                if let Err(e) = result {
+                    sender
+                        .output(ProcessWorkerOutput::Error(format!(
+                            "Erreur à l'arrêt du processus : {}",
+                            e.to_string()
+                        )))
+                        .unwrap();
+                }
+            }
+            ProcessWorkerCmdOutput::ProcessLaunched(child_result) => {
+                if self.child_process.is_some() {
+                    panic!("A Python engine is already running!");
+                }
+                self.launching = false;
+
+                match child_result {
+                    Ok(child) => {
+                        self.child_process = Some(child);
+                        self.schedule_check(sender);
+                    }
+                    Err(e) => {
+                        sender
+                            .output(ProcessWorkerOutput::Error(e.to_string()))
+                            .unwrap();
                     }
                 }
             }
