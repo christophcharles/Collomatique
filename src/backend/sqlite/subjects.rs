@@ -200,106 +200,10 @@ FROM subjects WHERE subject_id = ?
     Ok(output)
 }
 
-async fn search_invalid_subject_group_id(
-    pool: &SqlitePool,
-    subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-) -> Result<Option<super::subject_groups::Id>> {
-    let subject_groups_ids = sqlx::query!("SELECT subject_group_id FROM subject_groups")
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.subject_group_id)
-        .collect::<BTreeSet<_>>();
-
-    if !subject_groups_ids.contains(&subject.subject_group_id.0) {
-        return Ok(Some(subject.subject_group_id));
-    }
-
-    Ok(None)
-}
-
-async fn search_invalid_incompat_id(
-    pool: &SqlitePool,
-    subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-) -> Result<Option<super::incompats::Id>> {
-    if let Some(incompat_id) = subject.incompat_id {
-        let incompat_ids = sqlx::query!("SELECT incompat_id FROM incompats")
-            .fetch_all(pool)
-            .await
-            .map_err(Error::from)?
-            .iter()
-            .map(|x| x.incompat_id)
-            .collect::<BTreeSet<_>>();
-
-        if !incompat_ids.contains(&incompat_id.0) {
-            return Ok(Some(incompat_id));
-        }
-    }
-
-    Ok(None)
-}
-
-async fn search_invalid_group_list_id(
-    pool: &SqlitePool,
-    subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-) -> Result<Option<super::group_lists::Id>> {
-    if let Some(group_list_id) = subject.group_list_id {
-        let group_list_ids = sqlx::query!("SELECT group_list_id FROM group_lists")
-            .fetch_all(pool)
-            .await
-            .map_err(Error::from)?
-            .iter()
-            .map(|x| x.group_list_id)
-            .collect::<BTreeSet<_>>();
-
-        if !group_list_ids.contains(&group_list_id.0) {
-            return Ok(Some(group_list_id));
-        }
-    }
-
-    Ok(None)
-}
-
-trait CheckIds: std::fmt::Debug + std::error::Error + Sized {
-    async fn check_ids(
-        pool: &SqlitePool,
-        subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-    ) -> std::result::Result<(), Self>;
-}
-
-impl CheckIds
-    for Cross3Error<Error, super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>
-{
-    async fn check_ids(
-        pool: &SqlitePool,
-        subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-    ) -> std::result::Result<(), Self> {
-        if let Some(subject_group_id) = search_invalid_subject_group_id(pool, subject).await? {
-            return Err(Cross3Error::InvalidCrossId1(subject_group_id));
-        }
-
-        if let Some(incompat_id) = search_invalid_incompat_id(pool, subject).await? {
-            return Err(Cross3Error::InvalidCrossId2(incompat_id));
-        }
-
-        if let Some(group_list_id) = search_invalid_group_list_id(pool, subject).await? {
-            return Err(Cross3Error::InvalidCrossId3(group_list_id));
-        }
-
-        Ok(())
-    }
-}
-
 pub async fn add(
     pool: &SqlitePool,
     subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-) -> std::result::Result<
-    Id,
-    Cross3Error<Error, super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-> {
-    Cross3Error::check_ids(pool, subject).await?;
-
+) -> std::result::Result<Id, Error> {
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let min_students_per_group =
@@ -394,51 +298,11 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
     Ok(())
 }
 
-impl CheckIds
-    for Cross3IdError<
-        Error,
-        Id,
-        super::subject_groups::Id,
-        super::incompats::Id,
-        super::group_lists::Id,
-    >
-{
-    async fn check_ids(
-        pool: &SqlitePool,
-        subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-    ) -> std::result::Result<(), Self> {
-        if let Some(subject_group_id) = search_invalid_subject_group_id(pool, subject).await? {
-            return Err(Cross3IdError::InvalidCrossId1(subject_group_id));
-        }
-
-        if let Some(incompat_id) = search_invalid_incompat_id(pool, subject).await? {
-            return Err(Cross3IdError::InvalidCrossId2(incompat_id));
-        }
-
-        if let Some(group_list_id) = search_invalid_group_list_id(pool, subject).await? {
-            return Err(Cross3IdError::InvalidCrossId3(group_list_id));
-        }
-
-        Ok(())
-    }
-}
-
 pub async fn update(
     pool: &SqlitePool,
     index: Id,
     subject: &Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
-) -> std::result::Result<
-    (),
-    Cross3IdError<
-        Error,
-        Id,
-        super::subject_groups::Id,
-        super::incompats::Id,
-        super::group_lists::Id,
-    >,
-> {
-    Cross3IdError::check_ids(pool, subject).await?;
-
+) -> std::result::Result<(), Error> {
     let subject_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -511,11 +375,10 @@ WHERE subject_id = ?14
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(Cross3IdError::InternalError(Error::CorruptedDatabase(
-            format!("Multiple subjects with id {:?}", index),
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple subjects with id {:?}",
+            index
         )));
-    } else if rows_affected == 0 {
-        return Err(Cross3IdError::InvalidId(index));
     }
 
     Ok(())

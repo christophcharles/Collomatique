@@ -209,6 +209,14 @@ pub enum DataStatusWithId<Id: OrdId> {
 }
 
 #[derive(Error, Debug)]
+pub enum DataStatusWithId3<Id1: OrdId, Id2: OrdId, Id3: OrdId> {
+    Ok,
+    BadCrossId1(Id1),
+    BadCrossId2(Id2),
+    BadCrossId3(Id3),
+}
+
+#[derive(Error, Debug)]
 pub enum DataStatusWithIdAndInvalidState<Id: OrdId> {
     Ok,
     InvalidData,
@@ -862,15 +870,77 @@ pub trait Storage: Send + Sync {
     async unsafe fn subjects_add_unchecked(
         &mut self,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
-    ) -> std::result::Result<
-        Self::SubjectId,
-        Cross3Error<Self::InternalError, Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
-    >;
+    ) -> std::result::Result<Self::SubjectId, Self::InternalError>;
     async unsafe fn subjects_remove_unchecked(
         &mut self,
         index: Self::SubjectId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>;
     async unsafe fn subjects_update_unchecked(
+        &mut self,
+        index: Self::SubjectId,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn subjects_check_id(
+        &self,
+        index: Self::SubjectId,
+    ) -> std::result::Result<bool, Self::InternalError> {
+        async move {
+            let subjects = self.subjects_get_all().await?;
+
+            Ok(subjects.contains_key(&index))
+        }
+    }
+    async fn subjects_check_data(
+        &self,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> std::result::Result<
+        DataStatusWithId3<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+        Self::InternalError,
+    > {
+        async move {
+            let subject_groups = self.subject_groups_get_all().await?;
+            if !subject_groups.contains_key(&subject.subject_group_id) {
+                return Ok(DataStatusWithId3::BadCrossId1(subject.subject_group_id));
+            }
+
+            if let Some(incompat_id) = subject.incompat_id {
+                let incompats = self.incompats_get_all().await?;
+                if !incompats.contains_key(&incompat_id) {
+                    return Ok(DataStatusWithId3::BadCrossId2(incompat_id));
+                }
+            }
+
+            if let Some(group_list_id) = subject.group_list_id {
+                let group_lists = self.group_lists_get_all().await?;
+                if !group_lists.contains_key(&group_list_id) {
+                    return Ok(DataStatusWithId3::BadCrossId3(group_list_id));
+                }
+            }
+
+            Ok(DataStatusWithId3::Ok)
+        }
+    }
+    async fn subjects_add(
+        &mut self,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> std::result::Result<
+        Self::SubjectId,
+        Cross3Error<Self::InternalError, Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    > {
+        async move {
+            let data_status = self.subjects_check_data(subject).await?;
+            match data_status {
+                DataStatusWithId3::BadCrossId1(id1) => Err(Cross3Error::InvalidCrossId1(id1)),
+                DataStatusWithId3::BadCrossId2(id2) => Err(Cross3Error::InvalidCrossId2(id2)),
+                DataStatusWithId3::BadCrossId3(id3) => Err(Cross3Error::InvalidCrossId3(id3)),
+                DataStatusWithId3::Ok => {
+                    let id = unsafe { self.subjects_add_unchecked(subject) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
+    async fn subjects_update(
         &mut self,
         index: Self::SubjectId,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
@@ -883,7 +953,24 @@ pub trait Storage: Send + Sync {
             Self::IncompatId,
             Self::GroupListId,
         >,
-    >;
+    > {
+        async move {
+            if !self.subjects_check_id(index).await? {
+                return Err(Cross3IdError::InvalidId(index));
+            }
+
+            let data_status = self.subjects_check_data(subject).await?;
+            match data_status {
+                DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
+                DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
+                DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+                DataStatusWithId3::Ok => {
+                    unsafe { self.subjects_update_unchecked(index, subject) }.await?;
+                    Ok(())
+                }
+            }
+        }
+    }
 
     async fn time_slots_get_all(
         &self,
