@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// There are mainly two ways to build an Expr.
 /// You can use [LinExpr::var]. This builds an expression containing only one variable with coefficient one.
 /// ```
-/// # use ilp::linexpr::LinExpr;
+/// # use collomatique_ilp::linexpr::LinExpr;
 /// # use std::collections::BTreeSet;
 /// // expr represents the linear expression : "1*A"
 /// let expr = LinExpr::<String>::var("A");
@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// You can use [LinExpr::constant]. This builds a constant expression containing no variables.
 /// ```
-/// # use ilp::linexpr::LinExpr;
+/// # use collomatique_ilp::linexpr::LinExpr;
 /// # use std::collections::BTreeSet;
 /// // expr represents the constant linear expression equals to 42
 /// let expr = LinExpr::<String>::constant(42.0);
@@ -39,7 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// More complex expressions are then built using overloaded operations
 /// ```
-/// # use ilp::linexpr::LinExpr;
+/// # use collomatique_ilp::linexpr::LinExpr;
 /// # use std::collections::BTreeSet;
 /// let expr1 = LinExpr::<String>::var("A");
 /// let expr2 = LinExpr::<String>::var("B");
@@ -109,7 +109,7 @@ impl<V: UsableData> LinExpr<V> {
     /// variable with coefficient 1 and no constant term.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// // expr represents the linear expression : "1*A"
     /// let expr = LinExpr::<String>::var("A");
@@ -128,7 +128,7 @@ impl<V: UsableData> LinExpr<V> {
     /// Expr::var builds a simple linear expression with no variables and only the constant term.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// // expr represents the constant linear expression equals to 42
     /// let expr = LinExpr::<String>::constant(42.0);
@@ -150,7 +150,7 @@ impl<V: UsableData> LinExpr<V> {
     /// For instance for the expression 2*a+3*b - 4*c + 42, this would return 42.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = LinExpr::<String>::constant(4.0);
     /// let constant = expr.get_constant(); // should be 4
     ///
@@ -159,7 +159,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// There is always a constant term. If empty, it is actually zero.
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = LinExpr::<String>::var("a");
     /// // no constant really is constant = 0
     /// let constant = expr.get_constant();
@@ -175,7 +175,7 @@ impl<V: UsableData> LinExpr<V> {
     /// For instance for the expression 2*a+3*b - 4*c + 42, and for the variable c, this would return -4.
     /// Because the variable might not appear at all in the expression, this returns an option.
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = 2 * LinExpr::<String>::var("a") + 3 * LinExpr::<String>::var("b") - 4 * LinExpr::<String>::var("c") + LinExpr::<String>::constant(42.0);
     /// let coef = expr.get("c"); // should be Some(-4.)
     ///
@@ -184,7 +184,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// If a variable does not appear in an expression, it returns None.
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = LinExpr::<String>::var("a");
     /// let coef_b = expr.get("b");
     ///
@@ -193,7 +193,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// But if a coefficient is 0, it is indeed returned.
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = LinExpr::<String>::var("a") + 0*LinExpr::<String>::var("b");
     /// let coef_b = expr.get("b");
     ///
@@ -206,7 +206,7 @@ impl<V: UsableData> LinExpr<V> {
     /// Returns the set of variables that appears in the expression
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -220,7 +220,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// This set can be empty :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr = LinExpr::<String>::constant(42.0);
     ///
@@ -231,7 +231,7 @@ impl<V: UsableData> LinExpr<V> {
     /// (the variable does not appear at all in the expression)
     /// and having 0 as a coefficient :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// assert!(expr1.variables().is_empty()); // There are no variables
@@ -249,7 +249,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -266,7 +266,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// This set can be empty :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr = LinExpr::<String>::constant(42.0);
     ///
@@ -277,7 +277,7 @@ impl<V: UsableData> LinExpr<V> {
     /// (the variable does not appear at all in the expression)
     /// and having 0 as a coefficient :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::{BTreeSet,BTreeMap};
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// assert!(expr1.coefficients().len() == 0); // There are no variables
@@ -300,7 +300,7 @@ impl<V: UsableData> LinExpr<V> {
     /// in the expression.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -320,7 +320,7 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// Other variables and coefficients are unchanged:
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -346,7 +346,7 @@ impl<V: UsableData> LinExpr<V> {
     /// it returns a new cleaned version.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -388,7 +388,7 @@ impl<V: UsableData> LinExpr<V> {
     /// the evaluation is only partial. As such, this function can't fail.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -440,7 +440,7 @@ impl<V: UsableData> LinExpr<V> {
     /// succeeds and returns a single floating point value.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -478,7 +478,7 @@ impl<V: UsableData> LinExpr<V> {
     /// Builds a new constraint of the form: "self <= rhs"
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -505,7 +505,7 @@ impl<V: UsableData> LinExpr<V> {
     /// But it is sometimes convenient and more readable to use this function.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -526,7 +526,7 @@ impl<V: UsableData> LinExpr<V> {
     /// Builds a new constraint of the form: "self = rhs"
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -553,7 +553,7 @@ impl<V: UsableData> Constraint<V> {
     /// it is still listed in the list of variables that appear.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -569,7 +569,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// This set can be empty :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
@@ -583,7 +583,7 @@ impl<V: UsableData> Constraint<V> {
     /// (the variable does not appear at all in the expression)
     /// and having 0 as a coefficient :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
@@ -606,7 +606,7 @@ impl<V: UsableData> Constraint<V> {
     /// it is still listed in the list of variables that appear.
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeMap;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -626,7 +626,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// This set can be empty :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
@@ -640,7 +640,7 @@ impl<V: UsableData> Constraint<V> {
     /// (the variable does not appear at all in the expression)
     /// and having 0 as a coefficient :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeMap;
     /// let expr1 = LinExpr::<String>::constant(42.0);
     /// let expr2 = LinExpr::<String>::constant(-1.0);
@@ -661,7 +661,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// This works similarly to [LinExpr::get].
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let constraint = expr.leq(&LinExpr::<String>::constant(1.0));
     ///
@@ -671,7 +671,7 @@ impl<V: UsableData> Constraint<V> {
     /// If a variable does not appear
     /// at all, it returns None:
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let constraint = expr.leq(&LinExpr::<String>::constant(1.0));
     ///
@@ -681,7 +681,7 @@ impl<V: UsableData> Constraint<V> {
     /// However, if a variable appears but it is coefficient is zero,
     /// it does return a value :
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr = 2*LinExpr::<String>::var("A") + 0 * LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let constraint = expr.leq(&LinExpr::<String>::constant(1.0));
     ///
@@ -691,7 +691,7 @@ impl<V: UsableData> Constraint<V> {
     /// Internally, a constraint only has a left hand side. So, the signs are changed when
     /// the coefficient was originally on the right hand side.
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
@@ -702,7 +702,7 @@ impl<V: UsableData> Constraint<V> {
     /// And the constraints are always "<=" or "=". So if a constraints was built with [LinExpr::geq],
     /// signs are also reversed:
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.geq(&expr2);
@@ -713,7 +713,7 @@ impl<V: UsableData> Constraint<V> {
     /// And there can be only one coefficient per variable. So multiple coefficients from left and right hand side
     /// are merged into one lhs coefficient after computation:
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
@@ -729,7 +729,7 @@ impl<V: UsableData> Constraint<V> {
     /// It can only be "<=" or "=". ">=" is tranformed internally into a "<=" symbol.
     ///
     /// ```
-    /// # use ilp::linexpr::{LinExpr, EqSymbol};
+    /// # use collomatique_ilp::linexpr::{LinExpr, EqSymbol};
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C");
     ///
@@ -749,7 +749,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// This works like [LinExpr::get_constant].
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C");
     /// let constraint = expr1.leq(&expr2);
@@ -760,7 +760,7 @@ impl<V: UsableData> Constraint<V> {
     /// Remember, there is always only one constant that was obtained by merging all the
     /// constants to the lhs:
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
@@ -770,7 +770,7 @@ impl<V: UsableData> Constraint<V> {
     ///
     /// And even if it does even out and the constant is zero, there is still a constant:
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(42.0);
     /// let constraint = expr1.leq(&expr2);
@@ -785,7 +785,7 @@ impl<V: UsableData> Constraint<V> {
     /// to represent the left hand side (the rhs is always 0 internally).
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
     /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
@@ -801,7 +801,7 @@ impl<V: UsableData> Constraint<V> {
     /// It works similarly to [LinExpr::clean].
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
@@ -829,7 +829,7 @@ impl<V: UsableData> Constraint<V> {
     /// It works similarly to [LinExpr::cleaned].
     ///
     /// ```
-    /// # use ilp::linexpr::LinExpr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// let expr1 = LinExpr::<String>::var("A");
     /// let expr2 = LinExpr::<String>::var("B");
