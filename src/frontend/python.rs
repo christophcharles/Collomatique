@@ -27,9 +27,7 @@ def example():
             "",
         )?;
 
-        let fun: Py<PyAny> = python_code
-            .getattr("example")?
-            .into();
+        let fun: Py<PyAny> = python_code.getattr("example")?.into();
 
         fun.call0(py)?;
 
