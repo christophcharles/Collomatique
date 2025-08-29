@@ -108,11 +108,10 @@ impl Component for LoadingPanel {
                 }
                 self.path = Some(path.clone());
                 sender.oneshot_command(async move {
-                    use std::time::Duration;
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-
-                    let data = collomatique_state_colloscopes::Data::new();
-                    LoadingCmdOutput::Loaded(path, data)
+                    match collomatique_storage::load_data_from_file(&path).await {
+                        Ok((data, _caveats)) => LoadingCmdOutput::Loaded(path, data),
+                        Err(e) => LoadingCmdOutput::Failed(path, e.to_string()),
+                    }
                 });
             }
             LoadingInput::StopLoading => {
