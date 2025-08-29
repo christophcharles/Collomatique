@@ -199,6 +199,14 @@ CREATE TABLE "group_list_item_items" (
 	PRIMARY KEY("student_id","group_list_id","group_id"),
 	FOREIGN KEY("group_list_id","group_id") REFERENCES "group_list_items"("group_list_id","group_id"),
 	FOREIGN KEY("student_id") REFERENCES "students"("student_id")
+);
+
+CREATE TABLE "group_list_subjects" (
+	"subject_id"	INTEGER NOT NULL,
+	"group_list_id"	INTEGER NOT NULL,
+	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	PRIMARY KEY("subject_id","group_list_id")
 );"#,
     )
     .bind(serde_json::to_string(&GeneralDataDb {
