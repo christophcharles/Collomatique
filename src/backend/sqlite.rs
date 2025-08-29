@@ -737,9 +737,8 @@ impl Storage for Store {
     unsafe fn time_slots_remove_unchecked(
         &mut self,
         index: Self::TimeSlotId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         time_slots::remove(&self.pool, index)
     }
     unsafe fn time_slots_update_unchecked(
