@@ -163,10 +163,12 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .teachers_remove(super::super::teachers::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .teachers_remove_unchecked(super::super::teachers::Id(2))
+            .await
+            .unwrap();
+    }
 
     let result = store.teachers_get_all().await.unwrap();
 
@@ -203,10 +205,12 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .teachers_remove(super::super::teachers::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .teachers_remove_unchecked(super::super::teachers::Id(2))
+            .await
+            .unwrap();
+    }
 
     let id = store
         .teachers_add(&Teacher {

@@ -168,10 +168,12 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
     .await
     .unwrap();
 
-    store
-        .subject_groups_remove(super::super::subject_groups::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .subject_groups_remove_unchecked(super::super::subject_groups::Id(2))
+            .await
+            .unwrap();
+    }
 
     let result = store.subject_groups_get_all().await.unwrap();
 
@@ -209,10 +211,12 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
     .await
     .unwrap();
 
-    store
-        .subject_groups_remove(super::super::subject_groups::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .subject_groups_remove_unchecked(super::super::subject_groups::Id(2))
+            .await
+            .unwrap();
+    }
 
     let id = store
         .subject_groups_add(&SubjectGroup {

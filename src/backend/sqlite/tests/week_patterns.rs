@@ -413,10 +413,12 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .week_patterns_remove(super::super::week_patterns::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .week_patterns_remove_unchecked(super::super::week_patterns::Id(2))
+            .await
+            .unwrap();
+    }
 
     let result = store.week_patterns_get_all().await.unwrap();
 
@@ -464,10 +466,12 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .week_patterns_remove(super::super::week_patterns::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .week_patterns_remove_unchecked(super::super::week_patterns::Id(2))
+            .await
+            .unwrap();
+    }
 
     let id = store
         .week_patterns_add(&WeekPattern {

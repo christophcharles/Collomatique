@@ -221,16 +221,17 @@ struct GroupingIncompatItemDb {
 async fn grouping_incompats_add_one_1(pool: SqlitePool) {
     let store = prepare_db(pool).await;
 
-    let id = store
-        .grouping_incompats_add(&GroupingIncompat {
+    let id = unsafe {
+        store.grouping_incompats_add_unchecked(&GroupingIncompat {
             max_count: NonZeroUsize::new(1).unwrap(),
             groupings: BTreeSet::from([
                 super::super::groupings::Id(1),
                 super::super::groupings::Id(2),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::grouping_incompats::Id(1));
 
     let grouping_incompats = sqlx::query_as!(
@@ -273,8 +274,8 @@ async fn grouping_incompats_add_one_1(pool: SqlitePool) {
 async fn grouping_incompats_add_one_2(pool: SqlitePool) {
     let store = prepare_db(pool).await;
 
-    let id = store
-        .grouping_incompats_add(&GroupingIncompat {
+    let id = unsafe {
+        store.grouping_incompats_add_unchecked(&GroupingIncompat {
             max_count: NonZeroUsize::new(2).unwrap(),
             groupings: BTreeSet::from([
                 super::super::groupings::Id(3),
@@ -282,8 +283,9 @@ async fn grouping_incompats_add_one_2(pool: SqlitePool) {
                 super::super::groupings::Id(5),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::grouping_incompats::Id(1));
 
     let grouping_incompats = sqlx::query_as!(
@@ -330,20 +332,21 @@ async fn grouping_incompats_add_one_2(pool: SqlitePool) {
 async fn grouping_incompats_add_multiple(pool: SqlitePool) {
     let store = prepare_db(pool).await;
 
-    let id = store
-        .grouping_incompats_add(&GroupingIncompat {
+    let id = unsafe {
+        store.grouping_incompats_add_unchecked(&GroupingIncompat {
             max_count: NonZeroUsize::new(1).unwrap(),
             groupings: BTreeSet::from([
                 super::super::groupings::Id(1),
                 super::super::groupings::Id(2),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::grouping_incompats::Id(1));
 
-    let id = store
-        .grouping_incompats_add(&GroupingIncompat {
+    let id = unsafe {
+        store.grouping_incompats_add_unchecked(&GroupingIncompat {
             max_count: NonZeroUsize::new(2).unwrap(),
             groupings: BTreeSet::from([
                 super::super::groupings::Id(3),
@@ -351,8 +354,9 @@ async fn grouping_incompats_add_multiple(pool: SqlitePool) {
                 super::super::groupings::Id(5),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::grouping_incompats::Id(2));
 
     let grouping_incompats = sqlx::query_as!(
@@ -467,16 +471,17 @@ async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
         .await
         .unwrap();
 
-    let id = store
-        .grouping_incompats_add(&GroupingIncompat {
+    let id = unsafe {
+        store.grouping_incompats_add_unchecked(&GroupingIncompat {
             max_count: NonZeroUsize::new(1).unwrap(),
             groupings: BTreeSet::from([
                 super::super::groupings::Id(1),
                 super::super::groupings::Id(2),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::grouping_incompats::Id(3));
 
     let grouping_incompats = store.grouping_incompats_get_all().await.unwrap();
@@ -512,19 +517,21 @@ async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
 async fn grouping_incompats_update(pool: SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .grouping_incompats_update(
-            super::super::grouping_incompats::Id(1),
-            &GroupingIncompat {
-                max_count: NonZeroUsize::new(2).unwrap(),
-                groupings: BTreeSet::from([
-                    super::super::groupings::Id(3),
-                    super::super::groupings::Id(4),
-                ]),
-            },
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .grouping_incompats_update_unchecked(
+                super::super::grouping_incompats::Id(1),
+                &GroupingIncompat {
+                    max_count: NonZeroUsize::new(2).unwrap(),
+                    groupings: BTreeSet::from([
+                        super::super::groupings::Id(3),
+                        super::super::groupings::Id(4),
+                    ]),
+                },
+            )
+            .await
+            .unwrap();
+    }
 
     let grouping_incompats = store.grouping_incompats_get_all().await.unwrap();
 

@@ -504,10 +504,12 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
 async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .time_slots_remove(super::super::time_slots::Id(5))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .time_slots_remove_unchecked(super::super::time_slots::Id(5))
+            .await
+            .unwrap();
+    }
 
     let time_slots = store.time_slots_get_all().await.unwrap();
 
@@ -807,12 +809,14 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
 async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .time_slots_remove(super::super::time_slots::Id(5))
-        .await
-        .unwrap();
-    let id = store
-        .time_slots_add(&TimeSlot {
+    unsafe {
+        store
+            .time_slots_remove_unchecked(super::super::time_slots::Id(5))
+            .await
+            .unwrap();
+    }
+    let id = unsafe {
+        store.time_slots_add_unchecked(&TimeSlot {
             subject_id: super::super::subjects::Id(3),
             teacher_id: super::super::teachers::Id(4),
             start: SlotStart {
@@ -822,8 +826,9 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
             week_pattern_id: super::super::week_patterns::Id(3),
             room: String::from("Test"),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::time_slots::Id(24));
 
     let time_slots = store.time_slots_get_all().await.unwrap();
@@ -1137,22 +1142,24 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
 async fn time_slots_update(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .time_slots_update(
-            super::super::time_slots::Id(5),
-            &TimeSlot {
-                subject_id: super::super::subjects::Id(3),
-                teacher_id: super::super::teachers::Id(4),
-                start: SlotStart {
-                    day: crate::time::Weekday::Wednesday,
-                    time: crate::time::Time::from_hm(8, 0).unwrap(),
+    unsafe {
+        store
+            .time_slots_update_unchecked(
+                super::super::time_slots::Id(5),
+                &TimeSlot {
+                    subject_id: super::super::subjects::Id(3),
+                    teacher_id: super::super::teachers::Id(4),
+                    start: SlotStart {
+                        day: crate::time::Weekday::Wednesday,
+                        time: crate::time::Time::from_hm(8, 0).unwrap(),
+                    },
+                    week_pattern_id: super::super::week_patterns::Id(3),
+                    room: String::from("Test"),
                 },
-                week_pattern_id: super::super::week_patterns::Id(3),
-                room: String::from("Test"),
-            },
-        )
-        .await
-        .unwrap();
+            )
+            .await
+            .unwrap();
+    }
 
     let time_slots = store.time_slots_get_all().await.unwrap();
 
@@ -1465,8 +1472,8 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
 async fn time_slots_add_one(pool: sqlx::SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    let id = store
-        .time_slots_add(&TimeSlot {
+    let id = unsafe {
+        store.time_slots_add_unchecked(&TimeSlot {
             subject_id: super::super::subjects::Id(3),
             teacher_id: super::super::teachers::Id(4),
             start: SlotStart {
@@ -1476,8 +1483,9 @@ async fn time_slots_add_one(pool: sqlx::SqlitePool) {
             week_pattern_id: super::super::week_patterns::Id(3),
             room: String::from("Test"),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::time_slots::Id(24));
 
     let time_slots = store.time_slots_get_all().await.unwrap();

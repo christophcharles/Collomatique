@@ -201,13 +201,14 @@ struct GroupingItemDb {
 async fn groupings_add_one_1(pool: SqlitePool) {
     let store = prepare_db(pool).await;
 
-    let id = store
-        .groupings_add(&Grouping {
+    let id = unsafe {
+        store.groupings_add_unchecked(&Grouping {
             name: String::from("G1"),
             slots: BTreeSet::from([super::super::time_slots::Id(3)]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::groupings::Id(1));
 
@@ -242,13 +243,14 @@ async fn groupings_add_one_1(pool: SqlitePool) {
 async fn groupings_add_one_2(pool: SqlitePool) {
     let store = prepare_db(pool).await;
 
-    let id = store
-        .groupings_add(&Grouping {
+    let id = unsafe {
+        store.groupings_add_unchecked(&Grouping {
             name: String::from("G2"),
             slots: BTreeSet::from([super::super::time_slots::Id(4)]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::groupings::Id(1));
 
@@ -283,23 +285,25 @@ async fn groupings_add_one_2(pool: SqlitePool) {
 async fn groupings_add_multiple(pool: SqlitePool) {
     let store = prepare_db(pool).await;
 
-    let id = store
-        .groupings_add(&Grouping {
+    let id = unsafe {
+        store.groupings_add_unchecked(&Grouping {
             name: String::from("G1"),
             slots: BTreeSet::from([super::super::time_slots::Id(3)]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::groupings::Id(1));
 
-    let id = store
-        .groupings_add(&Grouping {
+    let id = unsafe {
+        store.groupings_add_unchecked(&Grouping {
             name: String::from("G2"),
             slots: BTreeSet::from([super::super::time_slots::Id(4)]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::groupings::Id(2));
 
@@ -346,10 +350,12 @@ async fn groupings_add_multiple(pool: SqlitePool) {
 async fn groupings_remove_one(pool: SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .groupings_remove(super::super::groupings::Id(1))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .groupings_remove_unchecked(super::super::groupings::Id(1))
+            .await
+            .unwrap();
+    }
 
     let groupings = store.groupings_get_all().await.unwrap();
 
@@ -368,18 +374,21 @@ async fn groupings_remove_one(pool: SqlitePool) {
 async fn groupings_remove_then_add(pool: SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .groupings_remove(super::super::groupings::Id(1))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .groupings_remove_unchecked(super::super::groupings::Id(1))
+            .await
+            .unwrap();
+    }
 
-    let id = store
-        .groupings_add(&Grouping {
+    let id = unsafe {
+        store.groupings_add_unchecked(&Grouping {
             name: String::from("G1"),
             slots: BTreeSet::from([super::super::time_slots::Id(3)]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::groupings::Id(3));
 
@@ -409,16 +418,18 @@ async fn groupings_remove_then_add(pool: SqlitePool) {
 async fn groupings_update(pool: SqlitePool) {
     let store = prepare_example_db(pool).await;
 
-    store
-        .groupings_update(
-            super::super::groupings::Id(1),
-            &Grouping {
-                name: String::from("G3"),
-                slots: BTreeSet::from([super::super::time_slots::Id(5)]),
-            },
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .groupings_update_unchecked(
+                super::super::groupings::Id(1),
+                &Grouping {
+                    name: String::from("G3"),
+                    slots: BTreeSet::from([super::super::time_slots::Id(5)]),
+                },
+            )
+            .await
+            .unwrap();
+    }
 
     let groupings = store.groupings_get_all().await.unwrap();
 

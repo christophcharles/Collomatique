@@ -426,7 +426,7 @@ impl Storage for Store {
     > + Send {
         week_patterns::add(&self.pool, pattern)
     }
-    fn week_patterns_remove(
+    unsafe fn week_patterns_remove_unchecked(
         &self,
         index: Self::WeekPatternId,
     ) -> impl core::future::Future<
@@ -466,7 +466,7 @@ impl Storage for Store {
            + Send {
         teachers::add(&self.pool, teacher)
     }
-    fn teachers_remove(
+    unsafe fn teachers_remove_unchecked(
         &self,
         index: Self::TeacherId,
     ) -> impl core::future::Future<
@@ -506,7 +506,7 @@ impl Storage for Store {
            + Send {
         students::add(&self.pool, student)
     }
-    fn students_remove(
+    unsafe fn students_remove_unchecked(
         &self,
         index: Self::StudentId,
     ) -> impl core::future::Future<
@@ -553,7 +553,7 @@ impl Storage for Store {
     > + Send {
         subject_groups::add(&self.pool, subject_group)
     }
-    fn subject_groups_remove(
+    unsafe fn subject_groups_remove_unchecked(
         &self,
         index: Self::SubjectGroupId,
     ) -> impl core::future::Future<
@@ -592,7 +592,7 @@ impl Storage for Store {
     > + Send {
         incompats::get_all(&self.pool)
     }
-    fn incompats_add(
+    unsafe fn incompats_add_unchecked(
         &self,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> impl core::future::Future<
@@ -603,7 +603,7 @@ impl Storage for Store {
     > + Send {
         incompats::add(&self.pool, incompat)
     }
-    fn incompats_remove(
+    unsafe fn incompats_remove_unchecked(
         &self,
         index: Self::IncompatId,
     ) -> impl core::future::Future<
@@ -611,7 +611,7 @@ impl Storage for Store {
     > + Send {
         incompats::remove(&self.pool, index)
     }
-    fn incompats_update(
+    unsafe fn incompats_update_unchecked(
         &self,
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
@@ -645,7 +645,7 @@ impl Storage for Store {
     > + Send {
         group_lists::get_all(&self.pool)
     }
-    fn group_lists_add(
+    unsafe fn group_lists_add_unchecked(
         &self,
         group_list: &GroupList<Self::StudentId>,
     ) -> impl core::future::Future<
@@ -656,7 +656,7 @@ impl Storage for Store {
     > + Send {
         group_lists::add(&self.pool, group_list)
     }
-    fn group_lists_remove(
+    unsafe fn group_lists_remove_unchecked(
         &self,
         index: Self::GroupListId,
     ) -> impl core::future::Future<
@@ -664,7 +664,7 @@ impl Storage for Store {
     > + Send {
         group_lists::remove(&self.pool, index)
     }
-    fn group_lists_update(
+    unsafe fn group_lists_update_unchecked(
         &self,
         index: Self::GroupListId,
         group_list: &GroupList<Self::StudentId>,
@@ -706,7 +706,7 @@ impl Storage for Store {
     > + Send {
         subjects::get(&self.pool, index)
     }
-    fn subjects_add(
+    unsafe fn subjects_add_unchecked(
         &self,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     ) -> impl core::future::Future<
@@ -722,7 +722,7 @@ impl Storage for Store {
     > + Send {
         subjects::add(&self.pool, subject)
     }
-    fn subjects_remove(
+    unsafe fn subjects_remove_unchecked(
         &self,
         index: Self::SubjectId,
     ) -> impl core::future::Future<
@@ -730,7 +730,7 @@ impl Storage for Store {
     > + Send {
         subjects::remove(&self.pool, index)
     }
-    fn subjects_update(
+    unsafe fn subjects_update_unchecked(
         &self,
         index: Self::SubjectId,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
@@ -773,7 +773,7 @@ impl Storage for Store {
     > + Send {
         time_slots::get_all(&self.pool)
     }
-    fn time_slots_add(
+    unsafe fn time_slots_add_unchecked(
         &self,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     ) -> impl core::future::Future<
@@ -784,7 +784,7 @@ impl Storage for Store {
     > + Send {
         time_slots::add(&self.pool, time_slot)
     }
-    fn time_slots_remove(
+    unsafe fn time_slots_remove_unchecked(
         &self,
         index: Self::TimeSlotId,
     ) -> impl core::future::Future<
@@ -792,7 +792,7 @@ impl Storage for Store {
     > + Send {
         time_slots::remove(&self.pool, index)
     }
-    fn time_slots_update(
+    unsafe fn time_slots_update_unchecked(
         &self,
         index: Self::TimeSlotId,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
@@ -832,7 +832,7 @@ impl Storage for Store {
     > + Send {
         groupings::get_all(&self.pool)
     }
-    fn groupings_add(
+    unsafe fn groupings_add_unchecked(
         &self,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> impl core::future::Future<
@@ -843,7 +843,7 @@ impl Storage for Store {
     > + Send {
         groupings::add(&self.pool, grouping)
     }
-    fn groupings_remove(
+    unsafe fn groupings_remove_unchecked(
         &self,
         index: Self::GroupingId,
     ) -> impl core::future::Future<
@@ -851,7 +851,7 @@ impl Storage for Store {
     > + Send {
         groupings::remove(&self.pool, index)
     }
-    fn groupings_update(
+    unsafe fn groupings_update_unchecked(
         &self,
         index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
@@ -885,7 +885,7 @@ impl Storage for Store {
     > + Send {
         grouping_incompats::get_all(&self.pool)
     }
-    fn grouping_incompats_add(
+    unsafe fn grouping_incompats_add_unchecked(
         &self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> impl core::future::Future<
@@ -904,7 +904,7 @@ impl Storage for Store {
     > + Send {
         grouping_incompats::remove(&self.pool, index)
     }
-    fn grouping_incompats_update(
+    unsafe fn grouping_incompats_update_unchecked(
         &self,
         index: Self::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
@@ -917,7 +917,7 @@ impl Storage for Store {
         grouping_incompats::update(&self.pool, index, grouping_incompat)
     }
 
-    fn subject_group_for_student_set(
+    unsafe fn subject_group_for_student_set_unchecked(
         &self,
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
@@ -948,7 +948,7 @@ impl Storage for Store {
         subject_group_for_student::get(&self.pool, student_id, subject_group_id)
     }
 
-    fn incompat_for_student_set(
+    unsafe fn incompat_for_student_set_unchecked(
         &self,
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,

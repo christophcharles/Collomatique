@@ -181,10 +181,12 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .students_remove(super::super::students::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .students_remove_unchecked(super::super::students::Id(2))
+            .await
+            .unwrap();
+    }
 
     let result = store.students_get_all().await.unwrap();
 
@@ -223,10 +225,12 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .students_remove(super::super::students::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .students_remove_unchecked(super::super::students::Id(2))
+            .await
+            .unwrap();
+    }
 
     let id = store
         .students_add(&Student {

@@ -185,7 +185,7 @@ pub trait Storage {
         &self,
         pattern: &WeekPattern,
     ) -> std::result::Result<Self::WeekPatternId, Self::InternalError>;
-    async fn week_patterns_remove(
+    async unsafe fn week_patterns_remove_unchecked(
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
@@ -206,7 +206,7 @@ pub trait Storage {
         &self,
         teacher: &Teacher,
     ) -> std::result::Result<Self::TeacherId, Self::InternalError>;
-    async fn teachers_remove(
+    async unsafe fn teachers_remove_unchecked(
         &self,
         index: Self::TeacherId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
@@ -227,7 +227,7 @@ pub trait Storage {
         &self,
         student: &Student,
     ) -> std::result::Result<Self::StudentId, Self::InternalError>;
-    async fn students_remove(
+    async unsafe fn students_remove_unchecked(
         &self,
         index: Self::StudentId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
@@ -248,7 +248,7 @@ pub trait Storage {
         &self,
         subject_group: &SubjectGroup,
     ) -> std::result::Result<Self::SubjectGroupId, Self::InternalError>;
-    async fn subject_groups_remove(
+    async unsafe fn subject_groups_remove_unchecked(
         &self,
         index: Self::SubjectGroupId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
@@ -271,15 +271,15 @@ pub trait Storage {
         Incompat<Self::WeekPatternId>,
         IdError<Self::InternalError, Self::IncompatId>,
     >;
-    async fn incompats_add(
+    async unsafe fn incompats_add_unchecked(
         &self,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<Self::IncompatId, CrossError<Self::InternalError, Self::WeekPatternId>>;
-    async fn incompats_remove(
+    async unsafe fn incompats_remove_unchecked(
         &self,
         index: Self::IncompatId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::IncompatId>>;
-    async fn incompats_update(
+    async unsafe fn incompats_update_unchecked(
         &self,
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
@@ -301,18 +301,18 @@ pub trait Storage {
         GroupList<Self::StudentId>,
         IdError<Self::InternalError, Self::GroupListId>,
     >;
-    async fn group_lists_add(
+    async unsafe fn group_lists_add_unchecked(
         &self,
         group_list: &GroupList<Self::StudentId>,
     ) -> std::result::Result<
         Self::GroupListId,
         InvalidCrossError<Self::InternalError, GroupList<Self::StudentId>, Self::StudentId>,
     >;
-    async fn group_lists_remove(
+    async unsafe fn group_lists_remove_unchecked(
         &self,
         index: Self::GroupListId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupListId>>;
-    async fn group_lists_update(
+    async unsafe fn group_lists_update_unchecked(
         &self,
         index: Self::GroupListId,
         group_list: &GroupList<Self::StudentId>,
@@ -342,18 +342,18 @@ pub trait Storage {
         Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
         IdError<Self::InternalError, Self::SubjectId>,
     >;
-    async fn subjects_add(
+    async unsafe fn subjects_add_unchecked(
         &self,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     ) -> std::result::Result<
         Self::SubjectId,
         Cross3Error<Self::InternalError, Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     >;
-    async fn subjects_remove(
+    async unsafe fn subjects_remove_unchecked(
         &self,
         index: Self::SubjectId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>;
-    async fn subjects_update(
+    async unsafe fn subjects_update_unchecked(
         &self,
         index: Self::SubjectId,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
@@ -381,18 +381,18 @@ pub trait Storage {
         TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
         IdError<Self::InternalError, Self::TimeSlotId>,
     >;
-    async fn time_slots_add(
+    async unsafe fn time_slots_add_unchecked(
         &self,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     ) -> std::result::Result<
         Self::TimeSlotId,
         Cross3Error<Self::InternalError, Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     >;
-    async fn time_slots_remove(
+    async unsafe fn time_slots_remove_unchecked(
         &self,
         index: Self::TimeSlotId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>;
-    async fn time_slots_update(
+    async unsafe fn time_slots_update_unchecked(
         &self,
         index: Self::TimeSlotId,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
@@ -420,15 +420,15 @@ pub trait Storage {
         Grouping<Self::TimeSlotId>,
         IdError<Self::InternalError, Self::GroupingId>,
     >;
-    async fn groupings_add(
+    async unsafe fn groupings_add_unchecked(
         &self,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> std::result::Result<Self::GroupingId, CrossError<Self::InternalError, Self::TimeSlotId>>;
-    async fn groupings_remove(
+    async unsafe fn groupings_remove_unchecked(
         &self,
         index: Self::GroupingId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingId>>;
-    async fn groupings_update(
+    async unsafe fn groupings_update_unchecked(
         &self,
         index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
@@ -450,7 +450,7 @@ pub trait Storage {
         GroupingIncompat<Self::GroupingId>,
         IdError<Self::InternalError, Self::GroupingIncompatId>,
     >;
-    async fn grouping_incompats_add(
+    async unsafe fn grouping_incompats_add_unchecked(
         &self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> std::result::Result<
@@ -461,7 +461,7 @@ pub trait Storage {
         &self,
         index: Self::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>>;
-    async fn grouping_incompats_update(
+    async unsafe fn grouping_incompats_update_unchecked(
         &self,
         index: Self::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
@@ -470,7 +470,7 @@ pub trait Storage {
         CrossIdError<Self::InternalError, Self::GroupingIncompatId, Self::GroupingId>,
     >;
 
-    async fn subject_group_for_student_set(
+    async unsafe fn subject_group_for_student_set_unchecked(
         &self,
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
@@ -487,7 +487,7 @@ pub trait Storage {
         Option<Self::SubjectId>,
         Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
     >;
-    async fn incompat_for_student_set(
+    async unsafe fn incompat_for_student_set_unchecked(
         &self,
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,

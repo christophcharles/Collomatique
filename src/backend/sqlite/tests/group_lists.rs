@@ -404,8 +404,8 @@ struct GroupItemDb {
 fn students_add(pool: sqlx::SqlitePool) {
     let store = build_students(pool).await;
 
-    let id = store
-        .group_lists_add(&GroupList {
+    let id = unsafe {
+        store.group_lists_add_unchecked(&GroupList {
             name: String::from("Groupes"),
             groups: vec![
                 Group {
@@ -468,8 +468,9 @@ fn students_add(pool: sqlx::SqlitePool) {
                 (super::super::students::Id(24), 7),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::group_lists::Id(1));
 
@@ -715,10 +716,12 @@ fn students_add(pool: sqlx::SqlitePool) {
 async fn group_lists_remove_one(pool: sqlx::SqlitePool) {
     let store = build_example_group_list(pool).await;
 
-    store
-        .group_lists_remove(super::super::group_lists::Id(2))
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .group_lists_remove_unchecked(super::super::group_lists::Id(2))
+            .await
+            .unwrap();
+    }
 
     let group_lists = store.group_lists_get_all().await.unwrap();
 
@@ -840,12 +843,14 @@ async fn group_lists_remove_one(pool: sqlx::SqlitePool) {
 async fn group_lists_remove_then_add(pool: sqlx::SqlitePool) {
     let store = build_example_group_list(pool).await;
 
-    store
-        .group_lists_remove(super::super::group_lists::Id(2))
-        .await
-        .unwrap();
-    let id = store
-        .group_lists_add(&GroupList {
+    unsafe {
+        store
+            .group_lists_remove_unchecked(super::super::group_lists::Id(2))
+            .await
+            .unwrap();
+    }
+    let id = unsafe {
+        store.group_lists_add_unchecked(&GroupList {
             name: String::from("HGG"),
             groups: vec![
                 Group {
@@ -872,8 +877,9 @@ async fn group_lists_remove_then_add(pool: sqlx::SqlitePool) {
                 (super::super::students::Id(21), 2),
             ]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
     assert_eq!(id, super::super::group_lists::Id(4));
 
     let group_lists = store.group_lists_get_all().await.unwrap();
@@ -1026,39 +1032,41 @@ async fn group_lists_remove_then_add(pool: sqlx::SqlitePool) {
 async fn group_lists_update(pool: sqlx::SqlitePool) {
     let store = build_example_group_list(pool).await;
 
-    store
-        .group_lists_update(
-            super::super::group_lists::Id(2),
-            &GroupList {
-                name: String::from("HGG - new"),
-                groups: vec![
-                    Group {
-                        name: String::from("5bis"),
-                        extendable: false,
-                    },
-                    Group {
-                        name: String::from("6bis"),
-                        extendable: false,
-                    },
-                    Group {
-                        name: String::from("3+7"),
-                        extendable: false,
-                    },
-                ],
-                students_mapping: BTreeMap::from([
-                    (super::super::students::Id(13), 1),
-                    (super::super::students::Id(14), 1),
-                    (super::super::students::Id(15), 1),
-                    (super::super::students::Id(16), 0),
-                    (super::super::students::Id(17), 0),
-                    (super::super::students::Id(18), 0),
-                    (super::super::students::Id(9), 2),
-                    (super::super::students::Id(21), 2),
-                ]),
-            },
-        )
-        .await
-        .unwrap();
+    unsafe {
+        store
+            .group_lists_update_unchecked(
+                super::super::group_lists::Id(2),
+                &GroupList {
+                    name: String::from("HGG - new"),
+                    groups: vec![
+                        Group {
+                            name: String::from("5bis"),
+                            extendable: false,
+                        },
+                        Group {
+                            name: String::from("6bis"),
+                            extendable: false,
+                        },
+                        Group {
+                            name: String::from("3+7"),
+                            extendable: false,
+                        },
+                    ],
+                    students_mapping: BTreeMap::from([
+                        (super::super::students::Id(13), 1),
+                        (super::super::students::Id(14), 1),
+                        (super::super::students::Id(15), 1),
+                        (super::super::students::Id(16), 0),
+                        (super::super::students::Id(17), 0),
+                        (super::super::students::Id(18), 0),
+                        (super::super::students::Id(9), 2),
+                        (super::super::students::Id(21), 2),
+                    ]),
+                },
+            )
+            .await
+            .unwrap();
+    }
 
     let group_lists = store.group_lists_get_all().await.unwrap();
 
