@@ -325,13 +325,13 @@ impl FactoryComponent for Week {
             gtk::Box {
                 set_hexpand: true,
             },
+            #[name(switch)]
             gtk::Switch {
+                #[track(self.data.state != switch.is_active())]
                 set_active: self.data.state,
-                #[watch]
-                set_state: self.data.state,
                 connect_state_set[sender] => move |_widget,state| {
                     sender.input(WeekInput::StatusChanged(state));
-                    gtk::glib::Propagation::Stop
+                    gtk::glib::Propagation::Proceed
                 }
             },
         }
@@ -363,6 +363,14 @@ impl FactoryComponent for Week {
                 self.data = new_data;
             }
             WeekInput::StatusChanged(status) => {
+                if self.data.state == status {
+                    // Ignore status change that brought the component
+                    // inline with internal data
+                    return;
+                }
+                // Otherwise, bring internal data to the correct state right away
+                // to avoid endless loops
+                self.data.state = status;
                 sender
                     .output(WeekOutput::StatusChanged(
                         self.data.week_num_in_period,
