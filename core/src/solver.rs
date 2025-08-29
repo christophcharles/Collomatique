@@ -914,7 +914,7 @@ where
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     /// The actual decorated solution that is returned
-    pub solution: Option<DecoratedCompleteSolution<'a, M, S, T, P>>,
+    pub solution: Option<DecoratedFeasableSolution<'a, M, S, T, P>>,
     /// Wether the time limit was reached
     ///
     /// If the time limit is reached, the solution might not be optimal.
@@ -1004,17 +1004,18 @@ where
     >(
         &'a self,
         solver: &Solver,
-    ) -> Option<DecoratedCompleteSolution<'a, M, S, T, P>> {
+    ) -> Option<DecoratedFeasableSolution<'a, M, S, T, P>> {
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self.base.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&feasable_config),
         )?;
 
-        Some(DecoratedCompleteSolution {
+        DecoratedCompleteSolution {
             problem: self,
             internal_solution,
             ilp_config: feasable_config.into_inner(),
-        })
+        }
+        .into_feasable()
     }
 
     /// Solves the problem using a solver
@@ -1046,11 +1047,16 @@ where
             .configuration_to_partial_solution(&self.feasable_config_into_config_data(&config));
 
         TimeLimitSolution {
-            solution: internal_solution.map(|is| DecoratedCompleteSolution {
-                problem: self,
-                internal_solution: is,
-                ilp_config: config.into_inner(),
-            }),
+            solution: internal_solution
+                .map(|is| {
+                    DecoratedCompleteSolution {
+                        problem: self,
+                        internal_solution: is,
+                        ilp_config: config.into_inner(),
+                    }
+                    .into_feasable()
+                })
+                .flatten(),
             time_limit_reached: time_limit_sol.time_limit_reached,
         }
     }
