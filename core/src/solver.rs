@@ -140,10 +140,20 @@ where
     ///
     /// This functions can actually fail if there is a mismatch between the
     /// declared variables and the variables that appear in the constraints
-    /// and the objective.
+    /// and the objective. In that case, it returns `None`.
     ///
-    /// In that case, it returns `None`.
-    pub fn new(base: T) -> Option<Self> {
+    /// `obj_coef` specifies the coefficient for the base objective.
+    /// It behaves as if the sign was ignored.
+    ///
+    /// Objective coefficients are relative so this might seem useless.
+    /// If we want the base objective coefficient to be 2.0, this is equivalent
+    /// to dividing all the other objective coefficients by 2.0.
+    ///
+    /// Apart from the conveniance API, this has still a useful application:
+    /// the objective coefficient can be set to 0. In that case, the base
+    /// objective function is ignored and this can't be done by setting the other
+    /// coefficients to infinity.
+    pub fn new(base: T, obj_coef: f64) -> Option<Self> {
         let orig_main_variables = base.main_variables();
         let orig_structure_variables = base.structure_variables();
 
@@ -157,10 +167,11 @@ where
             )
             .collect::<BTreeMap<_, _>>();
 
-        let objective = base.objective().transmute(|v| match v {
-            BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
-            BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
-        });
+        let objective = obj_coef
+            * base.objective().transmute(|v| match v {
+                BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+                BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+            });
         for v in objective.get_function().variables() {
             if !variables.contains_key(&v) {
                 return None;
