@@ -308,6 +308,30 @@ CREATE TABLE "collo_group_items" (
 	"student_id"	INTEGER NOT NULL,
 	FOREIGN KEY("collo_group_id") REFERENCES "collo_groups"("collo_group_id"),
 	FOREIGN KEY("student_id") REFERENCES "students"("student_id")
+);
+
+CREATE TABLE "slot_selections" (
+	"slot_selection_id"	INTEGER NOT NULL,
+	"subject_id"	INTEGER NOT NULL,
+	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	PRIMARY KEY("slot_selection_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "slot_groups" (
+	"slot_group_id"	INTEGER NOT NULL,
+	"slot_selection_id"	INTEGER NOT NULL,
+	"count"	INTEGER NOT NULL,
+	FOREIGN KEY("slot_selection_id") REFERENCES "slot_selections"("slot_selection_id"),
+	PRIMARY KEY("slot_group_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "slot_group_items" (
+	"slot_group_item_id"	INTEGER NOT NULL,
+	"slot_group_id"	INTEGER NOT NULL,
+	"time_slot_id"	INTEGER NOT NULL,
+	FOREIGN KEY("slot_group_id") REFERENCES "slot_groups"("slot_group_id"),
+	FOREIGN KEY("time_slot_id") REFERENCES "time_slots"("time_slot_id"),
+	PRIMARY KEY("slot_group_item_id" AUTOINCREMENT)
 );"#,
         )
         .bind(serde_json::to_string(&GeneralDataDb {
@@ -366,6 +390,7 @@ mod grouping_incompats;
 mod groupings;
 mod incompat_for_student;
 mod incompats;
+mod slot_selections;
 mod students;
 mod subject_group_for_student;
 mod subject_groups;
@@ -386,6 +411,7 @@ impl Storage for Store {
     type GroupingId = groupings::Id;
     type GroupingIncompatId = grouping_incompats::Id;
     type ColloscopeId = colloscopes::Id;
+    type SlotSelectionId = slot_selections::Id;
 
     type InternalError = Error;
 
@@ -989,5 +1015,54 @@ impl Storage for Store {
     ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
     {
         colloscopes::update(&self.pool, index, colloscope)
+    }
+
+    fn slot_selections_get(
+        &self,
+        index: Self::SlotSelectionId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+            IdError<Self::InternalError, Self::SlotSelectionId>,
+        >,
+    > + Send {
+        slot_selections::get(&self.pool, index)
+    }
+
+    fn slot_selections_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::SlotSelectionId, SlotSelection<Self::SubjectId, Self::TimeSlotId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        slot_selections::get_all(&self.pool)
+    }
+
+    unsafe fn slot_selections_add_unchecked(
+        &mut self,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::SlotSelectionId, Self::InternalError>,
+    > + Send {
+        slot_selections::add(&self.pool, slot_selection)
+    }
+
+    unsafe fn slot_selections_remove_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        slot_selections::remove(&self.pool, index)
+    }
+
+    unsafe fn slot_selections_update_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        slot_selections::update(&self.pool, index, slot_selection)
     }
 }

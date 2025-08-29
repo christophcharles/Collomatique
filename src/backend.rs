@@ -240,6 +240,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     type GroupingId: OrdId;
     type GroupingIncompatId: OrdId;
     type ColloscopeId: OrdId;
+    type SlotSelectionId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error + Send;
 
@@ -550,6 +551,33 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         &mut self,
         index: Self::ColloscopeId,
         colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+
+    async fn slot_selections_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::SlotSelectionId, SlotSelection<Self::SubjectId, Self::TimeSlotId>>,
+        Self::InternalError,
+    >;
+    async fn slot_selections_get(
+        &self,
+        index: Self::SlotSelectionId,
+    ) -> std::result::Result<
+        SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+        IdError<Self::InternalError, Self::SlotSelectionId>,
+    >;
+    async unsafe fn slot_selections_add_unchecked(
+        &mut self,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> std::result::Result<Self::SlotSelectionId, Self::InternalError>;
+    async unsafe fn slot_selections_remove_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async unsafe fn slot_selections_update_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
     ) -> std::result::Result<(), Self::InternalError>;
 }
 
