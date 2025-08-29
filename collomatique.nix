@@ -4,6 +4,7 @@
     sqlite,
     cbc,
     cmake,
+    python3,
 }:
 rustPlatform.buildRustPackage {
     pname = "collomatique";
@@ -18,11 +19,13 @@ rustPlatform.buildRustPackage {
     nativeBuildInputs = [
         cmake
         rustPlatform.bindgenHook
+        python3
     ];
 
     buildInputs = [
         sqlite
         cbc
+        python3
     ];
 
     meta = {
