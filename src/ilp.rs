@@ -38,6 +38,7 @@ pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 pub struct ProblemBuilder<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     variables: BTreeMap<V, VariableType>,
+    objective_fn: linexpr::Expr<V>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -61,6 +62,7 @@ impl<V: VariableName> Default for ProblemBuilder<V> {
         ProblemBuilder {
             constraints: BTreeSet::new(),
             variables: BTreeMap::new(),
+            objective_fn: linexpr::Expr::constant(0),
         }
     }
 }
@@ -147,6 +149,18 @@ impl<V: VariableName> ProblemBuilder<V> {
         &self.variables
     }
 
+    pub fn set_objective_fn(mut self, expr: linexpr::Expr<V>) -> ConstraintResult<Self, V> {
+        let expr_vars = expr.variables();
+        for var in expr_vars {
+            if !self.variables.contains_key(&var) {
+                return Err(ConstraintError::UndeclaredVariable(var));
+            }
+        }
+
+        self.objective_fn = expr;
+        Ok(self)
+    }
+
     pub fn build<P: ProblemRepr<V>>(self) -> Problem<V, P> {
         let variables_vec: Vec<_> = self.variables.iter().map(|(v, _t)| v.clone()).collect();
         let mut variables_lookup = BTreeMap::new();
@@ -162,6 +176,7 @@ impl<V: VariableName> ProblemBuilder<V> {
             variables_lookup,
             constraints: self.constraints,
             pb_repr,
+            objective_fn: self.objective_fn,
         }
     }
 
@@ -180,10 +195,19 @@ impl<V: VariableName> ProblemBuilder<V> {
             .into_iter()
             .filter(|(v, _t)| predicate(v))
             .collect();
+        let mut objective_fn = linexpr::Expr::constant(self.objective_fn.get_constant());
+        for (var, &coef) in self.objective_fn.coefs() {
+            if !predicate(var) {
+                continue;
+            }
+
+            objective_fn = objective_fn + coef * linexpr::Expr::var(var.clone());
+        }
 
         ProblemBuilder {
             constraints,
             variables,
+            objective_fn,
         }
     }
 }
@@ -197,6 +221,7 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
     pb_repr: P,
+    objective_fn: linexpr::Expr<V>,
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
@@ -207,10 +232,12 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
         }
         write!(f, " ]\n")?;
 
-        write!(f, "constraints :")?;
+        write!(f, "constraints :\n")?;
         for (i, c) in self.constraints.iter().enumerate() {
-            write!(f, "\n{}) {}", i, c)?;
+            write!(f, "{}) {}\n", i, c)?;
         }
+
+        write!(f, "objective function : {}", self.objective_fn)?;
 
         Ok(())
     }
@@ -221,6 +248,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         ProblemBuilder {
             constraints: self.constraints,
             variables: self.variables,
+            objective_fn: self.objective_fn,
         }
     }
 
