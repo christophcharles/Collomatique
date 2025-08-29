@@ -149,6 +149,16 @@ enum WeekPatternCommand {
     },
     /// Show all week patterns
     PrintAll,
+    /// Show a particular week pattern
+    Print {
+        /// Name for the week pattern to show
+        name: String,
+        /// If multiple week patterns have the same name, select which one to use.
+        /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        week_pattern_number: Option<NonZeroUsize>,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -567,6 +577,15 @@ async fn general_command(
     }
 }
 
+fn week_pattern_to_string(week_pattern: &collomatique::backend::WeekPattern) -> String {
+    week_pattern
+        .weeks
+        .iter()
+        .map(|w| (w.get() + 1).to_string())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 async fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<sqlite::Store>,
@@ -642,17 +661,56 @@ async fn week_pattern_command(
                 .iter()
                 .enumerate()
                 .map(|(i, (_, week_pattern))| {
-                    let weeks = week_pattern
-                        .weeks
-                        .iter()
-                        .map(|w| (w.get() + 1).to_string())
-                        .collect::<Vec<_>>()
-                        .join(",");
+                    let weeks = week_pattern_to_string(week_pattern);
                     format!("{:>width$} - {}: {}", i + 1, week_pattern.name, weeks)
                 })
                 .collect();
 
             Ok(Some(week_pattern_vec.join("\n")))
+        }
+        WeekPatternCommand::Print {
+            name,
+            week_pattern_number,
+        } => {
+            let week_patterns = app_state
+                .get_backend_logic()
+                .week_patterns_get_all()
+                .await?;
+
+            let relevant_week_patterns: Vec<_> = week_patterns
+                .into_iter()
+                .filter_map(|(_, week_pattern)| {
+                    if week_pattern.name == name {
+                        Some(week_pattern)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if relevant_week_patterns.is_empty() {
+                return Err(anyhow!(format!(
+                    "No week pattern has the name \"{}\".",
+                    name
+                )));
+            }
+            if week_pattern_number.is_none() && relevant_week_patterns.len() > 1 {
+                return Err(anyhow!(
+                    format!("Several week patterns have the name \"{}\".\nDisambiguate the call by using the '-n' flag.", name)
+                ));
+            }
+
+            let num = match week_pattern_number {
+                Some(n) => n.get() - 1,
+                None => 0,
+            };
+            let week_pattern = relevant_week_patterns.get(num).ok_or(anyhow!(
+                "There is less than {} different week patterns with the name \"{}\"",
+                num + 1,
+                name
+            ))?;
+
+            Ok(Some(week_pattern_to_string(week_pattern)))
         }
     }
 }
