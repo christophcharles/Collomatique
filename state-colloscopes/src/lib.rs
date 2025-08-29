@@ -1035,7 +1035,7 @@ impl Data {
             .collect();
         let week_pattern_ids: std::collections::BTreeSet<_> =
             week_patterns.week_pattern_map.keys().copied().collect();
-        if !subjects.validate_all(&period_ids) {
+        if !subjects.validate_all(&period_ids, &week_pattern_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
         if !teachers.validate_all(&subjects) {
