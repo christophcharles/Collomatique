@@ -838,6 +838,39 @@ pub enum Variable {
     },
 }
 
+impl Variable {
+    fn subject(&self) -> Option<usize> {
+        match self {
+            Variable::GroupInSlot {
+                subject,
+                slot: _,
+                group: _,
+            } => Some(*subject),
+            Variable::GroupOnSlotSelection {
+                subject,
+                slot_selection: _,
+                group: _,
+            } => Some(*subject),
+            Variable::DynamicGroupAssignment {
+                subject,
+                slot: _,
+                group: _,
+                student: _,
+            } => Some(*subject),
+            Variable::StudentInGroup {
+                subject,
+                student: _,
+                group: _,
+            } => Some(*subject),
+            Variable::UseGrouping(_) => None,
+            Variable::IncompatGroupForStudent {
+                incompat_group: _,
+                student: _,
+            } => None,
+        }
+    }
+}
+
 impl<'a> From<&'a Variable> for Variable {
     fn from(value: &'a Variable) -> Self {
         value.clone()
@@ -2769,8 +2802,14 @@ impl<'a> IlpTranslator<'a> {
         let mut output = BTreeSet::new();
 
         for var1 in variables_in_first_half {
-            let v1 = Expr::var(var1);
+            let v1 = Expr::var(var1.clone());
             for var2 in &variables_in_second_half {
+                if var1.subject() == var2.subject() {
+                    // If it is the same subject, the periodicity constraints
+                    // already garantees that the two slots won't be consecutive
+                    continue;
+                }
+
                 let v2 = Expr::var(var2.clone());
 
                 let lhs = &v1 + &v2;
