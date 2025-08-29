@@ -161,6 +161,10 @@ impl<V: VariableName> Constraint<V> {
         self.expr.constant
     }
 
+    pub fn get_lhs(&self) -> &Expr<V> {
+        &self.expr
+    }
+
     pub fn clean(&mut self) {
         self.expr.clean();
     }

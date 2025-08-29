@@ -825,6 +825,9 @@ pub enum Variable {
     UpperBoundInterrogationPerDayGlobal,
     UpperBoundInterrogationPerWeekGlobal,
     LowerBoundInterrogationPerWeekGlobal,
+    SoftConstraint {
+        num: usize,
+    },
 }
 
 impl<'a> From<&'a Variable> for Variable {
@@ -875,6 +878,9 @@ impl std::fmt::Display for Variable {
             }
             Variable::LowerBoundInterrogationPerWeekGlobal => {
                 write!(f, "LB_IpW_G")
+            }
+            Variable::SoftConstraint { num } => {
+                write!(f, "SC_{}", num)
             }
         }
     }
@@ -1511,22 +1517,6 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_one_interrogation_per_period_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            if !subject.period_is_strict {
-                constraints.extend(
-                    self.build_one_interrogation_per_period_constraints_for_subject(
-                        i, subject, true,
-                    ),
-                );
-            }
-        }
-
-        constraints
-    }
-
     fn build_at_most_one_interrogation_per_period_for_empty_groups_contraint_for_group(
         &self,
         i: usize,
@@ -1865,80 +1855,6 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_interrogations_per_week_optimizer_for_student_expr(
-        &self,
-        student: usize,
-        week: u32,
-    ) -> Expr<Variable> {
-        let mut expr = Expr::constant(0);
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            if subject.is_tutorial {
-                // ignore tutorial sessions for interrogation count
-                continue;
-            }
-            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
-                if slot.start.week != week {
-                    continue;
-                }
-
-                if subject.groups.not_assigned.contains(&student) {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if Self::is_group_fixed(group, subject) {
-                            continue;
-                        }
-                        expr = expr
-                            + Expr::var(Variable::DynamicGroupAssignment {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                                student,
-                            });
-                    }
-                } else {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if group.students.contains(&student) {
-                            expr = expr
-                                + Expr::var(Variable::GroupInSlot {
-                                    subject: i,
-                                    slot: j,
-                                    group: k,
-                                });
-                        }
-                    }
-                }
-            }
-        }
-
-        expr
-    }
-
-    fn build_interrogations_per_week_optimizer_for_student(
-        &self,
-        student: usize,
-        week: u32,
-    ) -> Constraint<Variable> {
-        let expr1 = self.build_interrogations_per_week_optimizer_for_student_expr(student, week);
-        let expr2 =
-            self.build_interrogations_per_week_optimizer_for_student_expr(student, week + 1);
-
-        expr1.eq(&expr2)
-    }
-
-    fn build_interrogations_per_week_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints: BTreeSet<Constraint<Variable>> = BTreeSet::new();
-
-        for (student, _) in self.data.students.iter().enumerate() {
-            for week in 0..(self.data.general.week_count.get() - 1) {
-                constraints.insert(
-                    self.build_interrogations_per_week_optimizer_for_student(student, week),
-                );
-            }
-        }
-
-        constraints
-    }
-
     fn build_max_interrogations_per_day_constraints_for_student(
         &self,
         max_count: NonZeroU32,
@@ -2011,80 +1927,6 @@ impl<'a> IlpTranslator<'a> {
                     constraints.extend(
                         self.build_max_interrogations_per_day_constraints_for_student(
                             max_count, student, week, day,
-                        ),
-                    );
-                }
-            }
-        }
-
-        constraints
-    }
-
-    fn build_max_interrogations_per_day_optimizer_for_student(
-        &self,
-        student: usize,
-        week: u32,
-        day: time::Weekday,
-    ) -> Option<Constraint<Variable>> {
-        let mut expr = Expr::constant(0);
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            if subject.is_tutorial {
-                // ignore tutorial sessions for interrogation count
-                continue;
-            }
-            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
-                if slot.start.week != week {
-                    continue;
-                }
-                if slot.start.weekday != day {
-                    continue;
-                }
-
-                if subject.groups.not_assigned.contains(&student) {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if Self::is_group_fixed(group, subject) {
-                            continue;
-                        }
-                        expr = expr
-                            + Expr::var(Variable::DynamicGroupAssignment {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                                student,
-                            });
-                    }
-                } else {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if group.students.contains(&student) {
-                            expr = expr
-                                + Expr::var(Variable::GroupInSlot {
-                                    subject: i,
-                                    slot: j,
-                                    group: k,
-                                });
-                        }
-                    }
-                }
-            }
-        }
-
-        if expr == Expr::constant(0) {
-            return None;
-        }
-
-        Some(expr.eq(&Expr::constant(0)))
-    }
-
-    fn build_max_interrogations_per_day_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for week in 0..self.data.general.week_count.get() {
-            for day in time::Weekday::iter() {
-                for (student, _) in self.data.students.iter().enumerate() {
-                    constraints.extend(
-                        self.build_max_interrogations_per_day_optimizer_for_student(
-                            student, week, day,
                         ),
                     );
                 }
@@ -3177,7 +3019,26 @@ impl<'a> IlpTranslator<'a> {
         }
     }
 
-    fn build_variables(&self) -> BTreeMap<Variable, crate::ilp::VariableType> {
+    fn build_soft_constraint_variables(
+        &self,
+        soft_constraints: &BTreeSet<Constraint<Variable>>,
+    ) -> BTreeMap<Variable, crate::ilp::VariableType> {
+        let mut output = BTreeMap::new();
+
+        for (i, _constraint) in soft_constraints.iter().enumerate() {
+            output.insert(
+                Variable::SoftConstraint { num: i },
+                crate::ilp::VariableType::Integer(0..=i32::MAX),
+            );
+        }
+
+        output
+    }
+
+    fn build_variables(
+        &self,
+        soft_constraints: &BTreeSet<Constraint<Variable>>,
+    ) -> BTreeMap<Variable, crate::ilp::VariableType> {
         let mut output = BTreeMap::new();
 
         Self::add_bool_variables(&mut output, self.build_group_in_slot_variables());
@@ -3195,6 +3056,8 @@ impl<'a> IlpTranslator<'a> {
         output.extend(self.build_lower_bound_interrogation_per_week_variables());
         output.extend(self.build_global_bound_variables());
 
+        output.extend(self.build_soft_constraint_variables(soft_constraints));
+
         output
     }
 
@@ -3206,11 +3069,15 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn build_objective_fn(&self) -> Expr<Variable> {
+    fn build_objective_fn(
+        &self,
+        soft_constraints: &BTreeSet<Constraint<Variable>>,
+    ) -> Expr<Variable> {
         const STUDENT_PER_DAY_COST: i32 = 1;
         const STUDENT_PER_WEEK_COST: i32 = 1;
         const GLOBAL_PER_DAY_COST: i32 = 1;
         const GLOBAL_PER_WEEK_COST: i32 = 1;
+        const BALANCING_COST: i32 = 1;
 
         let mut expr = Expr::constant(0);
 
@@ -3269,10 +3136,35 @@ impl<'a> IlpTranslator<'a> {
             - Expr::var(Variable::LowerBoundInterrogationPerWeekGlobal);
         expr = expr + student_count_i32 * GLOBAL_PER_WEEK_COST * range_global;
 
+        // Soft constraints
+        for (i, _constraint) in soft_constraints.iter().enumerate() {
+            expr = expr + BALANCING_COST * Expr::var(Variable::SoftConstraint { num: i });
+        }
+
         expr
     }
 
-    fn build_hard_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_soft_constraints_upper_bound_constraints(
+        &self,
+        soft_constraints: &BTreeSet<Constraint<Variable>>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (num, constraint) in soft_constraints.iter().enumerate() {
+            let lhs_expr = constraint.get_lhs();
+            let rhs = Expr::var(Variable::SoftConstraint { num });
+
+            output.insert(lhs_expr.leq(&rhs));
+            output.insert(lhs_expr.geq(&(-rhs)));
+        }
+
+        output
+    }
+
+    fn build_hard_constraints(
+        &self,
+        soft_constraints: &BTreeSet<Constraint<Variable>>,
+    ) -> BTreeSet<Constraint<Variable>> {
         let mut output = BTreeSet::new();
 
         output.extend(self.build_at_most_max_groups_per_slot_constraints());
@@ -3299,6 +3191,8 @@ impl<'a> IlpTranslator<'a> {
         output.extend(self.build_upper_bound_interrogation_per_week_global_constraints());
         output.extend(self.build_lower_bound_interrogation_per_week_global_constraints());
 
+        output.extend(self.build_soft_constraints_upper_bound_constraints(soft_constraints));
+
         output
     }
 
@@ -3306,12 +3200,14 @@ impl<'a> IlpTranslator<'a> {
         //let soft_problem = self.problem_builder_soft().build();
         //let subjects = self.data.subjects.clone();
 
+        let soft_constraints = self.build_soft_constraints();
+
         let hard_problem_builder = ProblemBuilder::new()
-            .add_variables(self.build_variables())
+            .add_variables(self.build_variables(&soft_constraints))
             .expect("Should not have duplicates")
-            .add_constraints(self.build_hard_constraints())
+            .add_constraints(self.build_hard_constraints(&soft_constraints))
             .expect("Variables should be defined")
-            .set_objective_fn(self.build_objective_fn())
+            .set_objective_fn(self.build_objective_fn(&soft_constraints))
             .expect("Variables should be declared");
         // Comment out for now, we are going to need this code for the linear optimization
         /*      .eval_fn(crate::debuggable!(move |x| {
