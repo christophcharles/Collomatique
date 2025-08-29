@@ -11,24 +11,32 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 /// Collomatique gtk4 UI
-struct Opts {
+struct Args {
     /// Open Collomatique directly editing a new colloscope
     #[arg(short, long, default_value_t = false)]
     new: bool,
 
     /// Pass a file as argument to open it with Collomatique
     file: Option<PathBuf>,
+
+    /// Everything after gets passed through to GTK.
+    #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+    gtk_options: Vec<String>,
 }
 
 fn main() {
-    let opts = Opts::parse();
+    let args = Args::parse();
 
     let payload = collomatique_gtk4::AppInit {
-        new: opts.new,
-        file_name: opts.file,
+        new: args.new,
+        file_name: args.file,
     };
 
-    let app = RelmApp::new("fr.collomatique.gtk4").with_args(vec![]);
+    let program_invocation = std::env::args().next().unwrap();
+    let mut gtk_args = vec![program_invocation];
+    gtk_args.extend(args.gtk_options.clone());
+
+    let app = RelmApp::new("fr.collomatique.gtk4").with_args(gtk_args);
     app.allow_multiple_instances(true);
     app.run_async::<AppModel>(payload);
 }
