@@ -10,40 +10,21 @@ pub struct Solver {
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
+    fn find_closest_solution<'a>(
         &self,
         config: &Config<'a, V, P>,
-        origin: Option<&FeasableConfig<'a, V, P>>,
-        _max_steps: Option<usize>,
-        hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        // When everything is solved for some reason this is sometimes an issue...
-        if let Some(result) = config.clone().into_feasable() {
-            return Some(result);
-        }
+        self.solve_internal(config, true)
+    }
 
-        let problem = config.get_problem();
-
-        let mut highs_problem = self.build_problem(problem, config, hint_only);
-        if let Some(o) = origin {
-            Self::add_origin_constraints(&mut highs_problem, config, &o);
-        }
-
-        use highs::Sense;
-        let mut model = highs_problem.problem.try_optimise(Sense::Minimise).ok()?;
-        if self.disable_logging {
-            model.make_quiet();
-        }
-
-        let solved_problem = model.try_solve().ok()?;
-
-        Self::reconstruct_config(problem, &solved_problem)
+    fn solve<'a>(&self, problem: &'a Problem<V, P>) -> Option<FeasableConfig<'a, V, P>> {
+        let init_config = problem.default_config();
+        self.solve_internal(&init_config, false)
     }
 }
 
-struct HighsProblem<V: VariableName> {
+struct HighsProblem {
     problem: highs::RowProblem,
-    cols: std::collections::BTreeMap<V, highs::Col>,
 }
 
 impl Default for Solver {
@@ -63,12 +44,38 @@ impl Solver {
         Solver { disable_logging }
     }
 
+    fn solve_internal<'a, V: VariableName, P: ProblemRepr<V>>(
+        &self,
+        init_config: &Config<'a, V, P>,
+        minimize_distance_to_init_config: bool,
+    ) -> Option<FeasableConfig<'a, V, P>> {
+        // When everything is solved for some reason this is sometimes an issue...
+        if let Some(result) = init_config.clone().into_feasable() {
+            return Some(result);
+        }
+
+        let problem = init_config.get_problem();
+
+        let highs_problem =
+            self.build_problem(problem, init_config, minimize_distance_to_init_config);
+
+        use highs::Sense;
+        let mut model = highs_problem.problem.try_optimise(Sense::Minimise).ok()?;
+        if self.disable_logging {
+            model.make_quiet();
+        }
+
+        let solved_problem = model.try_solve().ok()?;
+
+        Self::reconstruct_config(problem, &solved_problem)
+    }
+
     fn build_problem<V: VariableName, P: ProblemRepr<V>>(
         &self,
         problem: &Problem<V, P>,
-        config: &Config<'_, V, P>,
-        hint_only: bool,
-    ) -> HighsProblem<V> {
+        init_config: &Config<'_, V, P>,
+        minimize_distance_to_init_config: bool,
+    ) -> HighsProblem {
         use highs::RowProblem;
         use std::collections::BTreeMap;
 
@@ -78,7 +85,7 @@ impl Solver {
             .get_variables()
             .iter()
             .map(|var| {
-                let value = if config.get(var).expect("Variable should be valid") {
+                let value = if init_config.get(var).expect("Variable should be valid") {
                     1.
                 } else {
                     0.
@@ -87,7 +94,11 @@ impl Solver {
                 // So if a variable is true in the config, false should be penalized
                 // And if a variable is false in the config, true should be penalized
                 // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-                let col_factor = if hint_only { 0. } else { 1. - 2. * value };
+                let col_factor = if minimize_distance_to_init_config {
+                    1. - 2. * value
+                } else {
+                    0.
+                };
 
                 let col = highs_problem.add_integer_column(col_factor, 0..=1);
                 (var.clone(), col)
@@ -116,31 +127,6 @@ impl Solver {
 
         HighsProblem {
             problem: highs_problem,
-            cols,
-        }
-    }
-
-    fn add_origin_constraints<'a, V: VariableName, P: ProblemRepr<V>>(
-        highs_problem: &mut HighsProblem<V>,
-        config: &Config<'a, V, P>,
-        origin: &FeasableConfig<'a, V, P>,
-    ) {
-        let changed_variables = config
-            .get_problem()
-            .get_variables()
-            .iter()
-            .filter(|var| config.get(var) != origin.get(var));
-
-        for var in changed_variables {
-            let col = highs_problem.cols[var];
-            let value = if config.get(var).expect("Variable should be valid") {
-                1.
-            } else {
-                0.
-            };
-
-            let row_factors = [(col, 1.0)];
-            highs_problem.problem.add_row(value..=value, row_factors);
         }
     }
 

@@ -10,41 +10,16 @@ pub struct Solver {
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps_and_hint_only<'a>(
+    fn find_closest_solution<'a>(
         &self,
         config: &Config<'a, V, P>,
-        origin: Option<&FeasableConfig<'a, V, P>>,
-        max_steps: Option<usize>,
-        hint_only: bool,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        // cbc does not seem to shut up even if logging is disabled
-        // we block output directly
-        let stdout_gag = gag::Gag::stdout();
-        // We allow for errors in case this is run in multiple threads
-        if !self.disable_logging {
-            if let Ok(gag) = stdout_gag {
-                drop(gag);
-            }
-        }
+        self.solve_internal(config, true)
+    }
 
-        // When everything is solved for some reason this is sometimes an issue...
-        if let Some(result) = config.clone().into_feasable() {
-            return Some(result);
-        }
-
-        let problem = config.get_problem();
-
-        let mut cbc_model = self.build_model(problem, config, hint_only);
-        if let Some(ms) = max_steps {
-            cbc_model.model.set_parameter("maxN", &format!("{}", ms));
-        }
-        if let Some(o) = origin {
-            Self::add_origin_constraints(&mut cbc_model, config, &o);
-        }
-
-        let sol = cbc_model.model.solve();
-
-        Self::reconstruct_config(problem, &sol, &cbc_model.cols)
+    fn solve<'a>(&self, problem: &'a Problem<V, P>) -> Option<FeasableConfig<'a, V, P>> {
+        let init_config = problem.default_config();
+        self.solve_internal(&init_config, false)
     }
 }
 
@@ -70,13 +45,39 @@ impl Solver {
         Solver { disable_logging }
     }
 
+    fn solve_internal<'a, V: VariableName, P: ProblemRepr<V>>(
+        &self,
+        init_config: &Config<'a, V, P>,
+        minimize_distance_to_init_config: bool,
+    ) -> Option<FeasableConfig<'a, V, P>> {
+        // cbc does not seem to shut up even if logging is disabled
+        // we block output directly
+        let stdout_gag = gag::Gag::stdout();
+        // We allow for errors in case this is run in multiple threads
+        if !self.disable_logging {
+            if let Ok(gag) = stdout_gag {
+                drop(gag);
+            }
+        }
+
+        let problem = init_config.get_problem();
+
+        let mut cbc_model = self.build_model(problem, init_config);
+        if minimize_distance_to_init_config {
+            self.add_minimize_dist_constraint(&mut cbc_model, init_config);
+        }
+
+        let sol = cbc_model.model.solve();
+
+        Self::reconstruct_config(problem, &sol, &cbc_model.cols)
+    }
+
     fn build_model<V: VariableName, P: ProblemRepr<V>>(
         &self,
         problem: &Problem<V, P>,
-        config: &Config<'_, V, P>,
-        hint_only: bool,
+        init_config: &Config<'_, V, P>,
     ) -> CbcModel<V> {
-        use coin_cbc::{Model, Sense};
+        use coin_cbc::Model;
         use std::collections::BTreeMap;
 
         let mut model = Model::default();
@@ -87,22 +88,13 @@ impl Solver {
             .map(|v| (v.clone(), model.add_binary()))
             .collect();
 
-        model.set_obj_sense(Sense::Minimize);
         for (var, col) in &cols {
-            let value = if config.get(var).expect("Variable should be valid") {
+            let value = if init_config.get(var).expect("Variable should be valid") {
                 1.
             } else {
                 0.
             };
             model.set_col_initial_solution(*col, value);
-
-            // Try minimizing the number of changes with respect to the config
-            // So if a variable is true in the config, false should be penalized
-            // And if a variable is false in the config, true should be penalized
-            // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-            if !hint_only {
-                model.set_obj_coeff(*col, 1. - 2. * value);
-            }
         }
 
         for constraint in problem.get_constraints() {
@@ -130,28 +122,24 @@ impl Solver {
         CbcModel { model, cols }
     }
 
-    fn add_origin_constraints<'a, V: VariableName, P: ProblemRepr<V>>(
+    fn add_minimize_dist_constraint<V: VariableName, P: ProblemRepr<V>>(
+        &self,
         cbc_model: &mut CbcModel<V>,
-        config: &Config<'a, V, P>,
-        origin: &FeasableConfig<'a, V, P>,
+        init_config: &Config<'_, V, P>,
     ) {
-        let changed_variables = config
-            .get_problem()
-            .get_variables()
-            .iter()
-            .filter(|var| config.get(var) != origin.get(var));
-
-        for var in changed_variables {
-            let col = cbc_model.cols[var];
-            let value = if config.get(var).expect("Variable should be valid") {
+        use coin_cbc::Sense;
+        cbc_model.model.set_obj_sense(Sense::Minimize);
+        for (var, col) in &cbc_model.cols {
+            let value = if init_config.get(var).expect("Variable should be valid") {
                 1.
             } else {
                 0.
             };
-
-            let row = cbc_model.model.add_row();
-            cbc_model.model.set_weight(row, col, 1.);
-            cbc_model.model.set_row_equal(row, value);
+            // Try minimizing the number of changes with respect to the config
+            // So if a variable is true in the config, false should be penalized
+            // And if a variable is false in the config, true should be penalized
+            // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+            cbc_model.model.set_obj_coeff(*col, 1. - 2. * value);
         }
     }
 
