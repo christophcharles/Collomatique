@@ -1477,10 +1477,8 @@ impl Subject {
     }
 }
 
-impl
-    From<
-        &json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>,
-    > for Subject
+impl From<&json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>>
+    for Subject
 {
     fn from(
         value: &json::Subject<
@@ -1509,8 +1507,7 @@ impl
     }
 }
 
-impl
-    From<json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>>
+impl From<json::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>>
     for Subject
 {
     fn from(
@@ -1673,11 +1670,7 @@ impl From<json::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::Week
     for TimeSlot
 {
     fn from(
-        value: json::TimeSlot<
-            state::SubjectHandle,
-            state::TeacherHandle,
-            state::WeekPatternHandle,
-        >,
+        value: json::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>,
     ) -> Self {
         TimeSlot::from(&value)
     }

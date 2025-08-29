@@ -1,5 +1,5 @@
-use collomatique::json::json;
 use collomatique::frontend::state::Manager;
+use collomatique::json::json;
 use thiserror::Error;
 
 use iced::widget::{button, center, column, container, row, text, tooltip, Space};
@@ -36,8 +36,7 @@ impl AppStateBox {
 
     fn extract(
         &mut self,
-    ) -> Option<collomatique::frontend::state::AppState<collomatique::json::json::JsonStore>>
-    {
+    ) -> Option<collomatique::frontend::state::AppState<collomatique::json::json::JsonStore>> {
         let mut lock = self.state.write().unwrap();
 
         lock.take()
@@ -96,8 +95,8 @@ pub type OpenCollomatiqueFileResult<T> = std::result::Result<T, OpenCollomatique
 
 impl State {
     pub fn new_with_empty_file() -> OpenCollomatiqueFileResult<Self> {
-        use collomatique::json::Logic;
         use collomatique::frontend::state::AppState;
+        use collomatique::json::Logic;
 
         let logic = Logic::new(json::JsonStore::new());
         let app_state = AppState::new(logic);
@@ -114,8 +113,8 @@ impl State {
     pub async fn new_with_existing_file(
         file: std::path::PathBuf,
     ) -> OpenCollomatiqueFileResult<Self> {
-        use collomatique::json::Logic;
         use collomatique::frontend::state::AppState;
+        use collomatique::json::Logic;
 
         let content = tokio::fs::read_to_string(&file).await?;
 
