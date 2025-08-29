@@ -1,5 +1,8 @@
 use adw::prelude::{EditableExt, PreferencesGroupExt, PreferencesRowExt};
-use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use chrono::Datelike;
+use gtk::prelude::{
+    AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
+};
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
@@ -24,6 +27,12 @@ pub enum DialogInput {
     Accept,
     UpdateName(String),
     UpdateStatusInPattern(usize, bool),
+    AllWeeksClicked,
+    NoWeeksClicked,
+    EvenCalendarWeeksClicked,
+    OddCalendarWeeksClicked,
+    EvenScheduleWeeksClicked,
+    OddScheduleWeeksClicked,
 }
 
 #[derive(Debug)]
@@ -87,6 +96,19 @@ impl SimpleComponent for Dialog {
                                 },
                             },
                         },
+                        gtk::Label {
+                            set_label: "<b>Options de préremplissage</b>",
+                            set_use_markup: true,
+                            set_halign: gtk::Align::Start,
+                        },
+                        #[name(btn_grid)]
+                        gtk::Grid {
+                            set_hexpand: true,
+                            set_column_homogeneous: true,
+                            set_row_homogeneous: true,
+                            set_column_spacing: 5,
+                            set_row_spacing: 5,
+                        },
                         #[local_ref]
                         period_entries_widget -> gtk::Box {
                             set_hexpand: true,
@@ -97,7 +119,41 @@ impl SimpleComponent for Dialog {
                     },
                 },
             }
-        }
+        },
+        all_weeks_btn = gtk::Button {
+            set_label: "Toutes les semaines",
+            set_hexpand: true,
+            connect_clicked => DialogInput::AllWeeksClicked,
+        },
+        no_weeks_btn = gtk::Button {
+            set_label: "Aucune semaine",
+            set_hexpand: true,
+            connect_clicked => DialogInput::NoWeeksClicked,
+        },
+        even_calendar_weeks_btn = gtk::Button {
+            set_label: "Semaines paires (calendaires)",
+            set_hexpand: true,
+            #[watch]
+            set_sensitive: model.periods.first_week.is_some(),
+            connect_clicked => DialogInput::EvenCalendarWeeksClicked,
+        },
+        odd_calendar_weeks_btn = gtk::Button {
+            set_label: "Semaines impaires (calendaires)",
+            set_hexpand: true,
+            #[watch]
+            set_sensitive: model.periods.first_week.is_some(),
+            connect_clicked => DialogInput::OddCalendarWeeksClicked,
+        },
+        even_schedule_weeks_btn = gtk::Button {
+            set_label: "Semaines paires (colloscope)",
+            set_hexpand: true,
+            connect_clicked => DialogInput::EvenScheduleWeeksClicked,
+        },
+        odd_schedule_weeks_btn = gtk::Button {
+            set_label: "Semaines impaires (colloscope)",
+            set_hexpand: true,
+            connect_clicked => DialogInput::OddScheduleWeeksClicked,
+        },
     }
 
     fn init(
@@ -130,6 +186,21 @@ impl SimpleComponent for Dialog {
         let period_entries_widget = model.period_entries.widget();
         let widgets = view_output!();
 
+        widgets.btn_grid.attach(&widgets.all_weeks_btn, 0, 0, 1, 1);
+        widgets.btn_grid.attach(&widgets.no_weeks_btn, 1, 0, 1, 1);
+        widgets
+            .btn_grid
+            .attach(&widgets.even_calendar_weeks_btn, 0, 1, 1, 1);
+        widgets
+            .btn_grid
+            .attach(&widgets.odd_calendar_weeks_btn, 1, 1, 1, 1);
+        widgets
+            .btn_grid
+            .attach(&widgets.even_schedule_weeks_btn, 0, 2, 1, 1);
+        widgets
+            .btn_grid
+            .attach(&widgets.odd_schedule_weeks_btn, 1, 2, 1, 1);
+
         ComponentParts { model, widgets }
     }
 
@@ -141,34 +212,9 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.periods = periods;
                 self.week_pattern = week_pattern;
+                self.extend_pattern_if_needed();
 
-                let new_data = self
-                    .periods
-                    .ordered_period_list
-                    .iter()
-                    .scan(0usize, |acc, (_id, desc)| {
-                        let current_first_week = *acc;
-                        *acc += desc.len();
-                        Some(PeriodData {
-                            global_first_week: self.periods.first_week.clone(),
-                            first_week_num: current_first_week,
-                            period_desc: desc.clone(),
-                            weeks_in_pattern: (current_first_week
-                                ..(current_first_week + desc.len()))
-                                .into_iter()
-                                .map(|index| {
-                                    self.week_pattern.weeks.get(index).cloned().unwrap_or(true)
-                                })
-                                .collect(),
-                        })
-                    })
-                    .collect::<Vec<_>>();
-
-                crate::tools::factories::update_vec_deque(
-                    &mut self.period_entries,
-                    new_data.into_iter(),
-                    |data| PeriodInput::UpdateData(data),
-                );
+                self.update_factory();
             }
             DialogInput::Cancel => {
                 self.hidden = true;
@@ -196,10 +242,87 @@ impl SimpleComponent for Dialog {
                 {
                     return;
                 }
-                if week_num >= self.week_pattern.weeks.len() {
-                    self.week_pattern.weeks.resize(week_num + 1, true);
-                }
                 self.week_pattern.weeks[week_num] = new_status;
+            }
+            DialogInput::AllWeeksClicked => {
+                for status in &mut self.week_pattern.weeks {
+                    *status = true;
+                }
+                self.update_factory();
+            }
+            DialogInput::NoWeeksClicked => {
+                for status in &mut self.week_pattern.weeks {
+                    *status = false;
+                }
+                self.update_factory();
+            }
+            DialogInput::EvenCalendarWeeksClicked => {
+                let Some(global_first_week) = &self.periods.first_week else {
+                    panic!("Even calendar weeks needs a first week data");
+                };
+                let first_week_number = global_first_week.inner().iso_week().week();
+
+                let mut next_status = (first_week_number % 2) == 0;
+                for status in &mut self.week_pattern.weeks {
+                    *status = next_status;
+                    next_status = !next_status;
+                }
+
+                self.update_factory();
+            }
+            DialogInput::OddCalendarWeeksClicked => {
+                let Some(global_first_week) = &self.periods.first_week else {
+                    panic!("Odd calendar weeks needs a first week data");
+                };
+                let first_week_number = global_first_week.inner().iso_week().week();
+
+                let mut next_status = (first_week_number % 2) == 1;
+                for status in &mut self.week_pattern.weeks {
+                    *status = next_status;
+                    next_status = !next_status;
+                }
+
+                self.update_factory();
+            }
+            DialogInput::EvenScheduleWeeksClicked => {
+                let mut next_status = false;
+
+                let status_in_periods = self.build_status_in_periods();
+                for (status, week_has_interrogations) in self
+                    .week_pattern
+                    .weeks
+                    .iter_mut()
+                    .zip(status_in_periods.iter())
+                {
+                    if *week_has_interrogations {
+                        *status = next_status;
+                        next_status = !next_status;
+                    } else {
+                        *status = false;
+                    }
+                }
+
+                self.update_factory();
+            }
+            DialogInput::OddScheduleWeeksClicked => {
+                let mut next_status = true;
+
+                let status_in_periods = self.build_status_in_periods();
+                for (status, week_has_interrogations) in self
+                    .week_pattern
+                    .weeks
+                    .iter_mut()
+                    .zip(status_in_periods.iter())
+                {
+                    if *week_has_interrogations {
+                        *status = next_status;
+                        next_status = !next_status;
+                    } else {
+                        *status = false;
+                    }
+                }
+
+                self.update_factory();
             }
         }
     }
@@ -210,6 +333,60 @@ impl SimpleComponent for Dialog {
             adj.set_value(0.);
             widgets.name_entry.grab_focus();
         }
+    }
+}
+
+impl Dialog {
+    fn extend_pattern_if_needed(&mut self) {
+        let week_count_in_periods = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .fold(0usize, |acc, (_id, desc)| acc + desc.len());
+        if week_count_in_periods > self.week_pattern.weeks.len() {
+            self.week_pattern.weeks.resize(week_count_in_periods, true);
+        }
+    }
+
+    fn build_status_in_periods(&self) -> Vec<bool> {
+        let mut output = vec![];
+        for (_id, period) in &self.periods.ordered_period_list {
+            output.extend(period.iter().cloned());
+        }
+        output
+    }
+
+    fn update_factory(&mut self) {
+        let new_data = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .scan(0usize, |acc, (_id, desc)| {
+                let current_first_week = *acc;
+                *acc += desc.len();
+                Some(PeriodData {
+                    global_first_week: self.periods.first_week.clone(),
+                    first_week_num: current_first_week,
+                    period_desc: desc.clone(),
+                    weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
+                        .into_iter()
+                        .map(|index| {
+                            self.week_pattern
+                                .weeks
+                                .get(index)
+                                .expect("Week pattern should be large enough at this point")
+                                .clone()
+                        })
+                        .collect(),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        crate::tools::factories::update_vec_deque(
+            &mut self.period_entries,
+            new_data.into_iter(),
+            |data| PeriodInput::UpdateData(data),
+        );
     }
 }
 
