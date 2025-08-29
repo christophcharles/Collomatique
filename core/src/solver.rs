@@ -590,6 +590,26 @@ where
         defined_variables == problem_variables
     }
 
+    /// Promotes the [DecoratedPartialSolution] into a [DecoratedCompleteSolution].
+    ///
+    /// If the solution is complete (see [DecoratedPartialSolution::is_complete]),
+    /// this functions returns a [DecoratedCompleteSolution] that represents it.
+    ///
+    /// Otherwise, the function fails and returns `None`.
+    pub fn into_complete(self) -> Option<DecoratedCompleteSolution<'a, M, S, T, P>> {
+        let ilp_config = self
+            .problem
+            .ilp_problem
+            .build_config(self.config_data)
+            .ok()?;
+
+        Some(DecoratedCompleteSolution {
+            problem: self.problem,
+            internal_solution: self.internal_solution,
+            ilp_config,
+        })
+    }
+
     /// Blame general constraints
     ///
     /// Returns a list of descriptions of general constraints that cannot be satisfied.
@@ -672,7 +692,7 @@ where
     }
 }
 
-/// Represents a (possibly non-feasable) solution
+/// Represents a possibly non-feasable but complete solution
 ///
 /// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
 /// This type will be used in the rest of the program. However, this representation usually lacks
@@ -681,11 +701,11 @@ where
 /// This is the decoration provided here: all the necessary variables are correctly reconstructed
 /// and stored.
 ///
-/// Such a decorated solution is either directly returned by [Problem::solve] (or its variant
-/// [Problem::solve_with_time_limit]) or it can be constructued from a [BaseConstraints::PartialSolution]
-/// by calling [Problem::decorate_solution].
+/// Compared to [DecoratedPartialSolution], this type garantees that the solution is *complete*
+/// meaning that all variables are defined and checking if it is a feasable solution is actually
+/// trivial.
 #[derive(Clone)]
-pub struct DecoratedSolution<'a, M, S, T, P>
+pub struct DecoratedCompleteSolution<'a, M, S, T, P>
 where
     M: UsableData,
     S: UsableData,
@@ -697,7 +717,7 @@ where
     ilp_config: collomatique_ilp::Config<'a, ExtraVariable<M, S, IdVariable>, InternalId, P>,
 }
 
-impl<'a, M, S, T, P> DecoratedSolution<'a, M, S, T, P>
+impl<'a, M, S, T, P> DecoratedCompleteSolution<'a, M, S, T, P>
 where
     M: UsableData,
     S: UsableData,
@@ -792,7 +812,7 @@ where
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     /// The actual decorated solution that is returned
-    pub solution: Option<DecoratedSolution<'a, M, S, T, P>>,
+    pub solution: Option<DecoratedCompleteSolution<'a, M, S, T, P>>,
     /// Wether the time limit was reached
     ///
     /// If the time limit is reached, the solution might not be optimal.
@@ -806,18 +826,18 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
-    /// Decorate a solutions
+    /// Decorate a partial solution
     ///
-    /// This functions takes a potential solution of type [BaseConstraints::PartialSolution]
+    /// This functions takes a partial solution of type [BaseConstraints::PartialSolution]
     /// and "decorates" it. This means that all the internal ILP variables are reconstructed and packaged
-    /// into a [DecoratedSolution].
+    /// into a [DecoratedPartialSolution].
     ///
     /// This function can fail (and return `None` in that case) if there are issues with the
     /// reconstruction (usually unexpected or undefined variables).
-    pub fn decorate_solution<'a>(
+    pub fn decorate_partial_solution<'a>(
         &'a self,
         solution: T::PartialSolution,
-    ) -> Option<DecoratedSolution<'a, M, S, T, P>> {
+    ) -> Option<DecoratedPartialSolution<'a, M, S, T, P>> {
         let starting_configuration_data = self.base.partial_solution_to_configuration(&solution)?;
         let mut base_config_data =
             starting_configuration_data.transmute(|x| BaseVariable::Main(x.clone()));
@@ -842,12 +862,10 @@ where
             );
         }
 
-        let ilp_config = self.ilp_problem.build_config(config_data).ok()?;
-
-        Some(DecoratedSolution {
+        Some(DecoratedPartialSolution {
             problem: self,
             internal_solution: solution,
-            ilp_config,
+            config_data,
         })
     }
 
@@ -884,13 +902,13 @@ where
     >(
         &'a self,
         solver: &Solver,
-    ) -> Option<DecoratedSolution<'a, M, S, T, P>> {
+    ) -> Option<DecoratedCompleteSolution<'a, M, S, T, P>> {
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self.base.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&feasable_config),
         )?;
 
-        Some(DecoratedSolution {
+        Some(DecoratedCompleteSolution {
             problem: self,
             internal_solution,
             ilp_config: feasable_config.into_inner(),
@@ -926,7 +944,7 @@ where
             .configuration_to_partial_solution(&self.feasable_config_into_config_data(&config));
 
         TimeLimitSolution {
-            solution: internal_solution.map(|is| DecoratedSolution {
+            solution: internal_solution.map(|is| DecoratedCompleteSolution {
                 problem: self,
                 internal_solution: is,
                 ilp_config: config.into_inner(),
