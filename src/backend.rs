@@ -826,6 +826,13 @@ pub enum DataStatusWithId<Id: OrdId> {
 }
 
 #[derive(Clone, Debug)]
+pub enum DataStatusWithId2<Id1: OrdId, Id2: OrdId> {
+    Ok,
+    BadCrossId1(Id1),
+    BadCrossId2(Id2),
+}
+
+#[derive(Clone, Debug)]
 pub enum DataStatusWithId3<Id1: OrdId, Id2: OrdId, Id3: OrdId> {
     Ok,
     BadCrossId1(Id1),
