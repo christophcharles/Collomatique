@@ -498,7 +498,7 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Solution<'a, V, T, P>
+pub struct DecoratedSolution<'a, V, T, P>
 where
     V: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
@@ -509,12 +509,20 @@ where
     ilp_config: collomatique_ilp::Config<'a, VariableName<V>, InternalId, P>,
 }
 
-impl<'a, V, T, P> Solution<'a, V, T, P>
+impl<'a, V, T, P> DecoratedSolution<'a, V, T, P>
 where
     V: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
     T: BaseConstraints<VariableName = V>,
 {
+    pub fn inner(&self) -> &T::Solution {
+        &self.internal_solution
+    }
+
+    pub fn into_innter(self) -> T::Solution {
+        self.internal_solution
+    }
+
     pub fn blame(&self) -> impl ExactSizeIterator<Item = &T::ConstraintDesc> {
         if false {
             return vec![].into_iter();
@@ -540,7 +548,7 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<VariableName<V>>,
     T: BaseConstraints<VariableName = V>,
 {
-    pub solution: Solution<'a, V, T, P>,
+    pub solution: DecoratedSolution<'a, V, T, P>,
     pub time_limit_reached: bool,
 }
 
@@ -571,13 +579,13 @@ where
     >(
         &'a self,
         solver: &S,
-    ) -> Option<Solution<'a, V, T, P>> {
+    ) -> Option<DecoratedSolution<'a, V, T, P>> {
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self
             .base
             .configuration_to_solution(&self.feasable_config_into_config_data(&feasable_config));
 
-        Some(Solution {
+        Some(DecoratedSolution {
             problem: self,
             internal_solution,
             ilp_config: feasable_config.into_inner(),
@@ -603,7 +611,7 @@ where
         );
 
         Some(TimeLimitSolution {
-            solution: Solution {
+            solution: DecoratedSolution {
                 problem: self,
                 internal_solution,
                 ilp_config: time_limit_sol.config.into_inner(),
