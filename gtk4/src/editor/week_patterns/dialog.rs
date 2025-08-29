@@ -190,16 +190,16 @@ impl SimpleComponent for Dialog {
         widgets.btn_grid.attach(&widgets.no_weeks_btn, 1, 0, 1, 1);
         widgets
             .btn_grid
-            .attach(&widgets.even_calendar_weeks_btn, 0, 1, 1, 1);
+            .attach(&widgets.even_calendar_weeks_btn, 1, 1, 1, 1);
         widgets
             .btn_grid
-            .attach(&widgets.odd_calendar_weeks_btn, 1, 1, 1, 1);
+            .attach(&widgets.odd_calendar_weeks_btn, 0, 1, 1, 1);
         widgets
             .btn_grid
-            .attach(&widgets.even_schedule_weeks_btn, 0, 2, 1, 1);
+            .attach(&widgets.even_schedule_weeks_btn, 1, 2, 1, 1);
         widgets
             .btn_grid
-            .attach(&widgets.odd_schedule_weeks_btn, 1, 2, 1, 1);
+            .attach(&widgets.odd_schedule_weeks_btn, 0, 2, 1, 1);
 
         ComponentParts { model, widgets }
     }
