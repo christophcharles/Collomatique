@@ -58,6 +58,7 @@ impl From<DeleteIncompatError> for IncompatibilitiesError {
 pub enum AddNewIncompatError {
     InvalidSubjectId(MsgSubjectId),
     InvalidWeekPatternId(MsgWeekPatternId),
+    SlotOverlapsWithNextDay,
 }
 
 impl std::fmt::Display for AddNewIncompatError {
@@ -71,6 +72,12 @@ impl std::fmt::Display for AddNewIncompatError {
                     f,
                     "L'identifiant {} ne correspond à aucun modèle de périodicité",
                     id.0
+                )
+            }
+            AddNewIncompatError::SlotOverlapsWithNextDay => {
+                write!(
+                    f,
+                    "Le créneau d'incompatibilité dépasse sur le jour suivant",
                 )
             }
         }
@@ -95,6 +102,7 @@ pub enum UpdateIncompatError {
     InvalidIncompatId(MsgIncompatId),
     InvalidSubjectId(MsgSubjectId),
     InvalidWeekPatternId(MsgWeekPatternId),
+    SlotOverlapsWithNextDay,
 }
 
 impl std::fmt::Display for UpdateIncompatError {
@@ -115,6 +123,12 @@ impl std::fmt::Display for UpdateIncompatError {
                     f,
                     "L'identifiant {} ne correspond à aucun modèle de périodicité",
                     id.0
+                )
+            }
+            UpdateIncompatError::SlotOverlapsWithNextDay => {
+                write!(
+                    f,
+                    "Le créneau d'incompatibilité dépasse sur le jour suivant",
                 )
             }
         }

@@ -34,7 +34,7 @@ impl Incompatibility {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
-    /// See [SlotExternalData::validate_all] and [SlotExternalData::validate].
+    /// See [IncompatibilityExternalData::validate].
     pub(crate) unsafe fn from_external_data(
         external_data: IncompatibilityExternalData,
     ) -> Incompatibility {

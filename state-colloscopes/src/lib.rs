@@ -598,6 +598,21 @@ impl Data {
         None
     }
 
+    /// Promotes an u64 to a [IncompatId] if it is valid
+    pub fn validate_incompat_id(&self, id: u64) -> Option<IncompatId> {
+        let temp_incompat_id = unsafe { IncompatId::new(id) };
+        if self
+            .inner_data
+            .incompats
+            .incompat_map
+            .contains_key(&temp_incompat_id)
+        {
+            return Some(temp_incompat_id);
+        }
+
+        None
+    }
+
     /// Promotes a [teachers::TeacherExternalData] to a [teachers::Teacher] if it is valid
     pub fn promote_teacher(
         &self,
@@ -664,6 +679,33 @@ impl Data {
 
         Ok(new_slot)
     }
+
+    /// Promotes a [incompats::IncompatibilityExternalData] to a [incompats::Incompatibility] if it is valid
+    pub fn promote_incompat(
+        &self,
+        incompat: incompats::IncompatibilityExternalData,
+    ) -> Result<incompats::Incompatibility, PromoteIncompatError> {
+        let subject_id = self
+            .validate_subject_id(incompat.subject_id)
+            .ok_or(PromoteIncompatError::InvalidSubjectId(incompat.subject_id))?;
+        let week_pattern_id = match incompat.week_pattern_id {
+            Some(id) => {
+                let week_pattern_id = self
+                    .validate_week_pattern_id(id)
+                    .ok_or(PromoteIncompatError::InvalidWeekPatternId(id))?;
+                Some(week_pattern_id)
+            }
+            None => None,
+        };
+
+        let new_incompat = incompats::Incompatibility {
+            subject_id,
+            week_pattern_id,
+            slot: incompat.slot,
+        };
+
+        Ok(new_incompat)
+    }
 }
 
 /// Error type for [Data::promote_slot]
@@ -671,6 +713,15 @@ impl Data {
 pub enum PromoteSlotError {
     #[error("Teacher id {0:?} is invalid")]
     InvalidTeacherId(u64),
+    #[error("WeekPattern id {0:?} is invalid")]
+    InvalidWeekPatternId(u64),
+}
+
+/// Error type for [Data::promote_incompat]
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum PromoteIncompatError {
+    #[error("Subject id {0:?} is invalid")]
+    InvalidSubjectId(u64),
     #[error("WeekPattern id {0:?} is invalid")]
     InvalidWeekPatternId(u64),
 }
