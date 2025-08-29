@@ -243,6 +243,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_margin_end: 5,
                 #[watch]
                 set_label: &self.data.extra,
+                set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
