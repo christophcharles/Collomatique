@@ -16,6 +16,11 @@ pub enum CliCommand {
         #[command(subcommand)]
         command: WeekPatternCommand,
     },
+    /// Remove and explore colloscopes
+    Colloscopes {
+        #[command(subcommand)]
+        command: ColloscopeCommand,
+    },
     /// Try and solve the colloscope
     Solve {
         /// Numbers of optimizing steps - default is 1000
@@ -212,6 +217,37 @@ pub enum WeekPatternFilling {
     Even,
     /// Fill the week pattern with every odd week for 1 to week_count
     Odd,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ColloscopeCommand {
+    /// Remove an existing colloscope
+    Remove {
+        /// Name of the colloscope to remove
+        name: String,
+        /// If multiple colloscopes have the same name, select which one to use.
+        /// So if there are 3 colloscopes with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        colloscope_number: Option<NonZeroUsize>,
+    },
+    /// Rename an existing colloscope
+    Rename {
+        /// Old name of the colloscope
+        old_name: String,
+        /// If multiple colloscopes have the same (old) name, select which one to use.
+        /// So if there are 3 colloscopes with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        colloscope_number: Option<NonZeroUsize>,
+        /// New name for the colloscope
+        new_name: String,
+        /// Force using an existing name
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
+    /// Show all colloscopes
+    PrintAll,
 }
 
 #[derive(Debug, Subcommand)]
@@ -438,7 +474,7 @@ async fn solve_command(
                     format!(
                         "Colloscope name \"{}\" is already used. Use \"-f\" flag if you want to force its usage",
                         value,
-                    )                 
+                    )
                 ));
             }
             value
@@ -1166,6 +1202,152 @@ async fn week_pattern_command(
     }
 }
 
+async fn get_colloscope(
+    app_state: &mut AppState<sqlite::Store>,
+    name: &str,
+    colloscope_number: Option<NonZeroUsize>,
+) -> Result<(
+    crate::frontend::state::ColloscopeHandle,
+    crate::backend::Colloscope<
+        crate::frontend::state::TeacherHandle,
+        crate::frontend::state::SubjectHandle,
+        crate::frontend::state::StudentHandle,
+    >,
+)> {
+    use crate::frontend::state::Manager;
+
+    let colloscopes = app_state.colloscopes_get_all().await?;
+
+    let relevant_colloscopes: Vec<_> = colloscopes
+        .into_iter()
+        .filter(|(_handle, colloscope)| colloscope.name == name)
+        .collect();
+
+    if relevant_colloscopes.is_empty() {
+        return Err(anyhow!(format!("No colloscope has the name \"{}\".", name)));
+    }
+    if colloscope_number.is_none() && relevant_colloscopes.len() > 1 {
+        return Err(anyhow!(
+            format!("Several colloscopes have the name \"{}\".\nDisambiguate the call by using the '-n' flag.", name)
+        ));
+    }
+
+    let num = match colloscope_number {
+        Some(n) => n.get() - 1,
+        None => 0,
+    };
+    let output = relevant_colloscopes.get(num).ok_or(anyhow!(
+        "There is less than {} different colloscopes with the name \"{}\"",
+        num + 1,
+        name
+    ))?;
+
+    Ok(output.clone())
+}
+
+async fn colloscopes_check_existing_names(
+    app_state: &mut AppState<sqlite::Store>,
+    name: &str,
+) -> Result<()> {
+    use crate::frontend::state::Manager;
+
+    let colloscopes = app_state.colloscopes_get_all().await?;
+    for (_, colloscope) in &colloscopes {
+        if colloscope.name == name {
+            return Err(anyhow!(format!(
+                "A colloscope with name \"{}\" already exists",
+                name
+            )));
+        }
+    }
+    Ok(())
+}
+
+async fn colloscope_command(
+    command: ColloscopeCommand,
+    app_state: &mut AppState<sqlite::Store>,
+) -> Result<Option<String>> {
+    use crate::backend::Colloscope;
+    use crate::frontend::state::{ColloscopesOperation, Manager, Operation, UpdateError};
+
+    match command {
+        ColloscopeCommand::Remove {
+            name,
+            colloscope_number,
+        } => {
+            let (handle, _colloscope) = get_colloscope(app_state, &name, colloscope_number).await?;
+
+            if let Err(e) = app_state
+                .apply(Operation::Colloscopes(ColloscopesOperation::Remove(handle)))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
+        }
+        ColloscopeCommand::Rename {
+            old_name,
+            colloscope_number,
+            new_name,
+            force,
+        } => {
+            if !force {
+                colloscopes_check_existing_names(app_state, &new_name).await?;
+            }
+
+            let (handle, colloscope) =
+                get_colloscope(app_state, &old_name, colloscope_number).await?;
+
+            let new_colloscope = Colloscope {
+                name: new_name,
+                subjects: colloscope.subjects,
+            };
+
+            if let Err(e) = app_state
+                .apply(Operation::Colloscopes(ColloscopesOperation::Update(
+                    handle,
+                    new_colloscope,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::ColloscopeBadTeacher(_week) => {
+                        panic!("The colloscope should be valid as only its name has changed")
+                    }
+                    UpdateError::ColloscopeBadSubject(_week) => {
+                        panic!("The colloscope should be valid as only its name has changed")
+                    }
+                    UpdateError::ColloscopeBadStudent(_week) => {
+                        panic!("The colloscope should be valid as only its name has changed")
+                    }
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
+        }
+        ColloscopeCommand::PrintAll => {
+            let colloscopes = app_state.colloscopes_get_all().await?;
+
+            let count = colloscopes.len();
+            let width = count.to_string().len();
+
+            let colloscope_vec: Vec<_> = colloscopes
+                .iter()
+                .enumerate()
+                .map(|(i, (_, colloscope))| format!("{:>width$} - {}", i + 1, colloscope.name))
+                .collect();
+
+            Ok(Some(colloscope_vec.join("\n")))
+        }
+    }
+}
+
 async fn python_command(
     command: PythonCommand,
     app_state: &mut AppState<sqlite::Store>,
@@ -1274,6 +1456,7 @@ pub async fn execute_cli_command(
     match command {
         CliCommand::General { command } => general_command(command, app_state).await,
         CliCommand::WeekPatterns { command } => week_pattern_command(command, app_state).await,
+        CliCommand::Colloscopes { command } => colloscope_command(command, app_state).await,
         CliCommand::Solve {
             steps,
             thread_count,
