@@ -181,20 +181,6 @@ impl Default for Subject {
     }
 }
 
-impl Subject {
-    fn is_student_concerned(&self, student: usize) -> bool {
-        if self.groups.not_assigned.contains(&student) {
-            return true;
-        }
-        for group in &self.groups.prefilled_groups {
-            if group.students.contains(&student) {
-                return true;
-            }
-        }
-        false
-    }
-}
-
 pub type SubjectList = Vec<Subject>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -1525,12 +1511,11 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_interrogations_per_week_optimizer_for_student(
+    fn build_interrogations_per_week_optimizer_for_student_expr(
         &self,
-        goal: i32,
         student: usize,
         week: u32,
-    ) -> Constraint<Variable> {
+    ) -> Expr<Variable> {
         let mut expr = Expr::constant(0);
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
@@ -1571,37 +1556,29 @@ impl<'a> IlpTranslator<'a> {
             }
         }
 
-        expr.eq(&Expr::constant(goal))
+        expr
     }
 
-    fn compute_average_interrogation_count_per_week(&self, student: usize) -> f64 {
-        let mut output = 0.;
+    fn build_interrogations_per_week_optimizer_for_student(
+        &self,
+        student: usize,
+        week: u32,
+    ) -> Constraint<Variable> {
+        let expr1 = self.build_interrogations_per_week_optimizer_for_student_expr(student, week);
+        let expr2 =
+            self.build_interrogations_per_week_optimizer_for_student_expr(student, week + 1);
 
-        for subject in &self.data.subjects {
-            if subject.is_student_concerned(student) {
-                let mean_interrogation_per_week = 1. / f64::from(subject.period.get());
-                output += mean_interrogation_per_week;
-            }
-        }
-
-        output
+        expr1.eq(&expr2)
     }
 
     fn build_interrogations_per_week_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints: BTreeSet<Constraint<Variable>> = BTreeSet::new();
 
         for (student, _) in self.data.students.iter().enumerate() {
-            let average = self.compute_average_interrogation_count_per_week(student);
-            // TODO : we must take an i32 because of the problem coefficients
-            //        this should not be a big problem but could be improved in the future
-            let average_i32 = average.round() as i32;
-
-            for week in 0..self.data.general.week_count.get() {
-                constraints.insert(self.build_interrogations_per_week_optimizer_for_student(
-                    average_i32,
-                    student,
-                    week,
-                ));
+            for week in 0..(self.data.general.week_count.get() - 1) {
+                constraints.insert(
+                    self.build_interrogations_per_week_optimizer_for_student(student, week),
+                );
             }
         }
 
