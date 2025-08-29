@@ -29,6 +29,7 @@ pub enum EditorInput {
 #[derive(Debug)]
 pub enum EditorOutput {
     UpdateActions,
+    SaveError(PathBuf, String),
 }
 
 #[derive(Debug)]
@@ -42,7 +43,6 @@ pub struct EditorPanel {
     data: AppState<Data>,
     dirty: bool,
     save_dialog: Controller<dialogs::open_save::Dialog>,
-    save_error: Controller<dialogs::file_error::Dialog>,
 }
 
 impl EditorPanel {
@@ -200,17 +200,11 @@ impl Component for EditorPanel {
                 }
             });
 
-        let save_error = dialogs::file_error::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.input_sender(), |_| EditorInput::Ignore);
-
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
             dirty: false,
             save_dialog,
-            save_error,
         };
         let widgets = view_output!();
 
@@ -293,15 +287,8 @@ impl Component for EditorPanel {
                     return;
                 }
                 self.dirty = true;
-                self.save_error
-                    .sender()
-                    .send(dialogs::file_error::DialogInput::Show(
-                        dialogs::file_error::Type::Save,
-                        path,
-                        error,
-                    ))
-                    .unwrap();
                 sender.output(EditorOutput::UpdateActions).unwrap();
+                sender.output(EditorOutput::SaveError(path, error)).unwrap();
             }
         }
     }
