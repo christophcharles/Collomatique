@@ -14,11 +14,11 @@ fn nd_problem_correctly_builds_matrices() {
 
     let constraints = vec![
         (2 * LinExpr::var("a") - 3 * LinExpr::var("b") + 4 * LinExpr::var("c") - 3)
-                .leq(&(2 * LinExpr::var("a") - 5 * LinExpr::var("d"))),
+            .leq(&(2 * LinExpr::var("a") - 5 * LinExpr::var("d"))),
         (-LinExpr::var("a") + LinExpr::var("b") + 3 * LinExpr::var("c") + 3)
-                .leq(&(2 * LinExpr::var("a") - 5 * LinExpr::var("d"))),
+            .leq(&(2 * LinExpr::var("a") - 5 * LinExpr::var("d"))),
         (2 * LinExpr::var("c") - 3 * LinExpr::var("d") + 4 * LinExpr::var("e") + 2)
-                .eq(&(-1 * LinExpr::var("e") + LinExpr::var("c"))),
+            .eq(&(-1 * LinExpr::var("e") + LinExpr::var("c"))),
     ];
 
     let pb = NdProblem::new(&variables, constraints.iter());
@@ -34,14 +34,20 @@ fn nd_problem_correctly_builds_matrices() {
         ]
     );
     assert_eq!(pb.constants, array![-3., 3., 2.]);
-    assert_eq!(pb.constraint_symbols, vec![EqSymbol::LessThan, EqSymbol::LessThan, EqSymbol::Equals]);
-    assert_eq!(pb.variable_map, BTreeMap::from([
-        (String::from("a"), 0),
-        (String::from("b"), 1),
-        (String::from("c"), 2),
-        (String::from("d"), 3),
-        (String::from("e"), 4),
-    ]));
+    assert_eq!(
+        pb.constraint_symbols,
+        vec![EqSymbol::LessThan, EqSymbol::LessThan, EqSymbol::Equals]
+    );
+    assert_eq!(
+        pb.variable_map,
+        BTreeMap::from([
+            (String::from("a"), 0),
+            (String::from("b"), 1),
+            (String::from("c"), 2),
+            (String::from("d"), 3),
+            (String::from("e"), 4),
+        ])
+    );
 }
 
 #[test]
@@ -62,11 +68,7 @@ fn nd_repr_checks_is_feasable_on_simple_example() {
 
     let one = LinExpr::<String>::constant(1.0);
 
-    let constraints = vec![
-        (&a + &b).leq(&one),
-        (&c + &d).leq(&one),
-        (&a + &d).eq(&one)
-    ];
+    let constraints = vec![(&a + &b).leq(&one), (&c + &d).leq(&one), (&a + &d).eq(&one)];
 
     let pb = NdProblem::new(&variables, constraints.iter());
 

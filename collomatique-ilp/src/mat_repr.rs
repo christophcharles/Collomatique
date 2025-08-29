@@ -14,16 +14,21 @@
 
 pub mod nd;
 
-use super::{UsableData, Variable, Constraint};
+use super::{Constraint, UsableData, Variable};
 
 use std::collections::BTreeMap;
 
-pub trait ProblemRepr<V: UsableData>: Clone + std::fmt::Debug + Send + Sync + PartialEq + Eq + PartialOrd + Ord {
+pub trait ProblemRepr<V: UsableData>:
+    Clone + std::fmt::Debug + Send + Sync + PartialEq + Eq + PartialOrd + Ord
+{
     fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
     where
         V: 'a,
         T: ExactSizeIterator<Item = &'a Constraint<V>>;
-    fn config_from<'a>(&'a self, vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>) -> impl ConfigRepr<'a, V>;
+    fn config_from<'a>(
+        &'a self,
+        vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    ) -> impl ConfigRepr<'a, V>;
 }
 
 pub trait ConfigRepr<'a, V: UsableData>:
