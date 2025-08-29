@@ -1011,7 +1011,7 @@ async fn main() -> Result<()> {
         println!("Attempt n°{}...", i);
 
         let random_gen = collomatique::ilp::random::DefaultRndGen::new();
-        let mut initializer = collomatique::ilp::initializers::random::Initializer::new(random_gen);
+        let mut initializer = collomatique::ilp::initializers::Random::new(random_gen);
 
         use collomatique::ilp::initializers::ConfigInitializer;
         sa_optimizer.set_init_config(initializer.build_init_config(&problem));
