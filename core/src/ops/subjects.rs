@@ -176,12 +176,35 @@ impl SubjectsUpdateOp {
                 Ok(None)
             }
             Self::DeleteSubject(subject_id) => {
-                let result = data
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (teacher_id, teacher) in &data.get_data().get_teachers().teacher_map {
+                    if teacher.subjects.contains(subject_id) {
+                        let mut new_teacher = teacher.clone();
+                        new_teacher.subjects.remove(subject_id);
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Teacher(
+                                    collomatique_state_colloscopes::TeacherOp::Update(
+                                        *teacher_id,
+                                        new_teacher,
+                                    ),
+                                ),
+                                "Enlever une référence à la matière à effacer".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Remove(*subject_id),
                         ),
-                        self.get_desc(),
+                        "Suppression effective de la matière".into(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Subject(se) = e {
@@ -200,6 +223,8 @@ impl SubjectsUpdateOp {
                     })?;
 
                 assert!(result.is_none());
+
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
