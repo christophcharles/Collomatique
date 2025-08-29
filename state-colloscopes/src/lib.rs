@@ -7,8 +7,7 @@
 use assignments::{Assignments, AssignmentsExternalData};
 use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
-use slots::Slots;
-use slots::SlotsExternalData;
+use slots::{Slots, SlotsExternalData};
 use std::collections::BTreeSet;
 use students::{Students, StudentsExternalData};
 use subjects::{Subjects, SubjectsExternalData};
@@ -21,11 +20,11 @@ use ids::IdIssuer;
 pub use ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId};
 pub mod ops;
 use ops::{
-    AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp,
-    AnnotatedTeacherOp, AnnotatedWeekPatternOp,
+    AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedStudentOp,
+    AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, Op, PeriodOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -299,6 +298,22 @@ pub enum WeekPatternError {
 /// These errors can be returned when trying to modify [Data] with a slot op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum SlotError {
+    /// A slot id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+
+    /// The slot id already exists
+    #[error("slot id ({0:?}) already exists")]
+    SlotIdAlreadyExists(SlotId),
+
+    /// A position is outside of bounds
+    #[error("Position {0} is outside the list (size = {1})")]
+    PositionOutOfBounds(usize, usize),
+
+    /// The previous slot given is not for the same subject
+    #[error("Slot {0:?} to be previous slot is not for subject {1:?}")]
+    PreviousSlotIsNotInRightSubject(SlotId, SubjectId),
+
     /// subject id is invalid
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(SubjectId),
@@ -436,6 +451,7 @@ impl InMemoryData for Data {
             AnnotatedOp::WeekPattern(week_pattern_op) => Ok(AnnotatedOp::WeekPattern(
                 self.build_rev_week_pattern(week_pattern_op)?,
             )),
+            AnnotatedOp::Slot(slot_op) => Ok(AnnotatedOp::Slot(self.build_rev_slot(slot_op)?)),
         }
     }
 
@@ -449,6 +465,7 @@ impl InMemoryData for Data {
             AnnotatedOp::WeekPattern(week_pattern_op) => {
                 self.apply_week_pattern(week_pattern_op)?
             }
+            AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -1690,6 +1707,123 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply slot operations
+    fn apply_slot(&mut self, slot_op: &AnnotatedSlotOp) -> std::result::Result<(), SlotError> {
+        match slot_op {
+            AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot) => {
+                if self
+                    .inner_data
+                    .slots
+                    .find_slot_subject_and_position(*new_id)
+                    .is_some()
+                {
+                    return Err(SlotError::SlotIdAlreadyExists(*new_id));
+                }
+                self.validate_slot(slot, *subject_id)?;
+
+                let position = match after_id {
+                    Some(id) => {
+                        let (sub_id, after_pos) = self
+                            .inner_data
+                            .slots
+                            .find_slot_subject_and_position(*id)
+                            .ok_or(SlotError::InvalidSlotId(*id))?;
+                        if sub_id != *subject_id {
+                            return Err(SlotError::PreviousSlotIsNotInRightSubject(
+                                *id,
+                                *subject_id,
+                            ));
+                        }
+
+                        after_pos + 1
+                    }
+                    None => 0,
+                };
+
+                let subject_slots = self
+                    .inner_data
+                    .slots
+                    .subject_map
+                    .get_mut(subject_id)
+                    .ok_or(SlotError::SubjectHasNoInterrogation(*subject_id))?;
+
+                subject_slots
+                    .ordered_slots
+                    .insert(position, (*new_id, slot.clone()));
+
+                Ok(())
+            }
+            AnnotatedSlotOp::ChangePosition(id, new_pos) => {
+                let Some((subject_id, old_pos)) =
+                    self.inner_data.slots.find_slot_subject_and_position(*id)
+                else {
+                    return Err(SlotError::InvalidSlotId(*id));
+                };
+
+                let subject_slots = self
+                    .inner_data
+                    .slots
+                    .subject_map
+                    .get_mut(&subject_id)
+                    .expect("Subject id should be valid at this point");
+
+                if *new_pos >= subject_slots.ordered_slots.len() {
+                    return Err(SlotError::PositionOutOfBounds(
+                        *new_pos,
+                        subject_slots.ordered_slots.len(),
+                    ));
+                }
+
+                let data = subject_slots.ordered_slots.remove(old_pos);
+                subject_slots.ordered_slots.insert(*new_pos, data);
+
+                Ok(())
+            }
+            AnnotatedSlotOp::Remove(id) => {
+                let Some((subject_id, old_pos)) =
+                    self.inner_data.slots.find_slot_subject_and_position(*id)
+                else {
+                    return Err(SlotError::InvalidSlotId(*id));
+                };
+
+                let subject_slots = self
+                    .inner_data
+                    .slots
+                    .subject_map
+                    .get_mut(&subject_id)
+                    .expect("Subject id should be valid at this point");
+
+                subject_slots.ordered_slots.remove(old_pos);
+
+                Ok(())
+            }
+            AnnotatedSlotOp::Update(slot_id, new_slot) => {
+                let Some((subject_id, position)) = self
+                    .inner_data
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return Err(SlotError::InvalidSlotId(*slot_id));
+                };
+
+                self.validate_slot(new_slot, subject_id)?;
+
+                let subject_slots = self
+                    .inner_data
+                    .slots
+                    .subject_map
+                    .get_mut(&subject_id)
+                    .expect("Subject id should be valid at this point");
+
+                subject_slots.ordered_slots[position].1 = new_slot.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -1972,7 +2106,7 @@ impl Data {
 
     /// Used internally
     ///
-    /// Builds reverse of a teacher operation
+    /// Builds reverse of a week pattern operation
     fn build_rev_week_pattern(
         &self,
         week_pattern_op: &AnnotatedWeekPatternOp,
@@ -2024,6 +2158,102 @@ impl Data {
                     *week_pattern_id,
                     old_week_pattern.clone(),
                 ))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a slot operation
+    fn build_rev_slot(
+        &self,
+        slot_op: &AnnotatedSlotOp,
+    ) -> std::result::Result<AnnotatedSlotOp, SlotError> {
+        match slot_op {
+            AnnotatedSlotOp::AddAfter(new_id, _subject_id, after_id, _slot) => {
+                if self
+                    .inner_data
+                    .slots
+                    .find_slot_subject_and_position(*new_id)
+                    .is_some()
+                {
+                    return Err(SlotError::SlotIdAlreadyExists(new_id.clone()));
+                }
+
+                if let Some(id) = after_id {
+                    if self
+                        .inner_data
+                        .slots
+                        .find_slot_subject_and_position(*id)
+                        .is_none()
+                    {
+                        return Err(SlotError::InvalidSlotId(id.clone()));
+                    }
+                }
+
+                Ok(AnnotatedSlotOp::Remove(new_id.clone()))
+            }
+            AnnotatedSlotOp::Remove(slot_id) => {
+                let Some((subject_id, position)) = self
+                    .inner_data
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return Err(SlotError::InvalidSlotId(slot_id.clone()));
+                };
+
+                let subject_slots = self
+                    .inner_data
+                    .slots
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid");
+
+                let old_slot = subject_slots.ordered_slots[position].1.clone();
+
+                let previous_id = if position == 0 {
+                    None
+                } else {
+                    Some(subject_slots.ordered_slots[position - 1].0)
+                };
+
+                Ok(AnnotatedSlotOp::AddAfter(
+                    *slot_id,
+                    subject_id,
+                    previous_id,
+                    old_slot,
+                ))
+            }
+            AnnotatedSlotOp::Update(slot_id, _new_slot) => {
+                let Some((subject_id, position)) = self
+                    .inner_data
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return Err(SlotError::InvalidSlotId(*slot_id));
+                };
+
+                let subject_slots = self
+                    .inner_data
+                    .slots
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid");
+
+                let old_slot = subject_slots.ordered_slots[position].1.clone();
+
+                Ok(AnnotatedSlotOp::Update(*slot_id, old_slot))
+            }
+            AnnotatedSlotOp::ChangePosition(slot_id, _new_pos) => {
+                let Some((_subject_id, old_pos)) = self
+                    .inner_data
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return Err(SlotError::InvalidSlotId(*slot_id));
+                };
+
+                Ok(AnnotatedSlotOp::ChangePosition(*slot_id, old_pos))
             }
         }
     }

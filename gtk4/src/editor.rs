@@ -252,6 +252,7 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp::WeekPattern(_) => {
                 Some(PanelNumbers::WeekPatterns)
             }
+            collomatique_state_colloscopes::AnnotatedOp::Slot(_) => None,
         }
     }
 
