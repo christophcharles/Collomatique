@@ -17,10 +17,11 @@ use super::{FeasabilitySolver, VariableName};
 use std::collections::BTreeSet;
 
 impl<V: VariableName> FeasabilitySolver<V> for Solver {
-    fn restore_feasability_with_origin<'a>(
+    fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
         config: &Config<'a, V>,
         origin: Option<&FeasableConfig<'a, V>>,
+        mut max_steps: Option<usize>,
     ) -> Option<FeasableConfig<'a, V>> {
         use std::collections::VecDeque;
 
@@ -31,6 +32,13 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
         config_queue.push_back(config.clone());
 
         while let Some(candidate) = config_queue.pop_front() {
+            if let Some(ms) = max_steps {
+                if ms == 0 {
+                    return None;
+                } else {
+                    max_steps = Some(ms - 1);
+                }
+            }
             if candidate.is_feasable()
                 && !forbidden_config.as_ref().is_some_and(|x| *x == candidate)
             {

@@ -416,7 +416,11 @@ fn restricted_interrogations_per_week() {
 
     use collomatique::ilp::solvers::FeasabilitySolver;
 
-    let result = solver.restore_feasability_with_origin(&config2, Some(&origin_config));
+    let result = solver.restore_feasability_with_origin_and_max_steps(
+        &config2,
+        Some(&origin_config),
+        Some(5000),
+    );
 
     match result {
         None => panic!("None"),

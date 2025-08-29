@@ -41,10 +41,11 @@ impl Solver {
 use super::FeasabilitySolver;
 
 impl<V: VariableName> FeasabilitySolver<V> for Solver {
-    fn restore_feasability_with_origin<'a>(
+    fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
         config: &Config<'a, V>,
         origin: Option<&FeasableConfig<'a, V>>,
+        mut max_steps: Option<usize>,
     ) -> Option<FeasableConfig<'a, V>> {
         let init_g_score = 0.0f32;
         let init_f_score = init_g_score + self.distance_heuristic(config);
@@ -57,6 +58,13 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
         let mut open_nodes = BTreeSet::from([config.clone()]);
 
         while let Some(candidate) = Self::min_f_score(&mut open_nodes, &f_scores) {
+            if let Some(ms) = max_steps {
+                if ms == 0 {
+                    return None;
+                } else {
+                    max_steps = Some(ms - 1);
+                }
+            }
             if candidate.is_feasable()
                 && !forbidden_config.as_ref().is_some_and(|x| *x == candidate)
             {
