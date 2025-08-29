@@ -590,6 +590,33 @@ fn build_main_worksheet(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HorizontalPosition {
+    First,
+    Middle,
+    Last,
+    Only,
+}
+
+impl HorizontalPosition {
+    fn apply(self, format: Format) -> Format {
+        match self {
+            HorizontalPosition::First => format
+                .set_border_left(BORDER_BIG)
+                .set_border_right(BORDER_SMALL),
+            HorizontalPosition::Middle => format
+                .set_border_left(BORDER_SMALL)
+                .set_border_right(BORDER_SMALL),
+            HorizontalPosition::Last => format
+                .set_border_left(BORDER_SMALL)
+                .set_border_right(BORDER_BIG),
+            HorizontalPosition::Only => format
+                .set_border_left(BORDER_BIG)
+                .set_border_right(BORDER_BIG),
+        }
+    }
+}
+
 const COL_FIRSTNAME: u16 = 0;
 const COL_SURNAME: u16 = 1;
 const COL_EMAIL: u16 = 2;
@@ -608,7 +635,8 @@ fn build_groups_worksheet_first_columns(
 ) -> Result<BTreeMap<StudentHandle, u32>> {
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border(BORDER_BIG);
 
     worksheet.write_with_format(ROW_STUDENT_TITLES, COL_FIRSTNAME, "Prénom", &format)?;
     worksheet.write_with_format(ROW_STUDENT_TITLES, COL_SURNAME, "Nom", &format)?;
@@ -617,9 +645,30 @@ fn build_groups_worksheet_first_columns(
 
     let mut line_map = BTreeMap::new();
 
+    let count = students.len();
     for (i, (student_handle, student)) in students.into_iter().enumerate() {
         let line = ROW_FIRST_STUDENT + u32::try_from(i).map_err(|_| Error::TooManyStudents)?;
         line_map.insert(*student_handle, line);
+
+        let format = Format::new()
+            .set_align(FormatAlign::VerticalCenter)
+            .set_align(FormatAlign::Center)
+            .set_border_left(BORDER_BIG)
+            .set_border_right(BORDER_BIG);
+        let format = match i {
+            0 if count == 1 => format
+                .set_border_top(BORDER_BIG)
+                .set_border_bottom(BORDER_BIG),
+            0 => format
+                .set_border_top(BORDER_BIG)
+                .set_border_bottom(BORDER_SMALL),
+            x if x == count - 1 => format
+                .set_border_top(BORDER_SMALL)
+                .set_border_bottom(BORDER_BIG),
+            _ => format
+                .set_border_top(BORDER_SMALL)
+                .set_border_bottom(BORDER_SMALL),
+        };
 
         worksheet.write_with_format(line, COL_FIRSTNAME, &student.firstname, &format)?;
         worksheet.write_with_format(line, COL_SURNAME, &student.surname, &format)?;
@@ -650,10 +699,14 @@ fn build_groups_worksheet_subject(
         SubjectHandle,
         backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     >,
+    position: HorizontalPosition,
 ) -> Result<u16> {
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border_top(BORDER_BIG)
+        .set_border_bottom(BORDER_BIG);
+    let format = position.apply(format);
 
     let subject_name = &subjects
         .get(&subject_handle)
@@ -672,9 +725,46 @@ fn build_groups_worksheet_subject(
             .get(&student_handle)
             .expect("student_line_map should be a complete map");
 
-        worksheet.write_with_format(*line, start_col, group_name, &format)?;
+        worksheet.write(*line, start_col, group_name)?;
     }
 
+    // If no students, we are done (but why are we exporting???)
+    if student_line_map.is_empty() {
+        return Ok(start_col + 1);
+    }
+
+    let first = student_line_map
+        .iter()
+        .map(|(_, line)| *line)
+        .min()
+        .unwrap();
+    let last = student_line_map
+        .iter()
+        .map(|(_, line)| *line)
+        .max()
+        .unwrap();
+    for (_student_handle, &line) in student_line_map.iter() {
+        let format = Format::new()
+            .set_align(FormatAlign::VerticalCenter)
+            .set_align(FormatAlign::Center);
+        let format = match line {
+            x if x == first && first == last => format
+                .set_border_top(BORDER_BIG)
+                .set_border_bottom(BORDER_BIG),
+            x if x == first => format
+                .set_border_top(BORDER_BIG)
+                .set_border_bottom(BORDER_SMALL),
+            x if x == last => format
+                .set_border_top(BORDER_SMALL)
+                .set_border_bottom(BORDER_BIG),
+            _ => format
+                .set_border_top(BORDER_SMALL)
+                .set_border_bottom(BORDER_SMALL),
+        };
+        let format = position.apply(format);
+
+        worksheet.set_cell_format(line, start_col, &format)?;
+    }
     Ok(start_col + 1)
 }
 
@@ -694,7 +784,15 @@ fn build_groups_worksheet_subject_group(
     subject_groups: &BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
 ) -> Result<u16> {
     let mut current_col = start_col;
-    for (subject_handle, subject) in selected_subjects {
+    let count = selected_subjects.len();
+    for (i, (subject_handle, subject)) in selected_subjects.into_iter().enumerate() {
+        let position = match i {
+            0 if count == 1 => HorizontalPosition::Only,
+            0 => HorizontalPosition::First,
+            x if x == count - 1 => HorizontalPosition::Last,
+            _ => HorizontalPosition::Middle,
+        };
+
         current_col = build_groups_worksheet_subject(
             worksheet,
             current_col,
@@ -702,6 +800,7 @@ fn build_groups_worksheet_subject_group(
             subject_handle,
             student_line_map,
             subjects,
+            position,
         )?;
     }
 
@@ -711,7 +810,8 @@ fn build_groups_worksheet_subject_group(
         .name;
     let format = Format::new()
         .set_align(FormatAlign::VerticalCenter)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_border(BORDER_BIG);
     merge_if_needed(
         worksheet,
         ROW_SUBJECT_GROUP_NAME,
