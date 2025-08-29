@@ -243,9 +243,9 @@ impl<'a, T: update::Manager> AppSession<'a, T> {
         self.commit_internal()
     }
 
-    pub async fn cancel(mut self) {
+    pub fn cancel(mut self) {
         while self.can_undo() {
-            let Err(e) = self.undo().await else {
+            let Err(e) = self.undo() else {
                 continue;
             };
 

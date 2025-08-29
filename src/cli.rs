@@ -195,11 +195,11 @@ async fn respond(
         }
         ShellCommand::Extra(extra_command) => match extra_command {
             ShellExtraCommand::Undo => {
-                app_state.undo().await?;
+                app_state.undo()?;
                 None
             }
             ShellExtraCommand::Redo => {
-                app_state.redo().await?;
+                app_state.redo()?;
                 None
             }
             ShellExtraCommand::PrintHistory => {
