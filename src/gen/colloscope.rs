@@ -2885,7 +2885,11 @@ impl<'a> IlpTranslator<'a> {
                 }
 
                 if subject.groups.not_assigned.contains(&student_num) {
-                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+
                         let new_var = Variable::DynamicGroupAssignment {
                             subject: i,
                             slot: j,
@@ -2954,7 +2958,11 @@ impl<'a> IlpTranslator<'a> {
                 }
 
                 if subject.groups.not_assigned.contains(&student_num) {
-                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+
                         let new_var = Variable::DynamicGroupAssignment {
                             subject: i,
                             slot: j,
@@ -3020,7 +3028,11 @@ impl<'a> IlpTranslator<'a> {
                 }
 
                 if subject.groups.not_assigned.contains(&student_num) {
-                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+
                         let new_var = Variable::DynamicGroupAssignment {
                             subject: i,
                             slot: j,
