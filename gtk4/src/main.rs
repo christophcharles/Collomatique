@@ -14,7 +14,7 @@ use std::path::PathBuf;
 struct Args {
     /// Ignore all other parameters and run the python engine
     #[arg(long, default_value_t = false)]
-    python_engine: bool,
+    rpc_engine: bool,
 
     /// Open Collomatique directly editing a new colloscope
     #[arg(short, long, default_value_t = false)]
@@ -31,8 +31,8 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    if args.python_engine {
-        collomatique_python::run_python_engine();
+    if args.rpc_engine {
+        collomatique_rpc::run_rpc_engine();
         return;
     }
 

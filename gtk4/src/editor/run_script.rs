@@ -1,25 +1,17 @@
-use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
+use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{adw, gtk, Component, ComponentController};
-use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt, WorkerController};
+use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
+use crate::widgets::rpc_server;
 use std::path::PathBuf;
 
 mod error_dialog;
-mod process_worker;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum BufferOp {
-    Clear,
-    Insert(String),
-}
-
 pub struct Dialog {
     hidden: bool,
     path: PathBuf,
     is_running: bool,
     error_dialog: Controller<error_dialog::Dialog>,
-    worker: WorkerController<process_worker::ProcessWorker>,
-    buffer_op: Option<BufferOp>,
+    rpc_logger: Controller<rpc_server::RpcLogger>,
 }
 
 #[derive(Debug)]
@@ -28,9 +20,8 @@ pub enum DialogInput {
     Cancel,
     Accept,
 
-    ScriptFinished,
-    StdErr(String),
-    StdOut(String),
+    ProcessFinished,
+    Cmd(Result<collomatique_rpc::CmdMsg, String>),
     Error(String),
 }
 
@@ -155,26 +146,7 @@ impl Component for Dialog {
                         set_label_widget = &gtk::Label {
                             set_label: "Informations de débogage",
                         },
-                        #[wrap(Some)]
-                        set_child = &gtk::ScrolledWindow {
-                            set_hexpand: true,
-                            set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                            set_margin_all: 5,
-                            #[name(text_view)]
-                            gtk::TextView {
-                                add_css_class: "frame",
-                                add_css_class: "osd",
-                                set_wrap_mode: gtk::WrapMode::Char,
-                                set_editable: false,
-                                set_monospace: true,
-                                #[name(text_buffer)]
-                                #[wrap(Some)]
-                                set_buffer = &gtk::TextBuffer {
-                                    #[track(model.buffer_op == Some(BufferOp::Clear))]
-                                    set_text: "",
-                                },
-                            }
-                        }
+                        set_child: Some(model.rpc_logger.widget()),
                     },
                     gtk::Label {
                         set_margin_all: 5,
@@ -197,26 +169,21 @@ impl Component for Dialog {
             .launch(())
             .detach();
 
-        let worker = process_worker::ProcessWorker::builder()
-            .detach_worker(())
+        use rpc_server::{RpcLogger, RpcLoggerOutput};
+        let rpc_logger = RpcLogger::builder()
+            .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                process_worker::ProcessWorkerOutput::ScriptFinished => DialogInput::ScriptFinished,
-                process_worker::ProcessWorkerOutput::StdErr(content) => {
-                    DialogInput::StdErr(content)
-                }
-                process_worker::ProcessWorkerOutput::StdOut(content) => {
-                    DialogInput::StdOut(content)
-                }
-                process_worker::ProcessWorkerOutput::Error(error) => DialogInput::Error(error),
+                RpcLoggerOutput::ProcessFinished => DialogInput::ProcessFinished,
+                RpcLoggerOutput::Cmd(cmd) => DialogInput::Cmd(cmd),
+                RpcLoggerOutput::Error(e) => DialogInput::Error(e),
             });
 
         let model = Dialog {
             hidden: true,
             path: PathBuf::new(),
-            is_running: true,
             error_dialog,
-            worker,
-            buffer_op: None,
+            rpc_logger,
+            is_running: false,
         };
 
         let widgets = view_output!();
@@ -226,64 +193,35 @@ impl Component for Dialog {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(path, script) => {
+            DialogInput::Run(path, _script) => {
                 self.hidden = false;
                 self.path = path;
                 self.is_running = true;
-                self.buffer_op = Some(BufferOp::Clear);
-                self.worker
+                self.rpc_logger
                     .sender()
-                    .send(process_worker::ProcessWorkerInput::RunScript(script))
+                    .send(rpc_server::RpcLoggerInput::RunRcpEngine(
+                        collomatique_rpc::InitMsg::Greetings,
+                    ))
                     .unwrap();
             }
             DialogInput::Cancel => {
                 self.hidden = true;
-                self.is_running = false;
-                self.worker
+                self.rpc_logger
                     .sender()
-                    .send(process_worker::ProcessWorkerInput::KillScript)
+                    .send(rpc_server::RpcLoggerInput::KillProcess)
                     .unwrap();
             }
+            DialogInput::Cmd(_) => {}
             DialogInput::Accept => {}
-            DialogInput::ScriptFinished => {
+            DialogInput::ProcessFinished => {
                 self.is_running = false;
-            }
-            DialogInput::StdErr(_content) => {}
-            DialogInput::StdOut(content) => {
-                self.buffer_op = Some(BufferOp::Insert(content));
             }
             DialogInput::Error(error) => {
                 self.error_dialog
                     .sender()
                     .send(error_dialog::DialogInput::Show(error))
                     .unwrap();
-                self.is_running = false;
             }
-        }
-    }
-
-    fn update_with_view(
-        &mut self,
-        widgets: &mut Self::Widgets,
-        message: Self::Input,
-        sender: ComponentSender<Self>,
-        root: &Self::Root,
-    ) {
-        self.update(message, sender.clone(), root);
-        self.update_view(widgets, sender);
-        self.update_buffer_if_needed(widgets);
-    }
-}
-
-impl Dialog {
-    fn update_buffer_if_needed(&mut self, widgets: &mut <Self as Component>::Widgets) {
-        if let Some(BufferOp::Insert(content)) = self.buffer_op.take() {
-            let mut end_iter = widgets.text_buffer.end_iter();
-            widgets.text_buffer.insert(&mut end_iter, &content);
-            let mut end_iter = widgets.text_buffer.end_iter();
-            widgets
-                .text_view
-                .scroll_to_iter(&mut end_iter, 0., false, 0., 0.);
         }
     }
 }

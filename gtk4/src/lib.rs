@@ -11,6 +11,7 @@ use std::path::PathBuf;
 mod dialogs;
 #[allow(dead_code)]
 mod tools;
+mod widgets;
 
 mod editor;
 mod loading;
