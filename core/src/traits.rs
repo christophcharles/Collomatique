@@ -1,4 +1,6 @@
-use collomatique_ilp::{ConfigData, Constraint, LinExpr, ObjectiveSense, UsableData, Variable};
+use collomatique_ilp::{
+    ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
+};
 use std::collections::BTreeMap;
 
 pub trait PartialSolution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq {
@@ -141,13 +143,8 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
         Self::GeneralConstraintDesc,
     )>;
 
-    fn objective(
-        &self,
-    ) -> (
-        LinExpr<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
-        ObjectiveSense,
-    ) {
-        (LinExpr::constant(0.), ObjectiveSense::Minimize)
+    fn objective(&self) -> Objective<BaseVariable<Self::MainVariable, Self::StructureVariable>> {
+        Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
 
     fn solution_to_configuration(&self, sol: &Self::Solution) -> ConfigData<Self::MainVariable>;
@@ -282,10 +279,7 @@ pub trait ExtraObjective<T: BaseConstraints> {
     fn extra_objective(
         &self,
         base: &T,
-    ) -> (
-        LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
-        ObjectiveSense,
-    );
+    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>;
 
     fn reconstruct_extra_structure_variables(
         &self,
@@ -446,10 +440,8 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
     fn extra_objective(
         &self,
         base: &T,
-    ) -> (
-        LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
-        ObjectiveSense,
-    ) {
+    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
+    {
         let mut new_obj = LinExpr::constant(0.0);
 
         for (i, (_c, desc)) in self
@@ -462,7 +454,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
             new_obj = new_obj + LinExpr::var(v);
         }
 
-        (new_obj, ObjectiveSense::Minimize)
+        Objective::new(new_obj, ObjectiveSense::Minimize)
     }
 
     fn reconstruct_extra_structure_variables(

@@ -156,12 +156,27 @@ impl ObjectiveSense {
 /// are taken as their absolute values.
 ///
 /// If you still want to reverse an objective, you can by using [Objective::reverse] or [Objective::reversed].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Objective<V: UsableData> {
     /// linear expression to optimize
     func: LinExpr<V>,
     /// objective sense for the objective
     sense: ObjectiveSense,
+}
+
+impl<V: UsableData> Default for Objective<V> {
+    fn default() -> Self {
+        Objective {
+            func: LinExpr::default(),
+            sense: ObjectiveSense::default(),
+        }
+    }
+}
+
+impl<V: UsableData + std::fmt::Display> std::fmt::Display for Objective<V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.func, self.sense)
+    }
 }
 
 impl<V: UsableData> Objective<V> {

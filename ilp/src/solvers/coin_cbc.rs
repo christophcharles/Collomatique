@@ -164,14 +164,14 @@ impl CbcSolver {
         problem: &Problem<V, C, P>,
     ) {
         use coin_cbc::Sense;
-        cbc_model
-            .model
-            .set_obj_sense(match problem.get_objective_sense() {
-                ObjectiveSense::Maximize => Sense::Maximize,
-                ObjectiveSense::Minimize => Sense::Minimize,
-            });
+        let objective = problem.get_objective();
 
-        for (var, coef) in problem.get_objective_function().coefficients() {
+        cbc_model.model.set_obj_sense(match objective.get_sense() {
+            ObjectiveSense::Maximize => Sense::Maximize,
+            ObjectiveSense::Minimize => Sense::Minimize,
+        });
+
+        for (var, coef) in objective.get_function().coefficients() {
             let col = cbc_model.cols[var];
 
             cbc_model.model.set_obj_coeff(col, coef);

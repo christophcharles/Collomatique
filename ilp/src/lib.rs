@@ -89,7 +89,7 @@
 //! value having gorup X in course 1 on week 1 rather than not.
 //!
 //! ```
-//! # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
+//! # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense, Objective};
 //! let x11 = LinExpr::<String>::var("x11"); // Group X has course 1 on week 1
 //! let x12 = LinExpr::<String>::var("x12"); // Group X has course 1 on week 2
 //! let x21 = LinExpr::<String>::var("x21"); // Group X has course 2 on week 1
@@ -137,7 +137,7 @@
 //!         ((&y21 + &y22).eq(&one), "Group Y should have course 2 exactly once")
 //!     ])
 //!     // Objective function : prefer group X in course 1 on week 1
-//!     .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
+//!     .set_objective(Objective::new(x11.clone(), ObjectiveSense::Maximize))
 //!     .build()
 //!     .unwrap();
 //!
@@ -559,7 +559,7 @@ impl Variable {
 /// value having gorup X in course 1 on week 1 rather than not.
 ///
 /// ```
-/// # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
+/// # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense, Objective};
 /// let x11 = LinExpr::<String>::var("x11"); // Group X has course 1 on week 1
 /// let x12 = LinExpr::<String>::var("x12"); // Group X has course 1 on week 2
 /// let x21 = LinExpr::<String>::var("x21"); // Group X has course 2 on week 1
@@ -607,7 +607,7 @@ impl Variable {
 ///         ((&y21 + &y22).eq(&one), "Group Y should have course 2 exactly once")
 ///     ])
 ///     // Objective function : prefer group X in course 1 on week 1
-///     .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
+///     .set_objective(Objective::new(x11.clone(), ObjectiveSense::Maximize))
 ///     .build()
 ///     .unwrap();
 /// ```
@@ -615,8 +615,7 @@ impl Variable {
 pub struct ProblemBuilder<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
-    objective_func: LinExpr<V>,
-    objective_sense: ObjectiveSense,
+    objective: Objective<V>,
     _phantom_data: std::marker::PhantomData<P>,
 }
 
@@ -625,8 +624,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Default for ProblemBuilder
         ProblemBuilder {
             constraints: Vec::default(),
             variables: BTreeMap::default(),
-            objective_func: LinExpr::default(),
-            objective_sense: ObjectiveSense::default(),
+            objective: Objective::default(),
             _phantom_data: std::marker::PhantomData,
         }
     }
@@ -663,8 +661,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
         ProblemBuilder {
             constraints: self.constraints,
             variables: self.variables,
-            objective_func: self.objective_func,
-            objective_sense: self.objective_sense,
+            objective: self.objective,
             _phantom_data: std::marker::PhantomData,
         }
     }
@@ -818,30 +815,31 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// This function can be used to set an objective function.
     /// An objective function is just a linear expression that must be minimized or maximized.
     ///
-    /// As a design choice, the sense must always be specified with the objective function.
+    /// As a design choice, the sense must always be specified with the objective function
+    /// and this is guaranteed by using the type [Objective] that bundles the linear expression
+    /// with an optmization direction.
     ///
     /// Be careful, all variables must be declared.
     ///
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense, Objective};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
     /// let obj_func = a + b;
+    /// let obj = Objective::new(obj_func, ObjectiveSense::Maximize);
     ///
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variable("A", Variable::binary())
     ///     .set_variable("B", Variable::binary())
-    ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
+    ///     .set_objective(obj.clone())
     ///     .build()
     ///     .expect("No undeclared variables");
     ///
-    /// assert_eq!(*problem.get_objective_function(), obj_func);
-    /// assert_eq!(problem.get_objective_sense(), ObjectiveSense::Maximize);
+    /// assert_eq!(*problem.get_objective(), obj);
     /// ```
-    pub fn set_objective_function(mut self, obj_fn: LinExpr<V>, obj_sense: ObjectiveSense) -> Self {
-        self.objective_func = obj_fn;
-        self.objective_sense = obj_sense;
+    pub fn set_objective(mut self, obj: Objective<V>) -> Self {
+        self.objective = obj;
         self
     }
 }
@@ -886,7 +884,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// If some variable is not declared, it returns an error.
     /// ```should_panic
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense, Objective};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
@@ -895,14 +893,14 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .add_constraint(c, "A + B <= 1")
-    ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
+    ///     .set_objective(Objective::new(obj_func, ObjectiveSense::Maximize))
     ///     .build()
     ///     .unwrap(); // Panics!
     /// ```
     ///
     /// Otherwise, it returns the constructed problem.
     /// ```
-    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense};
+    /// # use collomatique_ilp::{ProblemBuilder, Variable, linexpr::LinExpr, ObjectiveSense, Objective};
     /// let a = LinExpr::<String>::var("A");
     /// let b = LinExpr::<String>::var("B");
     ///
@@ -913,7 +911,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     ///     .set_variable("A", Variable::binary())
     ///     .set_variable("B", Variable::binary())
     ///     .add_constraint(c, "A + B <= 1")
-    ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
+    ///     .set_objective(Objective::new(obj_func, ObjectiveSense::Maximize))
     ///     .build()
     ///     .expect("No undeclared variables");
     /// ```
@@ -930,10 +928,10 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
         }
 
         // And now in the objective function
-        if let Some(var) = self.check_variables_in_expr(&self.objective_func) {
+        if let Some(var) = self.check_variables_in_expr(self.objective.get_function()) {
             return Err(BuildError::UndeclaredVariableInObjFunc(
                 var,
-                self.objective_func.clone(),
+                self.objective.get_function().clone(),
             ));
         }
 
@@ -942,8 +940,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
         Ok(Problem {
             constraints: self.constraints,
             variables: self.variables,
-            objective_func: self.objective_func,
-            objective_sense: self.objective_sense,
+            objective: self.objective,
             repr,
         })
     }
@@ -977,8 +974,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
 pub struct Problem<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
-    objective_func: LinExpr<V>,
-    objective_sense: ObjectiveSense,
+    objective: Objective<V>,
     repr: P,
 }
 
@@ -996,8 +992,7 @@ impl<V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: Pr
             write!(f, "{}) {} ({})\n", i, c, desc)?;
         }
 
-        write!(f, "objective function: {}", self.objective_func)?;
-        write!(f, "objective sense: {}", self.objective_sense)?;
+        write!(f, "objective: {}", self.objective)?;
 
         Ok(())
     }
@@ -1012,8 +1007,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
         ProblemBuilder {
             constraints: self.constraints,
             variables: self.variables,
-            objective_func: self.objective_func,
-            objective_sense: self.objective_sense,
+            objective: self.objective,
             _phantom_data: std::marker::PhantomData,
         }
     }
@@ -1036,18 +1030,12 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
         &self.variables
     }
 
-    /// Returns the objective function of the problem.
+    /// Returns the objective of the problem.
     ///
-    /// The objective function is a simple linear expression described a struct of type [linexpr::LinExpr].
-    pub fn get_objective_function(&self) -> &LinExpr<V> {
-        &self.objective_func
-    }
-
-    /// Returns the sense of the obejctive function (is it maximized or minimized).
-    ///
-    /// See [ObjectiveSense].
-    pub fn get_objective_sense(&self) -> ObjectiveSense {
-        self.objective_sense
+    /// The objective is described by a [Objective] and bundles a linear expression (of type [linexpr::LinExpr])
+    /// together with an optimization direction (of type [ObjectiveSense]).
+    pub fn get_objective(&self) -> &Objective<V> {
+        &self.objective
     }
 }
 
@@ -1482,7 +1470,8 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
             .map(|(x, y)| (x.clone(), y.into_inner()))
             .collect();
         self.problem
-            .objective_func
+            .objective
+            .get_function()
             .eval(&value_map)
             .expect("There should be no variable missing")
     }

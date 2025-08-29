@@ -88,14 +88,16 @@ impl GoodSolver {
             })
             .collect();
 
-        let mut expr =
-            good_lp::Expression::with_capacity(problem.get_objective_function().variables().len());
+        let objective = problem.get_objective();
 
-        for (v, c) in problem.get_objective_function().coefficients() {
+        let mut expr =
+            good_lp::Expression::with_capacity(objective.get_function().variables().len());
+
+        for (v, c) in objective.get_function().coefficients() {
             expr.add_mul(c, vars[v]);
         }
 
-        let unsolved_problem = match problem.get_objective_sense() {
+        let unsolved_problem = match objective.get_sense() {
             ObjectiveSense::Maximize => pb_vars.maximise(expr),
             ObjectiveSense::Minimize => pb_vars.minimise(expr),
         };
