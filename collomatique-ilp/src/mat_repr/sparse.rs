@@ -67,6 +67,10 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
         for (i, c) in constraints.enumerate() {
             constraint_symbols.push(c.get_symbol());
             for (var, val) in c.coefficients() {
+                if f64_is_zero(val) {
+                    continue;
+                }
+                
                 let j = variable_map[var];
                 mat_tri.add_triplet(i, j, val);
             }
