@@ -557,12 +557,32 @@ impl Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
+                let mut new_week_count = 0usize;
+                for (id, period_desc) in &self.inner_data.periods.ordered_period_list {
+                    if id != period_id {
+                        new_week_count += period_desc.len();
+                    }
+                }
+
                 for (subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySubject(
                             *period_id,
                             *subject_id,
                         ));
+                    }
+                    if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                        weeks_at_start_of_new_block,
+                    } = &subject.parameters.periodicity
+                    {
+                        for week in weeks_at_start_of_new_block {
+                            if *week >= new_week_count {
+                                return Err(PeriodError::SubjectImpliesMinimumWeekCount(
+                                    *subject_id,
+                                    *week + 1,
+                                ));
+                            }
+                        }
                     }
                 }
 
@@ -575,6 +595,37 @@ impl Data {
                 else {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
+
+                let mut new_week_count = 0usize;
+                for (id, period_desc) in &self.inner_data.periods.ordered_period_list {
+                    if id != period_id {
+                        new_week_count += period_desc.len();
+                    } else {
+                        new_week_count += desc.len();
+                    }
+                }
+
+                for (subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedBySubject(
+                            *period_id,
+                            *subject_id,
+                        ));
+                    }
+                    if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                        weeks_at_start_of_new_block,
+                    } = &subject.parameters.periodicity
+                    {
+                        for week in weeks_at_start_of_new_block {
+                            if *week >= new_week_count {
+                                return Err(PeriodError::SubjectImpliesMinimumWeekCount(
+                                    *subject_id,
+                                    *week + 1,
+                                ));
+                            }
+                        }
+                    }
+                }
 
                 self.inner_data.periods.ordered_period_list[position].1 = desc.clone();
 
