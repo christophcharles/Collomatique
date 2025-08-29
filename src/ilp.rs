@@ -1,5 +1,5 @@
 pub mod linexpr;
-pub mod solvers;
+mod tools;
 
 #[derive(Debug,PartialEq,Eq,Default,Clone)]
 pub struct ProblemBuilder {

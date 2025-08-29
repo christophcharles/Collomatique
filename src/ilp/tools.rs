@@ -1,0 +1,59 @@
+#[cfg(test)]
+mod tests;
+
+use super::*;
+
+use ndarray::{Array, Array1, Array2, ArrayView};
+
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct MatRepr<'a> {
+    problem: &'a Problem,
+    leq_mat: Array2<i32>,
+    leq_constants: Array1<i32>,
+    eq_mat: Array2<i32>,
+    eq_constants: Array1<i32>,
+}
+
+impl<'a> MatRepr<'a> {
+    pub fn new(problem: &'a Problem) -> MatRepr<'a> {
+        let p = problem.variables.len();
+
+        let mut leq_mat = Array2::zeros((0,p));
+        let mut eq_mat = Array2::zeros((0,p));
+
+        let mut leq_constants_vec = vec![];
+        let mut eq_constants_vec = vec![];
+
+        for c in &problem.constraints {
+            let mut current_row = Array::zeros(p);
+            for (j,var) in problem.variables.iter().enumerate() {
+                if let Some(val) = c.get_var(var) {
+                    current_row[j] = val;
+                }
+            }
+
+            let cst = c.get_constant();
+            match c.get_sign() {
+                linexpr::Sign::Equals => {
+                    eq_mat.push_row(ArrayView::from(&current_row)).unwrap();
+                    eq_constants_vec.push(cst);
+                }
+                linexpr::Sign::LessThan => {
+                    leq_mat.push_row(ArrayView::from(&current_row)).unwrap();
+                    leq_constants_vec.push(cst);
+                }
+            }
+        }
+
+        let leq_constants = Array::from_vec(leq_constants_vec);
+        let eq_constants = Array::from_vec(eq_constants_vec);
+
+        MatRepr {
+            problem,
+            leq_mat,
+            leq_constants,
+            eq_mat,
+            eq_constants,
+        }
+    }
+}
