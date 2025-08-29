@@ -32,6 +32,8 @@ pub enum ConnectDbError {
     DatabaseDoesNotExist(std::path::PathBuf),
     #[error("Erreur sqlx : {0}")]
     SqlxError(std::sync::Arc<sqlx::Error>),
+    #[error("Erreur d'entrée/sortie : {0}")]
+    IOError(std::sync::Arc<std::io::Error>),
 }
 
 impl From<collomatique::backend::sqlite::NewError> for ConnectDbError {
@@ -62,26 +64,48 @@ impl From<sqlx::Error> for ConnectDbError {
     }
 }
 
+impl From<std::io::Error> for ConnectDbError {
+    fn from(value: std::io::Error) -> Self {
+        ConnectDbError::IOError(std::sync::Arc::new(value))
+    }
+}
+
 pub type ConnectDbResult<T> = std::result::Result<T, ConnectDbError>;
 
+#[derive(Debug, Clone)]
+pub enum CreatePolicy {
+    Create,
+    CreateAndOverride,
+    Open,
+}
+
 async fn connect_db(
-    create: bool,
+    create_policy: CreatePolicy,
     path: &std::path::Path,
 ) -> ConnectDbResult<collomatique::backend::sqlite::Store> {
     use collomatique::backend::sqlite;
-    if create {
-        Ok(sqlite::Store::new_db(path).await?)
-    } else {
-        Ok(sqlite::Store::open_db(path).await?)
+    match create_policy {
+        CreatePolicy::Create => Ok(sqlite::Store::new_db(path).await?),
+        CreatePolicy::Open => Ok(sqlite::Store::open_db(path).await?),
+        CreatePolicy::CreateAndOverride => {
+            use tokio::fs;
+            if fs::try_exists(path).await? {
+                fs::remove_file(path).await?;
+            }
+            Ok(sqlite::Store::new_db(path).await?)
+        }
     }
 }
 
 impl State {
-    pub async fn new(create: bool, file: std::path::PathBuf) -> ConnectDbResult<Self> {
+    pub async fn new(
+        create_policy: CreatePolicy,
+        file: std::path::PathBuf,
+    ) -> ConnectDbResult<Self> {
         use collomatique::backend::Logic;
         use collomatique::frontend::state::AppState;
 
-        let logic = Logic::new(connect_db(create, file.as_path()).await?);
+        let logic = Logic::new(connect_db(create_policy, file.as_path()).await?);
         let app_state = AppState::new(logic);
 
         Ok(Self {
