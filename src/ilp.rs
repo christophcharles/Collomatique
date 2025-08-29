@@ -97,7 +97,7 @@ where
         let mut config = Config::new();
 
         for v in iterable {
-            config.set(v.into(), true);
+            config.set(v, true);
         }
 
         config
