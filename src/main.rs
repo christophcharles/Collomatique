@@ -35,23 +35,7 @@ async fn main() -> Result<()> {
     let ilp_translator = data.ilp_translator();
 
     println!("Generating ILP problem...");
-    let problem = ilp_translator
-        .problem_builder()
-        .eval_fn(collomatique::debuggable!(|x| {
-            if !x
-                .get(&collomatique::gen::colloscope::Variable::GroupInSlot {
-                    subject: 0,
-                    slot: 0,
-                    group: 0,
-                })
-                .unwrap()
-            {
-                100.
-            } else {
-                0.
-            }
-        }))
-        .build();
+    let problem = ilp_translator.problem();
 
     println!("{}", problem);
 
@@ -67,16 +51,13 @@ async fn main() -> Result<()> {
         ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
     let random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
-    let variable_count = problem.get_variables().len();
-    let p = 2. / (variable_count as f64);
-
     use collomatique::ilp::initializers::ConfigInitializer;
     let init_config = incremental_initializer.build_init_config(&problem);
     let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
 
     let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
     let mutation_policy =
-        collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), p);
+        collomatique::ilp::optimizers::NeighbourMutationPolicy::new(random_gen.clone());
     let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
 
     for (i, (sol, cost)) in iterator.enumerate() {
