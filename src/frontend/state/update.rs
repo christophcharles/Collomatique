@@ -83,7 +83,7 @@ impl<T: ManagerInternal> Manager for T {
                     private::update_internal_state_with_aggregated(self, &aggregated_ops).await.map_err(
                         |e| match e {
                             UpdateError::Internal(int_err) => UndoError::InternalError(int_err),
-                            _ => panic!("Data should be consistent as it was automatically build from previous state"),
+                            _ => panic!("Data should be consistent as it was automatically build from previous state.\n{}", e),
                         }
                     )?;
                     Ok(())
