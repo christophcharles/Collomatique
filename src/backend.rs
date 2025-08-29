@@ -765,6 +765,13 @@ pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId> {
 }
 
 #[derive(Clone, Debug)]
+pub enum ColloscopeDependancy<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId> {
+    Teacher(TeacherId),
+    Subject(SubjectId),
+    Student(StudentId),
+}
+
+#[derive(Clone, Debug)]
 pub enum DataStatusWithId<Id: OrdId> {
     Ok,
     BadCrossId(Id),
@@ -2038,6 +2045,123 @@ impl<T: Storage> Logic<T> {
         }
         .await?;
         Ok(())
+    }
+
+    pub async fn colloscopes_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<T::ColloscopeId, Colloscope<T::TeacherId, T::SubjectId, T::StudentId>>,
+        T::InternalError,
+    > {
+        self.storage.colloscopes_get_all().await
+    }
+    pub async fn colloscopes_get(
+        &self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<
+        Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+        IdError<T::InternalError, T::ColloscopeId>,
+    > {
+        self.storage.colloscopes_get(index).await
+    }
+    pub async fn colloscopes_check_id(
+        &self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<bool, T::InternalError> {
+        let colloscopes = self.colloscopes_get_all().await?;
+
+        Ok(colloscopes.contains_key(&index))
+    }
+    pub async fn colloscopes_check_data(
+        &self,
+        colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+    ) -> std::result::Result<
+        DataStatusWithId3<T::TeacherId, T::SubjectId, T::StudentId>,
+        T::InternalError,
+    > {
+        let teachers = self.teachers_get_all().await?;
+        let subjects = self.subjects_get_all().await?;
+        let students = self.students_get_all().await?;
+
+        for (&subject_id, subject_desc) in &colloscope.subjects {
+            if !subjects.contains_key(&subject_id) {
+                return Ok(DataStatusWithId3::BadCrossId2(subject_id));
+            }
+
+            for (&student_id, _mapping) in &subject_desc.group_list.students_mapping {
+                if !students.contains_key(&student_id) {
+                    return Ok(DataStatusWithId3::BadCrossId3(student_id));
+                }
+            }
+
+            for time_slot in &subject_desc.time_slots {
+                if !teachers.contains_key(&time_slot.teacher_id) {
+                    return Ok(DataStatusWithId3::BadCrossId1(time_slot.teacher_id));
+                }
+            }
+        }
+
+        Ok(DataStatusWithId3::Ok)
+    }
+    pub async fn colloscopes_add(
+        &mut self,
+        colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+    ) -> std::result::Result<
+        T::ColloscopeId,
+        Cross3Error<T::InternalError, T::TeacherId, T::SubjectId, T::StudentId>,
+    > {
+        let data_status = self.colloscopes_check_data(colloscope).await?;
+        match data_status {
+            DataStatusWithId3::BadCrossId1(id) => Err(Cross3Error::InvalidCrossId1(id)),
+            DataStatusWithId3::BadCrossId2(id) => Err(Cross3Error::InvalidCrossId2(id)),
+            DataStatusWithId3::BadCrossId3(id) => Err(Cross3Error::InvalidCrossId3(id)),
+            DataStatusWithId3::Ok => {
+                let id = unsafe { self.storage.colloscopes_add_unchecked(colloscope) }.await?;
+                Ok(id)
+            }
+        }
+    }
+    pub async fn colloscopes_check_can_remove(
+        &self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::ColloscopeId>> {
+        if !self.colloscopes_check_id(index).await? {
+            return Err(IdError::InvalidId(index));
+        }
+
+        Ok(())
+    }
+    pub async fn colloscopes_remove(
+        &mut self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::ColloscopeId>> {
+        self.colloscopes_check_can_remove(index).await?;
+
+        unsafe { self.storage.colloscopes_remove_unchecked(index) }.await?;
+        Ok(())
+    }
+    pub async fn colloscopes_update(
+        &mut self,
+        index: T::ColloscopeId,
+        colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+    ) -> std::result::Result<
+        (),
+        Cross3IdError<T::InternalError, T::ColloscopeId, T::TeacherId, T::SubjectId, T::StudentId>,
+    > {
+        if !self.colloscopes_check_id(index).await? {
+            return Err(Cross3IdError::InvalidId(index));
+        }
+
+        let data_status = self.colloscopes_check_data(colloscope).await?;
+        match data_status {
+            DataStatusWithId3::BadCrossId1(id) => Err(Cross3IdError::InvalidCrossId1(id)),
+            DataStatusWithId3::BadCrossId2(id) => Err(Cross3IdError::InvalidCrossId2(id)),
+            DataStatusWithId3::BadCrossId3(id) => Err(Cross3IdError::InvalidCrossId3(id)),
+            DataStatusWithId3::Ok => {
+                unsafe { self.storage.colloscopes_update_unchecked(index, colloscope) }.await?;
+                Ok(())
+            }
+        }
     }
 }
 
