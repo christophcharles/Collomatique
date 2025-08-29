@@ -374,6 +374,55 @@ impl<V: UsableData> LinExpr<V> {
         output.clean();
         output
     }
+
+    /// Reduce an expression by replacing part or all
+    /// of its variables by values.
+    /// 
+    /// This function takes a list of values for some variables
+    /// and substitute these values into the expression.
+    /// The result is a new expression (which might be constant).
+    /// This can be understood as a partial evaluation of the expression.
+    /// 
+    /// The list of variables can contain variables that do not appear in
+    /// the expression. It can also omit variables that do appear since
+    /// the evaluation is only partial. As such, this function can't fail.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// # use std::collections::BTreeMap;
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*&expr1 - 3.0*&expr2 - &expr3;
+    /// let expr_reduced = expr.reduce(&BTreeMap::from([
+    ///     (String::from("A"), -1.0),
+    ///     (String::from("C"), 2.0),
+    /// ]));
+    /// 
+    /// let expr_expected = -3.0*&expr2 - 44.0;
+    /// assert_eq!(expr_reduced, expr_expected);
+    /// ```
+    pub fn reduce(&self, vars: &BTreeMap<V, f64>) -> LinExpr<V> {
+        let mut new_constant = self.constant.into_inner();
+        let mut new_coefs = BTreeMap::new();
+
+        for (v, c) in &self.coefs {
+            match vars.get(v) {
+                Some(val) => {
+                    new_constant += c.into_inner() * (*val);
+                }
+                None => {
+                    new_coefs.insert(v.clone(), *c);
+                }
+            }
+        }
+
+        LinExpr {
+            coefs: new_coefs,
+            constant: ordered_float::OrderedFloat(new_constant),
+        }
+    }
 }
 
 impl<V: UsableData> LinExpr<V> {
