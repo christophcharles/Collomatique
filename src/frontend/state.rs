@@ -150,6 +150,7 @@ impl<'a, T: update::Manager> AppSession<'a, T> {
             return;
         }
         self.op_manager.get_history_mut().apply(aggregated_ops);
+        self.session_history.clear_past_history();
     }
 }
 

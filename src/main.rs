@@ -1360,22 +1360,20 @@ async fn respond(
 
     let output = match shell_command.command {
         ShellCommand::Global(command) => execute_cli_command(command, app_state).await?,
-        ShellCommand::Extra(extra_command) => {
-            match extra_command {
-                ShellExtraCommand::Undo => {
-                    app_state.undo().await?;
-                    None
-                }
-                ShellExtraCommand::Redo => {
-                    app_state.redo().await?;
-                    None
-                }
-                ShellExtraCommand::PrintHistory => {
-                    Some(format!("{:?}", app_state.get_aggregated_history()))
-                }
-                ShellExtraCommand::Exit => return Ok(true),
+        ShellCommand::Extra(extra_command) => match extra_command {
+            ShellExtraCommand::Undo => {
+                app_state.undo().await?;
+                None
             }
-        }
+            ShellExtraCommand::Redo => {
+                app_state.redo().await?;
+                None
+            }
+            ShellExtraCommand::PrintHistory => {
+                Some(format!("{:?}", app_state.get_aggregated_history()))
+            }
+            ShellExtraCommand::Exit => return Ok(true),
+        },
     };
     if let Some(msg) = output {
         println!("{}", msg);
