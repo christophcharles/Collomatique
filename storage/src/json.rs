@@ -83,27 +83,50 @@ pub struct Entry {
 pub mod common;
 pub mod student_list;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
 pub enum EntryContent {
-    StudentList(student_list::List),
-    #[serde(other)]
+    ValidEntry(ValidEntry),
     UnknownEntry,
+}
+
+impl<'de> Deserialize<'de> for EntryContent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value: Box<serde_json::value::RawValue> = Deserialize::deserialize(deserializer)?;
+
+        println!("{:?}", value);
+
+        use serde::de::IntoDeserializer;
+        match ValidEntry::deserialize(value.into_deserializer()) {
+            Ok(valid_entry) => {
+                println!("{:?}", valid_entry);
+                Ok(EntryContent::ValidEntry(valid_entry))
+            }
+            Err(_) => Ok(EntryContent::UnknownEntry),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ValidEntry {
+    StudentList(student_list::List),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
 
-impl EntryContent {
+impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {
         match self {
-            EntryContent::StudentList(_) => 1,
-            EntryContent::UnknownEntry => 1,
+            ValidEntry::StudentList(_) => 1,
         }
     }
 
     pub fn needed_entry(&self) -> bool {
         match self {
-            EntryContent::StudentList(_) => true,
-            EntryContent::UnknownEntry => false,
+            ValidEntry::StudentList(_) => true,
         }
     }
 }
