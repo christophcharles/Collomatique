@@ -260,6 +260,8 @@ enum PythonCommand {
         name: String,
         /// File to load the python script from
         file: PathBuf,
+        /// Function to run in the file
+        func: String,
         /// Force creating a new python scipt with an existing name
         #[arg(short, long, default_value_t = false)]
         force: bool,
@@ -287,9 +289,11 @@ enum PythonCommand {
         python_script_number: Option<NonZeroUsize>,
     },
     /// Run a python script directly from a file
-    RunFile {
+    RunFromFile {
         /// Python file to run
         script: PathBuf,
+        /// Function to run in the file
+        func: String,
         /// Optional csv file to give as input to the python script
         csv: Option<PathBuf>,
     },
@@ -1157,6 +1161,7 @@ async fn python_command(
         PythonCommand::Create {
             name: _name,
             file: _file,
+            func: _func,
             force: _force,
         } => Err(anyhow!("python create command not yet implemented")),
         PythonCommand::Remove {
@@ -1168,7 +1173,7 @@ async fn python_command(
             csv: _csv,
             python_script_number: _python_script_number,
         } => Err(anyhow!("python run command not yet implemented")),
-        PythonCommand::RunFile { script, csv } => {
+        PythonCommand::RunFromFile { script, func, csv } => {
             if csv.is_some() {
                 return Err(anyhow!(
                     "csv loading not yet implented for python run-file command"
@@ -1176,7 +1181,7 @@ async fn python_command(
             }
 
             let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
-            python_code.run()?;
+            python_code.run(&func)?;
 
             Ok(None)
         }
