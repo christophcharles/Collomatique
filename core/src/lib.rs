@@ -34,10 +34,10 @@ pub mod solver;
 pub mod traits;
 
 pub use solver::{
-    ConstraintsTranslator, DecoratedSolution, ObjectiveTranslator, Problem, ProblemBuilder,
+    ExtraTranslator, DecoratedSolution, Problem, ProblemBuilder,
     TimeLimitSolution,
 };
 pub use traits::{
-    BaseConstraints, BaseVariable, CompleteSolution, ExtraConstraints, ExtraObjective,
-    ExtraVariable, PartialSolution, SoftConstraints,
+    BaseConstraints, BaseVariable, ExtraConstraints,
+    ExtraVariable, SoftConstraints,
 };
