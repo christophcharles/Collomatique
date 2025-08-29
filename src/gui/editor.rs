@@ -123,3 +123,12 @@ pub fn view(state: &State) -> Element<GuiMessage> {
     .padding(5)
     .into()
 }
+
+pub fn title(state: &State) -> String {
+    match &state.db {
+        Some(file) => {
+            format!("Collomatique - {}", file.to_string_lossy())
+        }
+        None => String::from("Collomatique"),
+    }
+}
