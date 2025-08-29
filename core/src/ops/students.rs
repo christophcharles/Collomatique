@@ -6,6 +6,14 @@ pub enum StudentsUpdateWarning {
         collomatique_state_colloscopes::StudentId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseExclusionFromGroupList(
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::GroupListId,
+    ),
+    LoosePrefilledGroup(
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::GroupListId,
+    ),
 }
 
 impl StudentsUpdateWarning {
@@ -31,6 +39,42 @@ impl StudentsUpdateWarning {
                     student.desc.firstname,
                     student.desc.surname,
                     period_index + 1
+                )
+            }
+            Self::LooseExclusionFromGroupList(student_id, group_list_id) => {
+                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return String::new();
+                };
+                let Some(group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte de l'exclusion de {} {} de la liste de groupes \"{}\"",
+                    student.desc.firstname, student.desc.surname, group_list.params.name,
+                )
+            }
+            Self::LoosePrefilledGroup(student_id, group_list_id) => {
+                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return String::new();
+                };
+                let Some(group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte du préremplissage de la liste de groupes \"{}\" avec {} {}",
+                    group_list.params.name, student.desc.firstname, student.desc.surname,
                 )
             }
         }
@@ -92,7 +136,27 @@ impl StudentsUpdateOp {
     ) -> Vec<StudentsUpdateWarning> {
         match self {
             Self::AddNewStudent(_student) => vec![],
-            Self::DeleteStudent(_student_id) => vec![],
+            Self::DeleteStudent(student_id) => {
+                let mut output = vec![];
+
+                for (group_list_id, group_list) in &data.get_data().get_group_lists().group_list_map
+                {
+                    if group_list.params.excluded_students.contains(student_id) {
+                        output.push(StudentsUpdateWarning::LooseExclusionFromGroupList(
+                            *student_id,
+                            *group_list_id,
+                        ));
+                    }
+                    if group_list.prefilled_groups.contains_key(student_id) {
+                        output.push(StudentsUpdateWarning::LoosePrefilledGroup(
+                            *student_id,
+                            *group_list_id,
+                        ));
+                    }
+                }
+
+                output
+            }
             Self::UpdateStudent(student_id, student) => {
                 let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
                 else {
@@ -239,6 +303,44 @@ impl StudentsUpdateOp {
             }
             Self::DeleteStudent(student_id) => {
                 let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
+
+                for (group_list_id, group_list) in &data.get_data().get_group_lists().group_list_map
+                {
+                    if group_list.params.excluded_students.contains(student_id) {
+                        let mut new_params = group_list.params.clone();
+                        new_params.excluded_students.remove(student_id);
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::Update(
+                                        *group_list_id,
+                                        new_params,
+                                    ),
+                                ),
+                                "Désactiver l'exclusion de l'élève d'une liste de groupes".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
+                        assert!(result.is_none());
+                    }
+                    if group_list.prefilled_groups.contains_key(student_id) {
+                        let mut new_prefilled_groups = group_list.prefilled_groups.clone();
+                        new_prefilled_groups.remove(student_id);
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::PreFill(
+                                        *group_list_id,
+                                        new_prefilled_groups,
+                                    ),
+                                ),
+                                "Retirer l'élève du préremplissage d'une liste de groupes".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
+                        assert!(result.is_none());
+                    }
+                }
 
                 for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
                 {
