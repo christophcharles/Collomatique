@@ -152,10 +152,10 @@ impl State {
 }
 
 type UndoErr = collomatique::frontend::state::UndoError<
-    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::InternalError,
+    <collomatique::backend::json::JsonStore as collomatique::backend::Storage>::InternalError,
 >;
 type RedoErr = collomatique::frontend::state::RedoError<
-    <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::InternalError,
+    <collomatique::backend::json::JsonStore as collomatique::backend::Storage>::InternalError,
 >;
 
 #[derive(Error, Debug, Clone)]
