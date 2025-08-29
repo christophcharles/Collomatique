@@ -1,8 +1,11 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use collomatique::frontend::shell::CliCommand;
+
 use collomatique::frontend::state::{AppState, Manager};
 use collomatique::json::{json, Logic};
+
+pub mod commands;
+pub use commands::CliCommand;
 
 #[derive(Debug, Parser)]
 #[clap(disable_help_flag = true)]
@@ -188,9 +191,7 @@ fn respond(
     };
 
     let output = match shell_command.command {
-        ShellCommand::Global(command) => {
-            collomatique::frontend::shell::execute_cli_command(command, app_state)?
-        }
+        ShellCommand::Global(command) => commands::execute_cli_command(command, app_state)?,
         ShellCommand::Extra(extra_command) => match extra_command {
             ShellExtraCommand::Undo => {
                 app_state.undo()?;
@@ -248,8 +249,7 @@ pub fn run_cli(create: bool, path: std::path::PathBuf, command: CliCommandOrShel
         }
         CliCommandOrShell::Global(command) => {
             let mut app_state = AppState::new(logic);
-            let output =
-                collomatique::frontend::shell::execute_cli_command(command, &mut app_state)?;
+            let output = commands::execute_cli_command(command, &mut app_state)?;
             if let Some(msg) = output {
                 print!("{}", msg);
             }
