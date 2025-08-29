@@ -7,6 +7,8 @@
 
 #[cfg(feature = "coin_cbc")]
 pub mod coin_cbc;
+#[cfg(feature = "good_lp")]
+pub mod good_lp;
 
 use super::{FeasableConfig, Problem};
 
@@ -74,14 +76,6 @@ pub trait SolverWithTimeLimit<V: UsableData, C: UsableData, P: ProblemRepr<V>>:
     fn solve_with_time_limit<'a>(
         &self,
         problem: &'a Problem<V, C, P>,
-        time_limit_in_seconds: Option<u32>,
+        time_limit_in_seconds: u32,
     ) -> Option<TimeLimitSolution<'a, V, C, P>>;
-}
-
-impl<V: UsableData, C: UsableData, P: ProblemRepr<V>, T: SolverWithTimeLimit<V, C, P>>
-    Solver<V, C, P> for T
-{
-    fn solve<'a>(&self, problem: &'a Problem<V, C, P>) -> Option<FeasableConfig<'a, V, C, P>> {
-        self.solve_with_time_limit(problem, None).map(|x| x.config)
-    }
 }

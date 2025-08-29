@@ -8,8 +8,11 @@
 #[cfg(test)]
 mod tests;
 
-use super::{ProblemRepr, SolverWithTimeLimit, TimeLimitSolution};
-use crate::{linexpr::EqSymbol, ConfigData, ObjectiveSense, Problem, UsableData, VariableType};
+use super::{ProblemRepr, Solver, SolverWithTimeLimit, TimeLimitSolution};
+use crate::{
+    linexpr::EqSymbol, ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData,
+    VariableType,
+};
 
 /// Coin-cbc solver
 ///
@@ -23,9 +26,15 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverWithTimeLimit<V, C, 
     fn solve_with_time_limit<'a>(
         &self,
         problem: &'a Problem<V, C, P>,
-        time_limit_in_seconds: Option<u32>,
+        time_limit_in_seconds: u32,
     ) -> Option<TimeLimitSolution<'a, V, C, P>> {
-        self.solve_internal(problem, time_limit_in_seconds)
+        self.solve_internal(problem, Some(time_limit_in_seconds))
+    }
+}
+
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSolver {
+    fn solve<'a>(&self, problem: &'a Problem<V, C, P>) -> Option<FeasableConfig<'a, V, C, P>> {
+        self.solve_internal(problem, None).map(|x| x.config)
     }
 }
 
