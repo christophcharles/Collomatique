@@ -33,8 +33,8 @@ impl IdIssuer {
     /// Create a new IdIssuer
     ///
     /// It takes a list of all used ids so far
-    pub fn new<'a>(
-        student_ids: impl Iterator<Item = &'a u64>,
+    pub fn new(
+        student_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
         let existing_ids = student_ids;
         Ok(IdIssuer {

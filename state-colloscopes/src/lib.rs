@@ -68,6 +68,19 @@ pub struct Data {
     student_list: BTreeMap<StudentId, PersonWithContact>,
 }
 
+impl Clone for Data {
+    fn clone(&self) -> Self {
+        let student_list = self.student_list.clone();
+        let student_ids = student_list.keys().map(|k| k.inner());
+        let id_issuer = IdIssuer::new(student_ids).expect("Ids should be consistent when cloning");
+
+        Data {
+            id_issuer,
+            student_list,
+        }
+    }
+}
+
 impl PartialEq for Data {
     fn eq(&self, other: &Self) -> bool {
         self.student_list == other.student_list
@@ -136,7 +149,7 @@ impl Data {
     pub fn from_lists(
         student_list: BTreeMap<u64, PersonWithContact>,
     ) -> Result<Data, tools::IdError> {
-        let student_ids = student_list.keys();
+        let student_ids = student_list.keys().copied();
         let id_issuer = IdIssuer::new(student_ids)?;
 
         // Ids have been validated

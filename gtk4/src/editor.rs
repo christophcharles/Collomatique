@@ -3,7 +3,7 @@ use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, WidgetExt};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, Controller, SimpleComponent};
+use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use std::path::PathBuf;
 
 use collomatique_state::AppState;
@@ -31,11 +31,18 @@ pub enum EditorOutput {
     UpdateActions,
 }
 
+#[derive(Debug)]
+pub enum EditorCommandOutput {
+    SaveSuccessful(PathBuf),
+    SaveFailed(PathBuf, String),
+}
+
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data>,
     dirty: bool,
     save_dialog: Controller<dialogs::open_save::Dialog>,
+    save_error: Controller<dialogs::file_error::Dialog>,
 }
 
 impl EditorPanel {
@@ -71,10 +78,11 @@ impl EditorPanel {
 }
 
 #[relm4::component(pub)]
-impl SimpleComponent for EditorPanel {
+impl Component for EditorPanel {
     type Input = EditorInput;
     type Output = EditorOutput;
     type Init = ();
+    type CommandOutput = EditorCommandOutput;
 
     view! {
         #[root]
@@ -192,18 +200,24 @@ impl SimpleComponent for EditorPanel {
                 }
             });
 
+        let save_error = dialogs::file_error::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |_| EditorInput::Ignore);
+
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
             dirty: false,
             save_dialog,
+            save_error,
         };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             EditorInput::Ignore => {}
             EditorInput::NewFile {
@@ -239,7 +253,18 @@ impl SimpleComponent for EditorPanel {
                     ))
                     .unwrap();
             }
-            EditorInput::SaveCurrentFileAs(_path) => {}
+            EditorInput::SaveCurrentFileAs(path) => {
+                let data_copy = self.data.get_data().clone();
+                self.dirty = false;
+                self.file_name = Some(path.clone());
+                sender.oneshot_command(async move {
+                    match collomatique_storage::save_data_to_file(&data_copy, &path).await {
+                        Ok(()) => EditorCommandOutput::SaveSuccessful(path),
+                        Err(e) => EditorCommandOutput::SaveFailed(path, e.to_string()),
+                    }
+                });
+                sender.output(EditorOutput::UpdateActions).unwrap();
+            }
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
                     self.data.undo().expect("Should be able to undo");
@@ -251,6 +276,32 @@ impl SimpleComponent for EditorPanel {
                     self.data.redo().expect("Should be able to undo");
                     sender.output(EditorOutput::UpdateActions).unwrap();
                 }
+            }
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            EditorCommandOutput::SaveSuccessful(_path) => {}
+            EditorCommandOutput::SaveFailed(path, error) => {
+                if Some(&path) != self.file_name.as_ref() {
+                    return;
+                }
+                self.dirty = true;
+                self.save_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Save,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
+                sender.output(EditorOutput::UpdateActions).unwrap();
             }
         }
     }

@@ -51,12 +51,12 @@ impl IdIssuerHelper {
     /// Create a new IdIssuerHelper
     ///
     /// It takes an iterator on existing ID values
-    pub fn new<'a>(
-        existing_ids: impl Iterator<Item = &'a u64>,
+    pub fn new(
+        existing_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuerHelper, IdError> {
         let mut ids_found_so_far = BTreeSet::new();
         for id in existing_ids {
-            if !ids_found_so_far.insert(*id) {
+            if !ids_found_so_far.insert(id) {
                 return Err(IdError::DuplicatedId);
             }
         }
