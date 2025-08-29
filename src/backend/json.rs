@@ -326,6 +326,8 @@ struct ValidatedJson {
 pub enum ValidationError {
     #[error("Id {0} appears twice in data")]
     DuplicatedId(u64),
+    #[error("Student {0:?} has invalid subject assigned for subject group {1:?}")]
+    StudentWithBadSubjectGroupAssignment(StudentId, SubjectGroupId),
     #[error("Week pattern {0:?} has weeks outside of last week")]
     WeekPatternWithWeekTooBig(WeekPatternId),
     #[error("Group list {0:?} has an invalid group number")]
@@ -432,13 +434,23 @@ impl JsonData {
     }
 
     fn validate_students(&self) -> ValidationResult<()> {
-        for (_, student) in &self.students {
+        for (student_id, student) in &self.students {
             for (subject_group_id, subject_id) in &student.subject_groups {
                 if !self.subject_groups.contains_key(subject_group_id) {
                     return Err(ValidationError::BadSubjectGroupId(*subject_group_id));
                 }
-                if !self.subjects.contains_key(subject_id) {
-                    return Err(ValidationError::BadSubjectId(*subject_id));
+                match self.subjects.get(subject_id) {
+                    Some(subject) => {
+                        if subject.subject_group_id != *subject_group_id {
+                            return Err(ValidationError::StudentWithBadSubjectGroupAssignment(
+                                *student_id,
+                                *subject_group_id,
+                            ));
+                        }
+                    }
+                    None => {
+                        return Err(ValidationError::BadSubjectId(*subject_id));
+                    }
                 }
             }
             for incompat_id in &student.incompats {
