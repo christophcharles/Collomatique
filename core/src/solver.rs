@@ -470,7 +470,8 @@ where
 /// Translator
 ///
 /// This is used to restore types. The structure is returned by [ProblemBuilder::add_constraints]
-/// and can be passed to [DecoratedSolution::blame_extra] and [DecoratedSolution::check_structure_extra].
+/// and can be passed to [DecoratedPartialSolution::partial_blame_extra], [DecoratedPartialSolution::partial_check_structure_extra],
+/// [DecoratedCompleteSolution::blame_extra] and [DecoratedCompleteSolution::check_structure_extra].
 ///
 /// It is used to restore the correct types for the constraints descriptions associated to a problem extension
 /// (described by [ExtraConstraints]).
@@ -492,8 +493,9 @@ pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
 /// You can call [Problem::solve] or [Problem::solve_with_time_limit] to try
 /// and solve the problem using a solver.
 ///
-/// You can also provide a potentiel solution to [Problem::decorate_solution]
-/// and use its blaming functions ([DecoratedSolution::blame] and [DecoratedSolution::blame_extra])
+/// You can also provide a potentiel solution to [Problem::decorate_partial_solution]
+/// and use its blaming functions ([DecoratedPartialSolution::partial_blame] and [DecoratedPartialSolution::partial_blame_extra] or
+/// the corresponding functions for [DecoratedCompleteSolution]).
 /// to find out which constraints is not satisfied.
 
 pub struct Problem<M, S, T, P>
@@ -568,7 +570,7 @@ where
 
     /// Returns the inner solution
     ///
-    /// This method works like [Self::inner] but consumes the [DecoratedSolution].
+    /// This method works like [Self::inner] but consumes the [DecoratedPartialSolution].
     pub fn into_inner(self) -> T::PartialSolution {
         self.internal_solution
     }
@@ -734,7 +736,7 @@ where
 
     /// Returns the inner solution
     ///
-    /// This method works like [Self::inner] but consumes the [DecoratedSolution].
+    /// This method works like [Self::inner] but consumes the [DecoratedCompleteSolution].
     pub fn into_inner(self) -> T::PartialSolution {
         self.internal_solution
     }
@@ -895,7 +897,7 @@ where
     /// Solves the problem using a solver
     ///
     /// This will use the solver to solve the ILP problem. It returns `None` if there is no solution.
-    /// Otherwise it returns a [DecoratedSolution] reprenseting the solution that was found.
+    /// Otherwise it returns a [DecoratedCompleteSolution] reprenseting the solution that was found.
     pub fn solve<
         'a,
         Solver: collomatique_ilp::solvers::Solver<ExtraVariable<M, S, IdVariable>, InternalId, P>,
