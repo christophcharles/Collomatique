@@ -203,6 +203,12 @@ pub enum IncompatDependancy<SubjectId: OrdId, StudentId: OrdId> {
 }
 
 #[derive(Error, Debug)]
+pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId> {
+    TimeSlot(TimeSlotId),
+    Student(StudentId),
+}
+
+#[derive(Error, Debug)]
 pub enum DataStatusWithId<Id: OrdId> {
     Ok,
     BadCrossId(Id),
@@ -874,7 +880,7 @@ pub trait Storage: Send + Sync {
     async unsafe fn subjects_remove_unchecked(
         &mut self,
         index: Self::SubjectId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn subjects_update_unchecked(
         &mut self,
         index: Self::SubjectId,
@@ -969,6 +975,68 @@ pub trait Storage: Send + Sync {
                     Ok(())
                 }
             }
+        }
+    }
+    async fn subjects_can_remove(
+        &mut self,
+        index: Self::SubjectId,
+    ) -> std::result::Result<
+        Vec<SubjectDependancy<Self::TimeSlotId, Self::StudentId>>,
+        IdError<Self::InternalError, Self::SubjectId>,
+    > {
+        async move {
+            let subject = self.subjects_get(index).await?;
+
+            let mut dependancies = Vec::new();
+
+            let time_slots = self.time_slots_get_all().await?;
+            for (time_slot_id, time_slot) in time_slots {
+                if time_slot.subject_id == index {
+                    dependancies.push(SubjectDependancy::TimeSlot(time_slot_id));
+                }
+            }
+
+            let students = self.students_get_all().await?;
+            for (student_id, _student) in students {
+                let subject_group_id = subject.subject_group_id;
+                let subject_group_for_student = self.subject_group_for_student_get(student_id, subject_group_id)
+                    .await
+                    .map_err(
+                        |e| match e {
+                            Id2Error::InternalError(int_err) => IdError::InternalError(int_err),
+                            Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid as it was returned from students_get_all", id1),
+                            Id2Error::InvalidId2(id2) => panic!("Subject group id {:?} should be valid as it was retrieved from the database", id2),
+                        }
+                    )?;
+                if subject_group_for_student == Some(index) {
+                    dependancies.push(SubjectDependancy::Student(student_id));
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn subjects_remove(
+        &mut self,
+        index: Self::SubjectId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            Self::InternalError,
+            Self::SubjectId,
+            Vec<SubjectDependancy<Self::TimeSlotId, Self::StudentId>>,
+        >,
+    > {
+        async move {
+            let dependancies = self
+                .subjects_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.subjects_remove_unchecked(index) }.await?;
+            Ok(())
         }
     }
 
