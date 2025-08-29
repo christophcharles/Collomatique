@@ -22,23 +22,23 @@ struct AppControllers {
     editor: AsyncController<editor::EditorPanel>,
 }
 
-enum AppState {
+enum GlobalState {
     WelcomeScreen,
     EditorScreen,
 }
 
-impl AppState {
+impl GlobalState {
     fn get_screen_name(&self) -> &'static str {
         match self {
-            AppState::WelcomeScreen => "welcome",
-            AppState::EditorScreen => "editor",
+            GlobalState::WelcomeScreen => "welcome",
+            GlobalState::EditorScreen => "editor",
         }
     }
 }
 
 pub struct AppModel {
     controllers: AppControllers,
-    state: AppState,
+    state: GlobalState,
 }
 
 #[derive(Debug)]
@@ -103,9 +103,9 @@ impl SimpleAsyncComponent for AppModel {
         let controllers = AppControllers { welcome, editor };
 
         let state = if params.new || params.file_name.is_some() {
-            AppState::EditorScreen
+            GlobalState::EditorScreen
         } else {
-            AppState::WelcomeScreen
+            GlobalState::WelcomeScreen
         };
 
         let model = AppModel { controllers, state };
@@ -120,7 +120,7 @@ impl SimpleAsyncComponent for AppModel {
                 // This message exists only to be ignored (as its name suggests)
             }
             AppInput::OpenNewColloscope => {
-                self.state = AppState::EditorScreen;
+                self.state = GlobalState::EditorScreen;
                 self.controllers
                     .editor
                     .sender()
