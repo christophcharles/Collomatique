@@ -5,12 +5,8 @@
 //! The main such structure is [Colloscope] which describes
 //! a (partially completed or not) colloscope.
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroUsize;
 
-pub trait Identifier:
-    Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync
-{
-}
+use super::Identifier;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
@@ -37,18 +33,6 @@ pub struct TeacherInterrogations<InterrogationId: Identifier> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
-    group_list_id: GroupListId,
-    enrolled_students: BTreeSet<StudentId>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DatedGroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
-    start_week: NonZeroUsize,
-    group_assignment: GroupAssignment<GroupListId, StudentId>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectInterrogations<
     TeacherId: Identifier,
     InterrogationId: Identifier,
@@ -56,8 +40,7 @@ pub struct SubjectInterrogations<
     StudentId: Identifier,
 > {
     duration: collomatique_time::NonZeroDurationInMinutes,
-    starting_group_assignment: GroupAssignment<GroupListId, StudentId>,
-    other_group_assignments: Vec<DatedGroupAssignment<GroupListId, StudentId>>,
+    group_assignments: super::GroupAssignments<GroupListId, StudentId>,
     teacher_map: BTreeMap<TeacherId, TeacherInterrogations<InterrogationId>>,
 }
 
