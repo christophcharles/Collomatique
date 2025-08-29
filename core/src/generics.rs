@@ -4,7 +4,7 @@
 //! Extension to this problem can be implemented using other structures that implement [ExtraConstraints].
 //!
 //! It also implements a few generic [ExtraConstraints] that are useful in a lot of situations.
-//! See [SoftConstraints].
+//! See [SoftConstraints] and [FixedPartialSolution].
 
 use collomatique_ilp::{
     ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
