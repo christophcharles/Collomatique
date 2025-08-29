@@ -1,6 +1,7 @@
 {
     rustPlatform,
     lib,
+    sqlite,
 }:
 rustPlatform.buildRustPackage {
     pname = "collomatique";
@@ -11,6 +12,10 @@ rustPlatform.buildRustPackage {
     cargoLock = {
         lockFile = ./Cargo.lock;
     };
+
+    buildInputs = [
+        sqlite
+    ];
 
     meta = {
         description = "Automatic colloscope building program";
