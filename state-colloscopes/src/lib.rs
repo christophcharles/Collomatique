@@ -204,6 +204,10 @@ pub enum PeriodError {
     /// Some non-default group list association are still present for the period
     #[error("period id ({0:?}) has non-default group list associations and cannot be removed")]
     PeriodStillHasNonTrivialGroupListAssociation(PeriodId),
+
+    /// The period is referenced by a rule
+    #[error("period id ({0:?}) is referenced by rule {1:?}")]
+    PeriodIsReferencedByRule(PeriodId, RuleId),
 }
 
 /// Errors for subject operations
@@ -1931,6 +1935,12 @@ impl Data {
                             *period_id,
                             *subject_id,
                         ));
+                    }
+                }
+
+                for (rule_id, rule) in &self.inner_data.rules.rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedByRule(*period_id, *rule_id));
                     }
                 }
 
