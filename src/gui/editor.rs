@@ -165,6 +165,7 @@ pub enum Message {
     PanelChanged(Panel),
     NewClicked,
     OpenClicked,
+    SaveClicked,
     UndoClicked,
     UndoProcessed(std::sync::Arc<Result<(), UndoErr>>),
     RedoClicked,
@@ -210,6 +211,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
         }
         Message::NewClicked => close_warning_task(state, GuiMessage::OpenNewFile),
         Message::OpenClicked => close_warning_task(state, GuiMessage::OpenExistingFile),
+        Message::SaveClicked => Task::none(),
         Message::UndoClicked => {
             /*let GuiState::Editor(editor_state) = state else {
                 panic!("Received editor message while not in editor state");
@@ -311,7 +313,16 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 Some(Message::OpenClicked.into())
             ),
             Space::with_height(2),
-            icon_button(tools::Icon::SaveAs, button::primary, "Enregistrer", None),
+            icon_button(
+                tools::Icon::SaveAs,
+                button::primary,
+                "Enregistrer",
+                if state.is_saved() {
+                    None
+                } else {
+                    Some(Message::SaveClicked.into())
+                }
+            ),
             Space::with_height(20),
             icon_button(tools::Icon::Undo, button::primary, "Annuler", {
                 use collomatique::frontend::state::Manager;
