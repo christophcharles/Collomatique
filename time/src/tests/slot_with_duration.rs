@@ -3,7 +3,6 @@ use super::*;
 #[test]
 fn rejects_slot_over_midnight() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(23, 0, 0).unwrap(),
     };
@@ -18,7 +17,6 @@ fn rejects_slot_over_midnight() {
 #[test]
 fn rejects_slot_over_midnight_variant() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(22, 54, 0).unwrap(),
     };
@@ -33,7 +31,6 @@ fn rejects_slot_over_midnight_variant() {
 #[test]
 fn accepts_slot_within_day() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
     };
@@ -48,7 +45,6 @@ fn accepts_slot_within_day() {
 #[test]
 fn accepts_slot_within_day_variant() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -63,7 +59,6 @@ fn accepts_slot_within_day_variant() {
 #[test]
 fn accepts_slot_ending_at_midnight() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(22, 0, 0).unwrap(),
     };
@@ -78,7 +73,6 @@ fn accepts_slot_ending_at_midnight() {
 #[test]
 fn accepts_slot_ending_at_midnight_variant() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(22, 32, 0).unwrap(),
     };
@@ -93,7 +87,6 @@ fn accepts_slot_ending_at_midnight_variant() {
 #[test]
 fn accepts_slot_spanning_all_day() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
     };
@@ -108,7 +101,6 @@ fn accepts_slot_spanning_all_day() {
 #[test]
 fn rejects_slot_ending_at_midnight_one_day_after() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(23, 0, 0).unwrap(),
     };
@@ -123,7 +115,6 @@ fn rejects_slot_ending_at_midnight_one_day_after() {
 #[test]
 fn check_end_time_within_day() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
     };
@@ -141,7 +132,6 @@ fn check_end_time_within_day() {
 #[test]
 fn check_end_time_within_day_variant() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -159,7 +149,6 @@ fn check_end_time_within_day_variant() {
 #[test]
 fn check_end_time_at_midnight() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(22, 0, 0).unwrap(),
     };
@@ -177,7 +166,6 @@ fn check_end_time_at_midnight() {
 #[test]
 fn check_end_time_at_midnight_variant() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(22, 32, 0).unwrap(),
     };
@@ -195,7 +183,6 @@ fn check_end_time_at_midnight_variant() {
 #[test]
 fn check_end_time_for_slot_spanning_all_day() {
     let start = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
     };
@@ -213,7 +200,6 @@ fn check_end_time_for_slot_spanning_all_day() {
 #[test]
 fn check_non_overlapping() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -221,7 +207,6 @@ fn check_non_overlapping() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(12, 52, 0).unwrap(),
     };
@@ -234,7 +219,6 @@ fn check_non_overlapping() {
 #[test]
 fn check_non_overlapping_order_inversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -242,7 +226,6 @@ fn check_non_overlapping_order_inversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(12, 52, 0).unwrap(),
     };
@@ -255,7 +238,6 @@ fn check_non_overlapping_order_inversed() {
 #[test]
 fn check_non_overlapping_just_touching() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -263,7 +245,6 @@ fn check_non_overlapping_just_touching() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 26, 0).unwrap(),
     };
@@ -276,7 +257,6 @@ fn check_non_overlapping_just_touching() {
 #[test]
 fn check_non_overlapping_just_touching_order_inversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(7, 34, 0).unwrap(),
     };
@@ -284,7 +264,6 @@ fn check_non_overlapping_just_touching_order_inversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 26, 0).unwrap(),
     };
@@ -297,7 +276,6 @@ fn check_non_overlapping_just_touching_order_inversed() {
 #[test]
 fn check_overlapping_not_included() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -305,7 +283,6 @@ fn check_overlapping_not_included() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 12, 0).unwrap(),
     };
@@ -318,7 +295,6 @@ fn check_overlapping_not_included() {
 #[test]
 fn check_overlapping_not_included_order_inversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -326,7 +302,6 @@ fn check_overlapping_not_included_order_inversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 12, 0).unwrap(),
     };
@@ -339,7 +314,6 @@ fn check_overlapping_not_included_order_inversed() {
 #[test]
 fn check_overlapping_included() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -347,7 +321,6 @@ fn check_overlapping_included() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(7, 12, 0).unwrap(),
     };
@@ -360,7 +333,6 @@ fn check_overlapping_included() {
 #[test]
 fn check_overlapping_included_order_inversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -368,7 +340,6 @@ fn check_overlapping_included_order_inversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(7, 12, 0).unwrap(),
     };
@@ -381,7 +352,6 @@ fn check_overlapping_included_order_inversed() {
 #[test]
 fn check_overlapping_barely() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -389,7 +359,6 @@ fn check_overlapping_barely() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 25, 0).unwrap(),
     };
@@ -402,7 +371,6 @@ fn check_overlapping_barely() {
 #[test]
 fn check_overlapping_barely_order_inversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -410,7 +378,6 @@ fn check_overlapping_barely_order_inversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(8, 25, 0).unwrap(),
     };
@@ -423,7 +390,6 @@ fn check_overlapping_barely_order_inversed() {
 #[test]
 fn check_overlapping_included_barely_front() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -431,7 +397,6 @@ fn check_overlapping_included_barely_front() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -444,7 +409,6 @@ fn check_overlapping_included_barely_front() {
 #[test]
 fn check_overlapping_included_barely_front_order_reversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -452,7 +416,6 @@ fn check_overlapping_included_barely_front_order_reversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -465,7 +428,6 @@ fn check_overlapping_included_barely_front_order_reversed() {
 #[test]
 fn check_overlapping_included_barely_back() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -473,7 +435,6 @@ fn check_overlapping_included_barely_back() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(7, 51, 0).unwrap(),
     };
@@ -486,7 +447,6 @@ fn check_overlapping_included_barely_back() {
 #[test]
 fn check_overlapping_included_barely_back_order_reversed() {
     let start1 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(6, 52, 0).unwrap(),
     };
@@ -494,7 +454,6 @@ fn check_overlapping_included_barely_back_order_reversed() {
     let slot1 = SlotWithDuration::new(start1, duration1).unwrap();
 
     let start2 = SlotStart {
-        week: 1,
         weekday: chrono::Weekday::Wed.into(),
         start_time: chrono::NaiveTime::from_hms_opt(7, 51, 0).unwrap(),
     };
