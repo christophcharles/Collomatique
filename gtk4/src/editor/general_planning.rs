@@ -56,7 +56,7 @@ impl GeneralPlanning {
             "<b><big>Début de la première semaine de colles :</big></b> {}",
             match &self.periods.first_week {
                 Some(date) => {
-                    date.inner().to_string()
+                    date.inner().format("%d/%m/%Y").to_string()
                 }
                 None => "non sélectionné".to_string(),
             }
