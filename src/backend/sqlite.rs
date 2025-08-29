@@ -357,6 +357,15 @@ impl Storage for Store {
     > + Send {
         week_patterns::remove(&self.pool, index)
     }
+    fn week_patterns_update(
+        &self,
+        index: Self::WeekPatternId,
+        pattern: WeekPattern,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>,
+    > + Send {
+        week_patterns::update(&self.pool, index, pattern)
+    }
 
     fn teachers_get(
         &self,

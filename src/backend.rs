@@ -41,6 +41,11 @@ pub trait Storage {
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
+    async fn week_patterns_update(
+        &self,
+        index: Self::WeekPatternId,
+        pattern: WeekPattern,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
 
     async fn teachers_get_all(
         &self,
