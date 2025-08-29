@@ -5,10 +5,10 @@ use pyo3::prelude::*;
 use crate::rpc::{
     cmd_msg::MsgStudentId,
     error_msg::{
-        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, CutPeriodError,
-        DeletePeriodError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
-        GeneralPlanningError, MergeWithPreviousPeriodError, MoveDownError, MoveUpError,
-        StudentsError, SubjectsError, TeachersError, UpdatePeriodStatusError,
+        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignError, AssignmentsError,
+        CutPeriodError, DeletePeriodError, DeleteStudentError, DeleteSubjectError,
+        DeleteTeacherError, GeneralPlanningError, MergeWithPreviousPeriodError, MoveDownError,
+        MoveUpError, StudentsError, SubjectsError, TeachersError, UpdatePeriodStatusError,
         UpdatePeriodWeekCountError, UpdateStudentError, UpdateSubjectError, UpdateTeacherError,
         UpdateWeekStatusError,
     },
@@ -618,6 +618,118 @@ impl Session {
             .iter()
             .map(|(id, data)| (MsgStudentId::from(*id).into(), data.clone().into()))
             .collect()
+    }
+
+    fn assignments_set(
+        self_: PyRef<'_, Self>,
+        period_id: PeriodId,
+        student_id: StudentId,
+        subject_id: SubjectId,
+        status: bool,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::Assignments(crate::rpc::cmd_msg::AssignmentsCmdMsg::Assign(
+                period_id.into(),
+                student_id.into(),
+                subject_id.into(),
+                status,
+            )),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Assignments(AssignmentsError::Assign(e))) => match e {
+                AssignError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                AssignError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+                AssignError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                AssignError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Subject {:?} does not run on period {:?}",
+                        subject_id, period_id
+                    )))
+                }
+                AssignError::StudentIsNotPresentOnPeriod(student_id, period_id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Student {:?} is not present on period {:?}",
+                        student_id, period_id
+                    )))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn assignments_get(
+        self_: PyRef<'_, Self>,
+        period_id: PeriodId,
+        student_id: StudentId,
+        subject_id: SubjectId,
+    ) -> PyResult<bool> {
+        let current_data = self_.token.get_data();
+
+        let Some(period_id) =
+            current_data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid period id {:?}",
+                period_id
+            )));
+        };
+        let Some(student_id) =
+            current_data.validate_student_id(MsgStudentId::from(student_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid student id {:?}",
+                student_id
+            )));
+        };
+        let Some(subject_id) =
+            current_data.validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid subject id {:?}",
+                subject_id
+            )));
+        };
+
+        let student = current_data
+            .get_students()
+            .student_map
+            .get(&student_id)
+            .expect("Student id should be valid at this point");
+
+        if student.excluded_periods.contains(&period_id) {
+            return Err(PyValueError::new_err(format!(
+                "Student {:?} is not present on period {:?}",
+                student_id, period_id
+            )));
+        }
+
+        let Some(assigned_students) = current_data
+            .get_assignments()
+            .period_map
+            .get(&period_id)
+            .expect("Period id should be valid at this point")
+            .subject_map
+            .get(&subject_id)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Subject {:?} does not run on period {:?}",
+                subject_id, period_id
+            )));
+        };
+
+        let value = assigned_students.contains(&student_id);
+
+        Ok(value)
     }
 }
 
