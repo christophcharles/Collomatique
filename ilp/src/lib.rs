@@ -522,7 +522,7 @@ impl Variable {
 /// Each variable used either by a constraint or by the objective function must be declared. This is necessary
 /// as each variable type and range must be specified. This is also used as a consistency check.
 ///
-/// You can optionally specify an objective function with [ProblemBuilder::set_objective_function].
+/// You can optionally specify an objective function with [ProblemBuilder::set_objective].
 ///
 /// Once the problem is fully specified, you can call [ProblemBuilder::build]. This will return a [Problem] struct
 /// that you can use with a solver.
@@ -646,7 +646,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// or [ProblemBuilder::set_variables]. You can similarly add constraints with [ProblemBuilder::add_constraint]
     /// or [ProblemBuilder::add_constraints].
     ///
-    /// An objective function can also be set with [ProblemBuilder::set_objective_function].
+    /// An objective function can also be set with [ProblemBuilder::set_objective].
     ///
     /// Finally, the problem is generated using [ProblemBuilder::build].
     pub fn new() -> Self {
@@ -877,7 +877,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// Once you have constructed the problem using [ProblemBuilder::add_constraint],
     /// [ProblemBuilder::add_constraints], declared the variables using [ProblemBuilder::set_variable]
     /// or [ProblemBuilder::set_variables] and optionally defined an objective function with
-    /// [ProblemBuilder::set_objective_function], you can commit the result into a [Problem].
+    /// [ProblemBuilder::set_objective], you can commit the result into a [Problem].
     ///
     /// This function does just that. It does a simple sanity check: all variables that appear in
     /// the constraints and the objective function must be declared.
