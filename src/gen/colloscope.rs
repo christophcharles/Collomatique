@@ -248,7 +248,7 @@ pub struct GeneralData {
     pub week_count: NonZeroU32,
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
-    pub periodicity_cuts: BTreeSet<u32>,
+    pub periodicity_cuts: BTreeSet<NonZeroU32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -281,8 +281,11 @@ impl ValidatedData {
         grouping_incompats: SlotGroupingIncompatSet,
     ) -> Result<ValidatedData> {
         for cut in &general.periodicity_cuts {
-            if *cut >= general.week_count.get() {
-                return Err(Error::InvalidPeriodicityCut(*cut, general.week_count.get()));
+            if cut.get() >= general.week_count.get() {
+                return Err(Error::InvalidPeriodicityCut(
+                    cut.get(),
+                    general.week_count.get(),
+                ));
             }
         }
 
