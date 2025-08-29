@@ -8,7 +8,9 @@ pub fn decode_entry(
     student_list: json::student_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    assert!(pre_data.students.student_map.is_empty());
+    if !pre_data.students.student_map.is_empty() {
+        return Err(DecodeError::StudentsAlreadyDecoded);
+    }
 
     let mut ids = BTreeSet::new();
     for (id, student) in student_list.student_map {
