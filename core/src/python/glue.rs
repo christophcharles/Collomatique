@@ -258,6 +258,9 @@ impl Session {
                 AddNewSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
                     "students per group range cannot be empty",
                 )),
+                AddNewSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
+                    "interrogation count range cannot be empty",
+                )),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -291,6 +294,9 @@ impl Session {
                     "Invalid subject id {:?}",
                     id
                 ))),
+                UpdateSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
+                    "interrogation count range cannot be empty",
+                )),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }

@@ -41,6 +41,8 @@ pub enum AddNewSubjectError {
     StudentsPerGroupRangeIsEmpty,
     #[error("Groups per interrogations range should allow at least one value")]
     GroupsPerInterrogationRangeIsEmpty,
+    #[error("Interrogation count range should allow at least one value")]
+    InterrogationCountRangeIsEmpty,
 }
 
 #[derive(Debug, Error)]
@@ -51,6 +53,8 @@ pub enum UpdateSubjectError {
     StudentsPerGroupRangeIsEmpty,
     #[error("Groups per interrogations range should allow at least one value")]
     GroupsPerInterrogationRangeIsEmpty,
+    #[error("Interrogation count range should allow at least one value")]
+    InterrogationCountRangeIsEmpty,
 }
 
 #[derive(Debug, Error)]
@@ -123,6 +127,7 @@ impl SubjectsUpdateOp {
                         match se {
                             collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
                             collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => AddNewSubjectError::InterrogationCountRangeIsEmpty,
                             _ => panic!("Unexpected subject error during AddNewSubject: {:?}", se),
                         }
                     } else {
@@ -158,6 +163,7 @@ impl SubjectsUpdateOp {
                         match se {
                             collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
                             collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => AddNewSubjectError::InterrogationCountRangeIsEmpty,
                             _ => panic!("Unexpected subject error during UpdateSubject: {:?}", se),
                         }
                     } else {
