@@ -2740,6 +2740,52 @@ impl<T: Storage> Logic<T> {
             })
             .collect::<BackupResult<_, _>>()?;
 
+        let mut student_assignments = BTreeMap::<_, _>::new();
+        for (old_student_id, new_student_id) in &student_ids {
+            let mut incompats = BTreeSet::<BackupIncompatId>::new();
+            for (old_incompat_id, new_incompat_id) in &incompat_ids {
+                if self
+                    .incompat_for_student_get(*old_student_id, *old_incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        Id2Error::InternalError(int_err) => BackupError::InternalError(int_err),
+                        Id2Error::InvalidId1(_) => BackupError::InconsistentId,
+                        Id2Error::InvalidId2(_) => BackupError::InconsistentId,
+                    })?
+                {
+                    incompats.insert(*new_incompat_id);
+                }
+            }
+
+            let mut subject_groups = BTreeMap::<BackupSubjectGroupId, BackupSubjectId>::new();
+            for (old_subject_group_id, new_subject_group_id) in &subject_group_ids {
+                let old_subject_id_opt = self
+                    .subject_group_for_student_get(*old_student_id, *old_subject_group_id)
+                    .await
+                    .map_err(|e| match e {
+                        Id2Error::InternalError(int_err) => BackupError::InternalError(int_err),
+                        Id2Error::InvalidId1(_) => BackupError::InconsistentId,
+                        Id2Error::InvalidId2(_) => BackupError::InconsistentId,
+                    })?;
+
+                if let Some(old_subject_id) = old_subject_id_opt {
+                    let new_subject_id = subject_ids
+                        .get(&old_subject_id)
+                        .cloned()
+                        .ok_or(BackupError::InconsistentId)?;
+                    subject_groups.insert(*new_subject_group_id, new_subject_id);
+                }
+            }
+
+            student_assignments.insert(
+                *new_student_id,
+                BackupAssignments {
+                    subject_groups,
+                    incompats,
+                },
+            );
+        }
+
         todo!()
     }
 }
