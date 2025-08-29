@@ -101,7 +101,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
         AgregateVariableConstraintDesc<ProblemVariable>,
     )> {
         let var_expr = LinExpr::<ProblemVariable>::var(self.variable_name.clone());
-        let mut add_expr = LinExpr::constant((1 - self.original_variables.len()) as f64);
+        let mut add_expr = LinExpr::constant(1. - self.original_variables.len() as f64);
 
         for orig_var in &self.original_variables {
             add_expr = add_expr + LinExpr::var(orig_var.clone());
@@ -132,6 +132,7 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
     }
 
     fn reconstruct_structure_variable(&self, config: &ConfigData<ProblemVariable>) -> Option<f64> {
+        let mut at_least_one_none = false;
         for orig_var in &self.original_variables {
             match config.get(orig_var.clone()) {
                 Some(val) => {
@@ -139,10 +140,16 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
                         return Some(0.);
                     }
                 }
-                None => return None,
+                None => {
+                    at_least_one_none = true;
+                }
             }
         }
-        Some(1.)
+        if at_least_one_none {
+            None
+        } else {
+            Some(1.)
+        }
     }
 }
 
