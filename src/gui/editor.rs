@@ -54,7 +54,7 @@ impl AppStateBox {
 #[derive(Debug, Clone)]
 pub struct State {
     panel: Panel,
-    db: std::path::PathBuf,
+    path: Option<std::path::PathBuf>,
     app_state: AppStateBox,
 }
 
@@ -110,7 +110,7 @@ impl State {
 
         Ok(Self {
             panel: Panel::SubjectGroups,
-            db: file,
+            path: Some(file),
             app_state: AppStateBox::new(app_state),
         })
     }
@@ -392,7 +392,10 @@ pub fn view(state: &State) -> Element<GuiMessage> {
 }
 
 pub fn title(state: &State) -> String {
-    format!("Collomatique - {}", state.db.to_string_lossy())
+    match &state.path {
+        Some(p) => format!("Collomatique - {}", p.to_string_lossy()),
+        None => format!("Collomatique"),
+    }
 }
 
 pub fn exit_subscription(_state: &State) -> Subscription<GuiMessage> {
