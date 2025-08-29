@@ -427,18 +427,18 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
     type StructureVariable = SoftVariable<E::StructureVariable, E::GeneralConstraintDesc>;
     type GeneralConstraintDesc = ();
 
-    fn is_fit_for_problem(&self, base: &T) -> bool {
-        self.internal_constraints.is_fit_for_problem(base)
+    fn is_fit_for_problem(&self, desc: &T) -> bool {
+        self.internal_constraints.is_fit_for_problem(desc)
     }
 
-    fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+    fn extra_structure_variables(&self, desc: &T) -> BTreeMap<Self::StructureVariable, Variable> {
         self.internal_constraints
-            .extra_structure_variables(base)
+            .extra_structure_variables(desc)
             .into_iter()
             .map(|(x, v)| (SoftVariable::Orig(x), v))
             .chain(
                 self.internal_constraints
-                    .general_constraints(base)
+                    .general_constraints(desc)
                     .into_iter()
                     .enumerate()
                     .map(|(i, (_c, desc))| (SoftVariable::Soft(i, desc), Variable::non_negative())),
@@ -448,13 +448,13 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn extra_structure_constraints(
         &self,
-        base: &T,
+        desc: &T,
     ) -> Vec<(
         Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
         Self::StructureConstraintDesc,
     )> {
         self.internal_constraints
-            .extra_structure_constraints(base)
+            .extra_structure_constraints(desc)
             .into_iter()
             .map(|(c, desc)| {
                 (
@@ -470,7 +470,7 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
             })
             .chain(
                 self.internal_constraints
-                    .general_constraints(base)
+                    .general_constraints(desc)
                     .into_iter()
                     .enumerate()
                     .flat_map(|(i, (c, desc))| {
@@ -506,7 +506,7 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn general_constraints(
         &self,
-        _base: &T,
+        _desc: &T,
     ) -> Vec<(
         Constraint<
             ExtraVariable<
@@ -522,14 +522,14 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn objective(
         &self,
-        base: &T,
+        desc: &T,
     ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
     {
         let mut new_obj = LinExpr::constant(0.0);
 
         for (i, (_c, desc)) in self
             .internal_constraints
-            .general_constraints(base)
+            .general_constraints(desc)
             .into_iter()
             .enumerate()
         {
@@ -542,12 +542,12 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn reconstruct_extra_structure_variables(
         &self,
-        base: &T,
+        desc: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
     ) -> ConfigData<Self::StructureVariable> {
         let orig_structure_variables = self
             .internal_constraints
-            .reconstruct_extra_structure_variables(base, config);
+            .reconstruct_extra_structure_variables(desc, config);
 
         let values = config
             .transmute(|x| match x {
@@ -565,7 +565,7 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
         for (i, (c, desc)) in self
             .internal_constraints
-            .general_constraints(base)
+            .general_constraints(desc)
             .into_iter()
             .enumerate()
         {
@@ -636,18 +636,18 @@ impl<T: BaseProblem> ProblemConstraints<T> for FixedPartialSolution<T> {
     type StructureVariable = ();
     type GeneralConstraintDesc = PartialConstraint<T::MainVariable>;
 
-    fn is_fit_for_problem(&self, base: &T) -> bool {
-        base.partial_solution_to_configuration(&self.partial_solution)
+    fn is_fit_for_problem(&self, desc: &T) -> bool {
+        desc.partial_solution_to_configuration(&self.partial_solution)
             .is_some()
     }
 
-    fn extra_structure_variables(&self, _base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+    fn extra_structure_variables(&self, _desc: &T) -> BTreeMap<Self::StructureVariable, Variable> {
         BTreeMap::new()
     }
 
     fn extra_structure_constraints(
         &self,
-        _base: &T,
+        _desc: &T,
     ) -> Vec<(
         Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
         Self::StructureConstraintDesc,
@@ -657,7 +657,7 @@ impl<T: BaseProblem> ProblemConstraints<T> for FixedPartialSolution<T> {
 
     fn general_constraints(
         &self,
-        base: &T,
+        desc: &T,
     ) -> Vec<(
         Constraint<
             ExtraVariable<
@@ -668,7 +668,7 @@ impl<T: BaseProblem> ProblemConstraints<T> for FixedPartialSolution<T> {
         >,
         Self::GeneralConstraintDesc,
     )> {
-        let config_data = base
+        let config_data = desc
             .partial_solution_to_configuration(&self.partial_solution)
             .expect("Compatibility should be tested with is_fit_for_problem");
 
@@ -689,7 +689,7 @@ impl<T: BaseProblem> ProblemConstraints<T> for FixedPartialSolution<T> {
 
     fn reconstruct_extra_structure_variables(
         &self,
-        _base: &T,
+        _desc: &T,
         _config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
     ) -> ConfigData<Self::StructureVariable> {
         ConfigData::new()
