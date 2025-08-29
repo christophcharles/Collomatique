@@ -11,15 +11,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonData {
-    header: Header,
-    entries: Vec<Entry>,
+    pub header: Header,
+    pub entries: Vec<Entry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Header {
-    file_type: FileType,
-    produced_with_version: Version,
-    file_content: FileContent,
+    pub file_type: FileType,
+    pub produced_with_version: Version,
+    pub file_content: FileContent,
 }
 
 /// Represents a semantic version number
