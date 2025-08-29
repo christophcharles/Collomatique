@@ -11,13 +11,13 @@ pub enum LoadingInput {
     Load(PathBuf),
 
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
-    Failed(PathBuf),
+    Failed(PathBuf, String),
 }
 
 #[derive(Debug)]
 pub enum LoadingOutput {
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
-    Failed(PathBuf),
+    Failed(PathBuf, String),
 }
 
 pub struct LoadingPanel {
@@ -92,7 +92,9 @@ impl SimpleComponent for LoadingPanel {
         let worker = file_loader::FileLoader::builder()
             .detach_worker(())
             .forward(sender.input_sender(), |x| match x {
-                file_loader::FileLoadingOutput::Failed(path) => LoadingInput::Failed(path),
+                file_loader::FileLoadingOutput::Failed(path, error) => {
+                    LoadingInput::Failed(path, error)
+                }
                 file_loader::FileLoadingOutput::Loaded(path, data) => {
                     LoadingInput::Loaded(path, data)
                 }
@@ -112,8 +114,8 @@ impl SimpleComponent for LoadingPanel {
                     .send(file_loader::FileLoadingInput::Load(path))
                     .unwrap();
             }
-            LoadingInput::Failed(path) => {
-                sender.output(LoadingOutput::Failed(path)).unwrap();
+            LoadingInput::Failed(path, error) => {
+                sender.output(LoadingOutput::Failed(path, error)).unwrap();
             }
             LoadingInput::Loaded(path, data) => {
                 sender.output(LoadingOutput::Loaded(path, data)).unwrap();
