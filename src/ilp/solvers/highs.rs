@@ -54,7 +54,7 @@ impl Default for Solver {
 impl Solver {
     pub fn new() -> Self {
         Solver {
-            disable_logging: false,
+            disable_logging: true,
         }
     }
 

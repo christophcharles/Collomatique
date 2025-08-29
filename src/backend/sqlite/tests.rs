@@ -27,6 +27,7 @@ async fn general_data_get_1(pool: SqlitePool) {
     let general_data_expected = GeneralData {
         interrogations_per_week: None,
         max_interrogations_per_day: None,
+        week_count: NonZeroU32::new(30).unwrap(),
     };
 
     assert_eq!(general_data, general_data_expected);
@@ -39,7 +40,7 @@ async fn general_data_get_2(pool: SqlitePool) {
     let _ = sqlx::query!(
         r#"
 UPDATE general_data
-SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2}'
+SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2,"week_count":25}'
 WHERE id = 1
         "#
     )
@@ -52,6 +53,7 @@ WHERE id = 1
     let general_data_expected = GeneralData {
         interrogations_per_week: Some(2..5),
         max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
+        week_count: NonZeroU32::new(25).unwrap(),
     };
 
     assert_eq!(general_data, general_data_expected);
@@ -61,19 +63,22 @@ WHERE id = 1
 async fn general_data_set(pool: SqlitePool) {
     let mut store = prepare_empty_db(pool).await;
 
-    store
-        .general_data_set(&GeneralData {
+    unsafe {
+        store.general_data_set_unchecked(&GeneralData {
             interrogations_per_week: Some(2..5),
             max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
+            week_count: NonZeroU32::new(25).unwrap(),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     let general_data = store.general_data_get().await.unwrap();
 
     let general_data_expected = GeneralData {
         interrogations_per_week: Some(2..5),
         max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
+        week_count: NonZeroU32::new(25).unwrap(),
     };
 
     assert_eq!(general_data, general_data_expected);
