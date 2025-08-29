@@ -141,6 +141,13 @@ impl Time {
             .checked_add(duration_in_minutes)
             .and_then(|x| Self::new(x))
     }
+
+    pub fn fit_in_day(&self, duration_in_minutes: u32) -> bool {
+        self.time_in_minutes
+            .checked_add(duration_in_minutes)
+            .and_then(|x| Some(x <= MINUTES_PER_DAY))
+            .unwrap_or(false)
+    }
 }
 
 impl Default for Time {
