@@ -60,6 +60,24 @@ impl SubjectId {
     }
 }
 
+/// This type represents an ID for a teacher
+///
+/// Every teacher gets a unique ID. IDs then identify teachers
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TeacherId(u64);
+
+impl TeacherId {
+    /// Returns the value for the ID
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+
+    pub(crate) unsafe fn new(value: u64) -> TeacherId {
+        TeacherId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -73,8 +91,12 @@ impl IdIssuer {
         student_ids: impl Iterator<Item = u64>,
         period_ids: impl Iterator<Item = u64>,
         subject_ids: impl Iterator<Item = u64>,
+        teacher_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
-        let existing_ids = student_ids.chain(period_ids).chain(subject_ids);
+        let existing_ids = student_ids
+            .chain(period_ids)
+            .chain(subject_ids)
+            .chain(teacher_ids);
         Ok(IdIssuer {
             helper: tools::IdIssuerHelper::new(existing_ids)?,
         })
@@ -93,5 +115,10 @@ impl IdIssuer {
     /// Get a new unused ID for a subject
     pub fn get_subject_id(&mut self) -> SubjectId {
         SubjectId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a subject
+    pub fn get_teacher_id(&mut self) -> TeacherId {
+        TeacherId(self.helper.get_new_id().inner())
     }
 }
