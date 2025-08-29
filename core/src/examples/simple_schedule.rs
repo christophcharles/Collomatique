@@ -16,18 +16,63 @@
 //! Here a simple example of using the library to solve such a simple scheduling problem:
 //! ```
 //! # use collomatique_core::{examples::simple_schedule::SimpleScheduleBase, ProblemBuilder};
+//! # use std::collections::BTreeSet;
 //! let problem_desc = SimpleScheduleBase {
 //!     group_count: 2,
 //!     week_count: 2,
 //!     course_count: 2,
 //! };
 //!
-//! let problem = ProblemBuilder::new(problem_desc, 1.0).expect("Consistent ILP description").build();
+//! let problem = ProblemBuilder::<_,_,_>::new(problem_desc, 1.0).expect("Consistent ILP description").build();
 //!
 //! let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::new();
-//! let solution = problem.solve(&solver).expect("There should be at least a solution").inner().inner();
+//! let solution = problem.solve(&solver).expect("There should be at least a solution").into_solution();
 //!
+//! // The solution should be complete as it was found by the solver
 //! assert!(solution.is_complete());
+//! // There should be less than one assignment per cell as the constraints are satisfied
+//! for group in 0..1 {
+//!     for week in 0..1 {
+//!         assert!(solution.get_assigned(group, week).unwrap().len() <= 1);
+//!     }
+//! }
+//!
+//! // In fact, we know the two solutions for this small problem, let's check we got one of them
+//! if solution.get_assigned(0, 0).unwrap().contains(&0) {
+//!     assert_eq!(
+//!         solution.get_assigned(0,0).cloned().unwrap(),
+//!         BTreeSet::from([0])
+//!     );
+//!     assert_eq!(
+//!         solution.get_assigned(0,1).cloned().unwrap(),
+//!         BTreeSet::from([1])
+//!     );
+//!     assert_eq!(
+//!         solution.get_assigned(1,0).cloned().unwrap(),
+//!         BTreeSet::from([1])
+//!     );
+//!     assert_eq!(
+//!         solution.get_assigned(1,1).cloned().unwrap(),
+//!         BTreeSet::from([0])
+//!     );
+//! } else {
+//!     assert_eq!(
+//!         solution.get_assigned(0,0).cloned().unwrap(),
+//!         BTreeSet::from([1])
+//!     );
+//!     assert_eq!(
+//!         solution.get_assigned(0,1).cloned().unwrap(),
+//!         BTreeSet::from([0])
+//!     );
+//!     assert_eq!(
+//!         solution.get_assigned(1,0).cloned().unwrap(),
+//!         BTreeSet::from([0])
+//!     );
+//!     assert_eq!(
+//!         solution.get_assigned(1,1).cloned().unwrap(),
+//!         BTreeSet::from([1])
+//!     );
+//! }
 //! ```
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, Variable};
