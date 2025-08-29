@@ -5,29 +5,37 @@ pub use general_planning::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
+    Update(UpdateMsg),
+    GetData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateMsg {
     GeneralPlanning(GeneralPlanningCmdMsg),
 }
 
-impl From<crate::ops::UpdateOp> for CmdMsg {
+impl From<crate::ops::UpdateOp> for UpdateMsg {
     fn from(value: crate::ops::UpdateOp) -> Self {
         match value {
-            crate::ops::UpdateOp::GeneralPlanning(op) => CmdMsg::GeneralPlanning(op.into()),
+            crate::ops::UpdateOp::GeneralPlanning(op) => UpdateMsg::GeneralPlanning(op.into()),
         }
     }
 }
 
-impl CmdMsg {
+impl UpdateMsg {
     pub fn promote(
         self,
         data: &collomatique_state_colloscopes::Data,
     ) -> Result<crate::ops::UpdateOp, ErrorMsg> {
         Ok(match self {
-            CmdMsg::GeneralPlanning(op) => crate::ops::UpdateOp::GeneralPlanning(op.promote(data)?),
+            UpdateMsg::GeneralPlanning(op) => {
+                crate::ops::UpdateOp::GeneralPlanning(op.promote(data)?)
+            }
         })
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MsgPeriodId(pub u64);
 
 impl From<collomatique_state_colloscopes::PeriodId> for MsgPeriodId {

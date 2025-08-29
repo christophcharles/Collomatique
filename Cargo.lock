@@ -350,6 +350,7 @@ dependencies = [
  "chrono",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-storage",
  "collomatique-time",
  "pyo3",
  "serde",

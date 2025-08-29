@@ -26,6 +26,7 @@ pub fn current_session() -> Session {
 pub struct Session {}
 
 mod general_planning;
+mod time;
 
 #[pymethods]
 impl Session {
