@@ -131,18 +131,7 @@ impl SlotsExternalData {
             return false;
         }
         self.subject_map.iter().all(|(subject_id, data)| {
-            let Some(subject) = subjects.find_subject(*subject_id) else {
-                return false;
-            };
-            let Some(params) = &subject.parameters.interrogation_parameters else {
-                return false;
-            };
-            data.validate(
-                *subject_id,
-                teachers,
-                week_pattern_ids,
-                params.duration.clone(),
-            )
+            data.validate(*subject_id, subjects, teachers, week_pattern_ids)
         })
     }
 }
@@ -164,14 +153,14 @@ impl SubjectSlotsExternalData {
     /// Checks the validity of a [SubjectSlotsExternalData].
     pub fn validate(
         &self,
-        current_subject_id: u64,
+        subject_id: u64,
+        subjects: &super::subjects::SubjectsExternalData,
         teachers: &super::teachers::TeachersExternalData,
         week_pattern_ids: &BTreeSet<u64>,
-        duration: collomatique_time::NonZeroDurationInMinutes,
     ) -> bool {
-        self.ordered_slots.iter().all(|(_id, slot)| {
-            slot.validate(current_subject_id, week_pattern_ids, teachers, duration)
-        })
+        self.ordered_slots
+            .iter()
+            .all(|(_id, slot)| slot.validate(subject_id, subjects, week_pattern_ids, teachers))
     }
 }
 
@@ -213,15 +202,22 @@ impl SlotExternalData {
     /// Checks the validity of a [SlotExternalData]
     pub fn validate(
         &self,
-        current_subject_id: u64,
+        subject_id: u64,
+        subjects: &super::subjects::SubjectsExternalData,
         week_pattern_ids: &BTreeSet<u64>,
         teachers: &super::teachers::TeachersExternalData,
-        duration: collomatique_time::NonZeroDurationInMinutes,
     ) -> bool {
+        let Some(subject) = subjects.find_subject(subject_id) else {
+            return false;
+        };
+        let Some(params) = &subject.parameters.interrogation_parameters else {
+            return false;
+        };
+
         let Some(teacher) = teachers.teacher_map.get(&self.teacher_id) else {
             return false;
         };
-        if !teacher.subjects.contains(&current_subject_id) {
+        if !teacher.subjects.contains(&subject_id) {
             return false;
         }
         if let Some(week_pattern_id) = &self.week_pattern {
@@ -229,7 +225,12 @@ impl SlotExternalData {
                 return false;
             }
         }
-        if collomatique_time::SlotWithDuration::new(self.start_time.clone(), duration).is_none() {
+        if collomatique_time::SlotWithDuration::new(
+            self.start_time.clone(),
+            params.duration.clone(),
+        )
+        .is_none()
+        {
             return false;
         }
         true
