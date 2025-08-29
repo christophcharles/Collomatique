@@ -287,14 +287,14 @@ impl_backup_id_from!(GroupingIncompatId);
 impl_backup_id_from!(ColloscopeId);
 impl_backup_id_from!(SlotSelectionId);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JsonStudent {
     pub student: Student,
     pub subject_groups: BTreeMap<SubjectGroupId, SubjectId>,
     pub incompats: BTreeSet<IncompatId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct JsonData {
     general_data: GeneralData,
     week_patterns: BTreeMap<WeekPatternId, WeekPattern>,
@@ -317,7 +317,7 @@ impl JsonData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ValidatedJson {
     validated: JsonData,
 }
@@ -631,7 +631,7 @@ pub enum FromLogicError<T: std::fmt::Debug + std::error::Error> {
 
 pub type FromLogicResult<T, E> = std::result::Result<T, FromLogicError<E>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsonStore {
     next_id: u64,
     data: ValidatedJson,

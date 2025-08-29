@@ -2586,4 +2586,8 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
+
+    pub fn get_storage(&self) -> &T {
+        &self.storage
+    }
 }

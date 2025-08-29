@@ -335,7 +335,7 @@ pub enum PythonCommand {
     },
 }
 
-use crate::backend::sqlite;
+use crate::backend::json;
 use crate::frontend::state::{AppSession, AppState};
 
 fn is_colloscope_name_used(
@@ -386,7 +386,7 @@ async fn solve_command(
     quick: bool,
     max_time: u32,
     #[cfg(feature = "highs")] highs: bool,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
     use indicatif::{ProgressBar, ProgressStyle};
@@ -492,7 +492,7 @@ async fn solve_command(
 
 async fn week_count_command(
     command: WeekCountCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     use crate::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
 
@@ -594,7 +594,7 @@ async fn week_count_command(
 
 async fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     use crate::frontend::state::{Manager, Operation, UpdateError};
 
@@ -640,7 +640,7 @@ async fn max_interrogations_per_day_command(
 
 async fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     use crate::frontend::state::{Manager, Operation, UpdateError};
 
@@ -717,7 +717,7 @@ async fn interrogations_per_week_range_command(
 
 async fn general_command(
     command: GeneralCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     match command {
         GeneralCommand::WeekCount { command } => week_count_command(command, app_state).await,
@@ -740,7 +740,7 @@ fn week_pattern_to_string(week_pattern: &crate::backend::WeekPattern) -> String 
 }
 
 async fn get_week_pattern(
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
     name: &str,
     week_pattern_number: Option<NonZeroUsize>,
 ) -> Result<(
@@ -795,7 +795,7 @@ fn predefined_week_pattern_weeks(
 }
 
 async fn week_patterns_check_existing_names(
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
     name: &str,
 ) -> Result<()> {
     use crate::frontend::state::Manager;
@@ -814,7 +814,7 @@ async fn week_patterns_check_existing_names(
 
 async fn week_pattern_command(
     command: WeekPatternCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     use crate::backend::WeekPattern;
     use crate::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
@@ -1108,7 +1108,7 @@ async fn week_pattern_command(
 }
 
 async fn get_colloscope(
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
     name: &str,
     colloscope_number: Option<NonZeroUsize>,
 ) -> Result<(
@@ -1151,7 +1151,7 @@ async fn get_colloscope(
 }
 
 async fn colloscopes_check_existing_names(
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
     name: &str,
 ) -> Result<()> {
     use crate::frontend::state::Manager;
@@ -1170,7 +1170,7 @@ async fn colloscopes_check_existing_names(
 
 async fn colloscope_command(
     command: ColloscopeCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     use crate::backend::Colloscope;
     use crate::frontend::state::{ColloscopesOperation, Manager, Operation, UpdateError};
@@ -1278,7 +1278,7 @@ async fn colloscope_command(
 
 async fn python_command(
     command: PythonCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     match command {
         PythonCommand::Create {
@@ -1379,7 +1379,7 @@ async fn python_command(
 
 pub async fn execute_cli_command(
     command: CliCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     match command {
         CliCommand::General { command } => general_command(command, app_state).await,

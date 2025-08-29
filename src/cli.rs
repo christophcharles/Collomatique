@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use collomatique::backend::{sqlite, Logic};
+use collomatique::backend::{json, Logic};
 use collomatique::frontend::shell::CliCommand;
-use collomatique::frontend::state::AppState;
+use collomatique::frontend::state::{AppState, Manager};
 
 #[derive(Debug, Parser)]
 #[clap(disable_help_flag = true)]
@@ -28,15 +28,28 @@ enum ShellExtraCommand {
     /// Redo previously undone command
     Redo,
     PrintHistory,
+    /// Save current data
+    Save,
+    /// Save current data
+    SaveAs {
+        /// Path to save to
+        path: std::path::PathBuf,
+    },
+    /// Show current working file
+    Cwf,
     /// Exit shell
-    Exit,
+    Exit {
+        /// Force exit if modifications were not saved
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
 }
 
-async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Store> {
+fn open_collomatique_file(create: bool, path: &std::path::Path) -> Result<json::JsonStore> {
     if create {
-        Ok(sqlite::Store::new_db(path).await?)
+        Ok(json::JsonStore::new())
     } else {
-        Ok(sqlite::Store::open_db(path).await?)
+        Ok(json::JsonStore::from_json_file(path)?)
     }
 }
 
@@ -82,7 +95,11 @@ impl reedline::Completer for ReedCompleter {
     }
 }
 
-async fn interactive_shell(app_state: &mut AppState<sqlite::Store>) -> Result<()> {
+async fn interactive_shell(
+    app_state: &mut AppState<json::JsonStore>,
+    mut current_path: std::path::PathBuf,
+    mut initial_state_store: json::JsonStore,
+) -> Result<()> {
     use nu_ansi_term::{Color, Style};
     use reedline::{
         DefaultHinter, Emacs, FileBackedHistory, IdeMenu, KeyCode, KeyModifiers, MenuBuilder,
@@ -112,7 +129,14 @@ async fn interactive_shell(app_state: &mut AppState<sqlite::Store>) -> Result<()
         .with_history(Box::new(FileBackedHistory::new(10000).unwrap()));
 
     loop {
-        match respond(&mut rl, app_state).await {
+        match respond(
+            &mut rl,
+            app_state,
+            &mut current_path,
+            &mut initial_state_store,
+        )
+        .await
+        {
             Ok(quit) => {
                 if quit {
                     break;
@@ -130,9 +154,10 @@ async fn interactive_shell(app_state: &mut AppState<sqlite::Store>) -> Result<()
 
 async fn respond(
     rl: &mut reedline::Reedline,
-    app_state: &mut AppState<sqlite::Store>,
+    app_state: &mut AppState<json::JsonStore>,
+    current_path: &mut std::path::PathBuf,
+    initial_state_store: &mut json::JsonStore,
 ) -> Result<bool> {
-    use collomatique::frontend::state::Manager;
     use reedline::{DefaultPrompt, DefaultPromptSegment, Signal};
 
     let mut prompt = DefaultPrompt::default();
@@ -176,7 +201,27 @@ async fn respond(
             ShellExtraCommand::PrintHistory => {
                 Some(format!("{:?}", app_state.get_aggregated_history()))
             }
-            ShellExtraCommand::Exit => return Ok(true),
+            ShellExtraCommand::Save => {
+                app_state
+                    .get_logic()
+                    .get_storage()
+                    .to_json_file(&current_path)?;
+                *initial_state_store = app_state.get_logic().get_storage().clone();
+                None
+            }
+            ShellExtraCommand::SaveAs { path } => {
+                app_state.get_logic().get_storage().to_json_file(&path)?;
+                *initial_state_store = app_state.get_logic().get_storage().clone();
+                *current_path = path;
+                None
+            }
+            ShellExtraCommand::Cwf => Some(current_path.to_string_lossy().into_owned()),
+            ShellExtraCommand::Exit { force } => {
+                if (!force) && (*app_state.get_logic().get_storage() != *initial_state_store) {
+                    return Err(anyhow!("Modifications were not saved"));
+                }
+                return Ok(true);
+            }
         },
     };
     if let Some(msg) = output {
@@ -188,19 +233,20 @@ async fn respond(
 
 use super::CliCommandOrShell;
 
-async fn async_cli(create: bool, db: std::path::PathBuf, command: CliCommandOrShell) -> Result<()> {
-    let logic = Logic::new(connect_db(create, db.as_path()).await?);
+async fn async_cli(
+    create: bool,
+    path: std::path::PathBuf,
+    command: CliCommandOrShell,
+) -> Result<()> {
+    let initial_state_store = open_collomatique_file(create, path.as_path())?;
+    let logic = Logic::new(initial_state_store.clone());
 
     collomatique::frontend::python::initialize();
 
     match command {
         CliCommandOrShell::Shell => {
             let mut app_state = AppState::new(logic);
-            interactive_shell(&mut app_state).await?;
-        }
-        CliCommandOrShell::Backup { out } => {
-            let json_store = collomatique::backend::json::JsonStore::from_logic(&logic).await?;
-            json_store.to_json_file(&out)?;
+            interactive_shell(&mut app_state, path, initial_state_store).await?;
         }
         CliCommandOrShell::Global(command) => {
             let mut app_state = AppState::new(logic);
@@ -209,16 +255,17 @@ async fn async_cli(create: bool, db: std::path::PathBuf, command: CliCommandOrSh
             if let Some(msg) = output {
                 print!("{}", msg);
             }
+            app_state.get_logic().get_storage().to_json_file(&path)?;
         }
     }
 
     Ok(())
 }
 
-pub fn run_cli(create: bool, db: std::path::PathBuf, command: CliCommandOrShell) -> Result<()> {
+pub fn run_cli(create: bool, path: std::path::PathBuf, command: CliCommandOrShell) -> Result<()> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
-        .block_on(async_cli(create, db, command))
+        .block_on(async_cli(create, path, command))
 }
