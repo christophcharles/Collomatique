@@ -12,7 +12,7 @@ pub struct Teachers {
     /// List of teachers
     ///
     /// Each item associates an id to a teacher description
-    pub teachers: BTreeMap<TeacherId, Teacher>,
+    pub teacher_map: BTreeMap<TeacherId, Teacher>,
 }
 
 /// Description of a single teacher
@@ -48,8 +48,8 @@ impl Teachers {
     /// See [TeachersExternalData::validate_all] and [TeacherExternalData::validate].
     pub(crate) unsafe fn from_external_data(external_data: TeachersExternalData) -> Teachers {
         Teachers {
-            teachers: external_data
-                .teachers
+            teacher_map: external_data
+                .teacher_map
                 .into_iter()
                 .map(|(id, data)| {
                     (unsafe { TeacherId::new(id) }, unsafe {
@@ -73,7 +73,7 @@ pub struct TeachersExternalData {
     /// List of teachers
     ///
     /// Each item associates an id to a teacher description
-    pub teachers: BTreeMap<u64, TeacherExternalData>,
+    pub teacher_map: BTreeMap<u64, TeacherExternalData>,
 }
 
 impl TeachersExternalData {
@@ -83,7 +83,7 @@ impl TeachersExternalData {
     ///
     /// **Beware**, this does not check the validity of the ids for the teachers!
     pub fn validate_all(&self, subject_ids: &BTreeSet<u64>) -> bool {
-        self.teachers
+        self.teacher_map
             .iter()
             .all(|(_id, data)| data.validate(subject_ids))
     }

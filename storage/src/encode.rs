@@ -62,21 +62,39 @@ fn generate_subject_list(data: &Data) -> subject_list::List {
     }
 }
 
+fn generate_teacher_list(data: &Data) -> teacher_list::List {
+    let orig_teachers = data.get_teachers();
+
+    teacher_list::List {
+        teacher_map: orig_teachers
+            .teacher_map
+            .iter()
+            .map(|(id, teacher)| (id.inner(), teacher.into()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
     let subject_list_entry = ValidEntry::SubjectList(generate_subject_list(data));
+    let teacher_list_entry = ValidEntry::TeacherList(generate_teacher_list(data));
 
     JsonData {
         header,
-        entries: vec![student_list_entry, period_list_entry, subject_list_entry]
-            .into_iter()
-            .map(|x| Entry {
-                minimum_spec_version: x.minimum_spec_version(),
-                needed_entry: x.needed_entry(),
-                content: EntryContent::ValidEntry(x),
-            })
-            .collect(),
+        entries: vec![
+            student_list_entry,
+            period_list_entry,
+            subject_list_entry,
+            teacher_list_entry,
+        ]
+        .into_iter()
+        .map(|x| Entry {
+            minimum_spec_version: x.minimum_spec_version(),
+            needed_entry: x.needed_entry(),
+            content: EntryContent::ValidEntry(x),
+        })
+        .collect(),
     }
 }

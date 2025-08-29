@@ -140,6 +140,7 @@ struct PreData {
 mod period_list;
 mod student_list;
 mod subject_list;
+mod teacher_list;
 
 fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
     let mut pre_data = PreData::default();
@@ -159,6 +160,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::SubjectList(subject_list) => {
                 subject_list::decode_entry(subject_list, &mut pre_data)?;
             }
+            ValidEntry::TeacherList(teacher_list) => {
+                teacher_list::decode_entry(teacher_list, &mut pre_data)?;
+            }
         }
     }
 
@@ -177,6 +181,7 @@ pub enum EntryTag {
     StudentList,
     PeriodList,
     SubjectList,
+    TeacherList,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -185,6 +190,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::StudentList(_) => EntryTag::StudentList,
             ValidEntry::PeriodList(_) => EntryTag::PeriodList,
             ValidEntry::SubjectList(_) => EntryTag::SubjectList,
+            ValidEntry::TeacherList(_) => EntryTag::TeacherList,
         }
     }
 }
