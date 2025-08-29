@@ -565,9 +565,9 @@ impl JsonStore {
 
 #[derive(Debug, Error)]
 pub enum SaveError {
-    #[error("Error while outputting json")]
+    #[error("Error while outputting json: {0}")]
     JsonError(#[from] serde_json::Error),
-    #[error("Error while writing file")]
+    #[error("Error while writing file: {0}")]
     IO(#[from] std::io::Error),
 }
 
@@ -590,7 +590,7 @@ impl JsonStore {
 
 #[derive(Debug, Error)]
 pub enum FromJsonError {
-    #[error("Error while reading json")]
+    #[error("Error while reading json: {0}")]
     JsonError(#[from] serde_json::Error),
 }
 
@@ -598,9 +598,9 @@ pub type FromJsonResult<T> = std::result::Result<T, FromJsonError>;
 
 #[derive(Debug, Error)]
 pub enum OpenError {
-    #[error("Error while decoding data")]
+    #[error("Error while decoding data: {0}")]
     FromJsonError(#[from] FromJsonError),
-    #[error("Error while reading file")]
+    #[error("Error while reading file: {0}")]
     IO(#[from] std::io::Error),
 }
 
