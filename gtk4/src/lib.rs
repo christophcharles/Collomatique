@@ -59,6 +59,7 @@ impl SimpleAsyncComponent for AppModel {
         root_window = adw::ApplicationWindow {
             set_default_width: 800,
             set_default_height: 600,
+            set_title: Some("Collomatique"),
             gtk::Stack {
                 set_hexpand: true,
                 set_vexpand: true,
