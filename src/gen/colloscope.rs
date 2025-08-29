@@ -53,6 +53,27 @@ pub struct Subject {
 
 pub type SubjectList = Vec<Subject>;
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SlotRef {
+    pub subject: usize,
+    pub interrogation: usize,
+    pub slot: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SlotGrouping {
+    pub slots: BTreeSet<SlotRef>,
+}
+
+pub type SlotGroupingSet = BTreeSet<SlotGrouping>;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GroupingIncompat {
+    pub groupings: BTreeSet<usize>,
+}
+
+pub type GroupingIncompatSet = BTreeSet<GroupingIncompat>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
     pub slots: Vec<Slot>,
@@ -82,6 +103,8 @@ pub struct ValidatedData {
     subjects: SubjectList,
     incompatibilities: IncompatibilityList,
     students: StudentList,
+    slot_groupings: SlotGroupingSet,
+    grouping_incompats: GroupingIncompatSet,
 }
 
 impl ValidatedData {
@@ -99,6 +122,8 @@ impl ValidatedData {
         subjects: SubjectList,
         incompatibilities: IncompatibilityList,
         students: StudentList,
+        slot_groupings: SlotGroupingSet,
+        grouping_incompats: GroupingIncompatSet,
     ) -> Result<ValidatedData> {
         for subject in &subjects {
             if subject.students_per_interrogation.is_empty() {
@@ -144,6 +169,8 @@ impl ValidatedData {
             subjects,
             incompatibilities,
             students,
+            slot_groupings,
+            grouping_incompats,
         })
     }
 }

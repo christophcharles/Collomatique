@@ -11,15 +11,27 @@ fn trivial_validated_data() {
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
 
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
+
     let expected_result = ValidatedData {
         general: general.clone(),
         subjects: subjects.clone(),
         incompatibilities: incompatibilities.clone(),
         students: students.clone(),
+        slot_groupings: slot_groupings.clone(),
+        grouping_incompats: grouping_incompats.clone(),
     };
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Ok(expected_result)
     );
 }
@@ -58,16 +70,27 @@ fn simple_validated_data() {
         subjects: BTreeSet::from([0]),
         incompatibilities: BTreeSet::from([0]),
     }];
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
 
     let expected_result = ValidatedData {
         general: general.clone(),
         subjects: subjects.clone(),
         incompatibilities: incompatibilities.clone(),
         students: students.clone(),
+        slot_groupings: slot_groupings.clone(),
+        grouping_incompats: grouping_incompats.clone(),
     };
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Ok(expected_result)
     );
 }
@@ -94,9 +117,18 @@ fn invalid_students_per_interrogation() {
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Err(Error::InvalidStudentsPerInterrogationRange)
     );
 }
@@ -123,9 +155,18 @@ fn slot_overlaps_next_day() {
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Err(Error::SlotOverlapsNextDay)
     );
 
@@ -145,8 +186,17 @@ fn slot_overlaps_next_day() {
         }],
     }];
     let students = StudentList::new();
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Err(Error::SlotOverlapsNextDay)
     );
 }
@@ -173,9 +223,18 @@ fn invalid_teacher_number() {
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Err(Error::InvalidTeacherNumber)
     );
 }
@@ -205,9 +264,18 @@ fn invalid_subject_number() {
         subjects: BTreeSet::from([1]),
         incompatibilities: BTreeSet::new(),
     }];
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Err(Error::InvalidSubjectNumber)
     );
 }
@@ -234,9 +302,18 @@ fn invalid_incompatibility_number() {
         subjects: BTreeSet::new(),
         incompatibilities: BTreeSet::from([1]),
     }];
+    let slot_groupings = SlotGroupingSet::new();
+    let grouping_incompats = GroupingIncompatSet::new();
 
     assert_eq!(
-        ValidatedData::new(general, subjects, incompatibilities, students),
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
         Err(Error::InvalidIncompatibilityNumber)
     );
 }
