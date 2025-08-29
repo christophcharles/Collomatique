@@ -18,6 +18,8 @@ pub mod incompatibilities;
 pub use incompatibilities::*;
 pub mod group_lists;
 pub use group_lists::*;
+pub mod rules;
+pub use rules::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
@@ -30,6 +32,7 @@ pub enum ErrorMsg {
     Slots(SlotsError),
     Incompats(IncompatibilitiesError),
     GroupLists(GroupListsError),
+    Rules(RulesError),
 }
 
 impl From<crate::ops::UpdateError> for ErrorMsg {
@@ -45,6 +48,7 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
             UpdateError::Slots(e) => ErrorMsg::Slots(e.into()),
             UpdateError::Incompatibilities(e) => ErrorMsg::Incompats(e.into()),
             UpdateError::GroupLists(e) => ErrorMsg::GroupLists(e.into()),
+            UpdateError::Rules(e) => ErrorMsg::Rules(e.into()),
         }
     }
 }
@@ -115,6 +119,7 @@ impl std::fmt::Display for ErrorMsg {
             ErrorMsg::Slots(e) => e.fmt(f),
             ErrorMsg::Incompats(e) => e.fmt(f),
             ErrorMsg::GroupLists(e) => e.fmt(f),
+            ErrorMsg::Rules(e) => e.fmt(f),
         }
     }
 }
