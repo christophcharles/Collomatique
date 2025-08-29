@@ -376,7 +376,6 @@ async fn solve_command(
     thread_count: Option<NonZeroUsize>,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use crate::frontend::state::Manager;
     use crate::frontend::translator::GenColloscopeTranslator;
     use indicatif::MultiProgress;
     use std::time::Duration;
@@ -390,9 +389,8 @@ async fn solve_command(
         None => num_cpus::get(),
     };
 
-    let logic = app_state.get_logic();
-    let gen_colloscope_translator = GenColloscopeTranslator::new(&logic);
-    let data = gen_colloscope_translator.build_validated_data().await?;
+    let gen_colloscope_translator = GenColloscopeTranslator::new(app_state).await?;
+    let data = gen_colloscope_translator.get_validated_data();
 
     let ilp_translator = data.ilp_translator();
 
@@ -470,9 +468,8 @@ async fn solve_command(
         .read_solution(&best_config)
         .expect("Solution should be translatable to gen::Colloscope data");
 
-    let best_backend_config = gen_colloscope_translator
-        .translate_colloscope(&best_ilp_config, "Test")
-        .await?;
+    let best_backend_config =
+        gen_colloscope_translator.translate_colloscope(&best_ilp_config, "Test")?;
 
     Ok(Some(format!(
         "Best cost found {} is for config: {:?}",
