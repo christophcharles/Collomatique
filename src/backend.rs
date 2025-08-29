@@ -680,6 +680,7 @@ pub struct Student {
     pub firstname: String,
     pub email: Option<String>,
     pub phone: Option<String>,
+    pub no_consecutive_slots: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

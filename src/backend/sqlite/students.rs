@@ -6,9 +6,8 @@ pub struct Id(pub(super) i64);
 pub async fn get(pool: &SqlitePool, index: Id) -> std::result::Result<Student, IdError<Error, Id>> {
     let student_id = index.0;
 
-    let record_opt = sqlx::query_as!(
-        Student,
-        "SELECT surname, firstname, email, phone FROM students WHERE student_id = ?",
+    let record_opt = sqlx::query!(
+        "SELECT surname, firstname, email, phone, no_consecutive_slots FROM students WHERE student_id = ?",
         student_id
     )
     .fetch_optional(pool)
@@ -17,13 +16,23 @@ pub async fn get(pool: &SqlitePool, index: Id) -> std::result::Result<Student, I
 
     let record = record_opt.ok_or(IdError::InvalidId(index))?;
 
-    Ok(record)
+    let student = Student {
+        surname: record.surname,
+        firstname: record.firstname,
+        email: record.email,
+        phone: record.phone,
+        no_consecutive_slots: record.no_consecutive_slots != 0,
+    };
+
+    Ok(student)
 }
 
 pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, Student>> {
-    let records = sqlx::query!("SELECT student_id, surname, firstname, email, phone FROM students")
-        .fetch_all(pool)
-        .await?;
+    let records = sqlx::query!(
+        "SELECT student_id, surname, firstname, email, phone, no_consecutive_slots FROM students"
+    )
+    .fetch_all(pool)
+    .await?;
 
     Ok(records
         .into_iter()
@@ -35,6 +44,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, Student>> {
                     firstname: record.firstname,
                     email: record.email,
                     phone: record.phone,
+                    no_consecutive_slots: record.no_consecutive_slots != 0,
                 },
             )
         })
@@ -44,12 +54,14 @@ pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, Student>> {
 pub async fn add(pool: &SqlitePool, student: &Student) -> Result<Id> {
     let mut conn = pool.acquire().await?;
 
+    let no_consecutive_slots = if student.no_consecutive_slots { 1 } else { 0 };
     let id = sqlx::query!(
-        "INSERT INTO students (surname, firstname, email, phone) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO students (surname, firstname, email, phone, no_consecutive_slots) VALUES (?1, ?2, ?3, ?4, ?5)",
         student.surname,
         student.firstname,
         student.email,
         student.phone,
+        no_consecutive_slots,
     )
     .execute(&mut *conn)
     .await?
@@ -101,12 +113,14 @@ pub async fn update(
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
+    let no_consecutive_slots = if student.no_consecutive_slots { 1 } else { 0 };
     let rows_affected = sqlx::query!(
-        "UPDATE students SET surname = ?1, firstname = ?2, email = ?3, phone = ?4 WHERE student_id = ?5",
+        "UPDATE students SET surname = ?1, firstname = ?2, email = ?3, phone = ?4, no_consecutive_slots = ?5 WHERE student_id = ?6",
         student.surname,
         student.firstname,
         student.email,
         student.phone,
+        no_consecutive_slots,
         student_id,
     )
     .execute(&mut *conn)
