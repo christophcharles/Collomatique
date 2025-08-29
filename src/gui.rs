@@ -32,7 +32,21 @@ fn view(state: &GuiState) -> Element<GuiMessage> {
     }
 }
 
-pub fn run_gui(_create: bool, _db: Option<std::path::PathBuf>) -> Result<()> {
-    iced::run("Collomatique", update, view)?;
+pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
+    iced::application("Collomatique", update, view).run_with(move || {
+        (
+            match db {
+                Some(file) => GuiState::Editor(editor::State::new(file)),
+                None => {
+                    if create {
+                        GuiState::Editor(editor::State::default())
+                    } else {
+                        GuiState::Welcome
+                    }
+                }
+            },
+            iced::Task::none(),
+        )
+    })?;
     Ok(())
 }
