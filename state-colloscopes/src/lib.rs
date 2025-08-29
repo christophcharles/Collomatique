@@ -6,6 +6,8 @@
 
 use assignments::{Assignments, AssignmentsExternalData};
 use collomatique_state::{tools, InMemoryData, Operation};
+use incompats::Incompats;
+use incompats::IncompatsExternalData;
 use periods::{Periods, PeriodsExternalData};
 use slots::{Slots, SlotsExternalData};
 use std::collections::BTreeSet;
@@ -17,11 +19,11 @@ use week_patterns::WeekPatternsExternalData;
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId};
+pub use ids::{IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId};
 pub mod ops;
 use ops::{
-    AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedStudentOp,
-    AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekPatternOp,
+    AnnotatedAssignmentOp, AnnotatedIncompatOp, AnnotatedPeriodOp, AnnotatedSlotOp,
+    AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
 pub use ops::{
     AnnotatedOp, AssignmentOp, Op, PeriodOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
@@ -31,6 +33,7 @@ pub use subjects::{
 };
 
 pub mod assignments;
+pub mod incompats;
 pub mod periods;
 pub mod slots;
 pub mod students;
@@ -92,6 +95,7 @@ struct InnerData {
     assignments: assignments::Assignments,
     week_patterns: week_patterns::WeekPatterns,
     slots: slots::Slots,
+    incompats: incompats::Incompats,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -343,6 +347,28 @@ pub enum SlotError {
     SlotOverlapsWithNextDay,
 }
 
+/// Errors for schedule incompatibility operations
+///
+/// These errors can be returned when trying to modify [Data] with an incompat op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum IncompatError {
+    /// A incompat id is invalid
+    #[error("invalid incompat id ({0:?})")]
+    InvalidIncompatId(IncompatId),
+
+    /// The incompat id already exists
+    #[error("incompat id ({0:?}) already exists")]
+    IncompatIdAlreadyExists(IncompatId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -362,6 +388,8 @@ pub enum Error {
     WeekPattern(#[from] WeekPatternError),
     #[error(transparent)]
     Slot(#[from] SlotError),
+    #[error(transparent)]
+    Incompat(#[from] IncompatError),
 }
 
 /// Errors for IDs
@@ -384,6 +412,7 @@ pub enum NewId {
     TeacherId(TeacherId),
     WeekPatternId(WeekPatternId),
     SlotId(SlotId),
+    IncompatId(IncompatId),
 }
 
 impl From<StudentId> for NewId {
@@ -422,6 +451,12 @@ impl From<SlotId> for NewId {
     }
 }
 
+impl From<IncompatId> for NewId {
+    fn from(value: IncompatId) -> Self {
+        NewId::IncompatId(value)
+    }
+}
+
 impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
@@ -456,6 +491,9 @@ impl InMemoryData for Data {
                 self.build_rev_week_pattern(week_pattern_op)?,
             )),
             AnnotatedOp::Slot(slot_op) => Ok(AnnotatedOp::Slot(self.build_rev_slot(slot_op)?)),
+            AnnotatedOp::Incompat(incompat_op) => {
+                Ok(AnnotatedOp::Incompat(self.build_rev_incompat(incompat_op)?))
+            }
         }
     }
 
@@ -470,6 +508,7 @@ impl InMemoryData for Data {
                 self.apply_week_pattern(week_pattern_op)?
             }
             AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
+            AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -668,6 +707,10 @@ impl Data {
             for (id, _) in &subject_slots.ordered_slots {
                 assert!(ids_so_far.insert(id.inner()));
             }
+        }
+
+        for (id, _) in &self.inner_data.incompats.incompat_map {
+            assert!(ids_so_far.insert(id.inner()));
         }
     }
 
@@ -935,6 +978,51 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks that an incompat is valid
+    fn validate_incompat_internal(
+        incompat: &incompats::Incompatibility,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+        subject_ids: &BTreeSet<SubjectId>,
+    ) -> Result<(), IncompatError> {
+        if !subject_ids.contains(&incompat.subject_id) {
+            return Err(IncompatError::InvalidSubjectId(incompat.subject_id));
+        }
+        if let Some(week_pattern_id) = &incompat.week_pattern_id {
+            if !week_pattern_ids.contains(week_pattern_id) {
+                return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    fn validate_incompat(
+        &self,
+        incompat: &incompats::Incompatibility,
+    ) -> Result<(), IncompatError> {
+        let week_pattern_ids = self.build_week_pattern_ids();
+        let subject_ids = self.build_subject_ids();
+
+        Self::validate_incompat_internal(incompat, &week_pattern_ids, &subject_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_incompats_data_consistency(
+        &self,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+        subject_ids: &BTreeSet<SubjectId>,
+    ) {
+        for (_incompat_id, incompat) in &self.inner_data.incompats.incompat_map {
+            Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -948,7 +1036,7 @@ impl Data {
 
     /// USED INTERNALLY
     ///
-    /// Build the set of PeriodIds
+    /// Build the set of WeekPatternId
     ///
     /// This is useful to check that references are valid
     fn build_week_pattern_ids(&self) -> BTreeSet<WeekPatternId> {
@@ -962,18 +1050,34 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Build the set of SubjectId
+    ///
+    /// This is useful to check that references are valid
+    fn build_subject_ids(&self) -> BTreeSet<SubjectId> {
+        self.inner_data
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
+        let subject_ids = self.build_subject_ids();
 
         self.check_subjects_data_consistency(&period_ids);
         self.check_teachers_data_consistency();
         self.check_students_data_consistency(&period_ids);
         self.check_assignments_data_consistency(&period_ids);
         self.check_slots_data_consistency(&week_pattern_ids);
+        self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
     }
 }
 
@@ -991,6 +1095,7 @@ impl Data {
             AssignmentsExternalData::default(),
             WeekPatternsExternalData::default(),
             SlotsExternalData::default(),
+            IncompatsExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -1007,6 +1112,7 @@ impl Data {
         assignments: assignments::AssignmentsExternalData,
         week_patterns: week_patterns::WeekPatternsExternalData,
         slots: slots::SlotsExternalData,
+        incompats: incompats::IncompatsExternalData,
     ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
@@ -1019,6 +1125,7 @@ impl Data {
             .flat_map(|(_subject_id, subject_slots)| {
                 subject_slots.ordered_slots.iter().map(|(id, _d)| *id)
             });
+        let incompat_ids = incompats.incompat_map.keys().copied();
         let id_issuer = IdIssuer::new(
             student_ids,
             period_ids,
@@ -1026,6 +1133,7 @@ impl Data {
             teacher_ids,
             week_patterns_ids,
             slot_ids,
+            incompat_ids,
         )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
@@ -1035,7 +1143,12 @@ impl Data {
             .collect();
         let week_pattern_ids: std::collections::BTreeSet<_> =
             week_patterns.week_pattern_map.keys().copied().collect();
-        if !subjects.validate_all(&period_ids, &week_pattern_ids) {
+        let subject_ids: std::collections::BTreeSet<_> = subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        if !subjects.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
         if !teachers.validate_all(&subjects) {
@@ -1050,6 +1163,9 @@ impl Data {
         if !slots.validate_all(&subjects, &week_pattern_ids, &teachers) {
             return Err(FromDataError::InconsistentSlots);
         }
+        if !incompats.validate_all(&subject_ids, &week_pattern_ids) {
+            return Err(tools::IdError::InvalidId.into());
+        }
 
         // Ids have been validated
         let students = unsafe { Students::from_external_data(students) };
@@ -1059,6 +1175,7 @@ impl Data {
         let assignments = unsafe { Assignments::from_external_data(assignments) };
         let week_patterns = unsafe { WeekPatterns::from_external_data(week_patterns) };
         let slots = unsafe { Slots::from_external_data(slots) };
+        let incompats = unsafe { Incompats::from_external_data(incompats) };
 
         let data = Data {
             id_issuer,
@@ -1070,6 +1187,7 @@ impl Data {
                 assignments,
                 week_patterns,
                 slots,
+                incompats,
             },
         };
 
@@ -1891,6 +2009,51 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply incompat operations
+    fn apply_incompat(
+        &mut self,
+        incompat_op: &AnnotatedIncompatOp,
+    ) -> std::result::Result<(), IncompatError> {
+        match incompat_op {
+            AnnotatedIncompatOp::Add(new_id, incompat) => {
+                if self.inner_data.incompats.incompat_map.contains_key(new_id) {
+                    return Err(IncompatError::IncompatIdAlreadyExists(*new_id));
+                }
+                self.validate_incompat(incompat)?;
+
+                self.inner_data
+                    .incompats
+                    .incompat_map
+                    .insert(*new_id, incompat.clone());
+
+                Ok(())
+            }
+            AnnotatedIncompatOp::Remove(id) => {
+                if !self.inner_data.incompats.incompat_map.contains_key(id) {
+                    return Err(IncompatError::InvalidIncompatId(*id));
+                }
+
+                self.inner_data.incompats.incompat_map.remove(id);
+
+                Ok(())
+            }
+            AnnotatedIncompatOp::Update(incompat_id, new_incompat) => {
+                self.validate_incompat(new_incompat)?;
+
+                let Some(incompat) = self.inner_data.incompats.incompat_map.get_mut(incompat_id)
+                else {
+                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
+                };
+
+                *incompat = new_incompat.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -2321,6 +2484,39 @@ impl Data {
                 };
 
                 Ok(AnnotatedSlotOp::ChangePosition(*slot_id, old_pos))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a schedule incompat operation
+    fn build_rev_incompat(
+        &self,
+        incompat_op: &AnnotatedIncompatOp,
+    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
+        match incompat_op {
+            AnnotatedIncompatOp::Add(new_id, _incompat) => {
+                Ok(AnnotatedIncompatOp::Remove(new_id.clone()))
+            }
+            AnnotatedIncompatOp::Remove(incompat_id) => {
+                let Some(old_incompat) = self.inner_data.incompats.incompat_map.get(incompat_id)
+                else {
+                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
+                };
+
+                Ok(AnnotatedIncompatOp::Add(*incompat_id, old_incompat.clone()))
+            }
+            AnnotatedIncompatOp::Update(incompat_id, _new_incompat) => {
+                let Some(old_incompat) = self.inner_data.incompats.incompat_map.get(incompat_id)
+                else {
+                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
+                };
+
+                Ok(AnnotatedIncompatOp::Update(
+                    *incompat_id,
+                    old_incompat.clone(),
+                ))
             }
         }
     }

@@ -310,7 +310,6 @@ impl SubjectsUpdateOp {
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods: BTreeSet::new(),
-                                    incompatibilities: BTreeSet::new(),
                                 }
                             )
                         ),
@@ -338,7 +337,6 @@ impl SubjectsUpdateOp {
                     .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?;
 
                 let excluded_periods = current_subject.excluded_periods.clone();
-                let incompatibilities = current_subject.incompatibilities.clone();
 
                 let previously_had_interrogations = current_subject
                     .parameters
@@ -400,7 +398,6 @@ impl SubjectsUpdateOp {
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods,
-                                    incompatibilities,
                                 }
                             )
                         ),

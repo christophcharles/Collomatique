@@ -114,6 +114,24 @@ impl SlotId {
     }
 }
 
+/// This type represents an ID for an schedule incompatibility
+///
+/// Every incompatibility gets a unique ID. IDs then identify incompatibilities
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IncompatId(u64);
+
+impl IncompatId {
+    /// Returns the value for the ID
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+
+    pub(crate) unsafe fn new(value: u64) -> IncompatId {
+        IncompatId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -130,13 +148,15 @@ impl IdIssuer {
         teacher_ids: impl Iterator<Item = u64>,
         week_patterns_ids: impl Iterator<Item = u64>,
         slot_ids: impl Iterator<Item = u64>,
+        incompat_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
         let existing_ids = student_ids
             .chain(period_ids)
             .chain(subject_ids)
             .chain(teacher_ids)
             .chain(week_patterns_ids)
-            .chain(slot_ids);
+            .chain(slot_ids)
+            .chain(incompat_ids);
         Ok(IdIssuer {
             helper: tools::IdIssuerHelper::new(existing_ids)?,
         })
@@ -167,8 +187,13 @@ impl IdIssuer {
         WeekPatternId(self.helper.get_new_id().inner())
     }
 
-    /// Get a new unused ID for a week pattern
+    /// Get a new unused ID for a slot
     pub fn get_slot_id(&mut self) -> SlotId {
         SlotId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a schedule incompatibility
+    pub fn get_incompat_id(&mut self) -> IncompatId {
+        IncompatId(self.helper.get_new_id().inner())
     }
 }

@@ -167,6 +167,7 @@ struct PreData {
     assignments: collomatique_state_colloscopes::assignments::AssignmentsExternalData,
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatternsExternalData,
     slots: collomatique_state_colloscopes::slots::SlotsExternalData,
+    incompats: collomatique_state_colloscopes::incompats::IncompatsExternalData,
 }
 
 mod assignment_map;
@@ -218,6 +219,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         pre_data.assignments,
         pre_data.week_patterns,
         pre_data.slots,
+        pre_data.incompats,
     )?;
     Ok(data)
 }
