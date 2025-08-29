@@ -13,19 +13,13 @@ pub trait Identifier:
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubjectDescription<
-    StudentId: Identifier,
-> {
+pub struct SubjectDescription<StudentId: Identifier> {
     students: BTreeSet<StudentId>,
     group_count: RangeInclusive<u32>,
     students_per_group: RangeInclusive<NonZeroU32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GroupListProblem<
-    SubjectId: Identifier,
-    StudentId: Identifier,
-> {
-    subject_descriptions:
-        BTreeMap<SubjectId, SubjectDescription<StudentId>>,
+pub struct GroupListProblem<SubjectId: Identifier, StudentId: Identifier> {
+    subject_descriptions: BTreeMap<SubjectId, SubjectDescription<StudentId>>,
 }

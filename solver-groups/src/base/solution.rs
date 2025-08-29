@@ -15,9 +15,6 @@ pub struct GroupList<StudentId: Identifier> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GroupLists<
-    SubjectId: Identifier,
-    StudentId: Identifier,
-> {
+pub struct GroupLists<SubjectId: Identifier, StudentId: Identifier> {
     group_lists: BTreeMap<SubjectId, GroupList<StudentId>>,
 }

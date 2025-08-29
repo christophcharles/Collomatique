@@ -12,7 +12,7 @@
 //!
 //! However a simpler route is to use the [simplified] module and rather implement [SimpleBaseProblem]
 //! and [SimpleProblemConstraints]. This will auto-implement [BaseProblem] and [ProblemConstraints]
-//! but will allow a simplified definition of structure variables using [tools::AggregatedVariable].
+//! but will allow a simplified definition of structure variables using [tools::AggregatedVariables].
 
 pub mod examples;
 pub mod generics;

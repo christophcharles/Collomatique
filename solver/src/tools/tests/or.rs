@@ -7,9 +7,9 @@ fn aor_variable_get_variable_def() {
         original_variables: BTreeSet::from([String::from("a"), String::from("b")]),
     };
 
-    let expected = (String::from("c"), Variable::binary());
+    let expected = vec![(String::from("c"), Variable::binary())];
 
-    assert_eq!(or_var.get_variable_def(), expected);
+    assert_eq!(or_var.get_variables_def(), expected);
 }
 
 #[test]
@@ -44,8 +44,8 @@ fn or_variable_reconstruct_one_one() {
 
     let config = ConfigData::new().set("a", 1.).set("b", 1.);
 
-    let expected = Some(1.);
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![Some(1.)];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -59,8 +59,8 @@ fn or_variable_reconstruct_one_zero() {
 
     let config = ConfigData::new().set("a", 1.).set("b", 0.);
 
-    let expected = Some(1.);
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![Some(1.)];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -74,8 +74,8 @@ fn or_variable_reconstruct_zero_one() {
 
     let config = ConfigData::new().set("a", 0.).set("b", 1.);
 
-    let expected = Some(1.);
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![Some(1.)];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -89,8 +89,8 @@ fn or_variable_reconstruct_zero_zero() {
 
     let config = ConfigData::new().set("a", 0.).set("b", 0.);
 
-    let expected = Some(0.);
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![Some(0.)];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -104,8 +104,8 @@ fn or_variable_reconstruct_one_undefined() {
 
     let config = ConfigData::new().set("a", 1.);
 
-    let expected = Some(1.);
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![Some(1.)];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -119,8 +119,8 @@ fn or_variable_reconstruct_undefined_one() {
 
     let config = ConfigData::new().set("b", 1.);
 
-    let expected = Some(1.);
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![Some(1.)];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -134,8 +134,8 @@ fn or_variable_reconstruct_zero_undefined() {
 
     let config = ConfigData::new().set("a", 0.);
 
-    let expected = None;
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![None];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -149,8 +149,8 @@ fn or_variable_reconstruct_undefined_zero() {
 
     let config = ConfigData::new().set("b", 0.);
 
-    let expected = None;
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![None];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
@@ -164,8 +164,8 @@ fn or_variable_reconstruct_undefined_undefined() {
 
     let config = ConfigData::new();
 
-    let expected = None;
-    let output = or_var.reconstruct_structure_variable(&config);
+    let expected = vec![None];
+    let output = or_var.reconstruct_structure_variables(&config);
 
     assert_eq!(expected, output);
 }
