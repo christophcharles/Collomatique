@@ -18,7 +18,7 @@
 mod tests;
 
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, UsableData, Variable};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, ops::RangeInclusive};
 
 /// Constraint description for [AggregatedVariables]
 ///
@@ -32,7 +32,7 @@ use std::collections::BTreeSet;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AggregatedVariablesConstraintDesc<ProblemVariable> {
     /// Name of the variable being definied through the constraint
-    pub variable_name: ProblemVariable,
+    pub variable_names: Vec<ProblemVariable>,
     /// Internal number of the structure constraint
     pub internal_number: usize,
     /// Plain text description of the constraint
@@ -113,7 +113,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
         let mut constraints = vec![(
             var_expr.geq(&add_expr),
             AggregatedVariablesConstraintDesc {
-                variable_name: self.variable_name.clone(),
+                variable_names: vec![self.variable_name.clone()],
                 internal_number: 0,
                 desc: "Variable should be 1 if all are 1".into(),
             },
@@ -124,7 +124,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
             constraints.push((
                 var_expr.leq(&orig_var_expr),
                 AggregatedVariablesConstraintDesc {
-                    variable_name: self.variable_name.clone(),
+                    variable_names: vec![self.variable_name.clone()],
                     internal_number: i,
                     desc: "Variable should be 0 if one is 0".into(),
                 },
@@ -195,7 +195,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
         let mut constraints = vec![(
             var_expr.leq(&add_expr),
             AggregatedVariablesConstraintDesc {
-                variable_name: self.variable_name.clone(),
+                variable_names: vec![self.variable_name.clone()],
                 internal_number: 0,
                 desc: "Variable should be 0 if all are 0".into(),
             },
@@ -206,7 +206,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
             constraints.push((
                 var_expr.geq(&orig_var_expr),
                 AggregatedVariablesConstraintDesc {
-                    variable_name: self.variable_name.clone(),
+                    variable_names: vec![self.variable_name.clone()],
                     internal_number: i,
                     desc: "Variable should be 1 if one is 1".into(),
                 },
@@ -234,5 +234,118 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
             }
         }
         vec![if at_least_one_none { None } else { Some(0.) }]
+    }
+}
+
+/// Variable implementing a conversion from integer variable to a collection
+/// of binary variables.
+///
+/// [IntToBinVariable] implements [AggregatedVariable] and can help
+/// convert a single variable having an integer value into a collection of binary
+/// variables with value 1 if a specific value is set. It takes a closure for
+/// the new variables and an initial integer variables (that should have a finite range).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UIntToBinVariable<ProblemVariable, F>
+where
+    ProblemVariable: UsableData + 'static,
+    F: Fn(u32) -> ProblemVariable + Send + Sync,
+{
+    /// Name for the new variables
+    pub variable_name_builder: F,
+    /// Original integer variable
+    pub original_variable: ProblemVariable,
+    /// Range for the original variable
+    pub original_range: RangeInclusive<u32>,
+}
+
+impl<ProblemVariable: UsableData + 'static, F: Fn(u32) -> ProblemVariable + Send + Sync>
+    AggregatedVariables<ProblemVariable> for UIntToBinVariable<ProblemVariable, F>
+{
+    fn get_variables_def(&self) -> Vec<(ProblemVariable, Variable)> {
+        self.original_range
+            .clone()
+            .into_iter()
+            .map(|i| ((self.variable_name_builder)(i), Variable::binary()))
+            .collect()
+    }
+
+    fn get_structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ProblemVariable>,
+        AggregatedVariablesConstraintDesc<ProblemVariable>,
+    )> {
+        let lhs1 = LinExpr::<ProblemVariable>::var(self.original_variable.clone());
+        let mut rhs1 = LinExpr::constant(0.);
+
+        for i in self.original_range.clone() {
+            rhs1 = rhs1 + f64::from(i) * LinExpr::var((self.variable_name_builder)(i));
+        }
+
+        let number_constraint = lhs1.eq(&rhs1);
+
+        let lhs2 = LinExpr::<ProblemVariable>::constant(1.);
+        let mut rhs2 = LinExpr::constant(0.);
+
+        for i in self.original_range.clone() {
+            rhs2 = rhs2 + LinExpr::var((self.variable_name_builder)(i));
+        }
+
+        let only_one_var_constraint = lhs2.eq(&rhs2);
+
+        let variable_names: Vec<_> = self
+            .original_range
+            .clone()
+            .into_iter()
+            .map(|i| (self.variable_name_builder)(i))
+            .collect();
+
+        let constraints = vec![
+            (
+                number_constraint,
+                AggregatedVariablesConstraintDesc {
+                    variable_names: variable_names.clone(),
+                    internal_number: 0,
+                    desc: "Original variable value should be reconstructible".into(),
+                },
+            ),
+            (
+                only_one_var_constraint,
+                AggregatedVariablesConstraintDesc {
+                    variable_names,
+                    internal_number: 1,
+                    desc: "Only one binary variable should be 1".into(),
+                },
+            ),
+        ];
+
+        constraints
+    }
+
+    fn reconstruct_structure_variables(
+        &self,
+        config: &ConfigData<ProblemVariable>,
+    ) -> Vec<Option<f64>> {
+        match config.get(self.original_variable.clone()) {
+            None => self
+                .original_range
+                .clone()
+                .into_iter()
+                .map(|_| None)
+                .collect(),
+            Some(v) => self
+                .original_range
+                .clone()
+                .into_iter()
+                .map(|i| {
+                    let test_v = f64::from(i);
+                    if v > test_v - 0.5 && v < test_v + 0.5 {
+                        Some(1.)
+                    } else {
+                        Some(0.)
+                    }
+                })
+                .collect(),
+        }
     }
 }
