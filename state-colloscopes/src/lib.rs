@@ -384,6 +384,32 @@ pub enum IncompatError {
     InvalidWeekPatternId(WeekPatternId),
 }
 
+/// Errors for group list operations
+///
+/// These errors can be returned when trying to modify [Data] with a group list op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum GroupListError {
+    /// student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+
+    /// empty group count range
+    #[error("group_count range is empty")]
+    GroupCountRangeIsEmpty,
+
+    /// students per group range is empty
+    #[error("students_per_group range is empty")]
+    StudentsPerGroupRangeIsEmpty,
+
+    /// student is both excluded and associated to a group
+    #[error("Student id {0:?} is both excluded and included in prefilled groups")]
+    StudentBothIncludedAndExcluded(StudentId),
+
+    /// student prefilled group number is invalid
+    #[error("Student id {0:?} is associated to a bad prefilled group number {1:?}")]
+    StudentPrefilledGroupIsInvalid(StudentId, u32),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -780,6 +806,10 @@ impl Data {
         for (id, _) in &self.inner_data.incompats.incompat_map {
             assert!(ids_so_far.insert(id.inner()));
         }
+
+        for (id, _) in &self.inner_data.group_lists.group_list_map {
+            assert!(ids_so_far.insert(id.inner()));
+        }
     }
 
     /// USED INTERNALLY
@@ -1091,6 +1121,69 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks that an incompat is valid
+    fn validate_group_list_internal(
+        group_list: &group_lists::GroupList,
+        students: &students::Students,
+    ) -> Result<(), GroupListError> {
+        if group_list.group_count.is_empty() {
+            return Err(GroupListError::GroupCountRangeIsEmpty);
+        }
+        if group_list.students_per_group.is_empty() {
+            return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
+        }
+        for student_id in &group_list.excluded_students {
+            if !students.student_map.contains_key(student_id) {
+                return Err(GroupListError::InvalidStudentId(*student_id));
+            }
+        }
+        let max_group = group_list.group_count.end().clone();
+        for (student_id, group_num) in &group_list.prefilled_groups {
+            if !students.student_map.contains_key(student_id) {
+                return Err(GroupListError::InvalidStudentId(*student_id));
+            }
+            if group_list.excluded_students.contains(student_id) {
+                return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+            }
+            if *group_num >= max_group {
+                return Err(GroupListError::StudentPrefilledGroupIsInvalid(
+                    *student_id,
+                    *group_num,
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    fn validate_group_list(
+        &self,
+        group_list: &group_lists::GroupList,
+    ) -> Result<(), GroupListError> {
+        Self::validate_group_list_internal(group_list, &self.inner_data.students)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_group_lists_data_consistency(&self, subject_ids: &BTreeSet<SubjectId>) {
+        for (subject_id, group_list_id) in &self.inner_data.group_lists.subjects_associations {
+            assert!(self
+                .inner_data
+                .group_lists
+                .group_list_map
+                .contains_key(group_list_id));
+            assert!(subject_ids.contains(subject_id));
+        }
+        for (_group_list_id, group_list) in &self.inner_data.group_lists.group_list_map {
+            Self::validate_group_list_internal(group_list, &self.inner_data.students).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -1146,6 +1239,7 @@ impl Data {
         self.check_assignments_data_consistency(&period_ids);
         self.check_slots_data_consistency(&week_pattern_ids);
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
+        self.check_group_lists_data_consistency(&subject_ids);
     }
 }
 
