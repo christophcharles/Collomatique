@@ -159,14 +159,28 @@ impl Problem {
         Some(cfg)
     }
 
-    pub fn into_feasable<'a, 'b>(&'a self, config: &'b Config) -> Option<FeasableConfig<'a>> {
-        let cfg = self.into_linexpr_config(config)?;
+    pub fn is_feasable(&self, config: &Config) -> bool {
+        let cfg = match self.into_linexpr_config(config) {
+            Some(c) => c,
+            None => return false,
+        };
 
         for c in &self.constraints {
-            let res = c.eval(&cfg)?;
+            let res = match c.eval(&cfg) {
+                Some(r) => r,
+                None => return false,
+            };
             if !res {
-                return None;
+                return false;
             }
+        }
+
+        true
+    }
+
+    pub fn into_feasable<'a, 'b>(&'a self, config: &'b Config) -> Option<FeasableConfig<'a>> {
+        if !self.is_feasable(config) {
+            return None;
         }
 
         Some(unsafe { self.into_feasable_unchecked(config) })
