@@ -65,9 +65,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SlotStart {
-    week: u32,
-    weekday: time::Weekday,
-    start_time: time::Time,
+    pub week: u32,
+    pub weekday: time::Weekday,
+    pub start_time: time::Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -105,14 +105,14 @@ pub struct SlotWithTeacher {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupDesc {
-    students: BTreeSet<usize>,
-    can_be_extended: bool,
+    pub students: BTreeSet<usize>,
+    pub can_be_extended: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupsDesc {
-    prefilled_groups: Vec<GroupDesc>,
-    not_assigned: BTreeSet<usize>,
+    pub prefilled_groups: Vec<GroupDesc>,
+    pub not_assigned: BTreeSet<usize>,
 }
 
 impl GroupsDesc {
@@ -1471,10 +1471,14 @@ impl<'a> IlpTranslator<'a> {
         let min = i32::try_from(range.start).unwrap();
         let max = i32::try_from(range.end).unwrap() - 1;
 
-        BTreeSet::from([
-            expr.leq(&Expr::constant(max)),
-            expr.geq(&Expr::constant(min)),
-        ])
+        if min != max {
+            BTreeSet::from([
+                expr.leq(&Expr::constant(max)),
+                expr.geq(&Expr::constant(min)),
+            ])
+        } else {
+            BTreeSet::from([expr.eq(&Expr::constant(max))])
+        }
     }
 
     fn build_interrogations_per_week_constraints(&self) -> BTreeSet<Constraint<Variable>> {
