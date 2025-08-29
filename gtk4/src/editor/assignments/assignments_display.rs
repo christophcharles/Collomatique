@@ -53,6 +53,7 @@ pub enum PeriodEntryOutput {
         collomatique_state_colloscopes::SubjectId,
         bool,
     ),
+    CopyPreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
 impl PeriodEntry {
@@ -98,7 +99,6 @@ impl FactoryComponent for PeriodEntry {
                 gtk::Button {
                     set_icon_name: "edit-copy-symbolic",
                     add_css_class: "flat",
-                    set_sensitive: false,
                     #[watch]
                     set_visible: self.data.first_week_num != 0,
                     set_tooltip_text: Some("Dupliquer les inscriptions de la période précédente"),
@@ -182,7 +182,11 @@ impl FactoryComponent for PeriodEntry {
                     ))
                     .unwrap();
             }
-            PeriodEntryInput::CopyPreviousPeriod => {}
+            PeriodEntryInput::CopyPreviousPeriod => {
+                sender
+                    .output(PeriodEntryOutput::CopyPreviousPeriod(self.data.period_id))
+                    .unwrap();
+            }
         }
     }
 }
