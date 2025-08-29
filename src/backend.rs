@@ -216,7 +216,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     type GroupingId: OrdId;
     type GroupingIncompatId: OrdId;
 
-    type InternalError: std::fmt::Debug + std::error::Error;
+    type InternalError: std::fmt::Debug + std::error::Error + Send;
 
     async unsafe fn general_data_set_unchecked(
         &mut self,

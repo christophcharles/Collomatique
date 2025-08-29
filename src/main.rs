@@ -359,6 +359,7 @@ async fn solve_command(
     thread_count: Option<NonZeroUsize>,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
+    use collomatique::frontend::state::Manager;
     use indicatif::MultiProgress;
     use std::time::Duration;
 
@@ -419,6 +420,7 @@ async fn solve_command(
     let step_count = steps.unwrap_or(DEFAULT_OPTIMIZING_STEP_COUNT);
     let best_cost_opt = {
         use rayon::prelude::*;
+
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(thread_count)
             .build()?;
@@ -452,7 +454,7 @@ async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
@@ -506,7 +508,7 @@ async fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
 
     match command {
         MaxInterrogationsPerDayCommand::Set {
@@ -557,7 +559,7 @@ async fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
 
     match command {
         InterrogationsPerWeekRangeCommand::SetMax {
@@ -669,6 +671,8 @@ async fn get_week_pattern(
     <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::WeekPatternId,
     collomatique::backend::WeekPattern,
 )> {
+    use collomatique::frontend::state::Manager;
+
     let week_patterns = app_state
         .get_backend_logic()
         .week_patterns_get_all()
@@ -721,6 +725,8 @@ async fn week_patterns_check_existing_names(
     app_state: &mut AppState<sqlite::Store>,
     name: &str,
 ) -> Result<()> {
+    use collomatique::frontend::state::Manager;
+
     let week_patterns = app_state
         .get_backend_logic()
         .week_patterns_get_all()
@@ -741,7 +747,7 @@ async fn week_pattern_command(
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use collomatique::backend::WeekPattern;
-    use collomatique::frontend::state::{Operation, UpdateError, WeekPatternsOperation};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
 
     match command {
         WeekPatternCommand::Create {
@@ -1130,6 +1136,7 @@ async fn respond(
     rl: &mut reedline::Reedline,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<bool> {
+    use collomatique::frontend::state::Manager;
     use reedline::{DefaultPrompt, DefaultPromptSegment, Signal};
 
     let mut prompt = DefaultPrompt::default();
