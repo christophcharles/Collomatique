@@ -1,9 +1,19 @@
+//! COIN-CBC solver
+//! 
+//! This module implements a solver which uses the
+//! [coin_cbc] crate as a backend. This crate is
+//! an interface to the COIN-CBC solver which is
+//! a quite fast open-source solver.
+
 #[cfg(test)]
 mod tests;
 
 use crate::{ConfigData, FeasableConfig, Problem, UsableData, VariableType, linexpr::EqSymbol, ObjectiveSense};
 use super::{SolverWithTimeLimit, ProblemRepr};
 
+/// Coin-cbc solver
+/// 
+/// To create such a solver, use [CbcSolver::new].
 #[derive(Debug, Clone)]
 pub struct CbcSolver {
     disable_logging: bool,
@@ -32,12 +42,24 @@ impl Default for CbcSolver {
 }
 
 impl CbcSolver {
+    /// Returns a default CBC solver.
+    /// 
+    /// The only real configuration for this solver is
+    /// to enable or disable logging.
+    /// 
+    /// By default, logging is disabled. But you can change that
+    /// using [CbcSolver::with_disable_logging] rather than this function.
     pub fn new() -> Self {
         CbcSolver {
             disable_logging: true,
         }
     }
 
+    /// Builds a CBC solver.
+    /// 
+    /// By default, logging is disabled for the CBC solver.
+    /// You can change it here by passing `false` for the `disable_logging`
+    /// argument.
     pub fn with_disable_logging(disable_logging: bool) -> Self {
         CbcSolver { disable_logging }
     }
