@@ -2,7 +2,7 @@ use super::*;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Error)]
-pub enum UpdateError<IntError: std::error::Error + std::fmt::Debug> {
+pub enum UpdateError<IntError: std::error::Error> {
     #[error("Error in storage backend: {0:?}")]
     Internal(#[from] IntError),
     #[error("Cannot set week_count: some week_patterns must be truncated")]
