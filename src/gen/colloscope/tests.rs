@@ -203,7 +203,7 @@ fn incompatibility_slot_overlaps_next_day() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::IncompatibilityWithSlotOverlappingNextDay)
+        Err(Error::IncompatibilityWithSlotOverlappingNextDay(0, 0))
     );
 }
 
