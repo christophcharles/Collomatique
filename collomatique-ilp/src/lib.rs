@@ -1307,6 +1307,18 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     }
 }
 
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::fmt::Display
+    for Config<'a, V, C, P>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, (v, desc)) in self.values.iter().enumerate() {
+            write!(f, "{}) {}: {}", i, v, desc)?;
+        }
+
+        Ok(())
+    }
+}
+
 /// A feasable configuration
 ///
 /// A feasable configuration is a configuration that satisfies all
@@ -1341,5 +1353,13 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::ops::Deref
 
     fn deref(&self) -> &Self::Target {
         self.inner()
+    }
+}
+
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::fmt::Display
+    for FeasableConfig<'a, V, C, P>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner().fmt(f)
     }
 }
