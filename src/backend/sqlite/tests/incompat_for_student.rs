@@ -215,3 +215,508 @@ async fn incompat_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(value, true);
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct StudentIncompatDb {
+    student_id: i64,
+    incompat_id: i64,
+}
+
+#[sqlx::test]
+async fn remove_student(pool: sqlx::SqlitePool) {
+    let mut store = prepare_example_db(pool).await;
+
+    store
+        .students_remove(super::super::students::Id(3))
+        .await
+        .unwrap();
+
+    let records = sqlx::query_as!(
+        StudentIncompatDb,
+        "SELECT student_id, incompat_id FROM student_incompats"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let records_expected = vec![
+        // Student 1
+        StudentIncompatDb {
+            student_id: 1,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 1,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 1,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 1,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 1,
+            incompat_id: 8,
+        },
+        // Student 2
+        StudentIncompatDb {
+            student_id: 2,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 2,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 2,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 2,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 2,
+            incompat_id: 8,
+        },
+        // Student 3 (nothing should be left)
+        // Student 4
+        StudentIncompatDb {
+            student_id: 4,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 4,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 4,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 4,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 4,
+            incompat_id: 8,
+        },
+        // Student 5
+        StudentIncompatDb {
+            student_id: 5,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 5,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 5,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 5,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 5,
+            incompat_id: 8,
+        },
+        // Student 6
+        StudentIncompatDb {
+            student_id: 6,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 6,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 6,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 6,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 6,
+            incompat_id: 8,
+        },
+        // Student 7
+        StudentIncompatDb {
+            student_id: 7,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 7,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 7,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 7,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 7,
+            incompat_id: 8,
+        },
+        // Student 8
+        StudentIncompatDb {
+            student_id: 8,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 8,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 8,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 8,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 8,
+            incompat_id: 8,
+        },
+        // Student 9
+        StudentIncompatDb {
+            student_id: 9,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 9,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 9,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 9,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 9,
+            incompat_id: 8,
+        },
+        // Student 10
+        StudentIncompatDb {
+            student_id: 10,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 10,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 10,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 10,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 10,
+            incompat_id: 8,
+        },
+        // Student 11
+        StudentIncompatDb {
+            student_id: 11,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 11,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 11,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 11,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 11,
+            incompat_id: 8,
+        },
+        // Student 12
+        StudentIncompatDb {
+            student_id: 12,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 12,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 12,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 12,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 12,
+            incompat_id: 8,
+        },
+        // Student 13
+        StudentIncompatDb {
+            student_id: 13,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 13,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 13,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 13,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 13,
+            incompat_id: 8,
+        },
+        // Student 14
+        StudentIncompatDb {
+            student_id: 14,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 14,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 14,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 14,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 14,
+            incompat_id: 8,
+        },
+        // Student 15
+        StudentIncompatDb {
+            student_id: 15,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 15,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 15,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 15,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 15,
+            incompat_id: 8,
+        },
+        // Student 16
+        StudentIncompatDb {
+            student_id: 16,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 16,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 16,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 16,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 16,
+            incompat_id: 8,
+        },
+        // Student 17
+        StudentIncompatDb {
+            student_id: 17,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 17,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 17,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 17,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 17,
+            incompat_id: 8,
+        },
+        // Student 18
+        StudentIncompatDb {
+            student_id: 18,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 18,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 18,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 18,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 18,
+            incompat_id: 8,
+        },
+        // Student 19
+        StudentIncompatDb {
+            student_id: 19,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 19,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 19,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 19,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 19,
+            incompat_id: 8,
+        },
+        // Student 20
+        StudentIncompatDb {
+            student_id: 20,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 20,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 20,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 20,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 20,
+            incompat_id: 8,
+        },
+        // Student 21
+        StudentIncompatDb {
+            student_id: 21,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 21,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 21,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 21,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 21,
+            incompat_id: 8,
+        },
+        // Student 22
+        StudentIncompatDb {
+            student_id: 22,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 22,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 22,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 22,
+            incompat_id: 7,
+        },
+        StudentIncompatDb {
+            student_id: 22,
+            incompat_id: 8,
+        },
+        // Student 23
+        StudentIncompatDb {
+            student_id: 23,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 23,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 23,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 23,
+            incompat_id: 8,
+        },
+        // Student 24
+        StudentIncompatDb {
+            student_id: 24,
+            incompat_id: 4,
+        },
+        StudentIncompatDb {
+            student_id: 24,
+            incompat_id: 5,
+        },
+        StudentIncompatDb {
+            student_id: 24,
+            incompat_id: 6,
+        },
+        StudentIncompatDb {
+            student_id: 24,
+            incompat_id: 7,
+        },
+    ];
+
+    assert_eq!(records, records_expected);
+}
