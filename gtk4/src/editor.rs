@@ -250,6 +250,7 @@ impl EditorPanel {
             collomatique_core::ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
             collomatique_core::ops::OpCategory::Slots => None,
             collomatique_core::ops::OpCategory::Incompatibilities => None,
+            collomatique_core::ops::OpCategory::GroupLists => None,
         }
     }
 

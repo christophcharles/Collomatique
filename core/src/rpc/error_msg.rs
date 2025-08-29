@@ -16,6 +16,8 @@ pub mod slots;
 pub use slots::*;
 pub mod incompatibilities;
 pub use incompatibilities::*;
+pub mod group_lists;
+pub use group_lists::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
@@ -27,6 +29,7 @@ pub enum ErrorMsg {
     WeekPatterns(WeekPatternsError),
     Slots(SlotsError),
     Incompats(IncompatibilitiesError),
+    GroupLists(GroupListsError),
 }
 
 impl From<crate::ops::UpdateError> for ErrorMsg {
@@ -41,6 +44,7 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
             UpdateError::WeekPatterns(e) => ErrorMsg::WeekPatterns(e.into()),
             UpdateError::Slots(e) => ErrorMsg::Slots(e.into()),
             UpdateError::Incompatibilities(e) => ErrorMsg::Incompats(e.into()),
+            UpdateError::GroupLists(e) => ErrorMsg::GroupLists(e.into()),
         }
     }
 }
@@ -93,6 +97,12 @@ impl From<IncompatibilitiesError> for ErrorMsg {
     }
 }
 
+impl From<GroupListsError> for ErrorMsg {
+    fn from(value: GroupListsError) -> Self {
+        ErrorMsg::GroupLists(value)
+    }
+}
+
 impl std::fmt::Display for ErrorMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -104,6 +114,7 @@ impl std::fmt::Display for ErrorMsg {
             ErrorMsg::WeekPatterns(e) => e.fmt(f),
             ErrorMsg::Slots(e) => e.fmt(f),
             ErrorMsg::Incompats(e) => e.fmt(f),
+            ErrorMsg::GroupLists(e) => e.fmt(f),
         }
     }
 }
