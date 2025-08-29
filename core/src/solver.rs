@@ -524,38 +524,38 @@ where
         self.internal_solution
     }
 
-    pub fn blame(&self) -> impl ExactSizeIterator<Item = &T::GeneralConstraintDesc> {
-        if false {
-            return vec![].into_iter();
-        }
-        todo!()
+    pub fn blame(&self) -> Vec<T::GeneralConstraintDesc> {
+        self.ilp_config
+            .blame()
+            .filter_map(|(_c, d)| self.problem.general_constraint_descs.get(d).cloned())
+            .collect()
     }
 
-    pub fn blame_with_extra_constraint<'b, E: ExtraConstraints<T>>(
+    pub fn blame_extra<E: ExtraConstraints<T>>(
         &self,
-        _translator: &'b ExtraTranslator<T, E>,
-    ) -> impl ExactSizeIterator<Item = &'b E::GeneralConstraintDesc> {
-        if false {
-            return vec![].into_iter();
-        }
-        todo!()
+        translator: &ExtraTranslator<T, E>,
+    ) -> Vec<E::GeneralConstraintDesc> {
+        self.ilp_config
+            .blame()
+            .filter_map(|(_c, d)| translator.general_c_map.get(d).cloned())
+            .collect()
     }
 
-    pub fn check_structure(&self) -> impl ExactSizeIterator<Item = &T::StructureConstraintDesc> {
-        if false {
-            return vec![].into_iter();
-        }
-        todo!()
+    pub fn check_structure(&self) -> Vec<T::StructureConstraintDesc> {
+        self.ilp_config
+            .blame()
+            .filter_map(|(_c, d)| self.problem.structure_constraint_descs.get(d).cloned())
+            .collect()
     }
 
-    pub fn check_extra_structure<'b, E: ExtraConstraints<T>>(
+    pub fn check_structure_extra<E: ExtraConstraints<T>>(
         &self,
-        _translator: &'b ExtraTranslator<T, E>,
-    ) -> impl ExactSizeIterator<Item = &'b E::StructureConstraintDesc> {
-        if false {
-            return vec![].into_iter();
-        }
-        todo!()
+        translator: &ExtraTranslator<T, E>,
+    ) -> Vec<E::StructureConstraintDesc> {
+        self.ilp_config
+            .blame()
+            .filter_map(|(_c, d)| translator.structure_c_map.get(d).cloned())
+            .collect()
     }
 }
 
