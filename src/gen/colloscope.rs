@@ -132,18 +132,144 @@ pub struct GroupsDesc {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum BalancingRequirements {
+pub enum BalancingStrictness {
     #[default]
-    None,
-    Teachers,
-    Timeslots,
-    TeachersAndTimeslots,
+    OverallOnly,
+    StrictWithCuts,
+    Strict,
 }
 
-impl BalancingRequirements {
-    pub fn new() -> Self {
-        Self::default()
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WeekSelection {
+    pub selection: BTreeSet<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BalancingObject {
+    Teachers(BTreeMap<WeekSelection, BTreeMap<TeacherBalancing, usize>>),
+    Timeslots(BTreeMap<WeekSelection, BTreeMap<TimeslotBalancing, usize>>),
+    TeachersAndTimeslots(BTreeMap<WeekSelection, BTreeMap<TeacherAndTimeslotBalancing, usize>>),
+}
+
+impl BalancingObject {
+    fn build_data<T: BalancingData>(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> BTreeMap<WeekSelection, BTreeMap<T, usize>> {
+        let mut week_map: BTreeMap<u32, BTreeMap<T, usize>> = BTreeMap::new();
+
+        for slot in slots {
+            let data = T::from_subject_slot(slot);
+
+            match week_map.get_mut(&slot.start.week) {
+                Some(val) => match val.get_mut(&data) {
+                    Some(value) => {
+                        *value += 1;
+                    }
+                    None => {
+                        val.insert(data, 1);
+                    }
+                },
+                None => {
+                    week_map.insert(slot.start.week, BTreeMap::from([(data, 1)]));
+                }
+            }
+        }
+
+        let mut reverse_data: BTreeMap<BTreeMap<T, usize>, WeekSelection> = BTreeMap::new();
+
+        for (week, data) in week_map {
+            match reverse_data.get_mut(&data) {
+                Some(value) => {
+                    value.selection.insert(week);
+                }
+                None => {
+                    reverse_data.insert(
+                        data,
+                        WeekSelection {
+                            selection: BTreeSet::from([week]),
+                        },
+                    );
+                }
+            }
+        }
+
+        reverse_data
+            .into_iter()
+            .map(|(data, week_select)| (week_select, data))
+            .collect()
     }
+
+    pub fn teachers_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
+        BalancingObject::Teachers(Self::build_data(slots))
+    }
+
+    pub fn timeslots_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
+        BalancingObject::Timeslots(Self::build_data(slots))
+    }
+
+    pub fn teachers_and_timeslots_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
+        BalancingObject::TeachersAndTimeslots(Self::build_data(slots))
+    }
+}
+
+trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self;
+
+    fn is_slot_relevant(&self, slot: &SlotWithTeacher) -> bool {
+        let other = Self::from_subject_slot(slot);
+        *self == other
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TeacherBalancing {
+    pub teacher: usize,
+}
+
+impl BalancingData for TeacherBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherBalancing {
+            teacher: slot.teacher,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TimeslotBalancing {
+    pub weekday: time::Weekday,
+    pub time: time::Time,
+}
+
+impl BalancingData for TimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TimeslotBalancing {
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TeacherAndTimeslotBalancing {
+    pub teacher: usize,
+    pub weekday: time::Weekday,
+    pub time: time::Time,
+}
+
+impl BalancingData for TeacherAndTimeslotBalancing {
+    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
+        TeacherAndTimeslotBalancing {
+            teacher: slot.teacher,
+            weekday: slot.start.weekday,
+            time: slot.start.start_time.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingRequirements {
+    pub strictness: BalancingStrictness,
+    pub object: BalancingObject,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -153,7 +279,7 @@ pub struct Subject {
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
-    pub balancing_requirements: BalancingRequirements,
+    pub balancing_requirements: Option<BalancingRequirements>,
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
@@ -167,7 +293,7 @@ impl Default for Subject {
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
-            balancing_requirements: BalancingRequirements::default(),
+            balancing_requirements: None,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![],
             groups: GroupsDesc::default(),
@@ -583,60 +709,6 @@ enum StudentStatus {
     Assigned(usize),
     ToBeAssigned(BTreeSet<usize>),
     NotConcerned,
-}
-
-trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self;
-
-    fn is_slot_relevant(&self, slot: &SlotWithTeacher) -> bool {
-        let other = Self::from_subject_slot(slot);
-        *self == other
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct TeacherBalancing {
-    teacher: usize,
-}
-
-impl BalancingData for TeacherBalancing {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
-        TeacherBalancing {
-            teacher: slot.teacher,
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct TimeslotBalancing {
-    weekday: time::Weekday,
-    time: time::Time,
-}
-
-impl BalancingData for TimeslotBalancing {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
-        TimeslotBalancing {
-            weekday: slot.start.weekday,
-            time: slot.start.start_time.clone(),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct TeacherAndTimeslotBalancing {
-    teacher: usize,
-    weekday: time::Weekday,
-    time: time::Time,
-}
-
-impl BalancingData for TeacherAndTimeslotBalancing {
-    fn from_subject_slot(slot: &SlotWithTeacher) -> Self {
-        TeacherAndTimeslotBalancing {
-            teacher: slot.teacher,
-            weekday: slot.start.weekday,
-            time: slot.start.start_time.clone(),
-        }
-    }
 }
 
 impl<'a> IlpTranslator<'a> {
@@ -1883,19 +1955,19 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            match subject.balancing_requirements {
-                BalancingRequirements::None => {} // ignore, no balancing needed
-                BalancingRequirements::Timeslots => constraints.extend(
-                    self.build_balancing_constraints_for_subject::<TimeslotBalancing>(i, subject),
-                ),
-                BalancingRequirements::Teachers => constraints.extend(
-                    self.build_balancing_constraints_for_subject::<TeacherBalancing>(i, subject),
-                ),
-                BalancingRequirements::TeachersAndTimeslots => constraints.extend(
-                    self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(
-                        i, subject,
+            match &subject.balancing_requirements {
+                None => {} // ignore, no balancing needed
+                Some(value) => match &value.object {
+                    BalancingObject::Teachers(_) => constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TeacherBalancing>(i, subject),
                     ),
-                ),
+                    BalancingObject::Timeslots(_) => constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TimeslotBalancing>(i, subject),
+                    ),
+                    BalancingObject::TeachersAndTimeslots(_) => constraints.extend(
+                        self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(i, subject),
+                    ),
+                }
             }
         }
 
