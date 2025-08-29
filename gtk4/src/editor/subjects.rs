@@ -87,14 +87,14 @@ impl Component for Subjects {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let subject_params_dialog =
-            subject_params::Dialog::builder()
-                .launch(())
-                .forward(sender.input_sender(), |msg| match msg {
-                    subject_params::DialogOutput::Accepted(params) => {
-                        SubjectsInput::SubjectParamsSelected(params)
-                    }
-                });
+        let subject_params_dialog = subject_params::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                subject_params::DialogOutput::Accepted(params) => {
+                    SubjectsInput::SubjectParamsSelected(params)
+                }
+            });
 
         let subjects_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
