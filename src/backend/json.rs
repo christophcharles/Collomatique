@@ -561,8 +561,29 @@ impl JsonStore {
             },
         })
     }
+}
 
-    pub fn get_data(&self) -> &JsonData {
-        &self.data
+#[derive(Debug, Error)]
+pub enum SaveError {
+    #[error("Error while outputting json")]
+    JsonError(#[from] serde_json::Error),
+    #[error("Error while writing file")]
+    IO(#[from] std::io::Error),
+}
+
+pub type SaveResult<T> = std::result::Result<T, SaveError>;
+
+impl JsonStore {
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        Ok(serde_json::to_string_pretty(&self.data)?)
+    }
+
+    pub fn to_json_file(&self, path: &std::path::Path) -> SaveResult<()> {
+        let content = self.to_json()?;
+        let mut file = std::fs::File::create(path)?;
+
+        use std::io::Write;
+        file.write_all(content.as_bytes())?;
+        Ok(())
     }
 }

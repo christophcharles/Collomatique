@@ -200,9 +200,7 @@ async fn async_cli(create: bool, db: std::path::PathBuf, command: CliCommandOrSh
         }
         CliCommandOrShell::Backup { out } => {
             let json_store = collomatique::backend::json::JsonStore::from_logic(&logic).await?;
-
-            let file = std::fs::File::create(out)?;
-            serde_json::to_writer_pretty(file, json_store.get_data())?;
+            json_store.to_json_file(&out)?;
         }
         CliCommandOrShell::Global(command) => {
             let mut app_state = AppState::new(logic);
