@@ -158,6 +158,10 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         Ok(self)
     }
 
+    pub fn get_variables(&self) -> &BTreeSet<V> {
+        &self.variables
+    }
+
     pub fn build(self) -> Problem<V, P> {
         let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
         let mut variables_lookup = BTreeMap::new();
