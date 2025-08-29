@@ -2669,6 +2669,155 @@ fn group_on_week_selection_variables() {
 }
 
 #[test]
+fn no_group_on_week_selection_variables() {
+    let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
+        teacher_count: 2,
+        week_count: NonZeroU32::new(4).unwrap(),
+        interrogations_per_week: None,
+        max_interrogations_per_day: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        balancing_requirements: None,
+        slots: vec![
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 2,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 3,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 2,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 3,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            prefilled_groups: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([]),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+        ..Subject::default()
+    }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatSet::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibility_groups,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let group_on_week_selection_variables =
+        ilp_translator.build_group_on_week_selection_variables();
+
+    assert!(group_on_week_selection_variables.is_empty());
+}
+
+#[test]
 fn dynamic_group_assignment_variables() {
     let general = GeneralData {
         periodicity_cuts: BTreeSet::new(),
