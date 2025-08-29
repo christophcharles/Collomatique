@@ -3132,7 +3132,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
 }
 
 #[test]
-fn exact_periodicity_variables() {
+fn periodicity_variables_for_strict_period() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
@@ -3285,35 +3285,383 @@ fn exact_periodicity_variables() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let exact_periodicity_variables = ilp_translator.build_exact_periodicity_variables();
+    let exact_periodicity_variables = ilp_translator.build_periodicity_variables();
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        Variable::ExactPeriodicity { subject: 0, student: 0, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 0, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 1, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 1, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 2, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 2, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 3, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 3, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 4, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 4, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 5, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 5, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 6, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 6, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 7, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 7, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 8, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 8, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 9, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 9, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 10, week_modulo: 0 },
-        Variable::ExactPeriodicity { subject: 0, student: 10, week_modulo: 1 },
-        Variable::ExactPeriodicity { subject: 0, student: 11, week_modulo: 0},
-        Variable::ExactPeriodicity { subject: 0, student: 11, week_modulo: 1, },
+        Variable::Periodicity { subject: 0, student: 0, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 0, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 1, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 1, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 2, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 2, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 3, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 3, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 4, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 4, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 5, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 5, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 6, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 6, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 7, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 7, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 8, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 8, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 9, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 9, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 10, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 10, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 11, week_modulo: 0},
+        Variable::Periodicity { subject: 0, student: 11, week_modulo: 1, },
     ]);
+
+    assert_eq!(exact_periodicity_variables, expected_result);
+}
+
+#[test]
+fn periodicity_variables_for_loose_unfinished_period() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(3).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: false,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
+        },
+    }];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let exact_periodicity_variables = ilp_translator.build_periodicity_variables();
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        Variable::Periodicity { subject: 0, student: 0, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 0, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 1, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 1, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 2, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 2, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 3, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 3, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 4, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 4, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 5, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 5, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 6, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 6, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 7, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 7, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 8, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 8, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 9, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 9, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 10, week_modulo: 0 },
+        Variable::Periodicity { subject: 0, student: 10, week_modulo: 1 },
+        Variable::Periodicity { subject: 0, student: 11, week_modulo: 0},
+        Variable::Periodicity { subject: 0, student: 11, week_modulo: 1, },
+    ]);
+
+    assert_eq!(exact_periodicity_variables, expected_result);
+}
+
+#[test]
+fn without_periodicity_variables_for_loose_complete_period() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: false,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
+        },
+    }];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let exact_periodicity_variables = ilp_translator.build_periodicity_variables();
+
+    let expected_result = BTreeSet::new();
 
     assert_eq!(exact_periodicity_variables, expected_result);
 }
