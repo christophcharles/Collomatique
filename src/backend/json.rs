@@ -799,7 +799,6 @@ impl JsonStore {
                 }
             }
 
-            let mut subject_groups = BTreeMap::<SubjectGroupId, SubjectId>::new();
             for (old_subject_group_id, new_subject_group_id) in &subject_group_ids {
                 let old_subject_id_opt = logic
                     .subject_group_for_student_get(*old_student_id, *old_subject_group_id)
