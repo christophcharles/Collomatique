@@ -286,6 +286,36 @@ pub enum WeekPatternError {
     WeekPatternIdAlreadyExists(WeekPatternId),
 }
 
+/// Errors for interrogation slot operations
+///
+/// These errors can be returned when trying to modify [Data] with a slot op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotError {
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// subject has no interrogations
+    #[error("subject ({0:?}) does not have interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
+
+    /// teacher id is invalid
+    #[error("invalid teacher id ({0:?})")]
+    InvalidTeacherId(TeacherId),
+
+    /// week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// Provided teacher does not teach in the corresponding subject
+    #[error("Provided teacher ({0:?}) does not teach in subject ({1:?})")]
+    TeacherDoesNotTeachInSubject(TeacherId, SubjectId),
+
+    /// Slot overlaps with next day
+    #[error("The slot start time is too late and the slot overlaps with the next day")]
+    SlotOverlapsWithNextDay,
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -303,6 +333,8 @@ pub enum Error {
     Assignment(#[from] AssignmentError),
     #[error(transparent)]
     WeekPattern(#[from] WeekPatternError),
+    #[error(transparent)]
+    Slot(#[from] SlotError),
 }
 
 /// Errors for IDs
@@ -354,6 +386,12 @@ impl From<TeacherId> for NewId {
 impl From<WeekPatternId> for NewId {
     fn from(value: WeekPatternId) -> Self {
         NewId::WeekPatternId(value)
+    }
+}
+
+impl From<SlotId> for NewId {
+    fn from(value: SlotId) -> Self {
+        NewId::SlotId(value)
     }
 }
 
@@ -733,6 +771,92 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks that a slot is valid
+    fn validate_slot_internal(
+        slot: &slots::Slot,
+        subject_id: SubjectId,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+        teachers: &teachers::Teachers,
+        subjects: &subjects::Subjects,
+    ) -> Result<(), SlotError> {
+        let Some(teacher) = teachers.teacher_map.get(&slot.teacher_id) else {
+            return Err(SlotError::InvalidTeacherId(slot.teacher_id));
+        };
+        if !teacher.subjects.contains(&subject_id) {
+            return Err(SlotError::TeacherDoesNotTeachInSubject(
+                slot.teacher_id,
+                subject_id,
+            ));
+        }
+        if let Some(week_pattern_id) = &slot.week_pattern {
+            if !week_pattern_ids.contains(week_pattern_id) {
+                return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
+            }
+        }
+        let Some(subject) = subjects.find_subject(subject_id) else {
+            return Err(SlotError::InvalidSubjectId(subject_id));
+        };
+        let Some(params) = &subject.parameters.interrogation_parameters else {
+            return Err(SlotError::SubjectHasNoInterrogation(subject_id));
+        };
+        if collomatique_time::SlotWithDuration::new(
+            slot.start_time.clone(),
+            params.duration.clone(),
+        )
+        .is_none()
+        {
+            return Err(SlotError::SlotOverlapsWithNextDay);
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    fn validate_slot(&self, slot: &slots::Slot, subject_id: SubjectId) -> Result<(), SlotError> {
+        let week_pattern_ids = self.build_week_pattern_ids();
+
+        Self::validate_slot_internal(
+            slot,
+            subject_id,
+            &week_pattern_ids,
+            &self.inner_data.teachers,
+            &self.inner_data.subjects,
+        )
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_slots_data_consistency(&self, week_pattern_ids: &BTreeSet<WeekPatternId>) {
+        let subjects_with_interrogations_count = self
+            .inner_data
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+            .count();
+        assert_eq!(
+            self.inner_data.slots.subject_map.len(),
+            subjects_with_interrogations_count
+        );
+
+        for (subject_id, subject_slots) in &self.inner_data.slots.subject_map {
+            for (_slot_id, slot) in &subject_slots.ordered_slots {
+                Self::validate_slot_internal(
+                    slot,
+                    *subject_id,
+                    week_pattern_ids,
+                    &self.inner_data.teachers,
+                    &self.inner_data.subjects,
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -746,16 +870,32 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Build the set of PeriodIds
+    ///
+    /// This is useful to check that references are valid
+    fn build_week_pattern_ids(&self) -> BTreeSet<WeekPatternId> {
+        self.inner_data
+            .week_patterns
+            .week_pattern_map
+            .keys()
+            .copied()
+            .collect()
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
         let period_ids = self.build_period_ids();
+        let week_pattern_ids = self.build_week_pattern_ids();
 
         self.check_subjects_data_consistency(&period_ids);
         self.check_teachers_data_consistency();
         self.check_students_data_consistency(&period_ids);
         self.check_assignments_data_consistency(&period_ids);
+        self.check_slots_data_consistency(&week_pattern_ids);
     }
 }
 
