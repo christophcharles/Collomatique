@@ -487,7 +487,7 @@ impl GenColloscopeTranslator {
             };
 
             let balancing_requirements = balacing_object.map(|obj| BalancingRequirements {
-                strictness: BalancingStrictness::default(),
+                strictness: BalancingStrictness::OverallOnly,
                 object: obj,
             });
 
