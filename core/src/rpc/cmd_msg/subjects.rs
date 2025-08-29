@@ -36,13 +36,13 @@ impl SubjectsCmdMsg {
                 let Some(subject_id) = data.validate_subject_id(id.0) else {
                     return Err(error_msg::MoveUpError::InvalidSubjectId(id).into());
                 };
-                SubjectsUpdateOp::MoveUp(subject_id)
+                SubjectsUpdateOp::MoveSubjectUp(subject_id)
             }
             SubjectsCmdMsg::MoveDown(id) => {
                 let Some(subject_id) = data.validate_subject_id(id.0) else {
                     return Err(error_msg::MoveDownError::InvalidSubjectId(id).into());
                 };
-                SubjectsUpdateOp::MoveDown(subject_id)
+                SubjectsUpdateOp::MoveSubjectDown(subject_id)
             }
             SubjectsCmdMsg::UpdatePeriodStatus(subject_id, period_id, new_status) => {
                 let Some(subject_id) = data.validate_subject_id(subject_id.0) else {

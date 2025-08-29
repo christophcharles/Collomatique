@@ -72,8 +72,8 @@ pub enum SubjectsUpdateOp {
         collomatique_state_colloscopes::subjects::SubjectParameters,
     ),
     DeleteSubject(collomatique_state_colloscopes::SubjectId),
-    MoveUp(collomatique_state_colloscopes::SubjectId),
-    MoveDown(collomatique_state_colloscopes::SubjectId),
+    MoveSubjectUp(collomatique_state_colloscopes::SubjectId),
+    MoveSubjectDown(collomatique_state_colloscopes::SubjectId),
     UpdatePeriodStatus(
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
@@ -90,9 +90,9 @@ pub enum SubjectsUpdateError {
     #[error(transparent)]
     DeleteSubject(#[from] DeleteSubjectError),
     #[error(transparent)]
-    MoveUp(#[from] MoveUpError),
+    MoveSubjectUp(#[from] MoveSubjectUpError),
     #[error(transparent)]
-    MoveDown(#[from] MoveDownError),
+    MoveSubjectDown(#[from] MoveSubjectDownError),
     #[error(transparent)]
     UpdatePeriodStatus(#[from] UpdatePeriodStatusError),
 }
@@ -126,7 +126,7 @@ pub enum DeleteSubjectError {
 }
 
 #[derive(Debug, Error)]
-pub enum MoveUpError {
+pub enum MoveSubjectUpError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
     #[error("Subject is already the first subject")]
@@ -134,7 +134,7 @@ pub enum MoveUpError {
 }
 
 #[derive(Debug, Error)]
-pub enum MoveDownError {
+pub enum MoveSubjectDownError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
     #[error("Subject is already the last subject")]
@@ -155,8 +155,8 @@ impl SubjectsUpdateOp {
             SubjectsUpdateOp::AddNewSubject(_desc) => "Ajouter une matière".into(),
             SubjectsUpdateOp::UpdateSubject(_id, _desc) => "Modifier une matière".into(),
             SubjectsUpdateOp::DeleteSubject(_id) => "Supprimer une matière".into(),
-            SubjectsUpdateOp::MoveUp(_id) => "Remonter une matière".into(),
-            SubjectsUpdateOp::MoveDown(_id) => "Descendre une matière".into(),
+            SubjectsUpdateOp::MoveSubjectUp(_id) => "Remonter une matière".into(),
+            SubjectsUpdateOp::MoveSubjectDown(_id) => "Descendre une matière".into(),
             Self::UpdatePeriodStatus(_subject_id, _period_id, status) => {
                 if *status {
                     "Dispenser une matière sur une période".into()
@@ -173,8 +173,8 @@ impl SubjectsUpdateOp {
     ) -> Vec<SubjectsUpdateWarning> {
         match self {
             Self::AddNewSubject(_) => vec![],
-            Self::MoveUp(_) => vec![],
-            Self::MoveDown(_) => vec![],
+            Self::MoveSubjectUp(_) => vec![],
+            Self::MoveSubjectDown(_) => vec![],
             Self::UpdateSubject(subject_id, params) => {
                 let Some(current_subject) =
                     data.get_data().get_subjects().find_subject(*subject_id)
@@ -512,15 +512,15 @@ impl SubjectsUpdateOp {
 
                 Ok(None)
             }
-            Self::MoveUp(subject_id) => {
+            Self::MoveSubjectUp(subject_id) => {
                 let current_position = data
                     .get_data()
                     .get_subjects()
                     .find_subject_position(*subject_id)
-                    .ok_or(MoveUpError::InvalidSubjectId(*subject_id))?;
+                    .ok_or(MoveSubjectUpError::InvalidSubjectId(*subject_id))?;
 
                 if current_position == 0 {
-                    Err(MoveUpError::NoUpperPosition)?;
+                    Err(MoveSubjectUpError::NoUpperPosition)?;
                 }
 
                 let result = data
@@ -539,16 +539,16 @@ impl SubjectsUpdateOp {
 
                 Ok(None)
             }
-            Self::MoveDown(subject_id) => {
+            Self::MoveSubjectDown(subject_id) => {
                 let current_position = data
                     .get_data()
                     .get_subjects()
                     .find_subject_position(*subject_id)
-                    .ok_or(MoveDownError::InvalidSubjectId(*subject_id))?;
+                    .ok_or(MoveSubjectDownError::InvalidSubjectId(*subject_id))?;
 
                 if current_position == data.get_data().get_subjects().ordered_subject_list.len() - 1
                 {
-                    Err(MoveDownError::NoLowerPosition)?;
+                    Err(MoveSubjectDownError::NoLowerPosition)?;
                 }
 
                 let result = data

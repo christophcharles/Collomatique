@@ -182,10 +182,12 @@ impl Component for Subjects {
                 sender.output(SubjectsUpdateOp::DeleteSubject(id)).unwrap();
             }
             SubjectsInput::MoveUpSubjectClicked(id) => {
-                sender.output(SubjectsUpdateOp::MoveUp(id)).unwrap();
+                sender.output(SubjectsUpdateOp::MoveSubjectUp(id)).unwrap();
             }
             SubjectsInput::MoveDownSubjectClicked(id) => {
-                sender.output(SubjectsUpdateOp::MoveDown(id)).unwrap();
+                sender
+                    .output(SubjectsUpdateOp::MoveSubjectDown(id))
+                    .unwrap();
             }
             SubjectsInput::PeriodStatusUpdated(id, period_num, status) => {
                 sender
