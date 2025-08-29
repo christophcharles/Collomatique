@@ -13,6 +13,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("Subject {0} has empty students_per_interrogation: {1:?}")]
     SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroU32>),
+    #[error("Subject {0} has in interrogation {1} the slot {2} after the week count ({3}) of the schedule")]
+    SubjectWithSlotAfterLastWeek(usize, usize, usize, u32),
     #[error("Subject {0} has in interrogation {1} the slot {2} overlapping next day")]
     SubjectWithSlotOverlappingNextDay(usize, usize, usize),
     #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
@@ -21,6 +23,10 @@ pub enum Error {
     StudentWithInvalidSubject(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
+    #[error(
+        "Incompatibility {0} has interrogation slot {1} after the week count ({2}) of the schedule"
+    )]
+    IncompatibilityWithSlotAfterLastWeek(usize, usize, u32),
     #[error("Incompatibility {0} has interrogation slot {1} overlapping next day")]
     IncompatibilityWithSlotOverlappingNextDay(usize, usize),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
@@ -125,9 +131,12 @@ impl ValidatedData {
         slot_start.week < general.week_count.get()
     }
 
-    fn validate_slot(general: &GeneralData, slot_start: &SlotStart, duration: NonZeroU32) -> bool {
-        Self::validate_slot_start(general, &slot_start)
-            && slot_start.start_time.fit_in_day(duration.get())
+    fn validate_slot_overlap(
+        general: &GeneralData,
+        slot_start: &SlotStart,
+        duration: NonZeroU32,
+    ) -> bool {
+        slot_start.start_time.fit_in_day(duration.get())
     }
 
     pub fn new(
@@ -155,7 +164,15 @@ impl ValidatedData {
                     ));
                 }
                 for (k, slot_start) in interrogation.slots.iter().enumerate() {
-                    if !Self::validate_slot(&general, slot_start, subject.duration) {
+                    if !Self::validate_slot_start(&general, slot_start) {
+                        return Err(Error::SubjectWithSlotAfterLastWeek(
+                            i,
+                            j,
+                            k,
+                            general.week_count.get(),
+                        ));
+                    }
+                    if !Self::validate_slot_overlap(&general, slot_start, subject.duration) {
                         return Err(Error::SubjectWithSlotOverlappingNextDay(i, j, k));
                     }
                 }
@@ -164,7 +181,14 @@ impl ValidatedData {
 
         for (i, incompatibility) in incompatibilities.iter().enumerate() {
             for (j, slot) in incompatibility.slots.iter().enumerate() {
-                if !Self::validate_slot(&general, &slot.start, slot.duration) {
+                if !Self::validate_slot_start(&general, &slot.start) {
+                    return Err(Error::IncompatibilityWithSlotAfterLastWeek(
+                        i,
+                        j,
+                        general.week_count.get(),
+                    ));
+                }
+                if !Self::validate_slot_overlap(&general, &slot.start, slot.duration) {
                     return Err(Error::IncompatibilityWithSlotOverlappingNextDay(i, j));
                 }
             }
