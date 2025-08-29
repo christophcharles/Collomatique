@@ -74,6 +74,7 @@ fn test_is_feasable() {
 
     let nd_problem = &pb.nd_problem;
 
+    use crate::ilp::mat_repr::ConfigRepr;
     assert_eq!(config_0.nd_config.is_feasable(nd_problem), false);
     assert_eq!(config_1.nd_config.is_feasable(nd_problem), true);
     assert_eq!(config_2.nd_config.is_feasable(nd_problem), false);
@@ -106,6 +107,7 @@ fn test_is_feasable_no_constraint() {
     let config_2 = pb.config_from(["b"]).unwrap();
     let config_3 = pb.config_from(["a", "b"]).unwrap();
 
+    use crate::ilp::mat_repr::ConfigRepr;
     assert_eq!(config_0.nd_config.is_feasable(&pb.nd_problem), true);
     assert_eq!(config_1.nd_config.is_feasable(&pb.nd_problem), true);
     assert_eq!(config_2.nd_config.is_feasable(&pb.nd_problem), true);
@@ -136,11 +138,12 @@ fn test_neighbours() {
 
     let nd_config = config.nd_config.clone();
 
+    use crate::ilp::mat_repr::ConfigRepr;
     use std::collections::BTreeSet;
     let neighbours = nd_config
         .neighbours()
         .into_iter()
-        .collect::<BTreeSet<NdConfig>>();
+        .collect::<BTreeSet<NdConfig<String>>>();
 
     let config_0 = pb.config_from(["b"]).unwrap();
     let config_1 = pb.config_from(["a"]).unwrap();
@@ -277,6 +280,7 @@ fn compute_lhs() {
 
     let nd_problem = &pb.nd_problem;
 
+    use crate::ilp::mat_repr::ConfigRepr;
     assert_eq!(
         config_0.nd_config.compute_lhs(nd_problem),
         BTreeMap::from([
