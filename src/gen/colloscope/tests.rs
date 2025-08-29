@@ -2490,7 +2490,7 @@ fn group_in_slot_variables() {
 }
 
 #[test]
-fn group_on_week_selection_variables() {
+fn group_on_slot_selection_variables() {
     let general = GeneralData {
         periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
@@ -2660,22 +2660,22 @@ fn group_on_week_selection_variables() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let group_on_week_selection_variables =
-        ilp_translator.build_group_on_week_selection_variables();
+    let group_on_slot_selection_variables =
+        ilp_translator.build_group_on_slot_selection_variables();
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 },
-        Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 },
-        Variable::GroupOnWeekSelection { subject: 0, week_selection: 1, group: 0 },
-        Variable::GroupOnWeekSelection { subject: 0, week_selection: 1, group: 1 },
+        Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 },
+        Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 },
+        Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 0 },
+        Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 1 },
     ]);
 
-    assert_eq!(group_on_week_selection_variables, expected_result);
+    assert_eq!(group_on_slot_selection_variables, expected_result);
 }
 
 #[test]
-fn no_group_on_week_selection_variables() {
+fn no_group_on_slot_selection_variables() {
     let general = GeneralData {
         periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
@@ -2817,10 +2817,10 @@ fn no_group_on_week_selection_variables() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let group_on_week_selection_variables =
-        ilp_translator.build_group_on_week_selection_variables();
+    let group_on_slot_selection_variables =
+        ilp_translator.build_group_on_slot_selection_variables();
 
-    assert!(group_on_week_selection_variables.is_empty());
+    assert!(group_on_slot_selection_variables.is_empty());
 }
 
 #[test]
@@ -6316,22 +6316,22 @@ fn simple_colloscope() {
     let gis_1_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 1 });
 
     #[rustfmt::skip]
-    let gowsa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 0 });
+    let gossa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gowsa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 0 });
+    let gossa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 0 });
     #[rustfmt::skip]
-    let gowsa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 0 });
+    let gossa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gowsa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 0 });
+    let gossa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 0 });
 
     #[rustfmt::skip]
-    let gowsa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 1 });
+    let gossa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gowsa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 1 });
+    let gossa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 1 });
     #[rustfmt::skip]
-    let gowsa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 1 });
+    let gossa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gowsa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 1 });
+    let gossa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 1 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
@@ -6351,34 +6351,34 @@ fn simple_colloscope() {
         (&gis_1_1_0 + &gis_1_1_1).leq(&Expr::constant(1)),
 
         // Auto Group On Week Selection
-        gis_0_0_0.leq(&gowsa_0_0_0),
-        gis_0_0_0.geq(&gowsa_0_0_0),
+        gis_0_0_0.leq(&gossa_0_0_0),
+        gis_0_0_0.geq(&gossa_0_0_0),
 
-        gis_0_1_0.leq(&gowsa_0_1_0),
-        gis_0_1_0.geq(&gowsa_0_1_0),
+        gis_0_1_0.leq(&gossa_0_1_0),
+        gis_0_1_0.geq(&gossa_0_1_0),
 
-        gis_1_0_0.leq(&gowsa_1_0_0),
-        gis_1_0_0.geq(&gowsa_1_0_0),
+        gis_1_0_0.leq(&gossa_1_0_0),
+        gis_1_0_0.geq(&gossa_1_0_0),
 
-        gis_1_1_0.leq(&gowsa_1_1_0),
-        gis_1_1_0.geq(&gowsa_1_1_0),
+        gis_1_1_0.leq(&gossa_1_1_0),
+        gis_1_1_0.geq(&gossa_1_1_0),
 
-        gis_0_0_1.leq(&gowsa_0_0_1),
-        gis_0_0_1.geq(&gowsa_0_0_1),
+        gis_0_0_1.leq(&gossa_0_0_1),
+        gis_0_0_1.geq(&gossa_0_0_1),
 
-        gis_0_1_1.leq(&gowsa_0_1_1),
-        gis_0_1_1.geq(&gowsa_0_1_1),
+        gis_0_1_1.leq(&gossa_0_1_1),
+        gis_0_1_1.geq(&gossa_0_1_1),
 
-        gis_1_0_1.leq(&gowsa_1_0_1),
-        gis_1_0_1.geq(&gowsa_1_0_1),
+        gis_1_0_1.leq(&gossa_1_0_1),
+        gis_1_0_1.geq(&gossa_1_0_1),
 
-        gis_1_1_1.leq(&gowsa_1_1_1),
-        gis_1_1_1.geq(&gowsa_1_1_1),
+        gis_1_1_1.leq(&gossa_1_1_1),
+        gis_1_1_1.geq(&gossa_1_1_1),
 
-        (&gowsa_0_0_0 + &gowsa_0_1_0).eq(&Expr::constant(1)),
-        (&gowsa_1_0_0 + &gowsa_1_1_0).eq(&Expr::constant(1)),
-        (&gowsa_0_0_1 + &gowsa_0_1_1).eq(&Expr::constant(1)),
-        (&gowsa_1_0_1 + &gowsa_1_1_1).eq(&Expr::constant(1)),
+        (&gossa_0_0_0 + &gossa_0_1_0).eq(&Expr::constant(1)),
+        (&gossa_1_0_0 + &gossa_1_1_0).eq(&Expr::constant(1)),
+        (&gossa_0_0_1 + &gossa_0_1_1).eq(&Expr::constant(1)),
+        (&gossa_1_0_1 + &gossa_1_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(constraints, expected_result);
@@ -6594,22 +6594,22 @@ fn colloscope_with_dynamic_groups() {
     let dga_1_1_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 5 });
 
     #[rustfmt::skip]
-    let gowsa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 0 });
+    let gossa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gowsa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 0 });
+    let gossa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 0 });
     #[rustfmt::skip]
-    let gowsa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 0 });
+    let gossa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gowsa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 0 });
+    let gossa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 0 });
 
     #[rustfmt::skip]
-    let gowsa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 0, group: 1 });
+    let gossa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gowsa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 0, week_selection: 1, group: 1 });
+    let gossa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 1 });
     #[rustfmt::skip]
-    let gowsa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 0, group: 1 });
+    let gossa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gowsa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelectionAuto { subject: 1, week_selection: 1, group: 1 });
+    let gossa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 1 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
@@ -6710,34 +6710,34 @@ fn colloscope_with_dynamic_groups() {
         dga_1_1_1_5.leq(&sig_1_5_1),
 
         // Auto Group On Week Selection
-        gis_0_0_0.leq(&gowsa_0_0_0),
-        gis_0_0_0.geq(&gowsa_0_0_0),
+        gis_0_0_0.leq(&gossa_0_0_0),
+        gis_0_0_0.geq(&gossa_0_0_0),
 
-        gis_0_1_0.leq(&gowsa_0_1_0),
-        gis_0_1_0.geq(&gowsa_0_1_0),
+        gis_0_1_0.leq(&gossa_0_1_0),
+        gis_0_1_0.geq(&gossa_0_1_0),
 
-        gis_1_0_0.leq(&gowsa_1_0_0),
-        gis_1_0_0.geq(&gowsa_1_0_0),
+        gis_1_0_0.leq(&gossa_1_0_0),
+        gis_1_0_0.geq(&gossa_1_0_0),
 
-        gis_1_1_0.leq(&gowsa_1_1_0),
-        gis_1_1_0.geq(&gowsa_1_1_0),
+        gis_1_1_0.leq(&gossa_1_1_0),
+        gis_1_1_0.geq(&gossa_1_1_0),
 
-        gis_0_0_1.leq(&gowsa_0_0_1),
-        gis_0_0_1.geq(&gowsa_0_0_1),
+        gis_0_0_1.leq(&gossa_0_0_1),
+        gis_0_0_1.geq(&gossa_0_0_1),
 
-        gis_0_1_1.leq(&gowsa_0_1_1),
-        gis_0_1_1.geq(&gowsa_0_1_1),
+        gis_0_1_1.leq(&gossa_0_1_1),
+        gis_0_1_1.geq(&gossa_0_1_1),
 
-        gis_1_0_1.leq(&gowsa_1_0_1),
-        gis_1_0_1.geq(&gowsa_1_0_1),
+        gis_1_0_1.leq(&gossa_1_0_1),
+        gis_1_0_1.geq(&gossa_1_0_1),
 
-        gis_1_1_1.leq(&gowsa_1_1_1),
-        gis_1_1_1.geq(&gowsa_1_1_1),
+        gis_1_1_1.leq(&gossa_1_1_1),
+        gis_1_1_1.geq(&gossa_1_1_1),
 
-        (&gowsa_0_0_0 + &gowsa_0_1_0).eq(&Expr::constant(1)),
-        (&gowsa_1_0_0 + &gowsa_1_1_0).eq(&Expr::constant(1)),
-        (&gowsa_0_0_1 + &gowsa_0_1_1).eq(&Expr::constant(1)),
-        (&gowsa_1_0_1 + &gowsa_1_1_1).eq(&Expr::constant(1)),
+        (&gossa_0_0_0 + &gossa_0_1_0).eq(&Expr::constant(1)),
+        (&gossa_1_0_0 + &gossa_1_1_0).eq(&Expr::constant(1)),
+        (&gossa_0_0_1 + &gossa_0_1_1).eq(&Expr::constant(1)),
+        (&gossa_1_0_1 + &gossa_1_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(constraints, expected_result);
@@ -7272,31 +7272,31 @@ fn balancing_teachers() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).leq(&(2*&gows_0_0_0)),
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).geq(&(1*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).leq(&(2*&goss_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0).geq(&(1*&goss_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).leq(&(2*&gows_0_0_1)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).geq(&(1*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).leq(&(2*&goss_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1).geq(&(1*&goss_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).leq(&(2*&gows_0_0_2)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).geq(&(1*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).leq(&(2*&goss_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2).geq(&(1*&goss_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -7487,40 +7487,40 @@ fn balancing_timeslots() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_2_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_0_0 + &gis_0_2_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_2_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_0_1 + &gis_0_2_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_2_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_0_2 + &gis_0_2_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2).geq(&(0*&goss_0_0_2)),
 
-        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&goss_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -7711,31 +7711,31 @@ fn balancing_timeslots_2() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).leq(&(2*&gows_0_0_0)),
-        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).geq(&(1*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).leq(&(2*&goss_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_5_0).geq(&(1*&goss_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).leq(&(2*&gows_0_0_1)),
-        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).geq(&(1*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).leq(&(2*&goss_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_5_1).geq(&(1*&goss_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).leq(&(2*&gows_0_0_2)),
-        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).geq(&(1*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).leq(&(2*&goss_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2 + &gis_0_4_2 + &gis_0_5_2).geq(&(1*&goss_0_0_2)),
 
-        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -7928,40 +7928,40 @@ fn balancing_teachers_and_timeslots() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_2_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_0_0 + &gis_0_2_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_0_0 + &gis_0_2_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_2_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_0_1 + &gis_0_2_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_0_1 + &gis_0_2_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_2_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_0_2 + &gis_0_2_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_0_2 + &gis_0_2_2).geq(&(0*&goss_0_0_2)),
 
-        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_1_0 + &gis_0_3_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_1_1 + &gis_0_3_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_1_2 + &gis_0_3_2).geq(&(0*&goss_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
-        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).leq(&(1*&goss_0_0_0)),
+        (&gis_0_4_0 + &gis_0_5_0).geq(&(0*&goss_0_0_0)),
 
-        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
-        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).leq(&(1*&goss_0_0_1)),
+        (&gis_0_4_1 + &gis_0_5_1).geq(&(0*&goss_0_0_1)),
 
-        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
-        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).leq(&(1*&goss_0_0_2)),
+        (&gis_0_4_2 + &gis_0_5_2).geq(&(0*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -8445,21 +8445,21 @@ fn balancing_timeslots_with_ghost_group() {
     let gis_0_f_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 15, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0 + &gis_0_8_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).eq(&(2*&gows_0_0_0)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1 + &gis_0_8_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).eq(&(2*&gows_0_0_1)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2 + &gis_0_8_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).eq(&(2*&gows_0_0_2)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_3_0 + &gis_0_8_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).eq(&(2*&goss_0_0_0)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_3_1 + &gis_0_8_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).eq(&(2*&goss_0_0_1)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_3_2 + &gis_0_8_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).eq(&(2*&goss_0_0_2)),
 
-        (&gis_0_4_0 + &gis_0_5_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_c_0 + &gis_0_d_0 + &gis_0_e_0 + &gis_0_f_0).eq(&(2*&gows_0_0_0)),
-        (&gis_0_4_1 + &gis_0_5_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_c_1 + &gis_0_d_1 + &gis_0_e_1 + &gis_0_f_1).eq(&(2*&gows_0_0_1)),
-        (&gis_0_4_2 + &gis_0_5_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_c_2 + &gis_0_d_2 + &gis_0_e_2 + &gis_0_f_2).eq(&(2*&gows_0_0_2)),
+        (&gis_0_4_0 + &gis_0_5_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_c_0 + &gis_0_d_0 + &gis_0_e_0 + &gis_0_f_0).eq(&(2*&goss_0_0_0)),
+        (&gis_0_4_1 + &gis_0_5_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_c_1 + &gis_0_d_1 + &gis_0_e_1 + &gis_0_f_1).eq(&(2*&goss_0_0_1)),
+        (&gis_0_4_2 + &gis_0_5_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_c_2 + &gis_0_d_2 + &gis_0_e_2 + &gis_0_f_2).eq(&(2*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -8738,31 +8738,31 @@ fn balancing_timeslots_with_ghost_group_2() {
     let gis_0_b_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 11, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).geq(&(1*&gows_0_0_0)),
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).leq(&(2*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).geq(&(1*&goss_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0 + &gis_0_6_0 + &gis_0_7_0 + &gis_0_8_0).leq(&(2*&goss_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).geq(&(1*&gows_0_0_1)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).leq(&(2*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).geq(&(1*&goss_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1 + &gis_0_6_1 + &gis_0_7_1 + &gis_0_8_1).leq(&(2*&goss_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).geq(&(1*&gows_0_0_2)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).leq(&(2*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).geq(&(1*&goss_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2 + &gis_0_6_2 + &gis_0_7_2 + &gis_0_8_2).leq(&(2*&goss_0_0_2)),
 
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).geq(&(1*&gows_0_0_0)),
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).leq(&(2*&gows_0_0_0)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).geq(&(1*&goss_0_0_0)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0 + &gis_0_9_0 + &gis_0_a_0 + &gis_0_b_0).leq(&(2*&goss_0_0_0)),
 
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).geq(&(1*&gows_0_0_1)),
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).leq(&(2*&gows_0_0_1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).geq(&(1*&goss_0_0_1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1 + &gis_0_9_1 + &gis_0_a_1 + &gis_0_b_1).leq(&(2*&goss_0_0_1)),
 
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).geq(&(1*&gows_0_0_2)),
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).leq(&(2*&gows_0_0_2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).geq(&(1*&goss_0_0_2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2 + &gis_0_9_2 + &gis_0_a_2 + &gis_0_b_2).leq(&(2*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -8951,31 +8951,31 @@ fn balancing_timeslots_with_partial_last_period() {
     let gis_0_5_2 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 2 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_0_2 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 2 });
+    let goss_0_0_2 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 2 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).geq(&(0*&gows_0_0_0)),
-        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).geq(&(0*&goss_0_0_0)),
+        (&gis_0_0_0 + &gis_0_1_0 + &gis_0_2_0).leq(&(1*&goss_0_0_0)),
 
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).geq(&(0*&gows_0_0_1)),
-        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).geq(&(0*&goss_0_0_1)),
+        (&gis_0_0_1 + &gis_0_1_1 + &gis_0_2_1).leq(&(1*&goss_0_0_1)),
 
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).geq(&(0*&gows_0_0_2)),
-        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).geq(&(0*&goss_0_0_2)),
+        (&gis_0_0_2 + &gis_0_1_2 + &gis_0_2_2).leq(&(1*&goss_0_0_2)),
 
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).geq(&(0*&gows_0_0_0)),
-        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).leq(&(1*&gows_0_0_0)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).geq(&(0*&goss_0_0_0)),
+        (&gis_0_3_0 + &gis_0_4_0 + &gis_0_5_0).leq(&(1*&goss_0_0_0)),
 
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).geq(&(0*&gows_0_0_1)),
-        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).leq(&(1*&gows_0_0_1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).geq(&(0*&goss_0_0_1)),
+        (&gis_0_3_1 + &gis_0_4_1 + &gis_0_5_1).leq(&(1*&goss_0_0_1)),
 
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).geq(&(0*&gows_0_0_2)),
-        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).leq(&(1*&gows_0_0_2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).geq(&(0*&goss_0_0_2)),
+        (&gis_0_3_2 + &gis_0_4_2 + &gis_0_5_2).leq(&(1*&goss_0_0_2)),
     ]);
 
     assert_eq!(balancing_constraints, expected_result);
@@ -9821,7 +9821,7 @@ fn incompat_group_for_student_constraints() {
 }
 
 #[test]
-fn group_on_week_selection_constraints() {
+fn group_on_slot_selection_constraints() {
     let general = GeneralData {
         periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
@@ -9991,8 +9991,8 @@ fn group_on_week_selection_constraints() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let group_on_week_selection_constraints =
-        ilp_translator.build_group_on_week_selection_constraints();
+    let group_on_slot_selection_constraints =
+        ilp_translator.build_group_on_slot_selection_constraints();
 
     #[rustfmt::skip]
     let gis_0_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 0 });
@@ -10029,43 +10029,43 @@ fn group_on_week_selection_constraints() {
     let gis_0_7_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 7, group: 1 });
 
     #[rustfmt::skip]
-    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gows_0_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 1, group: 0 });
+    let goss_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 0 });
     #[rustfmt::skip]
-    let gows_0_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 1, group: 1 });
+    let goss_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 1 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        gis_0_0_0.leq(&gows_0_0_0),
-        gis_0_2_0.leq(&gows_0_0_0),
-        gis_0_4_0.leq(&gows_0_0_0),
-        gis_0_6_0.leq(&gows_0_0_0),
-        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_6_0).geq(&gows_0_0_0),
+        gis_0_0_0.leq(&goss_0_0_0),
+        gis_0_2_0.leq(&goss_0_0_0),
+        gis_0_4_0.leq(&goss_0_0_0),
+        gis_0_6_0.leq(&goss_0_0_0),
+        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_6_0).geq(&goss_0_0_0),
 
-        gis_0_0_1.leq(&gows_0_0_1),
-        gis_0_2_1.leq(&gows_0_0_1),
-        gis_0_4_1.leq(&gows_0_0_1),
-        gis_0_6_1.leq(&gows_0_0_1),
-        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_6_1).geq(&gows_0_0_1),
+        gis_0_0_1.leq(&goss_0_0_1),
+        gis_0_2_1.leq(&goss_0_0_1),
+        gis_0_4_1.leq(&goss_0_0_1),
+        gis_0_6_1.leq(&goss_0_0_1),
+        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_6_1).geq(&goss_0_0_1),
 
-        gis_0_1_0.leq(&gows_0_1_0),
-        gis_0_3_0.leq(&gows_0_1_0),
-        gis_0_5_0.leq(&gows_0_1_0),
-        gis_0_7_0.leq(&gows_0_1_0),
-        (&gis_0_1_0 + &gis_0_3_0 + &gis_0_5_0 + &gis_0_7_0).geq(&gows_0_1_0),
+        gis_0_1_0.leq(&goss_0_1_0),
+        gis_0_3_0.leq(&goss_0_1_0),
+        gis_0_5_0.leq(&goss_0_1_0),
+        gis_0_7_0.leq(&goss_0_1_0),
+        (&gis_0_1_0 + &gis_0_3_0 + &gis_0_5_0 + &gis_0_7_0).geq(&goss_0_1_0),
 
-        gis_0_1_1.leq(&gows_0_1_1),
-        gis_0_3_1.leq(&gows_0_1_1),
-        gis_0_5_1.leq(&gows_0_1_1),
-        gis_0_7_1.leq(&gows_0_1_1),
-        (&gis_0_1_1 + &gis_0_3_1 + &gis_0_5_1 + &gis_0_7_1).geq(&gows_0_1_1),
+        gis_0_1_1.leq(&goss_0_1_1),
+        gis_0_3_1.leq(&goss_0_1_1),
+        gis_0_5_1.leq(&goss_0_1_1),
+        gis_0_7_1.leq(&goss_0_1_1),
+        (&gis_0_1_1 + &gis_0_3_1 + &gis_0_5_1 + &gis_0_7_1).geq(&goss_0_1_1),
 
-        (&gows_0_0_0 + &gows_0_1_0).eq(&Expr::constant(1)),
-        (&gows_0_0_1 + &gows_0_1_1).eq(&Expr::constant(1)),
+        (&goss_0_0_0 + &goss_0_1_0).eq(&Expr::constant(1)),
+        (&goss_0_0_1 + &goss_0_1_1).eq(&Expr::constant(1)),
     ]);
 
-    assert_eq!(group_on_week_selection_constraints, expected_result);
+    assert_eq!(group_on_slot_selection_constraints, expected_result);
 }
