@@ -15,6 +15,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<WeekPattern>()?;
     m.add_class::<Teacher>()?;
     m.add_class::<Student>()?;
+    m.add_class::<SubjectGroup>()?;
 
     m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
 
@@ -290,6 +291,85 @@ impl Database {
 
         Ok(())
     }
+
+    fn subject_groups_get_all(
+        self_: PyRef<'_, Self>,
+    ) -> PyResult<BTreeMap<SubjectGroupHandle, SubjectGroup>> {
+        let Answer::SubjectGroups(SubjectGroupsAnswer::GetAll(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::SubjectGroups(SubjectGroupsCommand::GetAll),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn subject_groups_get(
+        self_: PyRef<'_, Self>,
+        handle: SubjectGroupHandle,
+    ) -> PyResult<SubjectGroup> {
+        let Answer::SubjectGroups(SubjectGroupsAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::SubjectGroups(SubjectGroupsCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn subject_groups_create(
+        self_: PyRef<'_, Self>,
+        subject_group: SubjectGroup,
+    ) -> PyResult<SubjectGroupHandle> {
+        let Answer::SubjectGroups(SubjectGroupsAnswer::Create(handle)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::SubjectGroups(SubjectGroupsCommand::Create(subject_group)),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn subject_groups_update(
+        self_: PyRef<'_, Self>,
+        handle: SubjectGroupHandle,
+        subject_group: SubjectGroup,
+    ) -> PyResult<()> {
+        let Answer::SubjectGroups(SubjectGroupsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::SubjectGroups(SubjectGroupsCommand::Update(handle, subject_group)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn subject_groups_remove(self_: PyRef<'_, Self>, handle: SubjectGroupHandle) -> PyResult<()> {
+        let Answer::SubjectGroups(SubjectGroupsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::SubjectGroups(SubjectGroupsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -304,6 +384,7 @@ pub enum Command {
     WeekPatterns(WeekPatternsCommand),
     Teachers(TeachersCommand),
     Students(StudentsCommand),
+    SubjectGroups(SubjectGroupsCommand),
     Undo,
     Redo,
     Exit,
@@ -342,6 +423,15 @@ pub enum StudentsCommand {
     Remove(StudentHandle),
 }
 
+#[derive(Debug, Clone)]
+pub enum SubjectGroupsCommand {
+    GetAll,
+    Get(SubjectGroupHandle),
+    Create(SubjectGroup),
+    Update(SubjectGroupHandle, SubjectGroup),
+    Remove(SubjectGroupHandle),
+}
+
 #[derive(Debug)]
 struct PythonError {
     int_err: Box<dyn std::error::Error + Send>,
@@ -361,6 +451,7 @@ pub enum Answer {
     WeekPatterns(WeekPatternsAnswer),
     Teachers(TeachersAnswer),
     Students(StudentsAnswer),
+    SubjectGroups(SubjectGroupsAnswer),
     Undo,
     Redo,
 }
@@ -394,6 +485,15 @@ pub enum StudentsAnswer {
     GetAll(BTreeMap<StudentHandle, Student>),
     Get(Student),
     Create(StudentHandle),
+    Update,
+    Remove,
+}
+
+#[derive(Debug)]
+pub enum SubjectGroupsAnswer {
+    GetAll(BTreeMap<SubjectGroupHandle, SubjectGroup>),
+    Get(SubjectGroup),
+    Create(SubjectGroupHandle),
     Update,
     Remove,
 }
@@ -762,6 +862,93 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
+    async fn execute_subject_groups_job<T: state::Manager>(
+        subject_groups_command: &SubjectGroupsCommand,
+        manager: &mut T,
+    ) -> PyResult<SubjectGroupsAnswer> {
+        match subject_groups_command {
+            SubjectGroupsCommand::GetAll => {
+                let result = manager
+                    .subject_groups_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, subject_group)| {
+                        (handle.into(), SubjectGroup::from(subject_group))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(SubjectGroupsAnswer::GetAll(result))
+            }
+            SubjectGroupsCommand::Get(handle) => {
+                let result =
+                    manager
+                        .subject_groups_get(handle.handle)
+                        .await
+                        .map_err(|e| match e {
+                            IdError::InternalError(int_err) => {
+                                PyException::new_err(int_err.to_string())
+                            }
+                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                        })?;
+
+                Ok(SubjectGroupsAnswer::Get(result.into()))
+            }
+            SubjectGroupsCommand::Create(subject_group) => {
+                let output = manager
+                    .apply(Operation::SubjectGroups(
+                        state::SubjectGroupsOperation::Create(subject_group.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::SubjectGroup(handle) = output else {
+                    panic!("No subject group handle returned on SubjectGroupsCommand::Create");
+                };
+
+                Ok(SubjectGroupsAnswer::Create(handle.into()))
+            }
+            SubjectGroupsCommand::Update(handle, subject_group) => {
+                manager
+                    .apply(Operation::SubjectGroups(
+                        state::SubjectGroupsOperation::Update(handle.handle, subject_group.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SubjectGroupRemoved(_) => {
+                            PyValueError::new_err("Subject group was previously removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(SubjectGroupsAnswer::Update)
+            }
+            SubjectGroupsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::SubjectGroups(
+                        state::SubjectGroupsOperation::Remove(handle.handle),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SubjectGroupRemoved(_) => {
+                            PyValueError::new_err("Subject group was previously removed")
+                        }
+                        UpdateError::SubjectGroupDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this subject group",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(SubjectGroupsAnswer::Remove)
+            }
+        }
+    }
+
     async fn execute_job<T: state::Manager>(
         command: &Command,
         manager: &mut T,
@@ -783,6 +970,11 @@ impl<'scope> SessionConnection<'scope> {
             Command::Students(students_command) => {
                 let answer = Self::execute_students_job(students_command, manager).await?;
                 Ok(Answer::Students(answer))
+            }
+            Command::SubjectGroups(subject_groups_command) => {
+                let answer =
+                    Self::execute_subject_groups_job(subject_groups_command, manager).await?;
+                Ok(Answer::SubjectGroups(answer))
             }
             Command::Undo => {
                 manager.undo().await.map_err(|e| match e {

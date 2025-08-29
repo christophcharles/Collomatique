@@ -370,3 +370,91 @@ impl From<Student> for backend::Student {
         backend::Student::from(&value)
     }
 }
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SubjectGroupHandle {
+    pub handle: state::SubjectGroupHandle,
+}
+
+impl From<&state::SubjectGroupHandle> for SubjectGroupHandle {
+    fn from(value: &state::SubjectGroupHandle) -> Self {
+        SubjectGroupHandle {
+            handle: value.clone(),
+        }
+    }
+}
+
+impl From<state::SubjectGroupHandle> for SubjectGroupHandle {
+    fn from(value: state::SubjectGroupHandle) -> Self {
+        SubjectGroupHandle::from(&value)
+    }
+}
+
+impl From<&SubjectGroupHandle> for state::SubjectGroupHandle {
+    fn from(value: &SubjectGroupHandle) -> Self {
+        value.handle.clone()
+    }
+}
+
+impl From<SubjectGroupHandle> for state::SubjectGroupHandle {
+    fn from(value: SubjectGroupHandle) -> Self {
+        state::SubjectGroupHandle::from(&value)
+    }
+}
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubjectGroup {
+    #[pyo3(set, get)]
+    name: String,
+    #[pyo3(set, get)]
+    optional: bool,
+}
+
+#[pymethods]
+impl SubjectGroup {
+    #[new]
+    fn new(name: String) -> Self {
+        SubjectGroup {
+            name,
+            optional: false,
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{{ name = {}, optional = {} }}", self_.name, self_.optional,);
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::SubjectGroup> for SubjectGroup {
+    fn from(value: &backend::SubjectGroup) -> Self {
+        SubjectGroup {
+            name: value.name.clone(),
+            optional: value.optional,
+        }
+    }
+}
+
+impl From<backend::SubjectGroup> for SubjectGroup {
+    fn from(value: backend::SubjectGroup) -> Self {
+        SubjectGroup::from(&value)
+    }
+}
+
+impl From<&SubjectGroup> for backend::SubjectGroup {
+    fn from(value: &SubjectGroup) -> Self {
+        backend::SubjectGroup {
+            name: value.name.clone(),
+            optional: value.optional,
+        }
+    }
+}
+
+impl From<SubjectGroup> for backend::SubjectGroup {
+    fn from(value: SubjectGroup) -> Self {
+        backend::SubjectGroup::from(&value)
+    }
+}
