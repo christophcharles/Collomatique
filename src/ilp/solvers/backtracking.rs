@@ -100,11 +100,12 @@ impl Solver {
                     continue;
                 }
 
-                if infeasability > help - coef {
+                let coef_abs = coef.abs();
+                if infeasability > help - coef_abs {
                     return Err(Some(var.clone()));
                 }
 
-                let coef_f64 = NotNan::new(f64::from(coef)).unwrap();
+                let coef_f64 = NotNan::new(f64::from(coef_abs)).unwrap();
                 let temp_score = k * coef_f64;
                 match scores.get_mut(var) {
                     Some(score) => {
