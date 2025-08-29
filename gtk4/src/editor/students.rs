@@ -17,7 +17,7 @@ pub enum StudentsInput {
     EditStudentClicked(collomatique_state_colloscopes::StudentId),
     DeleteStudentClicked(collomatique_state_colloscopes::StudentId),
     AddStudentClicked,
-    FilterChanged(usize),
+    FilterChanged(Option<usize>),
     StudentEditResult(collomatique_state_colloscopes::students::Student),
 }
 
@@ -212,9 +212,10 @@ impl Component for Students {
             }
             StudentsInput::FilterChanged(num) => {
                 self.current_filter = match num {
-                    0 => StudentFilter::NoFilter,
-                    1 => StudentFilter::NoSubjectLinked,
-                    x => {
+                    None => StudentFilter::NoFilter,
+                    Some(0) => StudentFilter::NoFilter,
+                    Some(1) => StudentFilter::NoSubjectLinked,
+                    Some(x) => {
                         let index = x - 2;
                         assert!(index < self.periods.ordered_period_list.len());
 

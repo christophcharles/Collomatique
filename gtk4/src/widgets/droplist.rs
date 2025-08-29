@@ -21,7 +21,7 @@ pub enum WidgetInput {
 
 #[derive(Debug)]
 pub enum WidgetOutput {
-    SelectionChanged(usize),
+    SelectionChanged(Option<usize>),
 }
 
 pub struct Widget {
@@ -136,11 +136,16 @@ impl Component for Widget {
                 if Some(selected) == self.currently_selected {
                     return;
                 }
-                self.currently_selected = Some(selected);
-                let selected_usize = selected as usize;
-                sender
-                    .output(WidgetOutput::SelectionChanged(selected_usize))
-                    .unwrap();
+                if selected == gtk::INVALID_LIST_POSITION {
+                    self.currently_selected = None;
+                    sender.output(WidgetOutput::SelectionChanged(None)).unwrap();
+                } else {
+                    self.currently_selected = Some(selected);
+                    let selected_usize = selected as usize;
+                    sender
+                        .output(WidgetOutput::SelectionChanged(Some(selected_usize)))
+                        .unwrap();
+                }
             }
         }
     }
