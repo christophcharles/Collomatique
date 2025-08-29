@@ -44,6 +44,28 @@ def add_subjects(session, subject_set):
         subject_ids[subject] = sub_id
     return subject_ids
 
+def split_student_name(student_full_name):
+    name_list = student_full_name.split(" ")
+    surname = ""
+    i = 0
+    while i < len(name_list) and name_list[i].isupper():
+        if i != 0:
+            surname += " "
+        surname += name_list[i]
+        i += 1
+    if i < len(name_list):
+        firstname = name_list[i]
+        i += 1
+    else:
+        firstname = ""
+    
+    while i < len(name_list):
+        firstname += " "
+        firstname += name_list[i]
+        i += 1
+
+    return firstname, surname
+
 def add_student_from_csv_line(session, csv_line, subject_ids):
     student_full_name = csv_line['\ufeff'][0] # Yes, the pronote CSV is that bad
     if not student_full_name:
@@ -51,9 +73,7 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
         return
     collomatique.log("Ajout de {}".format(student_full_name))
 
-    name_list = student_full_name.split(" ", 1)
-    surname = name_list[0]
-    firstname = name_list[1]
+    firstname, surname = split_student_name(student_full_name)
 
     student = collomatique.Student(firstname, surname)
     student_id = session.students_add(student)
