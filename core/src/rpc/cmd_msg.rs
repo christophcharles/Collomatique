@@ -42,6 +42,7 @@ pub enum UpdateMsg {
     Assignments(AssignmentsCmdMsg),
     WeekPatterns(WeekPatternsCmdMsg),
     Slots(SlotsCmdMsg),
+    Incompats(IncompatibilitiesCmdMsg),
 }
 
 impl UpdateMsg {
@@ -59,6 +60,7 @@ impl UpdateMsg {
             UpdateMsg::Assignments(op) => crate::ops::UpdateOp::Assignments(op.promote(data)?),
             UpdateMsg::WeekPatterns(op) => crate::ops::UpdateOp::WeekPatterns(op.promote(data)?),
             UpdateMsg::Slots(op) => crate::ops::UpdateOp::Slots(op.promote(data)?),
+            UpdateMsg::Incompats(op) => crate::ops::UpdateOp::Incompatibilities(op.promote(data)?),
         })
     }
 }
