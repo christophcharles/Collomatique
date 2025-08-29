@@ -143,7 +143,7 @@ where
     Id: std::fmt::Debug,
     CrossId1: std::fmt::Debug,
     CrossId2: std::fmt::Debug,
-    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
 {
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId1(CrossId1),
@@ -151,6 +151,30 @@ where
     InvalidCrossId2(CrossId2),
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId3(CrossId3),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Cross3IdWithDepError<T, Id, CrossId1, CrossId2, CrossId3, DepId>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
+    DepId: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId3(CrossId3),
+    #[error("Dependancy of id {0:?} blocks modification of this data")]
+    BlockingDependancy(DepId),
     #[error("Id {0:?} is invalid")]
     InvalidId(Id),
     #[error("Backend internal error: {0:?}")]
@@ -1428,23 +1452,51 @@ impl<T: Storage> Logic<T> {
         subject: &Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
     ) -> std::result::Result<
         (),
-        Cross3IdError<
+        Cross3IdWithDepError<
             T::InternalError,
             T::SubjectId,
             T::SubjectGroupId,
             T::IncompatId,
             T::GroupListId,
+            T::StudentId,
         >,
     > {
         if !self.subjects_check_id(index).await? {
-            return Err(Cross3IdError::InvalidId(index));
+            return Err(Cross3IdWithDepError::InvalidId(index));
+        }
+
+        let current_subject = self.subjects_get(index).await.map_err(|e| match e {
+            IdError::InvalidId(id) => panic!(
+                "Subject group id {:?} should be valid as it was already checked",
+                id
+            ),
+            IdError::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+        })?;
+
+        if current_subject.subject_group_id != subject.subject_group_id {
+            let students = self.students_get_all().await?;
+            for (student_id, _student) in students {
+                let subject_group_id = subject.subject_group_id;
+                let subject_group_for_student = self.subject_group_for_student_get(student_id, subject_group_id)
+                    .await
+                    .map_err(
+                        |e| match e {
+                            Id2Error::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+                            Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid as it was returned from students_get_all", id1),
+                            Id2Error::InvalidId2(id2) => panic!("Subject group id {:?} should be valid as it was already checked", id2),
+                        }
+                    )?;
+                if subject_group_for_student == Some(index) {
+                    return Err(Cross3IdWithDepError::BlockingDependancy(student_id));
+                }
+            }
         }
 
         let data_status = self.subjects_check_data(subject).await?;
         match data_status {
-            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
-            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
-            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
+            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
+            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
                 unsafe { self.storage.subjects_update_unchecked(index, subject) }.await?;
                 Ok(())
