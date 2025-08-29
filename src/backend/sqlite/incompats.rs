@@ -220,7 +220,7 @@ WHERE incompat_id = ?
 
 pub async fn add(
     pool: &SqlitePool,
-    incompat: Incompat<week_patterns::Id>,
+    incompat: &Incompat<week_patterns::Id>,
 ) -> std::result::Result<Id, CrossError<Error, week_patterns::Id>> {
     let week_pattern_ids = sqlx::query!("SELECT week_pattern_id FROM week_patterns",)
         .fetch_all(pool)
@@ -300,7 +300,7 @@ pub async fn remove(_pool: &SqlitePool, _index: Id) -> std::result::Result<(), I
 pub async fn update(
     _pool: &SqlitePool,
     _index: Id,
-    _incompat: Incompat<week_patterns::Id>,
+    _incompat: &Incompat<week_patterns::Id>,
 ) -> std::result::Result<(), CrossIdError<Error, Id, week_patterns::Id>> {
     todo!()
 }

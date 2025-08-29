@@ -5,7 +5,7 @@ async fn teachers_add_one(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _id = store
-        .teachers_add(Teacher {
+        .teachers_add(&Teacher {
             surname: String::from("Durand"),
             firstname: String::from("Bernard"),
             contact: String::from("test@example.com"),
@@ -32,7 +32,7 @@ async fn teachers_add_multiple(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _id = store
-        .teachers_add(Teacher {
+        .teachers_add(&Teacher {
             surname: String::from("Durand"),
             firstname: String::from("Bernard"),
             contact: String::from("test@example.com"),
@@ -41,7 +41,7 @@ async fn teachers_add_multiple(pool: sqlx::SqlitePool) {
         .unwrap();
 
     let _id = store
-        .teachers_add(Teacher {
+        .teachers_add(&Teacher {
             surname: String::from("Dupont"),
             firstname: String::from("Leonard"),
             contact: String::from("06 07 08 09 10"),
@@ -50,7 +50,7 @@ async fn teachers_add_multiple(pool: sqlx::SqlitePool) {
         .unwrap();
 
     let _id = store
-        .teachers_add(Teacher {
+        .teachers_add(&Teacher {
             surname: String::from("Tessier"),
             firstname: String::from("Lucie"),
             contact: String::from(""),
@@ -209,7 +209,7 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
         .unwrap();
 
     let id = store
-        .teachers_add(Teacher {
+        .teachers_add(&Teacher {
             surname: String::from("Dupont"),
             firstname: String::from("Leonard"),
             contact: String::from("06 07 08 09 10"),
@@ -265,7 +265,7 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
     store
         .teachers_update(
             super::super::teachers::Id(2),
-            Teacher {
+            &Teacher {
                 surname: String::from("Dupond"),
                 firstname: String::from("Leonard"),
                 contact: String::from("07 06 08 09 10"),
