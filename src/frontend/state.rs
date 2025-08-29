@@ -1,4 +1,3 @@
-use std::num::NonZeroU32;
 use thiserror::Error;
 
 mod handles;
@@ -7,33 +6,121 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedGeneralOperation, AnnotatedOperation, AnnotatedWeekPatternsOperation,
+    AnnotatedGroupListsOperation, AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation,
+    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedRegisterStudentOperation,
+    AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation,
+    AnnotatedTeachersOperation, AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation,
     ModificationHistory, ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
+pub use handles::{
+    GroupListHandle, GroupingHandle, GroupingIncompatHandle, IncompatHandle, StudentHandle,
+    SubjectGroupHandle, SubjectHandle, TeacherHandle, TimeSlotHandle, WeekPatternHandle,
+};
 pub use update::{Manager, UpdateError};
 
 use self::history::AggregatedOperations;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
-    General(GeneralOperation),
+    GeneralData(backend::GeneralData),
     WeekPatterns(WeekPatternsOperation),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GeneralOperation {
-    SetWeekCount(NonZeroU32),
-    SetMaxInterrogationsPerDay(Option<NonZeroU32>),
-    SetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
+    Teachers(TeachersOperation),
+    Students(StudentsOperation),
+    SubjectGroups(SubjectGroupsOperation),
+    Incompats(IncompatsOperation),
+    GroupLists(GroupListsOperation),
+    Subjects(SubjectsOperation),
+    TimeSlots(TimeSlotsOperation),
+    Groupings(GroupingsOperation),
+    GroupingIncompats(GroupingIncompatsOperation),
+    RegisterStudent(RegisterStudentOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WeekPatternsOperation {
     Create(backend::WeekPattern),
-    Remove(handles::WeekPatternHandle),
-    Update(handles::WeekPatternHandle, backend::WeekPattern),
+    Remove(WeekPatternHandle),
+    Update(WeekPatternHandle, backend::WeekPattern),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TeachersOperation {
+    Create(backend::Teacher),
+    Remove(TeacherHandle),
+    Update(TeacherHandle, backend::Teacher),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StudentsOperation {
+    Create(backend::Student),
+    Remove(StudentHandle),
+    Update(StudentHandle, backend::Student),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectGroupsOperation {
+    Create(backend::SubjectGroup),
+    Remove(SubjectGroupHandle),
+    Update(SubjectGroupHandle, backend::SubjectGroup),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IncompatsOperation {
+    Create(backend::Incompat<WeekPatternHandle>),
+    Remove(IncompatHandle),
+    Update(IncompatHandle, backend::Incompat<WeekPatternHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupListsOperation {
+    Create(backend::GroupList<StudentHandle>),
+    Remove(GroupListHandle),
+    Update(GroupListHandle, backend::GroupList<StudentHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectsOperation {
+    Create(backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>),
+    Remove(SubjectHandle),
+    Update(
+        SubjectHandle,
+        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TimeSlotsOperation {
+    Create(backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>),
+    Remove(TimeSlotHandle),
+    Update(
+        TimeSlotHandle,
+        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupingsOperation {
+    Create(backend::Grouping<TimeSlotHandle>),
+    Remove(GroupingHandle),
+    Update(GroupingHandle, backend::Grouping<TimeSlotHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupingIncompatsOperation {
+    Create(backend::GroupingIncompat<GroupingHandle>),
+    Remove(GroupingIncompatHandle),
+    Update(
+        GroupingIncompatHandle,
+        backend::GroupingIncompat<GroupingHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RegisterStudentOperation {
+    InSubjectGroup(StudentHandle, SubjectGroupHandle, Option<SubjectHandle>),
+    InIncompat(StudentHandle, IncompatHandle, bool),
 }
 
 #[derive(Debug)]
@@ -150,7 +237,12 @@ impl<'a, T: update::Manager> AppSession<'a, T> {
 
     fn commit_internal(&mut self) {
         let aggregated_ops = self.session_history.build_aggregated_ops();
+        if aggregated_ops.inner().is_empty() {
+            // If no operation needs commiting, do not add an event for this session
+            return;
+        }
         self.op_manager.get_history_mut().apply(aggregated_ops);
+        self.session_history.clear_past_history();
     }
 }
 
