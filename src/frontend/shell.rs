@@ -327,66 +327,6 @@ pub enum PythonCommand {
 use crate::backend::sqlite;
 use crate::frontend::state::{AppSession, AppState};
 
-use crate::gen::colloscope::{IlpTranslator, Variable};
-use crate::ilp::{Config, Problem};
-fn solve_initial_guess<'a>(
-    ilp_translator: &IlpTranslator<'a>,
-    problem: &'a Problem<Variable>,
-    verbose: bool,
-    long_init: bool,
-) -> Config<'a, Variable> {
-    let general_initializer =
-        crate::ilp::initializers::Random::with_p(crate::ilp::random::DefaultRndGen::new(), 0.01)
-            .unwrap();
-    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-    let max_steps = None;
-    let retries = 1;
-    let quick_init = !long_init;
-    let incremental_initializer = ilp_translator.incremental_initializer(
-        general_initializer,
-        solver,
-        max_steps,
-        retries,
-        quick_init,
-    );
-
-    use crate::ilp::initializers::ConfigInitializer;
-    incremental_initializer.build_init_config(&problem)
-}
-
-use crate::ilp::FeasableConfig;
-use indicatif::{ProgressBar, ProgressStyle};
-fn solve_colloscope<'a>(
-    pb: ProgressBar,
-    ilp_translator: &IlpTranslator<'a>,
-    problem: &'a Problem<Variable>,
-    verbose: bool,
-    long_init: bool,
-) -> Option<FeasableConfig<'a, Variable>> {
-    use std::time::Duration;
-
-    pb.set_message("Building initial guess... (this can take a few minutes)");
-    pb.enable_steady_tick(Duration::from_millis(100));
-
-    let init_config = solve_initial_guess(ilp_translator, problem, verbose, long_init);
-
-    pb.set_message("Building initial colloscope... (this can take a few minutes)");
-
-    use crate::ilp::solvers::FeasabilitySolver;
-    let first_config_is_only_hint = !long_init;
-    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-    let config_opt = solver.restore_feasability_with_origin_and_max_steps_and_hint_only(
-        &init_config,
-        None,
-        None,
-        first_config_is_only_hint,
-    );
-
-    pb.finish_with_message("Done. Found valid colloscope");
-
-    config_opt
-}
-
 fn is_colloscope_name_used(
     colloscopes: &std::collections::BTreeMap<
         crate::frontend::state::ColloscopeHandle,
@@ -435,6 +375,7 @@ async fn solve_command(
     long_init: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
+    use indicatif::{ProgressBar, ProgressStyle};
     use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
     use std::time::Duration;
 
@@ -471,20 +412,34 @@ async fn solve_command(
     pb.finish();
 
     let pb = ProgressBar::new_spinner().with_style(style.clone());
+    let init_config = problem.default_config();
 
-    let best_config_opt = solve_colloscope(pb, &ilp_translator, &problem, verbose, long_init);
+    pb.set_message("Building colloscope... (this can take a few minutes)");
+    pb.enable_steady_tick(Duration::from_millis(100));
 
-    let best_config = match best_config_opt {
+    use crate::ilp::solvers::FeasabilitySolver;
+    let first_config_is_only_hint = !long_init;
+    let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
+    let config_opt = solver.restore_feasability_with_origin_and_max_steps_and_hint_only(
+        &init_config,
+        None,
+        None,
+        first_config_is_only_hint,
+    );
+
+    pb.finish_with_message("Done. Found valid colloscope");
+
+    let config = match config_opt {
         Some(value) => value,
         None => return Err(anyhow!("No solution found, colloscope is unfeasable!\nThis means the constraints are incompatible and no colloscope can be built that follows all of them. Relax some constraints and try again.")),
     };
 
-    let best_ilp_config = ilp_translator
-        .read_solution(&best_config)
+    let ilp_config = ilp_translator
+        .read_solution(&config)
         .expect("Solution should be translatable to gen::Colloscope data");
 
-    let best_backend_config =
-        gen_colloscope_translator.translate_colloscope(&best_ilp_config, &colloscope_name)?;
+    let backend_config =
+        gen_colloscope_translator.translate_colloscope(&ilp_config, &colloscope_name)?;
 
     let pb = ProgressBar::new_spinner().with_style(style.clone());
     pb.set_message("Saving colloscope in database...");
@@ -492,7 +447,7 @@ async fn solve_command(
 
     let _ = app_state
         .apply(crate::frontend::state::Operation::Colloscopes(
-            crate::frontend::state::ColloscopesOperation::Create(best_backend_config),
+            crate::frontend::state::ColloscopesOperation::Create(backend_config),
         ))
         .await?;
 
