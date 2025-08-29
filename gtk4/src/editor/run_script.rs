@@ -1,4 +1,5 @@
 use collomatique_core::rpc::ResultMsg;
+use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
@@ -225,15 +226,45 @@ impl Component for Dialog {
                     .unwrap();
             }
             DialogInput::Cmd(cmd) => match cmd {
-                Ok(_cmd_msg) => {
-                    self.add_command(
-                        sender,
-                        msg_display::EntryData::Success("Received command".into()),
-                    );
-                    self.rpc_logger
-                        .sender()
-                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack))
-                        .unwrap();
+                Ok(cmd_msg) => {
+                    let app_session = self
+                        .app_session
+                        .as_mut()
+                        .expect("there should be some current state to accept");
+                    let data = app_session.get_data();
+                    let op = match cmd_msg.promote(data) {
+                        Ok(op) => op,
+                        Err(e) => {
+                            self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
+                            self.rpc_logger
+                                .sender()
+                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(e)))
+                                .unwrap();
+                            return;
+                        }
+                    };
+
+                    match op.apply(app_session) {
+                        Ok(()) => {
+                            self.add_command(
+                                sender,
+                                msg_display::EntryData::Success(op.get_desc()),
+                            );
+                            self.rpc_logger
+                                .sender()
+                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack))
+                                .unwrap();
+                        }
+                        Err(e) => {
+                            self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
+                            self.rpc_logger
+                                .sender()
+                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(
+                                    e.into(),
+                                )))
+                                .unwrap();
+                        }
+                    }
                 }
                 Err(e) => {
                     self.add_command(sender, msg_display::EntryData::Invalid(e));

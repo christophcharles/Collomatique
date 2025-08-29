@@ -63,14 +63,42 @@ pub enum UpdateWeekStatusError {
 }
 
 impl GeneralPlanningUpdateOp {
-    pub fn apply(&self, data: &mut AppState<Data>) -> Result<(), GeneralPlanningUpdateError> {
+    pub fn get_desc(&self) -> String {
+        match self {
+            GeneralPlanningUpdateOp::DeleteFirstWeek => "Effacer le début des colles".into(),
+            GeneralPlanningUpdateOp::UpdateFirstWeek(_date) => "Changer le début des colles".into(),
+            GeneralPlanningUpdateOp::AddNewPeriod(_week_count) => "Ajouter une période".into(),
+            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_period_id, _week_count) => {
+                "Modifier une période".into()
+            }
+            GeneralPlanningUpdateOp::DeletePeriod(_period_id) => "Supprimer une période".into(),
+            GeneralPlanningUpdateOp::CutPeriod(_period_id, _new_week_count) => {
+                "Découper une période".into()
+            }
+            GeneralPlanningUpdateOp::MergeWithPreviousPeriod(_period_id) => {
+                "Fusionner deux périodes".into()
+            }
+            GeneralPlanningUpdateOp::UpdateWeekStatus(_period_id, _week_num, state) => {
+                if *state {
+                    "Ajouter une semaine de colle".into()
+                } else {
+                    "Supprimer une semaine de colle".into()
+                }
+            }
+        }
+    }
+
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        data: &mut T,
+    ) -> Result<(), GeneralPlanningUpdateError> {
         match self {
             GeneralPlanningUpdateOp::DeleteFirstWeek => {
                 data.apply(
                     collomatique_state_colloscopes::Op::Period(
                         collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
                     ),
-                    "Effacer le début des colles".into(),
+                    self.get_desc(),
                 )
                 .expect("Deleting first week should always work");
                 Ok(())
@@ -82,7 +110,7 @@ impl GeneralPlanningUpdateOp {
                             date.clone(),
                         )),
                     ),
-                    "Changer le début des colles".into(),
+                    self.get_desc(),
                 )
                 .expect("Updating first week should always work");
                 Ok(())
@@ -98,7 +126,7 @@ impl GeneralPlanningUpdateOp {
                             None => collomatique_state_colloscopes::PeriodOp::AddFront(new_desc),
                         },
                     ),
-                    "Ajouter une période".into(),
+                    self.get_desc(),
                 )
                 .expect("Adding a period should never fail");
                 Ok(())
@@ -119,7 +147,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::Op::Period(
                         collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                     ),
-                    "Modifier une période".into(),
+                    self.get_desc(),
                 )
                 .expect("Period id should be valid at this point");
                 Ok(())
@@ -129,7 +157,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::Op::Period(
                         collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
                     ),
-                    "Supprimer une période".into(),
+                    self.get_desc(),
                 )
                 .map_err(|e| match e {
                     collomatique_state_colloscopes::Error::InvalidPeriodId(id) => {
@@ -179,7 +207,7 @@ impl GeneralPlanningUpdateOp {
                     )
                     .expect("At this point, period id should be valid");
 
-                *data = session.commit("Découper une période".into());
+                *data = session.commit(self.get_desc());
                 Ok(())
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -224,7 +252,7 @@ impl GeneralPlanningUpdateOp {
                     )
                     .expect("At this point, period id should be valid");
 
-                *data = session.commit("Fusionner deux périodes".into());
+                *data = session.commit(self.get_desc());
                 Ok(())
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
@@ -250,11 +278,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::Op::Period(
                         collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                     ),
-                    if *state {
-                        "Ajouter une semaine de colle".into()
-                    } else {
-                        "Supprimer une semaine de colle".into()
-                    },
+                    self.get_desc(),
                 )
                 .expect("At this point, parameters should be valid");
                 Ok(())
