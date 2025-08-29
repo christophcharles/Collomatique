@@ -495,11 +495,16 @@ pub struct IlpTranslator<'a> {
 
 use crate::ilp::initializers::ConfigInitializer;
 use crate::ilp::linexpr::{Constraint, Expr};
+use crate::ilp::solvers::FeasabilitySolver;
 use crate::ilp::{Config, DefaultRepr, FeasableConfig, Problem, ProblemBuilder};
 
 pub trait GenericInitializer: ConfigInitializer<Variable, DefaultRepr<Variable>> {}
 
 impl<T: ConfigInitializer<Variable, DefaultRepr<Variable>>> GenericInitializer for T {}
+
+pub trait GenericSolver: FeasabilitySolver<Variable, DefaultRepr<Variable>> {}
+
+impl<S: FeasabilitySolver<Variable, DefaultRepr<Variable>>> GenericSolver for S {}
 
 enum StudentStatus {
     Assigned(usize),
@@ -1747,13 +1752,14 @@ impl<'a> IlpTranslator<'a> {
         NonZeroU32::new(result).unwrap()
     }
 
-    pub fn incremental_initializer<T: GenericInitializer>(
+    pub fn incremental_initializer<T: GenericInitializer, S: GenericSolver>(
         &self,
         initializer: T,
-    ) -> IncrementalInitializer<T> {
+        solver: S,
+        max_steps: Option<usize>,
+        retries: usize,
+    ) -> IncrementalInitializer<T, S> {
         let period_length = self.compute_period_length();
-
-        let week_count = self.data.general.week_count;
 
         let last_period_full = (self.data.general.week_count.get() % period_length.get()) != 0;
         let period_count = NonZeroU32::new(
@@ -1772,6 +1778,12 @@ impl<'a> IlpTranslator<'a> {
             .subjects
             .iter()
             .map(|subject| subject.period_is_strict)
+            .collect();
+        let subject_period = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| subject.period)
             .collect();
         let grouping_week_map = self
             .data
@@ -1794,11 +1806,14 @@ impl<'a> IlpTranslator<'a> {
             period_length,
             last_period_full,
             period_count,
-            week_count,
             subject_strictness,
             subject_week_map,
+            subject_period,
             grouping_week_map,
+            max_steps,
+            retries,
             initializer,
+            solver,
         }
     }
 
@@ -1882,19 +1897,22 @@ pub struct ColloscopeSubject {
 }
 
 #[derive(Clone, Debug)]
-pub struct IncrementalInitializer<T: GenericInitializer> {
+pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     period_length: NonZeroU32,
     last_period_full: bool,
     period_count: NonZeroU32,
-    week_count: NonZeroU32,
     subject_strictness: Vec<bool>,
     subject_week_map: Vec<Vec<u32>>,
+    subject_period: Vec<NonZeroU32>,
     grouping_week_map: Vec<BTreeSet<u32>>,
+    max_steps: Option<usize>,
+    retries: usize,
     initializer: T,
+    solver: S,
 }
 
-impl<T: GenericInitializer> ConfigInitializer<Variable, DefaultRepr<Variable>>
-    for IncrementalInitializer<T>
+impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, DefaultRepr<Variable>>
+    for IncrementalInitializer<T, S>
 {
     fn build_init_config<'a, 'b>(
         &'a mut self,
@@ -1902,14 +1920,77 @@ impl<T: GenericInitializer> ConfigInitializer<Variable, DefaultRepr<Variable>>
     ) -> Option<Config<'b, Variable, DefaultRepr<Variable>>> {
         let problem_builder = problem.clone().into_builder();
 
-        let first_period_problem_builder =
-            self.construct_first_period_problem_builder(problem_builder);
+        let mut set_variables = BTreeMap::new();
 
-        todo!("Should implement incremental building of init config");
+        let first_period_problem = self.construct_first_period_problem(problem_builder.clone());
+        let first_period_config = self.build_init_config(&first_period_problem)?;
+        Self::update_set_variables(&mut set_variables, &first_period_config);
+
+        for period in 1..self.period_count.get() - 1 {
+            let period_problem = self.construct_generic_period_problem(
+                problem_builder.clone(),
+                &set_variables,
+                period,
+            );
+            let partial_config = self.build_init_config(&period_problem)?;
+            Self::update_set_variables(&mut set_variables, &partial_config);
+        }
+
+        if self.period_count.get() >= 2 {
+            let last_period_problem = self.construct_generic_period_problem(
+                problem_builder.clone(),
+                &set_variables,
+                self.period_count.get() - 1,
+            );
+            let last_period_config = self.build_init_config(&last_period_problem)?;
+            Self::update_set_variables(&mut set_variables, &last_period_config);
+        }
+
+        let vars: BTreeSet<_> = set_variables
+            .iter()
+            .filter_map(|(v, val)| if *val { Some(v.clone()) } else { None })
+            .collect();
+
+        problem.config_from(&vars).ok()
     }
 }
 
-impl<T: GenericInitializer> IncrementalInitializer<T> {
+impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
+    fn build_init_config<'a, 'b>(
+        &'a mut self,
+        problem: &'b Problem<Variable>,
+    ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
+        for _i in 0..self.retries {
+            if let Some(config) = self.build_init_config_one_try(problem) {
+                return Some(config);
+            }
+        }
+        None
+    }
+
+    fn build_init_config_one_try<'a, 'b>(
+        &'a mut self,
+        problem: &'b Problem<Variable>,
+    ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
+        let init_config = self.initializer.build_init_config(&problem)?;
+        self.solver
+            .restore_feasability_with_max_steps(&init_config, self.max_steps.clone())
+    }
+
+    fn update_set_variables(
+        set_variables: &mut BTreeMap<Variable, bool>,
+        config: &FeasableConfig<'_, Variable, DefaultRepr<Variable>>,
+    ) {
+        for var in config.get_problem().get_variables() {
+            if !set_variables.contains_key(var) {
+                set_variables.insert(
+                    var.clone(),
+                    config.get(var).expect("var should be a valid variable"),
+                );
+            }
+        }
+    }
+
     fn is_week_in_period(&self, week: u32, period: u32) -> bool {
         let period_for_week = week / self.period_length.get();
 
@@ -1934,25 +2015,35 @@ impl<T: GenericInitializer> IncrementalInitializer<T> {
         false
     }
 
-    fn should_build_periodicity(&self, subject: usize, period: u32) -> bool {
+    fn are_subject_and_period_concerned_with_periodicity(
+        &self,
+        subject: usize,
+        period: u32,
+    ) -> bool {
         if self.subject_strictness[subject] {
-            period == 0
-        } else {
-            if self.last_period_full {
-                false
-            } else {
-                assert!(self.period_count.get() >= 2);
-                period == self.period_count.get() - 2
-            }
+            return true;
         }
+
+        // Normally this should be true or we should not have any Periodicity variables
+        assert!(!self.last_period_full);
+
+        if period == self.period_count.get() - 1 {
+            return true;
+        }
+
+        assert!(self.period_count.get() >= 2);
+        assert!(period != self.period_count.get() - 2);
+
+        // If we are on the second to last period, we might need to fix periodicity
+        // if the penultimate subject period (which might be shorter) leaks on that period
+        (2 * self.subject_period[subject].get()) > self.period_length.get()
     }
 
-    fn construct_first_period_problem_builder(
+    fn filter_relevant_variables(
         &self,
         problem_builder: ProblemBuilder<Variable>,
+        period: u32,
     ) -> ProblemBuilder<Variable> {
-        let first_period = 0;
-
         problem_builder.filter_variables(|v| match v {
             Variable::GroupInSlot {
                 subject,
@@ -1960,12 +2051,12 @@ impl<T: GenericInitializer> IncrementalInitializer<T> {
                 group: _,
             } => {
                 let week = self.subject_week_map[*subject][*slot];
-                self.is_week_in_period(week, first_period)
+                self.is_week_in_period(week, period)
             }
             Variable::StudentNotInLastPeriod {
                 subject: _,
                 student: _,
-            } => false,
+            } => period == self.period_count.get() - 1,
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -1973,21 +2064,61 @@ impl<T: GenericInitializer> IncrementalInitializer<T> {
                 student: _,
             } => {
                 let week = self.subject_week_map[*subject][*slot];
-                self.is_week_in_period(week, first_period)
+                self.is_week_in_period(week, period)
             }
             Variable::StudentInGroup {
                 subject,
                 student: _,
                 group: _,
-            } => self.is_subject_concerned_by_period(*subject, first_period),
+            } => self.is_subject_concerned_by_period(*subject, period),
             Variable::Periodicity {
                 subject,
                 student: _,
                 week_modulo: _,
-            } => self.should_build_periodicity(*subject, first_period),
+            } => self.are_subject_and_period_concerned_with_periodicity(*subject, period),
             Variable::UseGrouping(grouping) => {
-                self.is_grouping_concerned_by_period(*grouping, first_period)
+                self.is_grouping_concerned_by_period(*grouping, period)
             }
         })
+    }
+
+    fn set_relevant_variables(
+        &self,
+        mut problem_builder: ProblemBuilder<Variable>,
+        set_variables: &BTreeMap<Variable, bool>,
+    ) -> ProblemBuilder<Variable> {
+        let variables = problem_builder.get_variables().clone();
+        for var in &variables {
+            if let Some(val) = set_variables.get(var) {
+                problem_builder = problem_builder
+                    .add_constraint(crate::ilp::linexpr::Expr::var(var.clone()).eq(
+                        &crate::ilp::linexpr::Expr::constant(if *val { 1 } else { 0 }),
+                    ))
+                    .expect("Should be a valid constraint");
+            }
+        }
+        problem_builder
+    }
+
+    fn construct_first_period_problem(
+        &self,
+        problem_builder: ProblemBuilder<Variable>,
+    ) -> Problem<Variable> {
+        let first_period = 0;
+        self.filter_relevant_variables(problem_builder, first_period)
+            .simplify_trivial_constraints()
+            .build()
+    }
+
+    fn construct_generic_period_problem(
+        &self,
+        problem_builder: ProblemBuilder<Variable>,
+        set_variables: &BTreeMap<Variable, bool>,
+        period: u32,
+    ) -> Problem<Variable> {
+        let filtered_problem = self.filter_relevant_variables(problem_builder, period);
+        self.set_relevant_variables(filtered_problem, set_variables)
+            .simplify_trivial_constraints()
+            .build()
     }
 }
