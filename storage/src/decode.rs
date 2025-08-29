@@ -156,6 +156,7 @@ struct PreData {
     assignments: collomatique_state_colloscopes::assignments::AssignmentsExternalData,
 }
 
+mod assignment_map;
 mod period_list;
 mod student_list;
 mod subject_list;
@@ -182,6 +183,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::TeacherList(teacher_list) => {
                 teacher_list::decode_entry(teacher_list, &mut pre_data)?;
             }
+            ValidEntry::AssignmentMap(assignment_map) => {
+                assignment_map::decode_entry(assignment_map, &mut pre_data)?;
+            }
         }
     }
 
@@ -202,6 +206,7 @@ pub enum EntryTag {
     PeriodList,
     SubjectList,
     TeacherList,
+    AssignmentMap,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -211,6 +216,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::PeriodList(_) => EntryTag::PeriodList,
             ValidEntry::SubjectList(_) => EntryTag::SubjectList,
             ValidEntry::TeacherList(_) => EntryTag::TeacherList,
+            ValidEntry::AssignmentMap(_) => EntryTag::AssignmentMap,
         }
     }
 }

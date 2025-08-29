@@ -94,6 +94,7 @@ pub struct Entry {
     pub content: EntryContent,
 }
 
+pub mod assignment_map;
 pub mod common;
 pub mod period_list;
 pub mod student_list;
@@ -128,6 +129,7 @@ pub enum ValidEntry {
     PeriodList(period_list::List),
     SubjectList(subject_list::List),
     TeacherList(teacher_list::List),
+    AssignmentMap(assignment_map::Map),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
@@ -139,6 +141,7 @@ impl ValidEntry {
             ValidEntry::PeriodList(_) => 1,
             ValidEntry::SubjectList(_) => 1,
             ValidEntry::TeacherList(_) => 1,
+            ValidEntry::AssignmentMap(_) => 1,
         }
     }
 
@@ -148,6 +151,7 @@ impl ValidEntry {
             ValidEntry::PeriodList(_) => true,
             ValidEntry::SubjectList(_) => true,
             ValidEntry::TeacherList(_) => true,
+            ValidEntry::AssignmentMap(_) => true,
         }
     }
 }
