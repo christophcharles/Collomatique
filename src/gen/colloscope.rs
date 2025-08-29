@@ -132,12 +132,34 @@ impl GroupsDesc {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingRequirements {
+    pub teachers: bool,
+    pub timeslots: bool,
+}
+
+impl Default for BalancingRequirements {
+    fn default() -> Self {
+        BalancingRequirements {
+            teachers: false,
+            timeslots: false,
+        }
+    }
+}
+
+impl BalancingRequirements {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_group: RangeInclusive<NonZeroUsize>,
     pub max_groups_per_slot: NonZeroUsize,
     pub period: NonZeroU32,
     pub period_is_strict: bool,
     pub is_tutorial: bool,
+    pub balancing_requirements: BalancingRequirements,
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
@@ -151,6 +173,7 @@ impl Default for Subject {
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
             is_tutorial: false,
+            balancing_requirements: BalancingRequirements::default(),
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![],
             groups: GroupsDesc::default(),
