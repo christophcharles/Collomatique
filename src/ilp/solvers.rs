@@ -1,4 +1,6 @@
+#[cfg(feature = "coin_cbc")]
 pub mod coin_cbc;
+#[cfg(feature = "highs")]
 pub mod highs;
 
 use super::{Config, FeasableConfig};
