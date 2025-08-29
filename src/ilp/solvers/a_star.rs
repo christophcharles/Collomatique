@@ -41,16 +41,15 @@ impl Solver {
 use super::FeasabilitySolver;
 
 impl<V: VariableName> FeasabilitySolver<V> for Solver {
-    fn restore_feasability_exclude<'a>(
+    fn restore_feasability_with_origin<'a>(
         &self,
         config: &Config<'a, V>,
-        exclude_list: &BTreeSet<&FeasableConfig<'a, V>>,
+        origin: Option<&FeasableConfig<'a, V>>,
     ) -> Option<FeasableConfig<'a, V>> {
         let init_g_score = 0.0f32;
         let init_f_score = init_g_score + self.distance_heuristic(config);
 
-        let exclude_configs: BTreeSet<Config<'_, V>> =
-            exclude_list.iter().map(|x| x.inner().clone()).collect();
+        let forbidden_config = origin.map(|x| x.inner().clone());
 
         let mut g_scores = BTreeMap::from([(config.clone(), init_g_score)]);
         let mut f_scores = BTreeMap::from([(config.clone(), init_f_score)]);
@@ -58,7 +57,9 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
         let mut open_nodes = BTreeSet::from([config.clone()]);
 
         while let Some(candidate) = Self::min_f_score(&mut open_nodes, &f_scores) {
-            if candidate.is_feasable() && !exclude_configs.contains(&candidate) {
+            if candidate.is_feasable()
+                && !forbidden_config.as_ref().is_some_and(|x| *x == candidate)
+            {
                 return Some(unsafe { candidate.into_feasable_unchecked() });
             } else {
                 let candidate_g_score = g_scores

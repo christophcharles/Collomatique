@@ -80,17 +80,16 @@ impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Ite
     type Item = (Rc<FeasableConfig<'a, V>>, f64);
 
     fn next(&mut self) -> Option<Self::Item> {
-        use std::collections::BTreeSet;
-        let exclude_list = match &self.previous_config {
-            Some((c, _)) => BTreeSet::from([c.as_ref()]),
-            None => BTreeSet::new(),
+        let origin = match &self.previous_config {
+            Some((c, _)) => Some(c.as_ref()),
+            None => None,
         };
 
         // If we can't restore then the iterator stops
         // So "None" should be propagated upwards
         let config = Rc::new(
             self.solver
-                .restore_feasability_exclude(&self.current_config, &exclude_list)?,
+                .restore_feasability_with_origin(&self.current_config, origin)?,
         );
 
         let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
