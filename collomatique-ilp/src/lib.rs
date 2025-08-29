@@ -349,14 +349,21 @@ pub enum ObjectiveSense {
 ///
 /// by putting an x or a y in each cell.
 ///
-/// We have three broad conditions :
-/// - we should not put an X and a Y in the same cell. But a cell can possibly be empty
-/// - we should not put two Xs or two Ys in the same column (but column could have zero)
-/// - we must put exactly one X and one Y on each line
-///
 /// We represent this with 8 boolean variables.
-/// The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
-/// The same pattern is used for yij.
+/// The variable `xij` is 1 if X is written in the cell on the line i and column j, 0 otherwise.
+/// The same pattern is used for `yij`.
+
+/// We have three broad conditions :
+/// - We should not put an X and a Y in the same cell. But a cell can possibly be empty.
+///   This means that for all i and j, we have `xij + yij <= 1`.
+/// - We should not put two Xs or two Ys in the same column (but column could have zero).
+///   This means that for all j, we should have `x1j + x2j <= 1` and the same for the `yij`.
+/// - We must put exactly one X and one Y on each line.
+///   This means that `xi1 + xi2 = 1` for all i and the same for the group Y.
+///
+/// Additionally, we will prefer having group X in course 1 on week 1 by using an objective function.
+/// We just use the expression `x11` which is indeed linear. If we maximize it, this should
+/// value having gorup X in course 1 on week 1 rather than not.
 ///
 /// ```
 /// # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
