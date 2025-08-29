@@ -1,6 +1,9 @@
 pub mod linexpr;
 mod tools;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug,PartialEq,Eq,Default,Clone)]
 pub struct ProblemBuilder {
     constraints: Vec<linexpr::Constraint>,
@@ -80,5 +83,23 @@ impl Config {
 
     pub fn get<T: Into<String>>(&self, var: T) -> bool {
         self.variables.contains(&var.into())
+    }
+}
+
+impl<A> FromIterator<A> for Config
+where
+    A: Into<String>,
+{
+    fn from_iter<I>(iterable: I) -> Config
+    where
+        I: IntoIterator<Item = A>,
+    {
+        let mut config = Config::new();
+
+        for v in iterable {
+            config.set(v.into(), true);
+        }
+
+        config
     }
 }
