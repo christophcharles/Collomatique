@@ -413,6 +413,10 @@ where
         extra: E,
         obj_coef: f64,
     ) -> Option<ExtraTranslator<T, E>> {
+        if !extra.is_fit_for_problem(&self.base) {
+            return None;
+        }
+
         let extra_variables = extra.extra_structure_variables(&self.base);
         let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
         let extra_general_constraints = extra.extra_general_constraints(&self.base);
@@ -961,11 +965,13 @@ where
     /// This functions takes a partial solution of type [BaseConstraints::PartialSolution]
     /// and "decorates" it. This means that all the internal ILP variables are reconstructed and packaged
     /// into a [DecoratedPartialSolution].
+    ///
+    /// The function can fail if the partial solution is not adapted to the problem.
     pub fn decorate_partial_solution<'a>(
         &'a self,
         solution: T::PartialSolution,
-    ) -> DecoratedPartialSolution<'a, M, S, T, P> {
-        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution);
+    ) -> Option<DecoratedPartialSolution<'a, M, S, T, P>> {
+        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution)?;
         let mut base_config_data =
             starting_configuration_data.transmute(|x| BaseVariable::Main(x.clone()));
         base_config_data = base_config_data.set_iter(
@@ -989,11 +995,11 @@ where
             );
         }
 
-        DecoratedPartialSolution {
+        Some(DecoratedPartialSolution {
             problem: self,
             internal_solution: solution,
             config_data,
-        }
+        })
     }
 
     /// Used internally

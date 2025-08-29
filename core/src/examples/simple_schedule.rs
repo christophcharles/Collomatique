@@ -455,7 +455,15 @@ impl BaseConstraints for SimpleScheduleBase {
     fn partial_solution_to_configuration(
         &self,
         sol: &Self::PartialSolution,
-    ) -> ConfigData<Self::MainVariable> {
+    ) -> Option<ConfigData<Self::MainVariable>> {
+        if self.week_count as usize != sol.week_count {
+            return None;
+        }
+        let cell_count = (self.week_count * self.group_count) as usize;
+        if cell_count != sol.assigned_courses.len() || cell_count != sol.unassigned_courses.len() {
+            return None;
+        }
+
         let mut config_data = ConfigData::new();
 
         let mut index = 0usize;
@@ -486,7 +494,7 @@ impl BaseConstraints for SimpleScheduleBase {
             }
         }
 
-        config_data
+        Some(config_data)
     }
 
     fn configuration_to_partial_solution(

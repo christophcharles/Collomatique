@@ -251,7 +251,7 @@ fn test_partial_solution_to_configuration() {
 
     let computed_config_data = problem.partial_solution_to_configuration(&partial_solution);
 
-    assert_eq!(config_data, computed_config_data);
+    assert_eq!(Some(config_data), computed_config_data);
 }
 
 #[test]

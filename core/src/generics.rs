@@ -182,10 +182,13 @@ pub trait BaseConstraints: Send + Sync {
     ///   should be reciprocal to each other.
     /// - second, if the solution is partial, this should be correctly reflected by not setting the value of some
     ///   main variables.
+    ///
+    /// This method can fail if the partial solution does not fit the problem. In that cas, `None` is returned.
     fn partial_solution_to_configuration(
         &self,
         sol: &Self::PartialSolution,
-    ) -> ConfigData<Self::MainVariable>;
+    ) -> Option<ConfigData<Self::MainVariable>>;
+
     /// Converts a set of values for the main variables into a [BaseConstraints::PartialSolution].
     ///
     /// The description should be exactly one to one. This means two things:
@@ -299,6 +302,9 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
     ///
     /// See [ExtraConstraints] for the full discussion.
     type GeneralConstraintDesc: UsableData + 'static;
+
+    /// Checks if the extension is compatible with the given problem
+    fn is_fit_for_problem(&self, base: &T) -> bool;
 
     /// Definition of the structure variables for the problem extension.
     ///
@@ -440,6 +446,10 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         SoftConstraint<E::StructureConstraintDesc, E::GeneralConstraintDesc>;
     type StructureVariable = SoftVariable<E::StructureVariable, E::GeneralConstraintDesc>;
     type GeneralConstraintDesc = ();
+
+    fn is_fit_for_problem(&self, base: &T) -> bool {
+        self.internal_extra.is_fit_for_problem(base)
+    }
 
     fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
         self.internal_extra
@@ -646,6 +656,11 @@ impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
     type StructureVariable = ();
     type GeneralConstraintDesc = PartialConstraint<T::MainVariable>;
 
+    fn is_fit_for_problem(&self, base: &T) -> bool {
+        base.partial_solution_to_configuration(&self.partial_solution)
+            .is_some()
+    }
+
     fn extra_structure_variables(&self, _base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
         BTreeMap::new()
     }
@@ -673,7 +688,9 @@ impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
         >,
         Self::GeneralConstraintDesc,
     )> {
-        let config_data = base.partial_solution_to_configuration(&self.partial_solution);
+        let config_data = base
+            .partial_solution_to_configuration(&self.partial_solution)
+            .expect("Compatibility should be tested with is_fit_for_problem");
 
         config_data
             .get_values()
