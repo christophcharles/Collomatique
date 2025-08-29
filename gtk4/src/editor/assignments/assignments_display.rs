@@ -205,33 +205,33 @@ impl PeriodEntry {
     }
 
     fn update_view_wrapper(&mut self, sender: FactorySender<Self>) {
-        self.column_view.clear();
-        self.column_view
-            .extend_from_iter(
-                self.data
-                    .filtered_students
-                    .iter()
-                    .map(|(student_id, student)| StudentItem {
-                        student_id: *student_id,
-                        surname: student.desc.surname.clone(),
-                        firstname: student.desc.firstname.clone(),
-                        assigned_subjects: self
-                            .data
-                            .period_assignments
-                            .subject_map
-                            .iter()
-                            .filter_map(|(subject_id, assigned_students)| {
-                                if assigned_students.contains(student_id) {
-                                    Some(*subject_id)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect(),
-                        sender: sender.clone(),
-                        handler_ids: BTreeMap::new(),
-                    }),
-            );
+        self.column_view.splice(
+            0,
+            self.column_view.len(),
+            self.data
+                .filtered_students
+                .iter()
+                .map(|(student_id, student)| StudentItem {
+                    student_id: *student_id,
+                    surname: student.desc.surname.clone(),
+                    firstname: student.desc.firstname.clone(),
+                    assigned_subjects: self
+                        .data
+                        .period_assignments
+                        .subject_map
+                        .iter()
+                        .filter_map(|(subject_id, assigned_students)| {
+                            if assigned_students.contains(student_id) {
+                                Some(*subject_id)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
+                    sender: sender.clone(),
+                    handler_ids: BTreeMap::new(),
+                }),
+        );
     }
 }
 

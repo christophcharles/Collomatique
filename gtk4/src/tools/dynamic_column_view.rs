@@ -312,9 +312,9 @@ where
     }
 
     /// Add new items from an iterator the the end of the list.
-    pub fn extend_from_iter<I: IntoIterator<Item = T>>(&mut self, init: I) {
+    pub fn extend_from_iter<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         let objects: Vec<glib::BoxedAnyObject> =
-            init.into_iter().map(glib::BoxedAnyObject::new).collect();
+            iter.into_iter().map(glib::BoxedAnyObject::new).collect();
         self.store.extend_from_slice(&objects);
     }
 
@@ -338,6 +338,12 @@ where
         } else {
             None
         }
+    }
+
+    pub fn splice<I: IntoIterator<Item = T>>(&mut self, position: u32, n_removals: u32, iter: I) {
+        let objects: Vec<glib::BoxedAnyObject> =
+            iter.into_iter().map(glib::BoxedAnyObject::new).collect();
+        self.store.splice(position, n_removals, &objects);
     }
 
     /// Get the visible [`TypedListItem`] at the specified position,
