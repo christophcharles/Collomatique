@@ -1,7 +1,7 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::RelmWidgetExt;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, SimpleComponent, WorkerController};
+use relm4::{Component, ComponentParts, ComponentSender, WorkerController};
 use std::path::PathBuf;
 
 mod file_loader;
@@ -36,10 +36,11 @@ impl LoadingPanel {
 }
 
 #[relm4::component(pub)]
-impl SimpleComponent for LoadingPanel {
+impl Component for LoadingPanel {
     type Input = LoadingInput;
     type Output = LoadingOutput;
     type Init = ();
+    type CommandOutput = ();
 
     view! {
         #[root]
@@ -102,7 +103,7 @@ impl SimpleComponent for LoadingPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             LoadingInput::Load(path) => {
                 if Some(&path) == self.path.as_ref() {
