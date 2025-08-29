@@ -1,14 +1,29 @@
 use super::*;
 
 #[derive(Debug)]
-pub enum SlotsUpdateWarning {}
+pub enum SlotsUpdateWarning {
+    LooseRuleReferencingSlot(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::RuleId,
+    ),
+}
 
 impl SlotsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<String> {
-        None
+        match self {
+            SlotsUpdateWarning::LooseRuleReferencingSlot(_slot_id, rule_id) => {
+                let Some(rule) = data.get_data().get_rules().rule_map.get(rule_id) else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la règle \"{}\" qui utilise le créneau",
+                    rule.name,
+                ))
+            }
+        }
     }
 }
 
@@ -116,9 +131,27 @@ impl SlotsUpdateOp {
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Vec<SlotsUpdateWarning> {
-        vec![]
+        match self {
+            SlotsUpdateOp::AddNewSlot(_desc, _slot) => vec![],
+            SlotsUpdateOp::UpdateSlot(_id, _slot) => vec![],
+            SlotsUpdateOp::DeleteSlot(slot_id) => {
+                let mut output = vec![];
+
+                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                    if rule.desc.references_slot(*slot_id) {
+                        output.push(SlotsUpdateWarning::LooseRuleReferencingSlot(
+                            *slot_id, *rule_id,
+                        ));
+                    }
+                }
+
+                output
+            }
+            SlotsUpdateOp::MoveSlotUp(_id) => vec![],
+            SlotsUpdateOp::MoveSlotDown(_id) => vec![],
+        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -201,6 +234,22 @@ impl SlotsUpdateOp {
             }
             Self::DeleteSlot(slot_id) => {
                 let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
+
+                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                    if rule.desc.references_slot(*slot_id) {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Rule(
+                                    collomatique_state_colloscopes::RuleOp::Remove(*rule_id),
+                                ),
+                                "Enlever une règle référençant le créneau".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
 
                 let result = session
                     .apply(
