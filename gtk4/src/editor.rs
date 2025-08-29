@@ -19,6 +19,15 @@ pub struct EditorPanel {
     current_file: FileDesc,
 }
 
+impl EditorPanel {
+    fn generate_subtitle(&self) -> String {
+        match &self.current_file.file_name {
+            Some(path) => path.to_string_lossy().to_string(),
+            None => "Fichier sans nom".into(),
+        }
+    }
+}
+
 #[relm4::component(async, pub)]
 impl SimpleAsyncComponent for EditorPanel {
     type Input = EditorInput;
@@ -35,7 +44,14 @@ impl SimpleAsyncComponent for EditorPanel {
                 set_title: "Collomatique",
                 #[wrap(Some)]
                 set_child = &adw::ToolbarView {
-                    add_top_bar: &adw::HeaderBar::new(),
+                    add_top_bar = &adw::HeaderBar {
+                        #[wrap(Some)]
+                        set_title_widget = &adw::WindowTitle {
+                            set_title: "Collomatique",
+                            #[watch]
+                            set_subtitle: &model.generate_subtitle(),
+                        },
+                    },
                     #[wrap(Some)]
                     set_content = &gtk::StackSidebar {
                         set_vexpand: true,
@@ -46,19 +62,15 @@ impl SimpleAsyncComponent for EditorPanel {
             },
             #[wrap(Some)]
             set_content = &adw::NavigationPage {
-                set_title: "test.collomatique",
+                set_title: "Editor Panel",
                 #[wrap(Some)]
-                set_child = &adw::ToolbarView {
-                    add_top_bar: &adw::HeaderBar::new(),
-                    #[wrap(Some)]
-                    #[name(main_stack)]
-                    set_content = &gtk::Stack {
-                        set_hexpand: true,
-                        add_titled: (&gtk::Label::new(Some("Test1 - content")), Some("Test1"), &"Test1"),
-                        add_titled: (&gtk::Label::new(Some("Test2 - content")), Some("Test2"), &"Test2"),
-                        add_titled: (&gtk::Label::new(Some("Test3 - content")), Some("Test3"), &"Test3"),
-                        set_transition_type: gtk::StackTransitionType::SlideUpDown,
-                    },
+                #[name(main_stack)]
+                set_child = &gtk::Stack {
+                    set_hexpand: true,
+                    add_titled: (&gtk::Label::new(Some("Test1 - content")), Some("Test1"), &"Test1"),
+                    add_titled: (&gtk::Label::new(Some("Test2 - content")), Some("Test2"), &"Test2"),
+                    add_titled: (&gtk::Label::new(Some("Test3 - content")), Some("Test3"), &"Test3"),
+                    set_transition_type: gtk::StackTransitionType::SlideUpDown,
                 },
             },
         }

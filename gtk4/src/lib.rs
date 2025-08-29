@@ -24,7 +24,7 @@ struct AppControllers {
 
 enum AppState {
     WelcomeScreen,
-    EditorScreen { current_file: editor::FileDesc },
+    EditorScreen,
 }
 
 impl AppState {
@@ -37,7 +37,7 @@ impl AppState {
 
     fn is_editor_screen(&self) -> bool {
         match self {
-            AppState::EditorScreen { current_file: _ } => true,
+            AppState::EditorScreen => true,
             _ => false,
         }
     }
@@ -55,20 +55,6 @@ pub enum AppInput {
     OpenExistingColloscope,
 }
 
-impl AppModel {
-    fn generate_title(&self) -> String {
-        match &self.state {
-            AppState::WelcomeScreen => "Collomatique".into(),
-            AppState::EditorScreen { current_file } => match &current_file.file_name {
-                Some(path) => {
-                    format!("Collomatique - {}", path.to_string_lossy())
-                }
-                None => "Collomatique - Fichier sans nom".into(),
-            },
-        }
-    }
-}
-
 #[relm4::component(async, pub)]
 impl SimpleAsyncComponent for AppModel {
     type Input = AppInput;
@@ -80,8 +66,6 @@ impl SimpleAsyncComponent for AppModel {
         root_window = adw::ApplicationWindow {
             set_default_width: 800,
             set_default_height: 600,
-            #[watch]
-            set_title: Some(&model.generate_title()),
             gtk::Box {
                 set_hexpand: true,
                 set_vexpand: true,
@@ -137,11 +121,7 @@ impl SimpleAsyncComponent for AppModel {
         let controllers = AppControllers { welcome, editor };
 
         let state = if params.new || params.file_name.is_some() {
-            AppState::EditorScreen {
-                current_file: editor::FileDesc {
-                    file_name: params.file_name,
-                },
-            }
+            AppState::EditorScreen
         } else {
             AppState::WelcomeScreen
         };
@@ -158,9 +138,7 @@ impl SimpleAsyncComponent for AppModel {
                 // This message exists only to be ignored (as its name suggests)
             }
             AppInput::OpenNewColloscope => {
-                self.state = AppState::EditorScreen {
-                    current_file: editor::FileDesc { file_name: None },
-                };
+                self.state = AppState::EditorScreen;
                 self.controllers
                     .editor
                     .sender()
