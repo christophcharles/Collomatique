@@ -4,7 +4,7 @@ use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
-use collomatique_state::AppState;
+use collomatique_state::{AppSession, AppState};
 use collomatique_state_colloscopes::Data;
 
 use crate::widgets::rpc_server;
@@ -23,7 +23,7 @@ pub struct Dialog {
     rpc_logger: Controller<rpc_server::RpcLogger>,
     commands: FactoryVecDeque<msg_display::Entry>,
     adjust_scrolling: bool,
-    app_state: AppState<Data>,
+    app_session: Option<AppSession<AppState<Data>>>,
 }
 
 #[derive(Debug)]
@@ -181,7 +181,7 @@ impl Component for Dialog {
             is_running: false,
             commands,
             adjust_scrolling: false,
-            app_state: AppState::new(Data::new()),
+            app_session: None,
         };
 
         let cmds_listbox = model.commands.widget();
@@ -197,7 +197,7 @@ impl Component for Dialog {
             DialogInput::Run(path, script, app_state) => {
                 self.hidden = false;
                 self.path = path;
-                self.app_state = app_state;
+                self.app_session = Some(AppSession::new(app_state));
                 self.commands.guard().clear();
                 self.is_running = true;
                 self.rpc_logger
@@ -252,8 +252,12 @@ impl Component for Dialog {
             },
             DialogInput::Accept => {
                 self.hidden = true;
+                let app_session = self
+                    .app_session
+                    .take()
+                    .expect("there should be some current state to accept");
                 sender
-                    .output(DialogOutput::NewData(self.app_state.clone()))
+                    .output(DialogOutput::NewData(app_session.commit()))
                     .unwrap();
             }
             DialogInput::ProcessFinished => {

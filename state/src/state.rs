@@ -89,25 +89,26 @@ impl<T: InMemoryData> traits::private::ManagerInternal for AppState<T> {
 /// If it fails, we simply dismiss the modifications.
 /// If it succeeds, we can commit it into history as a single "script" operation.
 ///
-/// [AppSession] implements [Drop]. By default, a session is cancelled on dropping
-/// if neither [AppSession::commit] nor [AppSession::cancel] is called.
+/// You should always finish by calling [AppSession::commit] or [AppSession::cancel]
+/// as this will return the ownership of the [traits::Manager].
+/// Simply droping [AppSession] means also loosing the corresponding [traits::Manager].
 #[derive(Debug)]
 
-pub struct AppSession<'a, T: traits::Manager> {
-    op_manager: &'a mut T,
+pub struct AppSession<T: traits::Manager> {
+    op_manager: T,
     session_history: ModificationHistory<
         <<T as traits::private::ManagerInternal>::Data as InMemoryData>::AnnotatedOperation,
     >,
 }
 
-impl<'a, T: traits::Manager> AppSession<'a, T> {
+impl<T: traits::Manager> AppSession<T> {
     /// Builds a new [AppSession]
     ///
     /// An [AppSession] is created from a mutable reference to
     /// an already existing [traits::Manager]. Typically, this
     /// will be an [AppState]. But technically, it is possible to
     /// nest sessions.
-    pub fn new(op_manager: &'a mut T) -> Self {
+    pub fn new(op_manager: T) -> Self {
         AppSession {
             op_manager,
             // Modification history must be potentially infinite to
@@ -116,44 +117,32 @@ impl<'a, T: traits::Manager> AppSession<'a, T> {
         }
     }
 
-    /// Commit the session
-    pub fn commit(mut self) {
-        self.commit_internal()
-    }
-
-    /// Cancel the session (implicit if dropped)
-    pub fn cancel(self) {
-        drop(self)
-    }
-
-    /// Used internally
-    ///
-    /// Actually commit the history
-    fn commit_internal(&mut self) {
+    /// Commits the session and returns the Manager with one aggregated op in history
+    pub fn commit(mut self) -> T {
         let aggregated_op = self.session_history.build_aggregated_op();
         if aggregated_op.inner().is_empty() {
             // If no operation needs commiting, do not add an event for this session
-            return;
+            return self.op_manager;
         }
         // We only update the history: the state is already up to date
         self.op_manager
             .get_modification_history_mut()
             .store(aggregated_op);
-
-        // We NEED to clear the history, otherwise it would be cancelled on drop
-        self.session_history.clear_past_history();
+        self.op_manager
     }
-}
 
-impl<'a, T: traits::Manager> Drop for AppSession<'a, T> {
-    fn drop(&mut self) {
-        while <Self as traits::Manager>::can_undo(self) {
-            <Self as traits::Manager>::undo(self).expect("History not depleted");
+    /// Cancels the whole session and returns the Manager in its initial state
+    pub fn cancel(mut self) -> T {
+        // Cancel all modifications to the initial state
+        while <Self as traits::Manager>::can_undo(&self) {
+            <Self as traits::Manager>::undo(&mut self).expect("History not depleted");
         }
+        // Return the manager
+        self.op_manager
     }
 }
 
-impl<'a, T: traits::Manager> traits::private::ManagerInternal for AppSession<'a, T> {
+impl<T: traits::Manager> traits::private::ManagerInternal for AppSession<T> {
     type Data = T::Data;
 
     fn get_in_memory_data(&self) -> &Self::Data {
