@@ -9,17 +9,17 @@ impl TeachersUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             TeachersUpdateWarning::LooseInterrogationSlots(teacher_id) => {
                 let Some(teacher) = data.get_data().get_teachers().teacher_map.get(teacher_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Pertes des créneaux de colle du colleur {} {}",
                     teacher.desc.firstname, teacher.desc.surname,
-                )
+                ))
             }
         }
     }

@@ -27,20 +27,20 @@ impl SubjectsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             Self::LooseInterrogationDataForTeacher(teacher_id, subject_id) => {
                 let Some(teacher) = data.get_data().get_teachers().teacher_map.get(teacher_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Désincription du colleur {} {} pour la matière \"{}\"",
                     teacher.desc.firstname, teacher.desc.surname, subject.parameters.name,
-                )
+                ))
             }
             Self::LooseStudentsAssignmentsForPeriod(period_id, subject_id) => {
                 let Some(period_index) = data
@@ -48,29 +48,29 @@ impl SubjectsUpdateWarning {
                     .get_periods()
                     .find_period_position(*period_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte des inscriptions des élèves pour la matière \"{}\" sur la période {}",
                     subject.parameters.name,
                     period_index + 1
-                )
+                ))
             }
             Self::LooseInterrogationSlots(subject_id) => {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte des créneaux de colles pour la matière \"{}\"",
                     subject.parameters.name,
-                )
+                ))
             }
             Self::LooseScheduleIncompat(subject_id, incompat_id) => {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
                 let Some(incompat) = data
                     .get_data()
@@ -78,18 +78,18 @@ impl SubjectsUpdateWarning {
                     .incompat_map
                     .get(incompat_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte d'une incompatibilité horaire le {} à {} pour la matière \"{}\"",
                     incompat.slot.start().weekday,
                     incompat.slot.start().start_time,
                     subject.parameters.name,
-                )
+                ))
             }
             Self::LooseGroupListAssociation(subject_id, group_list_id) => {
                 let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
-                    return String::new();
+                    return None;
                 };
                 let Some(group_list) = data
                     .get_data()
@@ -97,12 +97,12 @@ impl SubjectsUpdateWarning {
                     .group_list_map
                     .get(group_list_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\"",
                     subject.parameters.name, group_list.params.name,
-                )
+                ))
             }
         }
     }

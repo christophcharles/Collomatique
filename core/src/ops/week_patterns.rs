@@ -10,7 +10,7 @@ impl WeekPatternsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             WeekPatternsUpdateWarning::LooseInterrogationSlot(slot_id) => {
                 let Some((subject_id, position)) = data
@@ -18,7 +18,7 @@ impl WeekPatternsUpdateWarning {
                     .get_slots()
                     .find_slot_subject_and_position(*slot_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let slot = &data
                     .get_data()
@@ -34,15 +34,15 @@ impl WeekPatternsUpdateWarning {
                     .teacher_map
                     .get(&slot.teacher_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(subject) = data.get_data().get_subjects().find_subject(subject_id) else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Pertes du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {}",
                     teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time,
-                )
+                ))
             }
             Self::LooseScheduleIncompat(incompat_id) => {
                 let Some(incompat) = data
@@ -51,21 +51,21 @@ impl WeekPatternsUpdateWarning {
                     .incompat_map
                     .get(incompat_id)
                 else {
-                    return String::new();
+                    return None;
                 };
                 let Some(subject) = data
                     .get_data()
                     .get_subjects()
                     .find_subject(incompat.subject_id)
                 else {
-                    return String::new();
+                    return None;
                 };
-                format!(
+                Some(format!(
                     "Perte d'une incompatibilité horaire le {} à {} pour la matière \"{}\"",
                     incompat.slot.start().weekday,
                     incompat.slot.start().start_time,
                     subject.parameters.name,
-                )
+                ))
             }
         }
     }

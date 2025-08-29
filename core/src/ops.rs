@@ -157,7 +157,7 @@ impl UpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
-    ) -> String {
+    ) -> Option<String> {
         match self {
             UpdateWarning::GeneralPlanning(w) => w.build_desc(data),
             UpdateWarning::Subjects(w) => w.build_desc(data),
