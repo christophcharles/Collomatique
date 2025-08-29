@@ -18,8 +18,8 @@ pub enum Error {
     InvalidTeacherNumber,
     #[error("Student {0} references an invalid subject number ({1})")]
     StudentWithInvalidSubject(usize, usize),
-    #[error("Incompatibility number is invalid")]
-    InvalidIncompatibilityNumber,
+    #[error("Student {0} references an invalid incompatibility number ({1})")]
+    StudentWithInvalidIncompatibility(usize, usize),
     #[error("Slot groupings {0} and {1} are duplicates of each other")]
     SlotGroupingsDuplicated(usize, usize),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
@@ -174,7 +174,7 @@ impl ValidatedData {
 
             for &incompatibility in &student.incompatibilities {
                 if incompatibility >= incompatibilities.len() {
-                    return Err(Error::InvalidIncompatibilityNumber);
+                    return Err(Error::StudentWithInvalidIncompatibility(i, incompatibility));
                 }
             }
         }
