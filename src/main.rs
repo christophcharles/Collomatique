@@ -546,11 +546,17 @@ struct StudentSubjectRecord {
     subject_id: i64,
 }
 
+struct GroupInfo {
+    students: std::collections::BTreeSet<usize>,
+    is_extendable: bool,
+}
+
 fn add_students_to_subjects(
     subjects: &mut collomatique::gen::colloscope::SubjectList,
     student_subjects_data: &[StudentSubjectRecord],
     subject_id_map: &std::collections::BTreeMap<i64, usize>,
     student_id_map: &std::collections::BTreeMap<i64, usize>,
+    group_infos: &std::collections::BTreeMap<i64, Vec<GroupInfo>>,
 ) -> Result<()> {
     for x in student_subjects_data {
         let subject_index = subject_id_map[&x.subject_id];
@@ -640,12 +646,16 @@ FROM time_slots NATURAL JOIN weeks"
         &subject_id_map,
     )?;
 
+    use std::collections::BTreeMap;
+    let group_infos = BTreeMap::new();
+
     let student_subjects_data = student_subjects_req.await?;
     add_students_to_subjects(
         &mut list,
         &student_subjects_data[..],
         &subject_id_map,
         student_id_map,
+        &group_infos,
     )?;
 
     Ok(SubjectsData { list, slot_map })
