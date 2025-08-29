@@ -218,10 +218,10 @@ WHERE incompat_id = ?
     Ok(incompats)
 }
 
-pub async fn add(
+async fn search_invalid_week_pattern_id(
     pool: &SqlitePool,
     incompat: &Incompat<week_patterns::Id>,
-) -> std::result::Result<Id, CrossError<Error, week_patterns::Id>> {
+) -> Result<Option<week_patterns::Id>> {
     let week_pattern_ids = sqlx::query!("SELECT week_pattern_id FROM week_patterns",)
         .fetch_all(pool)
         .await
@@ -233,9 +233,20 @@ pub async fn add(
     for incompat_group in &incompat.groups {
         for slot in &incompat_group.slots {
             if !week_pattern_ids.contains(&slot.week_pattern_id.0) {
-                return Err(CrossError::InvalidCrossId(slot.week_pattern_id));
+                return Ok(Some(slot.week_pattern_id));
             }
         }
+    }
+
+    Ok(None)
+}
+
+pub async fn add(
+    pool: &SqlitePool,
+    incompat: &Incompat<week_patterns::Id>,
+) -> std::result::Result<Id, CrossError<Error, week_patterns::Id>> {
+    if let Some(week_pattern_id) = search_invalid_week_pattern_id(pool, incompat).await? {
+        return Err(CrossError::InvalidCrossId(week_pattern_id));
     }
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -337,9 +348,96 @@ WHERE incompat_group_id IN
 }
 
 pub async fn update(
-    _pool: &SqlitePool,
-    _index: Id,
-    _incompat: &Incompat<week_patterns::Id>,
+    pool: &SqlitePool,
+    index: Id,
+    incompat: &Incompat<week_patterns::Id>,
 ) -> std::result::Result<(), CrossIdError<Error, Id, week_patterns::Id>> {
-    todo!()
+    if let Some(week_pattern_id) = search_invalid_week_pattern_id(pool, incompat).await? {
+        return Err(CrossIdError::InvalidCrossId(week_pattern_id));
+    }
+
+    let incompat_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let max_count_i64 = i64::try_from(incompat.max_count).map_err(|_| {
+        Error::RepresentationError(format!(
+            "Cannot represent max_count (value: {}) as an i64 for the database",
+            incompat.max_count
+        ))
+    })?;
+
+    let rows_affected = sqlx::query!(
+        "UPDATE incompats SET name = ?1, max_count = ?2 WHERE incompat_id = ?3",
+        incompat.name,
+        max_count_i64,
+        incompat_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if rows_affected > 1 {
+        return Err(CrossIdError::InternalError(Error::CorruptedDatabase(
+            format!("Multiple incompats with id {:?}", index),
+        )));
+    } else if rows_affected == 0 {
+        return Err(CrossIdError::InvalidId(index));
+    }
+
+    let _ = sqlx::query!(
+        r#"
+DELETE FROM incompat_group_items
+WHERE incompat_group_id IN
+(SELECT incompat_group_id FROM incompat_groups WHERE incompat_id = ?)
+        "#,
+        incompat_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        "DELETE FROM incompat_groups WHERE incompat_id = ?",
+        incompat_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    for incompat_group in &incompat.groups {
+        let incompat_group_id = sqlx::query!(
+            "INSERT INTO incompat_groups (incompat_id) VALUES (?)",
+            incompat_id
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .last_insert_rowid();
+
+        for slot in &incompat_group.slots {
+            let start_day: i64 = usize::from(slot.start.day)
+                .try_into()
+                .expect("day number should fit in i64");
+            let start_time = slot.start.time.get();
+            let duration = slot.duration.get();
+
+            let _ = sqlx::query!(
+                r#"
+INSERT INTO incompat_group_items (incompat_group_id, week_pattern_id, start_day, start_time, duration)
+VALUES (?1, ?2, ?3, ?4, ?5)
+                "#,
+                incompat_group_id,
+                slot.week_pattern_id.0,
+                start_day,
+                start_time,
+                duration
+            )
+            .execute(&mut *conn)
+            .await.map_err(Error::from)?;
+        }
+    }
+
+    Ok(())
 }
