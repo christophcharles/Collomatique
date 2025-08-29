@@ -28,7 +28,7 @@
 //!
 //! Such a type of problem is called a Linear Programming (LP) problem.
 //!
-//! An Integer Linear Programming problem adds the requirement that all (or only some of
+//! An Integer Linear Programming (ILP) problem adds the requirement that all (or only some of
 //! them for a Mixed-ILP problem) the variables are integers.
 //!
 //! It turns out that a lot of problems can be represented this way (See the wikipedia page: <https://en.wikipedia.org/wiki/Integer_programming>).
@@ -751,6 +751,11 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     }
 }
 
+/// ILP problem
+///
+/// This data structure represents an ILP problem.
+/// You cannot build it directly. It is built through the builder
+/// pattern, using [ProblemBuilder].
 #[derive(Debug, Clone)]
 pub struct Problem<V: UsableData, C: UsableData> {
     constraints: Vec<(Constraint<V>, C)>,
@@ -760,18 +765,43 @@ pub struct Problem<V: UsableData, C: UsableData> {
 }
 
 impl<V: UsableData, C: UsableData> Problem<V, C> {
+    /// Transforms the problem back into a [ProblemBuilder].
+    ///
+    /// This is useful when you have a problem that works tha
+    /// you want to change a bit (maybe add a constraint or a variable).
+    pub fn into_builder(self) -> ProblemBuilder<V, C> {
+        ProblemBuilder {
+            constraints: self.constraints,
+            variables: self.variables,
+            objective_func: self.objective_func,
+            objective_sense: self.objective_sense,
+        }
+    }
+
+    /// Returns the constraints of the problem.
+    ///
+    /// The constraints are returned as a list of tuples.
+    /// The first element of the tuple is the algebraic constraint.
+    /// The second element is a description of the constraint (given at
+    /// building time).
     pub fn get_constraints(&self) -> &[(Constraint<V>, C)] {
         &self.constraints[..]
     }
 
+    /// Returns the list of variables.
+    ///
+    /// The result is a map associating to each variable name
+    /// a description of type [Variable].
     pub fn get_variables(&self) -> &BTreeMap<V, Variable> {
         &self.variables
     }
 
+    /// Returns the objective function of the problem
     pub fn get_objective_function(&self) -> &LinExpr<V> {
         &self.objective_func
     }
 
+    /// Returns the sense of the obejctive function (is it maximized or minimized).
     pub fn get_objective_sense(&self) -> ObjectiveSense {
         self.objective_sense
     }
