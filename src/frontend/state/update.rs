@@ -224,13 +224,13 @@ pub trait Manager: ManagerInternal {
         IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
     >;
     async fn group_lists_get_all(
-        &self,
+        &mut self,
     ) -> Result<
         BTreeMap<GroupListHandle, backend::GroupList<StudentHandle>>,
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn group_lists_get(
-        &self,
+        &mut self,
         handle: GroupListHandle,
     ) -> Result<
         backend::GroupList<StudentHandle>,
@@ -244,14 +244,14 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn group_lists_check_can_remove(
-        &self,
+        &mut self,
         handle: GroupListHandle,
     ) -> Result<
         Vec<SubjectHandle>,
         IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
     >;
     async fn subjects_get_all(
-        &self,
+        &mut self,
     ) -> std::result::Result<
         BTreeMap<
             SubjectHandle,
@@ -260,7 +260,7 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn subjects_get(
-        &self,
+        &mut self,
         handle: SubjectHandle,
     ) -> Result<
         backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
@@ -274,14 +274,14 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn subjects_check_can_remove(
-        &self,
+        &mut self,
         handle: SubjectHandle,
     ) -> Result<
         Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>,
         IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
     >;
     async fn time_slots_get_all(
-        &self,
+        &mut self,
     ) -> Result<
         BTreeMap<
             TimeSlotHandle,
@@ -290,7 +290,7 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn time_slots_get(
-        &self,
+        &mut self,
         handle: TimeSlotHandle,
     ) -> Result<
         backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
@@ -304,20 +304,20 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn time_slots_check_can_remove(
-        &self,
+        &mut self,
         handle: TimeSlotHandle,
     ) -> Result<
         Vec<GroupingHandle>,
         IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
     >;
     async fn groupings_get_all(
-        &self,
+        &mut self,
     ) -> Result<
         BTreeMap<GroupingHandle, backend::Grouping<TimeSlotHandle>>,
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn groupings_get(
-        &self,
+        &mut self,
         handle: GroupingHandle,
     ) -> Result<
         backend::Grouping<TimeSlotHandle>,
@@ -331,20 +331,20 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn groupings_check_can_remove(
-        &self,
+        &mut self,
         handle: GroupingHandle,
     ) -> Result<
         Vec<GroupingIncompatHandle>,
         IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
     >;
     async fn grouping_incompats_get_all(
-        &self,
+        &mut self,
     ) -> Result<
         BTreeMap<GroupingIncompatHandle, backend::GroupingIncompat<GroupingHandle>>,
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn grouping_incompats_get(
-        &self,
+        &mut self,
         handle: GroupingIncompatHandle,
     ) -> Result<
         backend::GroupingIncompat<GroupingHandle>,
@@ -356,13 +356,6 @@ pub trait Manager: ManagerInternal {
     ) -> Result<
         backend::DataStatusWithId<GroupingHandle>,
         <Self::Storage as backend::Storage>::InternalError,
-    >;
-    async fn grouping_incompats_check_can_remove(
-        &self,
-        handle: GroupingIncompatHandle,
-    ) -> Result<
-        (),
-        IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
     >;
 
     async fn apply(
@@ -914,66 +907,171 @@ impl<T: ManagerInternal> Manager for T {
     }
 
     fn group_lists_get(
-        &self,
-        _handle: GroupListHandle,
+        &mut self,
+        handle: GroupListHandle,
     ) -> impl core::future::Future<
         Output = Result<
             backend::GroupList<StudentHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().group_lists;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let group_list = self
+                .get_backend_logic()
+                .group_lists_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_group_list_to_handles(
+                group_list,
+                self.get_handle_managers_mut(),
+            ))
+        }
     }
 
     fn group_lists_get_all(
-        &self,
+        &mut self,
     ) -> impl core::future::Future<
         Output = Result<
             BTreeMap<GroupListHandle, backend::GroupList<StudentHandle>>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let group_lists_backend = self.get_backend_logic().group_lists_get_all().await?;
+
+            let group_lists = group_lists_backend
+                .into_iter()
+                .map(|(id, group_list)| {
+                    let handle = self.get_handle_managers_mut().group_lists.get_handle(id);
+                    let group_list = private::convert_group_list_to_handles(
+                        group_list,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, group_list)
+                })
+                .collect();
+
+            Ok(group_lists)
+        }
     }
 
     fn group_lists_check_data(
         &self,
-        _group_list: &backend::GroupList<StudentHandle>,
+        group_list: &backend::GroupList<StudentHandle>,
     ) -> impl core::future::Future<
         Output = Result<
             backend::DataStatusWithIdAndInvalidState<StudentHandle>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let group_list_backend = match private::convert_group_list_from_handles(
+                group_list.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .group_lists_check_data(&group_list_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithIdAndInvalidState::BadCrossId(_id) => {
+                    panic!("StudentId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithIdAndInvalidState::InvalidData => {
+                    backend::DataStatusWithIdAndInvalidState::Ok
+                }
+                backend::DataStatusWithIdAndInvalidState::Ok => {
+                    backend::DataStatusWithIdAndInvalidState::Ok
+                }
+            };
+
+            Ok(status)
+        }
     }
 
     fn group_lists_check_can_remove(
-        &self,
-        _handle: GroupListHandle,
+        &mut self,
+        handle: GroupListHandle,
     ) -> impl core::future::Future<
         Output = Result<
             Vec<SubjectHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, GroupListHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().group_lists;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let group_list_deps_backend = self
+                .get_backend_logic()
+                .group_lists_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let subject_handle_manager = &mut handle_managers.subjects;
+
+            let group_list_deps = group_list_deps_backend
+                .into_iter()
+                .map(|dep| subject_handle_manager.get_handle(dep))
+                .collect();
+
+            Ok(group_list_deps)
+        }
     }
 
     fn subjects_get(
-        &self,
-        _handle: SubjectHandle,
+        &mut self,
+        handle: SubjectHandle,
     ) -> impl core::future::Future<
         Output = Result<
             backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().subjects;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let subject =
+                self.get_backend_logic()
+                    .subjects_get(index)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                        IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                    })?;
+
+            Ok(private::convert_subject_to_handles(
+                subject,
+                self.get_handle_managers_mut(),
+            ))
+        }
     }
 
     fn subjects_get_all(
-        &self,
+        &mut self,
     ) -> impl core::future::Future<
         Output = std::result::Result<
             BTreeMap<
@@ -983,47 +1081,146 @@ impl<T: ManagerInternal> Manager for T {
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let subjects_backend = self.get_backend_logic().subjects_get_all().await?;
+
+            let subjects = subjects_backend
+                .into_iter()
+                .map(|(id, subject)| {
+                    let handle = self.get_handle_managers_mut().subjects.get_handle(id);
+                    let subject = private::convert_subject_to_handles(
+                        subject,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, subject)
+                })
+                .collect();
+
+            Ok(subjects)
+        }
     }
 
     fn subjects_check_data(
         &self,
-        _subject: &backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        subject: &backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     ) -> impl core::future::Future<
         Output = Result<
             backend::DataStatusWithId3<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let subject_backend = match private::convert_subject_from_handles(
+                subject.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .subjects_check_data(&subject_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId3::BadCrossId1(_id) => {
+                    panic!(
+                        "SubjectGroupId was taken from a handle manager and thus should be valid"
+                    )
+                }
+                backend::DataStatusWithId3::BadCrossId2(_id) => {
+                    panic!("IncompatId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::BadCrossId3(_id) => {
+                    panic!("GroupListId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::Ok => backend::DataStatusWithId3::Ok,
+            };
+
+            Ok(status)
+        }
     }
 
     fn subjects_check_can_remove(
-        &self,
-        _handle: SubjectHandle,
+        &mut self,
+        handle: SubjectHandle,
     ) -> impl core::future::Future<
         Output = Result<
             Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>,
             IdError<<Self::Storage as backend::Storage>::InternalError, SubjectHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().subjects;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let subject_deps_backend = self
+                .get_backend_logic()
+                .subjects_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let time_slot_handle_manager = &mut handle_managers.time_slots;
+            let student_handle_manager = &mut handle_managers.students;
+
+            let subject_deps = subject_deps_backend
+                .into_iter()
+                .map(|dep| match dep {
+                    backend::SubjectDependancy::TimeSlot(id) => {
+                        backend::SubjectDependancy::TimeSlot(
+                            time_slot_handle_manager.get_handle(id),
+                        )
+                    }
+                    backend::SubjectDependancy::Student(id) => {
+                        backend::SubjectDependancy::Student(student_handle_manager.get_handle(id))
+                    }
+                })
+                .collect();
+
+            Ok(subject_deps)
+        }
     }
 
     fn time_slots_get(
-        &self,
-        _handle: TimeSlotHandle,
+        &mut self,
+        handle: TimeSlotHandle,
     ) -> impl core::future::Future<
         Output = Result<
             backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().time_slots;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let time_slot = self
+                .get_backend_logic()
+                .time_slots_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_time_slot_to_handles(
+                time_slot,
+                self.get_handle_managers_mut(),
+            ))
+        }
     }
 
     fn time_slots_get_all(
-        &self,
+        &mut self,
     ) -> impl core::future::Future<
         Output = Result<
             BTreeMap<
@@ -1033,125 +1230,325 @@ impl<T: ManagerInternal> Manager for T {
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let time_slots_backend = self.get_backend_logic().time_slots_get_all().await?;
+
+            let time_slots = time_slots_backend
+                .into_iter()
+                .map(|(id, time_slot)| {
+                    let handle = self.get_handle_managers_mut().time_slots.get_handle(id);
+                    let time_slot = private::convert_time_slot_to_handles(
+                        time_slot,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, time_slot)
+                })
+                .collect();
+
+            Ok(time_slots)
+        }
     }
 
     fn time_slots_check_data(
         &self,
-        _time_slot: &backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        time_slot: &backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
     ) -> impl core::future::Future<
         Output = Result<
             backend::DataStatusWithId3<SubjectHandle, TeacherHandle, WeekPatternHandle>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let time_slot_backend = match private::convert_time_slot_from_handles(
+                time_slot.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .time_slots_check_data(&time_slot_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId3::BadCrossId1(_id) => {
+                    panic!("SubjectId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::BadCrossId2(_id) => {
+                    panic!("TeacherId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::BadCrossId3(_id) => {
+                    panic!("WeekPatternId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::Ok => backend::DataStatusWithId3::Ok,
+            };
+
+            Ok(status)
+        }
     }
 
     fn time_slots_check_can_remove(
-        &self,
-        _handle: TimeSlotHandle,
+        &mut self,
+        handle: TimeSlotHandle,
     ) -> impl core::future::Future<
         Output = Result<
             Vec<GroupingHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, TimeSlotHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().time_slots;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let time_slot_deps_backend = self
+                .get_backend_logic()
+                .time_slots_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let grouping_handle_manager = &mut handle_managers.groupings;
+
+            let time_slot_deps = time_slot_deps_backend
+                .into_iter()
+                .map(|dep| grouping_handle_manager.get_handle(dep))
+                .collect();
+
+            Ok(time_slot_deps)
+        }
     }
 
     fn groupings_get(
-        &self,
-        _handle: GroupingHandle,
+        &mut self,
+        handle: GroupingHandle,
     ) -> impl core::future::Future<
         Output = Result<
             backend::Grouping<TimeSlotHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().groupings;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let grouping = self
+                .get_backend_logic()
+                .groupings_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_grouping_to_handles(
+                grouping,
+                self.get_handle_managers_mut(),
+            ))
+        }
     }
 
     fn groupings_get_all(
-        &self,
+        &mut self,
     ) -> impl core::future::Future<
         Output = Result<
             BTreeMap<GroupingHandle, backend::Grouping<TimeSlotHandle>>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let groupings_backend = self.get_backend_logic().groupings_get_all().await?;
+
+            let groupings = groupings_backend
+                .into_iter()
+                .map(|(id, grouping)| {
+                    let handle = self.get_handle_managers_mut().groupings.get_handle(id);
+                    let grouping = private::convert_grouping_to_handles(
+                        grouping,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, grouping)
+                })
+                .collect();
+
+            Ok(groupings)
+        }
     }
 
     fn groupings_check_data(
         &self,
-        _grouping: &backend::Grouping<TimeSlotHandle>,
+        grouping: &backend::Grouping<TimeSlotHandle>,
     ) -> impl core::future::Future<
         Output = Result<
             backend::DataStatusWithId<TimeSlotHandle>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let grouping_backend = match private::convert_grouping_from_handles(
+                grouping.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .groupings_check_data(&grouping_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId::BadCrossId(_id) => {
+                    panic!("TimeSlotId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId::Ok => backend::DataStatusWithId::Ok,
+            };
+
+            Ok(status)
+        }
     }
 
     fn groupings_check_can_remove(
-        &self,
-        _handle: GroupingHandle,
+        &mut self,
+        handle: GroupingHandle,
     ) -> impl core::future::Future<
         Output = Result<
             Vec<GroupingIncompatHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, GroupingHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().groupings;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let grouping_deps_backend = self
+                .get_backend_logic()
+                .groupings_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let grouping_incompat_handle_manager = &mut handle_managers.grouping_incompats;
+
+            let grouping_deps = grouping_deps_backend
+                .into_iter()
+                .map(|dep| grouping_incompat_handle_manager.get_handle(dep))
+                .collect();
+
+            Ok(grouping_deps)
+        }
     }
 
     fn grouping_incompats_get(
-        &self,
-        _handle: GroupingIncompatHandle,
+        &mut self,
+        handle: GroupingIncompatHandle,
     ) -> impl core::future::Future<
         Output = Result<
             backend::GroupingIncompat<GroupingHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().grouping_incompats;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let grouping_incompat = self
+                .get_backend_logic()
+                .grouping_incompats_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_grouping_incompat_to_handles(
+                grouping_incompat,
+                self.get_handle_managers_mut(),
+            ))
+        }
     }
 
     fn grouping_incompats_get_all(
-        &self,
+        &mut self,
     ) -> impl core::future::Future<
         Output = Result<
             BTreeMap<GroupingIncompatHandle, backend::GroupingIncompat<GroupingHandle>>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let grouping_incompats_backend = self
+                .get_backend_logic()
+                .grouping_incompats_get_all()
+                .await?;
+
+            let grouping_incompats = grouping_incompats_backend
+                .into_iter()
+                .map(|(id, grouping_incompat)| {
+                    let handle = self
+                        .get_handle_managers_mut()
+                        .grouping_incompats
+                        .get_handle(id);
+                    let grouping_incompat = private::convert_grouping_incompat_to_handles(
+                        grouping_incompat,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, grouping_incompat)
+                })
+                .collect();
+
+            Ok(grouping_incompats)
+        }
     }
 
     fn grouping_incompats_check_data(
         &self,
-        _grouping_incompat: &backend::GroupingIncompat<GroupingHandle>,
+        grouping_incompat: &backend::GroupingIncompat<GroupingHandle>,
     ) -> impl core::future::Future<
         Output = Result<
             backend::DataStatusWithId<GroupingHandle>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
-    }
+        async {
+            let grouping_incompat_backend = match private::convert_grouping_incompat_from_handles(
+                grouping_incompat.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
 
-    fn grouping_incompats_check_can_remove(
-        &self,
-        _handle: GroupingIncompatHandle,
-    ) -> impl core::future::Future<
-        Output = Result<
-            (),
-            IdError<<Self::Storage as backend::Storage>::InternalError, GroupingIncompatHandle>,
-        >,
-    > + Send {
-        async { todo!() }
+            let status_backend = self
+                .get_backend_logic()
+                .grouping_incompats_check_data(&grouping_incompat_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId::BadCrossId(_id) => {
+                    panic!("GroupingId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId::Ok => backend::DataStatusWithId::Ok,
+            };
+
+            Ok(status)
+        }
     }
 
     fn apply(
@@ -1972,6 +2369,227 @@ pub(super) mod private {
                             })
                             .collect::<Result<_, _>>()?,
                     })
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    pub fn convert_group_list_to_handles<T: backend::Storage>(
+        group_list: backend::GroupList<T::StudentId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::GroupList<StudentHandle> {
+        backend::GroupList {
+            name: group_list.name,
+            groups: group_list.groups,
+            students_mapping: group_list
+                .students_mapping
+                .into_iter()
+                .map(|(student_id, group)| (handle_managers.students.get_handle(student_id), group))
+                .collect(),
+        }
+    }
+
+    pub fn convert_group_list_from_handles<T: backend::Storage>(
+        group_list: backend::GroupList<StudentHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<
+        backend::GroupList<T::StudentId>,
+        backend::DataStatusWithIdAndInvalidState<StudentHandle>,
+    > {
+        Ok(backend::GroupList {
+            name: group_list.name,
+            groups: group_list.groups,
+            students_mapping: group_list
+                .students_mapping
+                .into_iter()
+                .map(|(student_handle, group)| {
+                    Ok((
+                        handle_managers.students.get_id(student_handle).ok_or(
+                            backend::DataStatusWithIdAndInvalidState::BadCrossId(student_handle),
+                        )?,
+                        group,
+                    ))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    pub fn convert_subject_to_handles<T: backend::Storage>(
+        subject: backend::Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle> {
+        backend::Subject {
+            name: subject.name,
+            subject_group_id: handle_managers
+                .subject_groups
+                .get_handle(subject.subject_group_id),
+            incompat_id: subject
+                .incompat_id
+                .map(|x| handle_managers.incompats.get_handle(x)),
+            group_list_id: subject
+                .group_list_id
+                .map(|x| handle_managers.group_lists.get_handle(x)),
+            duration: subject.duration,
+            students_per_group: subject.students_per_group,
+            period: subject.period,
+            period_is_strict: subject.period_is_strict,
+            is_tutorial: subject.is_tutorial,
+            max_groups_per_slot: subject.max_groups_per_slot,
+            balancing_requirements: subject.balancing_requirements,
+        }
+    }
+
+    pub fn convert_subject_from_handles<T: backend::Storage>(
+        subject: backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<
+        backend::Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
+        backend::DataStatusWithId3<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    > {
+        Ok(backend::Subject {
+            name: subject.name,
+            subject_group_id: handle_managers
+                .subject_groups
+                .get_id(subject.subject_group_id)
+                .ok_or(backend::DataStatusWithId3::BadCrossId1(
+                    subject.subject_group_id,
+                ))?,
+            incompat_id: subject
+                .incompat_id
+                .map(|x| {
+                    handle_managers
+                        .incompats
+                        .get_id(x)
+                        .ok_or(backend::DataStatusWithId3::BadCrossId2(x))
+                })
+                .transpose()?,
+            group_list_id: subject
+                .group_list_id
+                .map(|x| {
+                    handle_managers
+                        .group_lists
+                        .get_id(x)
+                        .ok_or(backend::DataStatusWithId3::BadCrossId3(x))
+                })
+                .transpose()?,
+            duration: subject.duration,
+            students_per_group: subject.students_per_group,
+            period: subject.period,
+            period_is_strict: subject.period_is_strict,
+            is_tutorial: subject.is_tutorial,
+            max_groups_per_slot: subject.max_groups_per_slot,
+            balancing_requirements: subject.balancing_requirements,
+        })
+    }
+
+    pub fn convert_time_slot_to_handles<T: backend::Storage>(
+        time_slot: backend::TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle> {
+        backend::TimeSlot {
+            subject_id: handle_managers.subjects.get_handle(time_slot.subject_id),
+            teacher_id: handle_managers.teachers.get_handle(time_slot.teacher_id),
+            start: time_slot.start,
+            week_pattern_id: handle_managers
+                .week_patterns
+                .get_handle(time_slot.week_pattern_id),
+            room: time_slot.room,
+        }
+    }
+
+    pub fn convert_time_slot_from_handles<T: backend::Storage>(
+        time_slot: backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<
+        backend::TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
+        backend::DataStatusWithId3<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    > {
+        Ok(backend::TimeSlot {
+            subject_id: handle_managers
+                .subjects
+                .get_id(time_slot.subject_id)
+                .ok_or(backend::DataStatusWithId3::BadCrossId1(
+                    time_slot.subject_id,
+                ))?,
+            teacher_id: handle_managers
+                .teachers
+                .get_id(time_slot.teacher_id)
+                .ok_or(backend::DataStatusWithId3::BadCrossId2(
+                    time_slot.teacher_id,
+                ))?,
+            start: time_slot.start,
+            week_pattern_id: handle_managers
+                .week_patterns
+                .get_id(time_slot.week_pattern_id)
+                .ok_or(backend::DataStatusWithId3::BadCrossId3(
+                    time_slot.week_pattern_id,
+                ))?,
+            room: time_slot.room,
+        })
+    }
+
+    pub fn convert_grouping_to_handles<T: backend::Storage>(
+        grouping: backend::Grouping<T::TimeSlotId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::Grouping<TimeSlotHandle> {
+        backend::Grouping {
+            name: grouping.name,
+            slots: grouping
+                .slots
+                .into_iter()
+                .map(|x| handle_managers.time_slots.get_handle(x))
+                .collect(),
+        }
+    }
+
+    pub fn convert_grouping_from_handles<T: backend::Storage>(
+        grouping: backend::Grouping<TimeSlotHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<backend::Grouping<T::TimeSlotId>, backend::DataStatusWithId<TimeSlotHandle>> {
+        Ok(backend::Grouping {
+            name: grouping.name,
+            slots: grouping
+                .slots
+                .into_iter()
+                .map(|x| {
+                    handle_managers
+                        .time_slots
+                        .get_id(x)
+                        .ok_or(backend::DataStatusWithId::BadCrossId(x))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    pub fn convert_grouping_incompat_to_handles<T: backend::Storage>(
+        grouping_incompat: backend::GroupingIncompat<T::GroupingId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::GroupingIncompat<GroupingHandle> {
+        backend::GroupingIncompat {
+            max_count: grouping_incompat.max_count,
+            groupings: grouping_incompat
+                .groupings
+                .into_iter()
+                .map(|x| handle_managers.groupings.get_handle(x))
+                .collect(),
+        }
+    }
+
+    pub fn convert_grouping_incompat_from_handles<T: backend::Storage>(
+        grouping_incompat: backend::GroupingIncompat<GroupingHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<backend::GroupingIncompat<T::GroupingId>, backend::DataStatusWithId<GroupingHandle>>
+    {
+        Ok(backend::GroupingIncompat {
+            max_count: grouping_incompat.max_count,
+            groupings: grouping_incompat
+                .groupings
+                .into_iter()
+                .map(|x| {
+                    handle_managers
+                        .groupings
+                        .get_id(x)
+                        .ok_or(backend::DataStatusWithId::BadCrossId(x))
                 })
                 .collect::<Result<_, _>>()?,
         })
