@@ -203,7 +203,7 @@ impl std::fmt::Display for SimpleScheduleConstraint {
 /// we can't assume that each group has a single course a given week.
 ///
 /// Mathematically, have a representation that is one to one with functions from
-/// the variable set and taking their values in Option<bool>.
+/// the variable set and taking their values in `Option<bool>`.
 ///
 /// But we still want a representation that is closer to what is needed
 /// in the rest of the program. Here, that might mean that we want for each
@@ -224,7 +224,7 @@ impl std::fmt::Display for SimpleScheduleConstraint {
 ///
 /// A solution is *complete* if and only if all the second BTreeSet are empty.
 ///
-/// Internally, this is represented by two Vec<BTreeSet<u32>>.
+/// Internally, this is represented by two `Vec<BTreeSet<u32>>`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SimpleSchedulePartialSolution {
     week_count: usize,
