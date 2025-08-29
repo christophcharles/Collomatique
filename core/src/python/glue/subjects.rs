@@ -76,6 +76,11 @@ pub struct Subject {
 
 #[pymethods]
 impl Subject {
+    #[new]
+    fn new(id: SubjectId, parameters: SubjectParameters) -> Self {
+        Subject { id, parameters }
+    }
+
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())
@@ -120,6 +125,22 @@ impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParamete
 
 #[pymethods]
 impl SubjectParameters {
+    #[new]
+    fn new(name: String) -> Self {
+        SubjectParameters {
+            name,
+            students_per_group_min: NonZeroU32::new(2).unwrap(),
+            students_per_group_max: NonZeroU32::new(3).unwrap(),
+            groups_per_interrogation_min: NonZeroU32::new(1).unwrap(),
+            groups_per_interrogation_max: NonZeroU32::new(1).unwrap(),
+            duration: NonZeroU32::new(60).unwrap(),
+            take_duration_into_account: true,
+            periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+            },
+        }
+    }
+
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())

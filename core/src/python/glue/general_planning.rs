@@ -240,6 +240,11 @@ pub struct Period {
 
 #[pymethods]
 impl Period {
+    #[new]
+    fn new(id: PeriodId, weeks_status: Vec<bool>) -> Self {
+        Period { id, weeks_status }
+    }
+
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())
