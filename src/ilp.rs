@@ -396,7 +396,7 @@ pub struct Config<'a, V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
 }
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
-    pub fn get_problem(&self) -> &Problem<V, P> {
+    pub fn get_problem(&self) -> &'a Problem<V, P> {
         self.problem
     }
 
