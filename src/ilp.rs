@@ -19,10 +19,6 @@ use mat_repr::{ConfigRepr, ProblemRepr};
 pub enum Error<V: VariableName> {
     #[error("Variable {0} is not valid for this problem")]
     InvalidVariable(V),
-    #[error("Constant {0} is set to the wrong value")]
-    ConstantWrongValue(V),
-    #[error("Variable {0} is actually a constant and cannot be set")]
-    ConstantNotVariable(V),
 }
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
@@ -42,15 +38,12 @@ pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     eval_fn: EvalFn<V, P>,
     variables: BTreeSet<V>,
-    constants: BTreeMap<V, bool>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum VarError<V: VariableName> {
     #[error("Variable {0} already declared")]
     VariableAlreadyDeclared(V),
-    #[error("Constant {0} already declared")]
-    ConstantAlreadyDeclared(V),
 }
 
 pub type VarResult<T, V> = std::result::Result<T, VarError<V>>;
@@ -69,7 +62,6 @@ impl<V: VariableName, P: ProblemRepr<V>> Default for ProblemBuilder<V, P> {
             constraints: BTreeSet::new(),
             eval_fn: EvalFn::default(),
             variables: BTreeSet::new(),
-            constants: BTreeMap::new(),
         }
     }
 }
@@ -117,9 +109,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         T: Ord + ?Sized,
         &'a T: Into<V>,
     {
-        if self.constants.contains_key(var) {
-            return Err(VarError::ConstantAlreadyDeclared(var.into()));
-        }
         if self.variables.contains(var) {
             return Err(VarError::VariableAlreadyDeclared(var.into()));
         }
@@ -143,23 +132,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         Ok(self)
     }
 
-    pub fn add_constant<T: Into<V>>(mut self, var: T, val: bool) -> VarResult<Self, V> {
-        let var = var.into();
-        self.check_var(&var)?;
-        self.constants.insert(var, val);
-        Ok(self)
-    }
-
-    pub fn add_constants<U: Into<V>, T: IntoIterator<Item = (U, bool)>>(
-        mut self,
-        vars: T,
-    ) -> VarResult<Self, V> {
-        for (var, val) in vars {
-            self = self.add_constant(var, val)?;
-        }
-        Ok(self)
-    }
-
     pub fn get_variables(&self) -> &BTreeSet<V> {
         &self.variables
     }
@@ -178,7 +150,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             variables_vec,
             variables_lookup,
             constraints: self.constraints,
-            constants: self.constants,
             eval_fn: self.eval_fn,
             pb_repr: nd_problem,
         }
@@ -195,17 +166,11 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             .filter(|c: &Constraint<V>| c.variables().iter().all(&mut predicate))
             .collect();
         let variables = self.variables.into_iter().filter(&mut predicate).collect();
-        let constants = self
-            .constants
-            .into_iter()
-            .filter(|(v, _val)| predicate(v))
-            .collect();
 
         ProblemBuilder {
             constraints,
             eval_fn: self.eval_fn,
             variables,
-            constants,
         }
     }
 }
@@ -218,7 +183,6 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    constants: BTreeMap<V, bool>,
     eval_fn: EvalFn<V, P>,
     pb_repr: P,
 }
@@ -228,15 +192,6 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
         write!(f, "variables : [")?;
         for v in &self.variables {
             write!(f, " {}", v)?;
-        }
-        write!(f, " ]\n")?;
-
-        write!(f, "constants : [")?;
-        for (i, (c, val)) in self.constants.iter().enumerate() {
-            if i != 0 {
-                write!(f, ",")?;
-            }
-            write!(f, " {} = {}", c, if *val { 1 } else { 0 })?;
         }
         write!(f, " ]\n")?;
 
@@ -257,7 +212,6 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
             constraints: self.constraints,
             eval_fn: self.eval_fn,
             variables: self.variables,
-            constants: self.constants,
         }
     }
 
@@ -282,16 +236,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
                 Some(num) => {
                     vars_repr.insert(*num);
                 }
-                None => match self.constants.get(v) {
-                    Some(val) => {
-                        if !*val {
-                            return Err(Error::ConstantWrongValue(v.into()));
-                        }
-                    }
-                    None => {
-                        return Err(Error::InvalidVariable(v.into()));
-                    }
-                },
+                None => return Err(Error::InvalidVariable(v.into())),
             }
         }
 
@@ -308,10 +253,6 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
 
     pub fn get_variables(&self) -> &BTreeSet<V> {
         &self.variables
-    }
-
-    pub fn get_constants(&self) -> impl Iterator<Item = &V> {
-        self.constants.keys()
     }
 }
 
@@ -358,10 +299,6 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         T: Ord + ?Sized,
         &'b T: Into<V>,
     {
-        if let Some(val) = self.problem.constants.get(var) {
-            return Ok(*val);
-        }
-
         let i = match self.problem.variables_lookup.get(var) {
             Some(i) => i,
             None => return Err(Error::InvalidVariable(var.into())),
@@ -377,11 +314,6 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
                 output.insert(var.clone());
             }
         }
-        for (constant, value) in &self.problem.constants {
-            if *value {
-                output.insert(constant.clone());
-            }
-        }
         output
     }
 
@@ -391,10 +323,6 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         T: Ord + ?Sized,
         &'b T: Into<V>,
     {
-        if let Some(_val) = self.problem.constants.get(var) {
-            return Err(Error::ConstantNotVariable(var.into()));
-        }
-
         let i = match self.problem.variables_lookup.get(var) {
             Some(i) => i,
             None => return Err(Error::InvalidVariable(var.into())),
@@ -534,23 +462,15 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
 
 impl<'a, V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Config<'a, V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut variables: BTreeMap<_, _> = self
+        let variables_iter = self
             .problem
-            .constants
+            .variables_vec
             .iter()
-            .map(|(k, v)| (k.clone(), if *v { 1 } else { 0 }))
-            .collect();
-        variables.extend(
-            self.problem
-                .variables_vec
-                .iter()
-                .enumerate()
-                .map(|(i, var)| (var.clone(), unsafe { self.cfg_repr.get_unchecked(i) })),
-        );
+            .enumerate()
+            .map(|(i, var)| (var.clone(), unsafe { self.cfg_repr.get_unchecked(i) }));
 
         write!(f, "[ ")?;
-        let slice: Vec<_> = variables
-            .iter()
+        let slice: Vec<_> = variables_iter
             .map(|(var, val)| format!("{}: {}", var, val))
             .collect();
         write!(f, "{}", slice.join(", "))?;
