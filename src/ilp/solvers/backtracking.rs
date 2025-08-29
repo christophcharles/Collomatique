@@ -144,7 +144,6 @@ impl<V: VariableName, H: heuristics::Heuristic, P: ProblemRepr<V>> FeasabilitySo
                     max_steps = Some(ms - 1);
                 }
             }
-            //println!("{:?}", max_steps);
             match self.compute_next_step(&temp_config, &available_variables) {
                 NextStep::Solved => return Some(unsafe { temp_config.into_feasable_unchecked() }),
                 NextStep::StepInto(vars) => {
