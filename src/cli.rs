@@ -99,7 +99,7 @@ impl reedline::Completer for ReedCompleter {
     }
 }
 
-async fn interactive_shell(
+fn interactive_shell(
     app_state: &mut AppState<json::JsonStore>,
     mut current_path: std::path::PathBuf,
     mut initial_state_store: json::JsonStore,
@@ -138,9 +138,7 @@ async fn interactive_shell(
             app_state,
             &mut current_path,
             &mut initial_state_store,
-        )
-        .await
-        {
+        ) {
             Ok(quit) => {
                 if quit {
                     break;
@@ -156,7 +154,7 @@ async fn interactive_shell(
     Ok(())
 }
 
-async fn respond(
+fn respond(
     rl: &mut reedline::Reedline,
     app_state: &mut AppState<json::JsonStore>,
     current_path: &mut std::path::PathBuf,
@@ -237,11 +235,7 @@ async fn respond(
 
 use super::CliCommandOrShell;
 
-async fn async_cli(
-    create: bool,
-    path: std::path::PathBuf,
-    command: CliCommandOrShell,
-) -> Result<()> {
+pub fn run_cli(create: bool, path: std::path::PathBuf, command: CliCommandOrShell) -> Result<()> {
     let initial_state_store = open_collomatique_file(create, path.as_path())?;
     let logic = Logic::new(initial_state_store.clone());
 
@@ -250,7 +244,7 @@ async fn async_cli(
     match command {
         CliCommandOrShell::Shell => {
             let mut app_state = AppState::new(logic);
-            interactive_shell(&mut app_state, path, initial_state_store).await?;
+            interactive_shell(&mut app_state, path, initial_state_store)?;
         }
         CliCommandOrShell::Global(command) => {
             let mut app_state = AppState::new(logic);
@@ -264,12 +258,4 @@ async fn async_cli(
     }
 
     Ok(())
-}
-
-pub fn run_cli(create: bool, path: std::path::PathBuf, command: CliCommandOrShell) -> Result<()> {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async_cli(create, path, command))
 }
