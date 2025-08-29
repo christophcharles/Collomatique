@@ -2,6 +2,10 @@
 //!
 //! This module contains the code for decoding StudentList entries
 
+use std::collections::BTreeMap;
+
+use collomatique_state_colloscopes::assignments::PeriodAssignmentsExternalData;
+
 use super::*;
 
 pub fn decode_entry(
@@ -22,12 +26,24 @@ pub fn decode_entry(
     if !pre_data.periods.ordered_period_list.is_empty() {
         return Err(DecodeError::PeriodsAlreadyDecoded);
     }
+    if !pre_data.subjects.ordered_subject_list.is_empty() {
+        return Err(DecodeError::SubjectsDecodedBeforePeriods);
+    }
+    if !pre_data.assignments.period_map.is_empty() {
+        return Err(DecodeError::AssignmentsDecodedBeforePeriods);
+    }
     let mut ids = BTreeSet::new();
     for (id, desc) in period_list.ordered_period_list {
         if !ids.insert(id) {
             return Err(DecodeError::DuplicatedID);
         }
         pre_data.periods.ordered_period_list.push((id, desc));
+        pre_data.assignments.period_map.insert(
+            id,
+            PeriodAssignmentsExternalData {
+                subject_exclusion_map: BTreeMap::new(),
+            },
+        );
     }
 
     Ok(())
