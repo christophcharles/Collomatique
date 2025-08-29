@@ -120,15 +120,17 @@ enum WeekPatternCommand {
         #[arg(short, long, default_value_t = false)]
         force: bool,
     },
+    /// Show all week patterns
+    PrintAll,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
 enum WeekPatternPrefill {
-    /// Fill the week pattern with every week for 0 to week_count-1
+    /// Fill the week pattern with every week for 1 to week_count
     All,
-    /// Fill the week pattern with every even week for 0 to week_count-1
+    /// Fill the week pattern with every even week for 2 to week_count
     Even,
-    /// Fill the week pattern with every odd week for 1 to week_count-1
+    /// Fill the week pattern with every odd week for 1 to week_count
     Odd,
 }
 
@@ -510,7 +512,7 @@ async fn general_command(
 async fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<sqlite::Store>,
-    _new_line_needed: bool,
+    new_line_needed: bool,
 ) -> Result<()> {
     use collomatique::backend::{Week, WeekPattern};
     use collomatique::frontend::state::{Operation, UpdateError};
@@ -563,6 +565,28 @@ async fn week_pattern_command(
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
+            }
+        }
+        WeekPatternCommand::PrintAll => {
+            let week_patterns = app_state
+                .get_backend_logic()
+                .week_patterns_get_all()
+                .await?;
+
+            let count = week_patterns.len();
+            let width = count.to_string().len();
+            for (i, (_, week_pattern)) in week_patterns.iter().enumerate() {
+                let weeks = week_pattern
+                    .weeks
+                    .iter()
+                    .map(|w| (w.get() + 1).to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+
+                print!("{:>width$} - {}: {}", i + 1, week_pattern.name, weeks);
+                if i != count - 1 || new_line_needed {
+                    println!("");
+                }
             }
         }
     }
