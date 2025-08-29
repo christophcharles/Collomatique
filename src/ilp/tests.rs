@@ -23,7 +23,8 @@ fn test_is_feasable() {
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
-        .build();
+        .build()
+        .unwrap();
 
     let config_0 = Config::from_iter::<[&str; 0]>([]);
     let config_1 = Config::from_iter(["a"]);
@@ -62,7 +63,7 @@ fn test_is_feasable() {
 
 #[test]
 fn test_is_feasable_no_constraint() {
-    let pb = crate::ilp::ProblemBuilder::new().build();
+    let pb = crate::ilp::ProblemBuilder::new().build().unwrap();
 
     let config_0 = Config::from_iter::<[&str; 0]>([]);
     let config_1 = Config::from_iter(["a"]);
@@ -77,7 +78,7 @@ fn test_is_feasable_no_constraint() {
 
 #[test]
 fn problem_extra_variable() {
-    let pb = ProblemBuilder::new().add_variable("X").build();
+    let pb = ProblemBuilder::new().add_variable("X").build().unwrap();
 
     assert_eq!(pb.variables, BTreeSet::from([String::from("X")]));
 }
@@ -87,7 +88,8 @@ fn problem_extra_variables() {
         .add_variable("X")
         .add_variable("Y")
         .add_variables([String::from("Z"), String::from("W")])
-        .build();
+        .build()
+        .unwrap();
 
     assert_eq!(
         pb.variables,

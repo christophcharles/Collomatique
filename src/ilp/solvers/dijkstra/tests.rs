@@ -59,7 +59,8 @@ fn test_dijkstra() {
         .add((&x21 + &x22).eq(&one))
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
-        .build();
+        .build()
+        .unwrap();
     let config = Config::from_iter(["x11", "y12", "y21"]);
 
     let dijkstra_solver = super::Solver::new(&pb);
