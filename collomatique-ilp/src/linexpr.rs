@@ -1,4 +1,4 @@
-//! This module defines [Expr] and [Constraint].
+//! This module defines [LinExpr] and [Constraint].
 //! These structs are used to represent linear expressions and constraints for
 //! integer linear optimization problems within collomatique.
 
@@ -6,62 +6,32 @@
 mod tests;
 
 use std::collections::{BTreeMap, BTreeSet};
+use super::UsableData;
 
-/// To allow for easier representation, variable names are somewhat arbitrary.
-/// They must just satisfy the following trait.
-pub trait VariableName:
-    std::fmt::Debug
-    + std::fmt::Display
-    + PartialOrd
-    + Ord
-    + PartialEq
-    + Eq
-    + Clone
-    + for<'a> From<&'a Self>
-    + Send
-    + Sync
-{
-}
-
-impl<
-        T: std::fmt::Debug
-            + std::fmt::Display
-            + PartialOrd
-            + Ord
-            + PartialEq
-            + Eq
-            + Clone
-            + for<'a> From<&'a T>
-            + Send
-            + Sync,
-    > VariableName for T
-{
-}
-
-/// [Expr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
+/// [LinExpr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
 ///
 /// The coefficients are f64 and natural operations are overloaded to naturally represent
 /// operations on linear expressions.
 ///
 /// There are mainly two ways to build an Expr.
-/// You can use [Expr::var]. This builds an expression containing only one variable with coefficient one.
+/// You can use [LinExpr::var]. This builds an expression containing only one variable with coefficient one.
 /// ```
-/// # use collomatique_ilp::linexpr::Expr;
+/// # use collomatique_ilp::linexpr::LinExpr;
 /// # use std::collections::BTreeSet;
 /// // expr represents the linear expression : "1*A"
-/// let expr = Expr::<String>::var("A");
+/// let expr = LinExpr::<String>::var("A");
 ///
 /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")])); // There is only "A"
 /// assert_eq!(expr.get("A"), Some(1.0)); // The coefficient for "A" is 1
 /// assert_eq!(expr.get_constant(), 0.0); // The constant is 0.0 (there is no constant)
 /// ```
 ///
-/// You can use [Expr::constant]. This builds a constant expression containing no variables.
+/// You can use [LinExpr::constant]. This builds a constant expression containing no variables.
 /// ```
-/// # use collomatique_ilp::linexpr::Expr;
+/// # use collomatique_ilp::linexpr::LinExpr;
 /// # use std::collections::BTreeSet;
 /// // expr represents the constant linear expression equals to 42
-/// let expr = Expr::<String>::constant(42.0);
+/// let expr = LinExpr::<String>::constant(42.0);
 ///
 /// assert_eq!(expr.variables(), BTreeSet::new()); // There are no variables
 /// assert_eq!(expr.get_constant(), 42.0); // The constant is 42.0
@@ -69,11 +39,11 @@ impl<
 ///
 /// More complex expressions are then built using overloaded operations
 /// ```
-/// # use collomatique_ilp::linexpr::Expr;
+/// # use collomatique_ilp::linexpr::LinExpr;
 /// # use std::collections::BTreeSet;
-/// let expr1 = Expr::<String>::var("A");
-/// let expr2 = Expr::<String>::var("B");
-/// let expr3 = Expr::<String>::constant(42.0);
+/// let expr1 = LinExpr::<String>::var("A");
+/// let expr2 = LinExpr::<String>::var("B");
+/// let expr3 = LinExpr::<String>::constant(42.0);
 ///
 /// // expr represents the linear expr 2*A - 3*B - 42
 /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
@@ -86,7 +56,7 @@ impl<
 /// assert_eq!(expr.get_constant(), -42.0); // The constant is -42.0
 /// ```
 #[derive(Debug, Clone, Default, PartialOrd, Ord, PartialEq, Eq)]
-pub struct Expr<V: VariableName> {
+pub struct LinExpr<V: UsableData> {
     coefs: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
     constant: ordered_float::OrderedFloat<f64>,
 }
@@ -118,29 +88,29 @@ pub enum EqSymbol {
 /// The precise position of every term is not recorded in [Constraint].
 /// Internally, everything is sent to the left hand side and always compared to zero.
 ///
-/// [Constraint] is usually built using [Expr::leq], [Expr::eq] or [Expr::geq].
+/// [Constraint] is usually built using [LinExpr::leq], [LinExpr::eq] or [LinExpr::geq].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct Constraint<V: VariableName> {
+pub struct Constraint<V: UsableData> {
     symbol: EqSymbol,
-    expr: Expr<V>,
+    expr: LinExpr<V>,
 }
 
-impl<V: VariableName> Expr<V> {
+impl<V: UsableData> LinExpr<V> {
     /// Expr::var builds a simple linear expression with a single
     /// variable with coefficient 1 and no constant term.
     ///
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// // expr represents the linear expression : "1*A"
-    /// let expr = Expr::<String>::var("A");
+    /// let expr = LinExpr::<String>::var("A");
     ///
     /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")])); // There is only "A"
     /// assert_eq!(expr.get("A"), Some(1.0)); // The coefficient for "A" is 1
     /// assert_eq!(expr.get_constant(), 0.0); // The constant is 0.0 (there is no constant)
     /// ```
     pub fn var<T: Into<V>>(name: T) -> Self {
-        Expr {
+        LinExpr {
             coefs: BTreeMap::from([(name.into(), ordered_float::OrderedFloat(1.0))]),
             constant: ordered_float::OrderedFloat(0.0),
         }
@@ -149,30 +119,30 @@ impl<V: VariableName> Expr<V> {
     /// Expr::var builds a simple linear expression with no variables and only the constant term.
     ///
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
     /// // expr represents the constant linear expression equals to 42
-    /// let expr = Expr::<String>::constant(42.0);
+    /// let expr = LinExpr::<String>::constant(42.0);
     ///
     /// assert_eq!(expr.variables(), BTreeSet::new()); // There are no variables
     /// assert_eq!(expr.get_constant(), 42.0); // The constant is 42.0
     /// ```
     pub fn constant(number: f64) -> Self {
-        Expr {
+        LinExpr {
             coefs: BTreeMap::new(),
             constant: ordered_float::OrderedFloat(number),
         }
     }
 }
 
-impl<V: VariableName> Expr<V> {
+impl<V: UsableData> LinExpr<V> {
     /// Returns the constant term in the expression.
     ///
     /// For instance for the expression 2*a+3*b - 4*c + 42, this would return 42.
     ///
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = Expr::<String>::constant(4.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = LinExpr::<String>::constant(4.0);
     /// let constant = expr.get_constant(); // should be 4
     ///
     /// assert_eq!(constant, 4.0);
@@ -180,8 +150,8 @@ impl<V: VariableName> Expr<V> {
     ///
     /// There is always a constant term. If empty, it is actually zero.
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = Expr::<String>::var("a");
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = LinExpr::<String>::var("a");
     /// // no constant really is constant = 0
     /// let constant = expr.get_constant();
     ///
@@ -196,8 +166,8 @@ impl<V: VariableName> Expr<V> {
     /// For instance for the expression 2*a+3*b - 4*c + 42, and for the variable c, this would return -4.
     /// Because the variable might not appear at all in the expression, this returns an option.
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = 2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b") - 4 * Expr::<String>::var("c") + Expr::<String>::constant(42.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = 2 * LinExpr::<String>::var("a") + 3 * LinExpr::<String>::var("b") - 4 * LinExpr::<String>::var("c") + LinExpr::<String>::constant(42.0);
     /// let coef = expr.get("c"); // should be Some(-4.)
     ///
     /// assert_eq!(coef, Some(-4.0));
@@ -205,8 +175,8 @@ impl<V: VariableName> Expr<V> {
     ///
     /// If a variable does not appear in an expression, it returns None.
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = Expr::<String>::var("a");
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = LinExpr::<String>::var("a");
     /// let coef_b = expr.get("b");
     ///
     /// assert_eq!(coef_b, None);
@@ -214,8 +184,8 @@ impl<V: VariableName> Expr<V> {
     /// 
     /// But if a coefficient is 0, it is indeed returned.
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = Expr::<String>::var("a") + 0*Expr::<String>::var("b");
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = LinExpr::<String>::var("a") + 0*LinExpr::<String>::var("b");
     /// let coef_b = expr.get("b");
     ///
     /// assert_eq!(coef_b, Some(0.));
@@ -227,11 +197,11 @@ impl<V: VariableName> Expr<V> {
     /// Returns the set of variables that appears in the expression
     ///
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
     ///
@@ -241,9 +211,9 @@ impl<V: VariableName> Expr<V> {
     ///
     /// This set can be empty :
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr = Expr::<String>::constant(42.0);
+    /// let expr = LinExpr::<String>::constant(42.0);
     ///
     /// assert!(expr.variables().is_empty()); // There are no variables
     /// ```
@@ -252,16 +222,16 @@ impl<V: VariableName> Expr<V> {
     /// (the variable does not appear at all in the expression)
     /// and having 0 as a coefficient :
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::constant(42.0);
     /// assert!(expr1.variables().is_empty()); // There are no variables
     ///
-    /// let expr2 = 0 * Expr::<String>::var("A");
+    /// let expr2 = 0 * LinExpr::<String>::var("A");
     /// // There is actually one variable eventhough its coefficient is 0
     /// assert_eq!(expr2.variables(), BTreeSet::from([String::from("A")]));
     /// ```
-    /// You can use [Expr::clean] to remove the 0 coefficients.
+    /// You can use [LinExpr::clean] to remove the 0 coefficients.
     pub fn variables(&self) -> BTreeSet<V> {
         self.coefs.keys().cloned().collect()
     }
@@ -275,11 +245,11 @@ impl<V: VariableName> Expr<V> {
     /// in the expression.
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let mut expr = 2.0*expr1 - 0*expr2 - expr3;
     /// 
@@ -295,11 +265,11 @@ impl<V: VariableName> Expr<V> {
     /// 
     /// Other variables and coefficients are unchanged:
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let mut expr = 2.0*expr1 - 0*expr2 - expr3;
     /// 
@@ -317,16 +287,16 @@ impl<V: VariableName> Expr<V> {
             .retain(|_k, v| *v != ordered_float::OrderedFloat(0.0));
     }
 
-    /// This works like [Expr::clean] but instead of changing
+    /// This works like [LinExpr::clean] but instead of changing
     /// the expression (which requires mutability)
     /// it returns a new cleaned version.
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*expr1 - 0*expr2 - expr3;
     /// 
@@ -345,22 +315,22 @@ impl<V: VariableName> Expr<V> {
     /// assert_eq!(new_expr.get("A"), Some(2.0));
     /// assert_eq!(new_expr.get("B"), None);
     /// ```
-    pub fn cleaned(&self) -> Expr<V> {
+    pub fn cleaned(&self) -> LinExpr<V> {
         let mut output = self.clone();
         output.clean();
         output
     }
 }
 
-impl<V: VariableName> Expr<V> {
+impl<V: UsableData> LinExpr<V> {
     /// Builds a new constraint of the form: "self <= rhs"
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let constraint = (2.0*expr1 - expr2).leq(&expr3);
     /// 
@@ -368,7 +338,7 @@ impl<V: VariableName> Expr<V> {
     /// println!("{}", constraint);
     /// # assert_eq!(format!("{}", constraint), "2*A + (-1)*B + (-42) <= 0");
     /// ```
-    pub fn leq(&self, rhs: &Expr<V>) -> Constraint<V> {
+    pub fn leq(&self, rhs: &LinExpr<V>) -> Constraint<V> {
         Constraint {
             expr: self - rhs,
             symbol: EqSymbol::LessThan,
@@ -383,18 +353,18 @@ impl<V: VariableName> Expr<V> {
     /// But it is sometimes convenient and more readable to use this function.
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let constraint1 = (2.0*&expr1 - &expr2).geq(&expr3);
     /// let constraint2 = expr3.leq(&(2.0*&expr1 - &expr2));
     /// 
     /// assert_eq!(constraint1, constraint2);
     /// ```
-    pub fn geq(&self, rhs: &Expr<V>) -> Constraint<V> {
+    pub fn geq(&self, rhs: &LinExpr<V>) -> Constraint<V> {
         Constraint {
             expr: rhs - self,
             symbol: EqSymbol::LessThan,
@@ -404,11 +374,11 @@ impl<V: VariableName> Expr<V> {
     /// Builds a new constraint of the form: "self = rhs"
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let constraint = (2.0*expr1 - expr2).eq(&expr3);
     /// 
@@ -416,7 +386,7 @@ impl<V: VariableName> Expr<V> {
     /// println!("{}", constraint);
     /// # assert_eq!(format!("{}", constraint), "2*A + (-1)*B + (-42) = 0");
     /// ```
-    pub fn eq(&self, rhs: &Expr<V>) -> Constraint<V> {
+    pub fn eq(&self, rhs: &LinExpr<V>) -> Constraint<V> {
         Constraint {
             expr: self - rhs,
             symbol: EqSymbol::Equals,
@@ -424,19 +394,19 @@ impl<V: VariableName> Expr<V> {
     }
 }
 
-impl<V: VariableName> Constraint<V> {
+impl<V: UsableData> Constraint<V> {
     /// Returns the variables that appear in the constraint.
     /// 
-    /// As for [Expr::variables], if a variable has a zero coefficient
+    /// As for [LinExpr::variables], if a variable has a zero coefficient
     /// it is still listed in the list of variables that appear.
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
-    /// let expr4 = Expr::<String>::var("C");
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
+    /// let expr4 = LinExpr::<String>::var("C");
     ///
     /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
     /// let constraint = expr.leq(&expr4);
@@ -447,10 +417,10 @@ impl<V: VariableName> Constraint<V> {
     ///
     /// This set can be empty :
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::constant(42.0);
-    /// let expr2 = Expr::<String>::constant(-1.0);
+    /// let expr1 = LinExpr::<String>::constant(42.0);
+    /// let expr2 = LinExpr::<String>::constant(-1.0);
     ///
     /// let constraint = expr1.eq(&expr2);
     /// 
@@ -461,14 +431,14 @@ impl<V: VariableName> Constraint<V> {
     /// (the variable does not appear at all in the expression)
     /// and having 0 as a coefficient :
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::constant(42.0);
-    /// let expr2 = Expr::<String>::constant(-1.0);
+    /// let expr1 = LinExpr::<String>::constant(42.0);
+    /// let expr2 = LinExpr::<String>::constant(-1.0);
     /// let constraint1 = expr1.leq(&expr2);
     /// assert!(constraint1.variables().is_empty()); // There are no variables
     ///
-    /// let expr3 = 0 * Expr::<String>::var("A");
+    /// let expr3 = 0 * LinExpr::<String>::var("A");
     /// let constraint2 = (&expr1 + &expr3).leq(&expr2);
     /// // There is actually one variable eventhough its coefficient is 0
     /// assert_eq!(constraint2.variables(), BTreeSet::from([String::from("A")]));
@@ -480,11 +450,11 @@ impl<V: VariableName> Constraint<V> {
 
     /// Returns the coefficient for a variable in the constraint.
     /// 
-    /// This works similarly to [Expr::get].
+    /// This works similarly to [LinExpr::get].
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let constraint = expr.leq(&Expr::<String>::constant(1.0));
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let constraint = expr.leq(&LinExpr::<String>::constant(1.0));
     /// 
     /// assert_eq!(constraint.get_var("A"), Some(2.0));
     /// ```
@@ -492,9 +462,9 @@ impl<V: VariableName> Constraint<V> {
     /// If a variable does not appear
     /// at all, it returns None:
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let constraint = expr.leq(&Expr::<String>::constant(1.0));
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let constraint = expr.leq(&LinExpr::<String>::constant(1.0));
     /// 
     /// assert_eq!(constraint.get_var("C"), None);
     /// ```
@@ -502,9 +472,9 @@ impl<V: VariableName> Constraint<V> {
     /// However, if a variable appears but it is coefficient is zero,
     /// it does return a value :
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr = 2*Expr::<String>::var("A") + 0 * Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let constraint = expr.leq(&Expr::<String>::constant(1.0));
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr = 2*LinExpr::<String>::var("A") + 0 * LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let constraint = expr.leq(&LinExpr::<String>::constant(1.0));
     /// 
     /// assert_eq!(constraint.get_var("B"), Some(0.));
     /// ```
@@ -512,20 +482,20 @@ impl<V: VariableName> Constraint<V> {
     /// Internally, a constraint only has a left hand side. So, the signs are changed when
     /// the coefficient was originally on the right hand side.
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
     /// 
     /// assert_eq!(constraint.get_var("C"), Some(-3.0));
     /// ```
     /// 
-    /// And the constraints are always "<=" or "=". So if a constraints was built with [Expr::geq],
+    /// And the constraints are always "<=" or "=". So if a constraints was built with [LinExpr::geq],
     /// signs are also reversed:
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.geq(&expr2);
     /// 
     /// assert_eq!(constraint.get_var("B"), Some(1.0));
@@ -534,9 +504,9 @@ impl<V: VariableName> Constraint<V> {
     /// And there can be only one coefficient per variable. So multiple coefficients from left and right hand side
     /// are merged into one lhs coefficient after computation:
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
     /// 
     /// assert_eq!(constraint.get_var("A"), Some(1.0));
@@ -550,9 +520,9 @@ impl<V: VariableName> Constraint<V> {
     /// It can only be "<=" or "=". ">=" is tranformed internally into a "<=" symbol.
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::{Expr, EqSymbol};
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C");
+    /// # use collomatique_ilp::linexpr::{LinExpr, EqSymbol};
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C");
     /// 
     /// let constraint1 = expr1.leq(&expr2);
     /// let constraint2 = expr1.geq(&expr2);
@@ -568,11 +538,11 @@ impl<V: VariableName> Constraint<V> {
 
     /// Returns the constant on the left hand side.
     /// 
-    /// This works like [Expr::get_constant].
+    /// This works like [LinExpr::get_constant].
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C");
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C");
     /// let constraint = expr1.leq(&expr2);
     /// 
     /// assert_eq!(constraint.get_constant(), 42.0);
@@ -581,9 +551,9 @@ impl<V: VariableName> Constraint<V> {
     /// Remember, there is always only one constant that was obtained by merging all the
     /// constants to the lhs:
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
     /// 
     /// assert_eq!(constraint.get_constant(), 44.0);
@@ -591,9 +561,9 @@ impl<V: VariableName> Constraint<V> {
     /// 
     /// And even if it does even out and the constant is zero, there is still a constant:
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(42.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(42.0);
     /// let constraint = expr1.leq(&expr2);
     /// 
     /// assert_eq!(constraint.get_constant(), 0.0);
@@ -606,30 +576,30 @@ impl<V: VariableName> Constraint<V> {
     /// to represent the left hand side (the rhs is always 0 internally).
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
-    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
-    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// let expr1 = 2*LinExpr::<String>::var("A") - LinExpr::<String>::var("B") + LinExpr::<String>::constant(42.0);
+    /// let expr2 = 1*LinExpr::<String>::var("A") + 3*LinExpr::<String>::var("C") + LinExpr::<String>::constant(-2.0);
     /// let constraint = expr1.leq(&expr2);
     /// 
     /// assert_eq!(*constraint.get_lhs(), &expr1 - &expr2);
     /// ```
-    pub fn get_lhs(&self) -> &Expr<V> {
+    pub fn get_lhs(&self) -> &LinExpr<V> {
         &self.expr
     }
 
     /// Removes variables that have a 0 coefficient.
     /// 
-    /// It works similarly to [Expr::clean].
+    /// It works similarly to [LinExpr::clean].
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*expr1 - 0*expr2 - expr3;
-    /// let mut constraint = expr.leq(&Expr::constant(2.0));
+    /// let mut constraint = expr.leq(&LinExpr::constant(2.0));
     /// 
     /// // So far, the variables "A" and "B" both appear
     /// // eventhough "B" has a 0 in front of it
@@ -647,17 +617,17 @@ impl<V: VariableName> Constraint<V> {
     /// Removes variables that have a 0 coefficient (like [Constraint::clean]
     /// but does it without mutability and returns a new constraint.
     /// 
-    /// It works similarly to [Expr::cleaned].
+    /// It works similarly to [LinExpr::cleaned].
     /// 
     /// ```
-    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeSet;
-    /// let expr1 = Expr::<String>::var("A");
-    /// let expr2 = Expr::<String>::var("B");
-    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr1 = LinExpr::<String>::var("A");
+    /// let expr2 = LinExpr::<String>::var("B");
+    /// let expr3 = LinExpr::<String>::constant(42.0);
     ///
     /// let expr = 2.0*expr1 - 0*expr2 - expr3;
-    /// let constraint = expr.leq(&Expr::constant(2.0));
+    /// let constraint = expr.leq(&LinExpr::constant(2.0));
     /// 
     /// // So far, the variables "A" and "B" both appear
     /// // eventhough "B" has a 0 in front of it
@@ -676,7 +646,7 @@ impl<V: VariableName> Constraint<V> {
     }
 }
 
-impl<V: VariableName> std::fmt::Display for Expr<V> {
+impl<V: UsableData> std::fmt::Display for LinExpr<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.coefs.is_empty() && self.constant.into_inner() == 0.0 {
             write!(f, "0.0")?;
@@ -720,17 +690,17 @@ impl std::fmt::Display for EqSymbol {
     }
 }
 
-impl<V: VariableName> std::fmt::Display for Constraint<V> {
+impl<V: UsableData> std::fmt::Display for Constraint<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {} 0", self.expr, self.symbol)
     }
 }
 
-impl<V: VariableName> std::ops::Add for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: &Expr<V>) -> Self::Output {
-        let mut output = Expr {
+    fn add(self, rhs: &LinExpr<V>) -> Self::Output {
+        let mut output = LinExpr {
             coefs: self.coefs.clone(),
             constant: self.constant,
         };
@@ -749,162 +719,162 @@ impl<V: VariableName> std::ops::Add for &Expr<V> {
     }
 }
 
-impl<V: VariableName> std::ops::Add for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add for LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: Expr<V>) -> Self::Output {
+    fn add(self, rhs: LinExpr<V>) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<Expr<V>> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<LinExpr<V>> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: Expr<V>) -> Self::Output {
+    fn add(self, rhs: LinExpr<V>) -> Self::Output {
         self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&Expr<V>> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&LinExpr<V>> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: &Expr<V>) -> Self::Output {
+    fn add(self, rhs: &LinExpr<V>) -> Self::Output {
         &self + rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&f64> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&f64> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: &f64) -> Self::Output {
-        self + Expr::constant(*rhs)
+        self + LinExpr::constant(*rhs)
     }
 }
 
-impl<V: VariableName> std::ops::Add<f64> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<f64> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: f64) -> Self::Output {
         self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&f64> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&f64> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: &f64) -> Self::Output {
         &self + rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<f64> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<f64> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: f64) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&i32> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&i32> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: &i32) -> Self::Output {
         self + f64::from(*rhs)
     }
 }
 
-impl<V: VariableName> std::ops::Add<i32> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<i32> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: i32) -> Self::Output {
         self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&i32> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&i32> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: &i32) -> Self::Output {
         &self + rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<i32> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<i32> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn add(self, rhs: i32) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&Expr<V>> for &f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&LinExpr<V>> for &f64 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: &Expr<V>) -> Self::Output {
+    fn add(self, rhs: &LinExpr<V>) -> Self::Output {
         rhs + self
     }
 }
 
-impl<V: VariableName> std::ops::Add<Expr<V>> for &f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<LinExpr<V>> for &f64 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: Expr<V>) -> Self::Output {
+    fn add(self, rhs: LinExpr<V>) -> Self::Output {
         self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&Expr<V>> for f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&LinExpr<V>> for f64 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: &Expr<V>) -> Self::Output {
+    fn add(self, rhs: &LinExpr<V>) -> Self::Output {
         &self + rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<Expr<V>> for f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<LinExpr<V>> for f64 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: Expr<V>) -> Self::Output {
+    fn add(self, rhs: LinExpr<V>) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&Expr<V>> for &i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&LinExpr<V>> for &i32 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: &Expr<V>) -> Self::Output {
+    fn add(self, rhs: &LinExpr<V>) -> Self::Output {
         rhs + self
     }
 }
 
-impl<V: VariableName> std::ops::Add<Expr<V>> for &i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<LinExpr<V>> for &i32 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: Expr<V>) -> Self::Output {
+    fn add(self, rhs: LinExpr<V>) -> Self::Output {
         self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<&Expr<V>> for i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<&LinExpr<V>> for i32 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: &Expr<V>) -> Self::Output {
+    fn add(self, rhs: &LinExpr<V>) -> Self::Output {
         &self + rhs
     }
 }
 
-impl<V: VariableName> std::ops::Add<Expr<V>> for i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Add<LinExpr<V>> for i32 {
+    type Output = LinExpr<V>;
 
-    fn add(self, rhs: Expr<V>) -> Self::Output {
+    fn add(self, rhs: LinExpr<V>) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<&Expr<V>> for &f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for &f64 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: &Expr<V>) -> Self::Output {
+    fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
         let mut output = rhs.clone();
 
         for (_key, value) in output.coefs.iter_mut() {
@@ -917,234 +887,234 @@ impl<V: VariableName> std::ops::Mul<&Expr<V>> for &f64 {
     }
 }
 
-impl<V: VariableName> std::ops::Mul<&Expr<V>> for f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for f64 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: &Expr<V>) -> Self::Output {
+    fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
         (&self) * rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<Expr<V>> for &f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<LinExpr<V>> for &f64 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: Expr<V>) -> Self::Output {
+    fn mul(self, rhs: LinExpr<V>) -> Self::Output {
         self * &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<Expr<V>> for f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<LinExpr<V>> for f64 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: Expr<V>) -> Self::Output {
+    fn mul(self, rhs: LinExpr<V>) -> Self::Output {
         &self * &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<&Expr<V>> for &i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for &i32 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: &Expr<V>) -> Self::Output {
+    fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
         f64::from(*self) * rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<&Expr<V>> for i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<&LinExpr<V>> for i32 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: &Expr<V>) -> Self::Output {
+    fn mul(self, rhs: &LinExpr<V>) -> Self::Output {
         (&self) * rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<Expr<V>> for &i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<LinExpr<V>> for &i32 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: Expr<V>) -> Self::Output {
+    fn mul(self, rhs: LinExpr<V>) -> Self::Output {
         self * &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Mul<Expr<V>> for i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Mul<LinExpr<V>> for i32 {
+    type Output = LinExpr<V>;
 
-    fn mul(self, rhs: Expr<V>) -> Self::Output {
+    fn mul(self, rhs: LinExpr<V>) -> Self::Output {
         &self * &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Neg for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Neg for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn neg(self) -> Self::Output {
         (-1.0) * self
     }
 }
 
-impl<V: VariableName> std::ops::Neg for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Neg for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn neg(self) -> Self::Output {
         -&self
     }
 }
 
-impl<V: VariableName> std::ops::Sub for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: &Expr<V>) -> Self::Output {
+    fn sub(self, rhs: &LinExpr<V>) -> Self::Output {
         self + (-1.0) * rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub for LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: Expr<V>) -> Self::Output {
+    fn sub(self, rhs: LinExpr<V>) -> Self::Output {
         &self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<Expr<V>> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<LinExpr<V>> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: Expr<V>) -> Self::Output {
+    fn sub(self, rhs: LinExpr<V>) -> Self::Output {
         self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&Expr<V>> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&LinExpr<V>> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: &Expr<V>) -> Self::Output {
+    fn sub(self, rhs: &LinExpr<V>) -> Self::Output {
         &self - rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&f64> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&f64> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: &f64) -> Self::Output {
         self + (-*rhs)
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&f64> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&f64> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: &f64) -> Self::Output {
         &self - rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<f64> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<f64> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: f64) -> Self::Output {
         self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<f64> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<f64> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: f64) -> Self::Output {
         &self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&i32> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&i32> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: &i32) -> Self::Output {
         self - f64::from(*rhs)
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&i32> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&i32> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: &i32) -> Self::Output {
         &self - rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<i32> for &Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<i32> for &LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: i32) -> Self::Output {
         self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<i32> for Expr<V> {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<i32> for LinExpr<V> {
+    type Output = LinExpr<V>;
 
     fn sub(self, rhs: i32) -> Self::Output {
         &self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&Expr<V>> for &f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&LinExpr<V>> for &f64 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: &Expr<V>) -> Self::Output {
+    fn sub(self, rhs: &LinExpr<V>) -> Self::Output {
         -rhs + self
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&Expr<V>> for f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&LinExpr<V>> for f64 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: &Expr<V>) -> Self::Output {
+    fn sub(self, rhs: &LinExpr<V>) -> Self::Output {
         &self - rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<Expr<V>> for &f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<LinExpr<V>> for &f64 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: Expr<V>) -> Self::Output {
+    fn sub(self, rhs: LinExpr<V>) -> Self::Output {
         self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<Expr<V>> for f64 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<LinExpr<V>> for f64 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: Expr<V>) -> Self::Output {
+    fn sub(self, rhs: LinExpr<V>) -> Self::Output {
         &self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&Expr<V>> for &i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&LinExpr<V>> for &i32 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: &Expr<V>) -> Self::Output {
+    fn sub(self, rhs: &LinExpr<V>) -> Self::Output {
         -rhs + self
     }
 }
 
-impl<V: VariableName> std::ops::Sub<&Expr<V>> for i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<&LinExpr<V>> for i32 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: &Expr<V>) -> Self::Output {
+    fn sub(self, rhs: &LinExpr<V>) -> Self::Output {
         &self - rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<Expr<V>> for &i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<LinExpr<V>> for &i32 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: Expr<V>) -> Self::Output {
+    fn sub(self, rhs: LinExpr<V>) -> Self::Output {
         self - &rhs
     }
 }
 
-impl<V: VariableName> std::ops::Sub<Expr<V>> for i32 {
-    type Output = Expr<V>;
+impl<V: UsableData> std::ops::Sub<LinExpr<V>> for i32 {
+    type Output = LinExpr<V>;
 
-    fn sub(self, rhs: Expr<V>) -> Self::Output {
+    fn sub(self, rhs: LinExpr<V>) -> Self::Output {
         &self - &rhs
     }
 }

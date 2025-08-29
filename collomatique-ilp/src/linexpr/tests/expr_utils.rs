@@ -2,9 +2,9 @@ use super::*;
 
 #[test]
 fn expr_clean_removes_zeros() {
-    let mut expr = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 0.0 * Expr::<String>::var("C")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let mut expr = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 0.0 * LinExpr::<String>::var("C")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     expr.clean();
 
@@ -13,9 +13,9 @@ fn expr_clean_removes_zeros() {
 
 #[test]
 fn expr_clean_keeps_non_zeros() {
-    let mut expr = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 0.0 * Expr::<String>::var("C")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let mut expr = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 0.0 * LinExpr::<String>::var("C")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     expr.clean();
 
@@ -27,9 +27,9 @@ fn expr_clean_keeps_non_zeros() {
 
 #[test]
 fn expr_clean_keeps_constant() {
-    let mut expr = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 0.0 * Expr::<String>::var("C")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let mut expr = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 0.0 * LinExpr::<String>::var("C")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     expr.clean();
 
@@ -38,9 +38,9 @@ fn expr_clean_keeps_constant() {
 
 #[test]
 fn expr_clean_and_cleaned_match() {
-    let mut expr = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 0.0 * Expr::<String>::var("C")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let mut expr = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 0.0 * LinExpr::<String>::var("C")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let expr_copy = expr.clone();
 

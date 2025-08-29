@@ -9,9 +9,9 @@ fn sign_default_is_less_than() {
 
 #[test]
 fn leq_gives_right_symbol() {
-    let expr1 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B");
-    let expr2 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let expr1 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B");
+    let expr2 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let constraint = expr1.leq(&expr2);
 
@@ -20,9 +20,9 @@ fn leq_gives_right_symbol() {
 
 #[test]
 fn leq_gives_right_lhs() {
-    let expr1 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B");
-    let expr2 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let expr1 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B");
+    let expr2 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let expr = &expr1 - &expr2;
 
@@ -33,9 +33,9 @@ fn leq_gives_right_lhs() {
 
 #[test]
 fn geq_gives_right_symbol() {
-    let expr1 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B");
-    let expr2 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let expr1 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B");
+    let expr2 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let constraint = expr1.geq(&expr2);
 
@@ -44,9 +44,9 @@ fn geq_gives_right_symbol() {
 
 #[test]
 fn geq_gives_right_lhs() {
-    let expr1 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B");
-    let expr2 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let expr1 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B");
+    let expr2 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let expr = &expr2 - &expr1;
 
@@ -57,9 +57,9 @@ fn geq_gives_right_lhs() {
 
 #[test]
 fn eq_gives_right_symbol() {
-    let expr1 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B");
-    let expr2 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let expr1 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B");
+    let expr2 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let constraint = expr1.eq(&expr2);
 
@@ -68,9 +68,9 @@ fn eq_gives_right_symbol() {
 
 #[test]
 fn eq_gives_right_lhs() {
-    let expr1 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B");
-    let expr2 = 2.0 * Expr::<String>::var("A") - 3.0 * Expr::<String>::var("B")
-        + 2.0 * Expr::<String>::constant(3.0);
+    let expr1 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B");
+    let expr2 = 2.0 * LinExpr::<String>::var("A") - 3.0 * LinExpr::<String>::var("B")
+        + 2.0 * LinExpr::<String>::constant(3.0);
 
     let expr = &expr1 - &expr2;
 
