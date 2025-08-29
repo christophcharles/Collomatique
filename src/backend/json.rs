@@ -400,6 +400,10 @@ impl JsonData {
         None
     }
 
+    fn validate_students(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
     fn validate_incompats(&self) -> ValidationResult<()> {
         for (_, incompat) in &self.incompats {
             for group in &incompat.groups {
@@ -414,12 +418,48 @@ impl JsonData {
         Ok(())
     }
 
+    fn validate_group_lists(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
+    fn validate_subjects(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
+    fn validate_time_slots(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
+    fn validate_groupings(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
+    fn validate_grouping_incompats(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
+    fn validate_colloscopes(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
+    fn validate_slot_selections(&self) -> ValidationResult<()> {
+        todo!();
+    }
+
     fn validate(self) -> ValidationResult<ValidatedJson> {
         if let Some(id) = self.find_duplicated_id() {
             return Err(ValidationError::DuplicatedId(id));
         }
 
+        self.validate_students()?;
         self.validate_incompats()?;
+        self.validate_group_lists()?;
+        self.validate_subjects()?;
+        self.validate_time_slots()?;
+        self.validate_groupings()?;
+        self.validate_grouping_incompats()?;
+        self.validate_colloscopes()?;
+        self.validate_slot_selections()?;
 
         Ok(ValidatedJson { validated: self })
     }
