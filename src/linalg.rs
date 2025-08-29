@@ -3,11 +3,19 @@ mod tests;
 
 use std::collections::BTreeMap;
 
-#[derive(Debug,Clone,PartialEq,Eq,Default)]
+#[derive(Debug,Clone,Default)]
 pub struct Expr {
     coefs: BTreeMap<String, i32>,
     constant: i32,
 }
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.constant == other.constant && (self.cleaned().coefs == other.cleaned().coefs)
+    }
+}
+
+impl Eq for Expr {}
 
 #[derive(Debug,Clone,PartialEq,Eq,Default)]
 pub enum Sign {
@@ -42,6 +50,30 @@ impl Expr {
             expr: self - rhs,
             sign: Sign::Equals,
         }
+    }
+
+    pub fn clean(&mut self) {
+        self.coefs.retain(|_k, v| {
+            *v != 0
+        });
+    }
+
+    pub fn cleaned(&self) -> Expr {
+        let mut output = self.clone();
+        output.clean();
+        output
+    }
+}
+
+impl Constraint {
+    pub fn clean(&mut self) {
+        self.expr.clean();
+    }
+
+    pub fn cleaned(&self) -> Constraint {
+        let mut output = self.clone();
+        output.clean();
+        output
     }
 }
 
