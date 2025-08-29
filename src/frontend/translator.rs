@@ -464,7 +464,7 @@ impl GenColloscopeTranslator {
         subjects: &mut crate::gen::colloscope::SubjectList,
         subject_id_map: &BTreeMap<SubjectHandle, usize>,
     ) {
-        use crate::gen::colloscope::{BalancingRequirements, BalancingStrictness};
+        use crate::gen::colloscope::{BalancingConstraints, BalancingRequirements};
 
         for (&subject_id, orig_subject) in &data.subjects {
             let subject_num = subject_id_map
@@ -494,7 +494,7 @@ impl GenColloscopeTranslator {
 
             let balancing_requirements =
                 slot_selections.map(|slot_selections| BalancingRequirements {
-                    strictness: BalancingStrictness::OverallOnly,
+                    constraints: BalancingConstraints::OverallOnly,
                     slot_selections,
                 });
 
