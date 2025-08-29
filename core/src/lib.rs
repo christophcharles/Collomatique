@@ -25,10 +25,9 @@
 //! somewhat pleasant.
 //!
 //! The main struct is [ProblemBuilder] and you should start from there to see how this crate
-//! works.
-//!
-//! If you want to implement a problem, you should implement [BaseProblem] on some structure
+//! works. If you want to implement a problem, you should implement [BaseProblem] on some structure
 //! and possibly [ProblemConstraints] on a few others.
+//! A generic usage example is provided in the [examples::simple_schedule] module.
 
 pub mod colloscopes;
 pub mod time;
