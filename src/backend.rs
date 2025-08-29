@@ -23,6 +23,7 @@ use std::collections::BTreeMap;
 pub trait Storage {
     type WeekPatternId: OrdId;
     type TeacherId: OrdId;
+    type StudentId: OrdId;
     type SubjectGroupId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
@@ -68,6 +69,27 @@ pub trait Storage {
         index: Self::TeacherId,
         teacher: Teacher,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
+
+    async fn students_get_all(
+        &self,
+    ) -> std::result::Result<BTreeMap<Self::StudentId, Student>, Self::InternalError>;
+    async fn students_get(
+        &self,
+        index: Self::StudentId,
+    ) -> std::result::Result<Student, IdError<Self::InternalError, Self::StudentId>>;
+    async fn students_add(
+        &self,
+        student: Student,
+    ) -> std::result::Result<Self::StudentId, Self::InternalError>;
+    async fn students_remove(
+        &self,
+        index: Self::StudentId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
+    async fn students_update(
+        &self,
+        index: Self::StudentId,
+        student: Student,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
 
     async fn subject_groups_get_all(
         &self,
@@ -117,6 +139,14 @@ pub struct Teacher {
     pub surname: String,
     pub firstname: String,
     pub contact: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Student {
+    pub surname: String,
+    pub firstname: String,
+    pub email: Option<String>,
+    pub phone: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

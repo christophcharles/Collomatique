@@ -311,6 +311,7 @@ impl Store {
 
 use super::*;
 
+mod students;
 mod subject_groups;
 mod teachers;
 mod week_patterns;
@@ -318,6 +319,7 @@ mod week_patterns;
 impl Storage for Store {
     type WeekPatternId = week_patterns::Id;
     type TeacherId = teachers::Id;
+    type StudentId = students::Id;
     type SubjectGroupId = subject_groups::Id;
 
     type InternalError = Error;
@@ -407,6 +409,46 @@ impl Storage for Store {
         Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
     > + Send {
         teachers::update(&self.pool, index, teacher)
+    }
+
+    fn students_get(
+        &self,
+        index: Self::StudentId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Student, IdError<Self::InternalError, Self::StudentId>>,
+    > + Send {
+        students::get(&self.pool, index)
+    }
+    fn students_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<BTreeMap<Self::StudentId, Student>, Self::InternalError>,
+    > + Send {
+        students::get_all(&self.pool)
+    }
+    fn students_add(
+        &self,
+        student: Student,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::StudentId, Self::InternalError>>
+           + Send {
+        students::add(&self.pool, student)
+    }
+    fn students_remove(
+        &self,
+        index: Self::StudentId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>,
+    > + Send {
+        students::remove(&self.pool, index)
+    }
+    fn students_update(
+        &self,
+        index: Self::StudentId,
+        student: Student,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>,
+    > + Send {
+        students::update(&self.pool, index, student)
     }
 
     fn subject_groups_get(
