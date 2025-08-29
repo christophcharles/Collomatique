@@ -7,6 +7,7 @@ pub enum AnnotatedOperation {
     GeneralData(backend::GeneralData),
     WeekPatterns(AnnotatedWeekPatternsOperation),
     Teachers(AnnotatedTeachersOperation),
+    Students(AnnotatedStudentsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,6 +22,13 @@ pub enum AnnotatedTeachersOperation {
     Create(handles::TeacherHandle, backend::Teacher),
     Remove(handles::TeacherHandle),
     Update(handles::TeacherHandle, backend::Teacher),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedStudentsOperation {
+    Create(handles::StudentHandle, backend::Student),
+    Remove(handles::StudentHandle),
+    Update(handles::StudentHandle, backend::Student),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -47,13 +55,31 @@ impl AnnotatedTeachersOperation {
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
         match op {
-            TeachersOperation::Create(pattern) => {
+            TeachersOperation::Create(teacher) => {
                 let handle = handle_managers.teachers.create_handle();
-                AnnotatedTeachersOperation::Create(handle, pattern)
+                AnnotatedTeachersOperation::Create(handle, teacher)
             }
             TeachersOperation::Remove(handle) => AnnotatedTeachersOperation::Remove(handle),
-            TeachersOperation::Update(handle, pattern) => {
-                AnnotatedTeachersOperation::Update(handle, pattern)
+            TeachersOperation::Update(handle, teacher) => {
+                AnnotatedTeachersOperation::Update(handle, teacher)
+            }
+        }
+    }
+}
+
+impl AnnotatedStudentsOperation {
+    fn annotate<T: backend::Storage>(
+        op: StudentsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            StudentsOperation::Create(student) => {
+                let handle = handle_managers.students.create_handle();
+                AnnotatedStudentsOperation::Create(handle, student)
+            }
+            StudentsOperation::Remove(handle) => AnnotatedStudentsOperation::Remove(handle),
+            StudentsOperation::Update(handle, student) => {
+                AnnotatedStudentsOperation::Update(handle, student)
             }
         }
     }
@@ -71,6 +97,9 @@ impl AnnotatedOperation {
             ),
             Operation::Teachers(op) => AnnotatedOperation::Teachers(
                 AnnotatedTeachersOperation::annotate(op, handle_managers),
+            ),
+            Operation::Students(op) => AnnotatedOperation::Students(
+                AnnotatedStudentsOperation::annotate(op, handle_managers),
             ),
         }
     }
