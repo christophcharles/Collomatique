@@ -1868,7 +1868,7 @@ fn too_many_groups() {
 }
 
 #[test]
-fn fixed_group_variables() {
+fn group_in_slot_variables() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
@@ -2021,33 +2021,49 @@ fn fixed_group_variables() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let fixed_group_variables = ilp_translator.build_fixed_group_variables();
+    let group_in_slot_variables = ilp_translator.build_group_in_slot_variables();
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        Variable::FixedGroup { subject: 0, slot: 0, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 0, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 1, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 1, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 2, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 2, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 3, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 3, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 4, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 4, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 5, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 5, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 6, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 6, group: 1 },
-        Variable::FixedGroup { subject: 0, slot: 7, group: 0 },
-        Variable::FixedGroup { subject: 0, slot: 7, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 0, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 0, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 0, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 0, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 1, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 1, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 1, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 1, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 2, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 2, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 2, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 2, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 3, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 3, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 3, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 3, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 4, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 4, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 4, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 4, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 5, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 5, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 5, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 5, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 6, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 6, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 6, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 6, group: 3 },
+        Variable::GroupInSlot { subject: 0, slot: 7, group: 0 },
+        Variable::GroupInSlot { subject: 0, slot: 7, group: 1 },
+        Variable::GroupInSlot { subject: 0, slot: 7, group: 2 },
+        Variable::GroupInSlot { subject: 0, slot: 7, group: 3 },
     ]);
 
-    assert_eq!(fixed_group_variables, expected_result);
+    assert_eq!(group_in_slot_variables, expected_result);
 }
 
 #[test]
-fn dynamic_group_variables() {
+fn dynamic_group_assignment_variables() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
@@ -2200,128 +2216,129 @@ fn dynamic_group_variables() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let dynamic_group_variables = ilp_translator.build_dynamic_group_variables();
+    let dynamic_group_assignment_variables =
+        ilp_translator.build_dynamic_group_assignment_variables();
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 0, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 1, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 2, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 2, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 3, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 3, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 4, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 4, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 5, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 5, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 6, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 6, group: 3, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 2, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 2, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 2, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 2, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 2, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 2, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 2, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 2, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 2, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 2, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 2, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 2, student: 11 },
 
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 3, student: 6 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 3, student: 7 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 3, student: 8 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 3, student: 9 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 3, student: 10 },
-        Variable::DynamicGroup { subject: 0, slot: 7, group: 3, student: 11 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 3, student: 6 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 3, student: 7 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 3, student: 8 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 3, student: 9 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 3, student: 10 },
+        Variable::DynamicGroupAssignment { subject: 0, slot: 7, group: 3, student: 11 },
     ]);
 
-    assert_eq!(dynamic_group_variables, expected_result);
+    assert_eq!(dynamic_group_assignment_variables, expected_result);
 }
 
 #[test]
-fn in_group_variables() {
+fn student_in_group_variables() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
@@ -2474,26 +2491,26 @@ fn in_group_variables() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let in_group_variables = ilp_translator.build_in_group_variables();
+    let student_in_group_variables = ilp_translator.build_student_in_group_variables();
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
-        Variable::InGroup { subject: 0, student: 6, group: 2 },
-        Variable::InGroup { subject: 0, student: 7, group: 2 },
-        Variable::InGroup { subject: 0, student: 8, group: 2 },
-        Variable::InGroup { subject: 0, student: 9, group: 2 },
-        Variable::InGroup { subject: 0, student: 10, group: 2 },
-        Variable::InGroup { subject: 0, student: 11, group: 2 },
+        Variable::StudentInGroup { subject: 0, student: 6, group: 2 },
+        Variable::StudentInGroup { subject: 0, student: 7, group: 2 },
+        Variable::StudentInGroup { subject: 0, student: 8, group: 2 },
+        Variable::StudentInGroup { subject: 0, student: 9, group: 2 },
+        Variable::StudentInGroup { subject: 0, student: 10, group: 2 },
+        Variable::StudentInGroup { subject: 0, student: 11, group: 2 },
        
-        Variable::InGroup { subject: 0, student: 6, group: 3 },
-        Variable::InGroup { subject: 0, student: 7, group: 3 },
-        Variable::InGroup { subject: 0, student: 8, group: 3 },
-        Variable::InGroup { subject: 0, student: 9, group: 3 },
-        Variable::InGroup { subject: 0, student: 10, group: 3 },
-        Variable::InGroup { subject: 0, student: 11, group: 3 }, 
+        Variable::StudentInGroup { subject: 0, student: 6, group: 3 },
+        Variable::StudentInGroup { subject: 0, student: 7, group: 3 },
+        Variable::StudentInGroup { subject: 0, student: 8, group: 3 },
+        Variable::StudentInGroup { subject: 0, student: 9, group: 3 },
+        Variable::StudentInGroup { subject: 0, student: 10, group: 3 },
+        Variable::StudentInGroup { subject: 0, student: 11, group: 3 }, 
     ]);
 
-    assert_eq!(in_group_variables, expected_result);
+    assert_eq!(student_in_group_variables, expected_result);
 }
 
 #[test]
