@@ -153,12 +153,14 @@ impl Component for EditorPanel {
                                 set_icon_name: "edit-undo",
                                 #[watch]
                                 set_sensitive: model.can_undo(),
+                                set_tooltip_text: Some("Annuler"),
                                 connect_clicked => EditorInput::UndoClicked,
                             },
                             gtk::Button {
                                 set_icon_name: "edit-redo",
                                 #[watch]
                                 set_sensitive: model.can_redo(),
+                                set_tooltip_text: Some("Rétablir"),
                                 connect_clicked => EditorInput::RedoClicked,
                             },
                         },
@@ -179,6 +181,7 @@ impl Component for EditorPanel {
                             },
                             gtk::Button {
                                 set_icon_name: "document-save-as",
+                                set_tooltip_text: Some("Enregistrer sous"),
                                 connect_clicked => EditorInput::SaveAsClicked,
                             },
                         },
