@@ -447,8 +447,8 @@ where
 
     /// Builds the [Problem].
     ///
-    /// This is the last function to call in the builder pattern. It
-    /// consumes the [ProblemBuilder] and builds the [Problem] as described.
+    /// This is the last function to call in the builder pattern (the first one being [ProblemBuilder::new]).
+    /// It consumes the [ProblemBuilder] and builds the [Problem] as described.
     pub fn build(self) -> Problem<M, S, T, P> {
         let ilp_problem = collomatique_ilp::ProblemBuilder::new()
             .set_variables(self.variables)
@@ -467,11 +467,34 @@ where
     }
 }
 
+/// Translator
+///
+/// This is used to restore types. The structure is returned by [ProblemBuilder::add_constraints]
+/// and can be passed to [DecoratedSolution::blame_extra] and [DecoratedSolution::check_structure_extra].
+///
+/// It is used to restore the correct types for the constraints descriptions associated to a problem extension
+/// (described by [ExtraConstraints]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
+    /// Map between ids and general constraints descriptions for the problem extension
     general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
+    /// Map between ids and structure constraints descriptions for the problem extension
     structure_c_map: BTreeMap<InternalId, E::StructureConstraintDesc>,
 }
+
+/// Represents a complete problem.
+///
+/// A problem is constructed using [ProblemBuilder] from a [BaseConstraints]
+/// and possibly multiple [ExtraConstraints] using the builder pattern.
+///
+/// Once built, a problem is essentially fixed and is non-mutable.
+///
+/// You can call [Problem::solve] or [Problem::solve_with_time_limit] to try
+/// and solve the problem using a solver.
+///
+/// You can also provide a potentiel solution to [Problem::decorate_solution]
+/// and use its blaming functions ([DecoratedSolution::blame] and [DecoratedSolution::blame_extra])
+/// to find out which constraints is not satisfied.
 
 pub struct Problem<M, S, T, P>
 where
@@ -480,10 +503,18 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// ILP representation of the problem
     ilp_problem: collomatique_ilp::Problem<ExtraVariable<M, S, IdVariable>, InternalId, P>,
+    /// Original problem of type [BaseConstraints]
     base: T,
+    /// Map between ids and general constraints descriptions for the problem
     general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
+    /// Map between ids and structure constraints descriptions for the problem
     structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
+    /// Reconstruction functions.
+    ///
+    /// These are used to reconstruct the structure variables associated to
+    /// the various problem extensions.
     reconstruction_funcs: Vec<
         Box<
             dyn Fn(
@@ -496,6 +527,18 @@ where
     >,
 }
 
+/// Represents a (possibly non-feasable) solution
+///
+/// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
+/// This type will be used in the rest of the program. However, this representation usually lacks
+/// some information to properly test the solution.
+///
+/// This is the decoration provided here: all the necessary variables are correctly reconstructed
+/// and stored.
+///
+/// Such a decorated solution is either directly returned by [Problem::solve] (or its variant
+/// [Problem::solve_with_time_limit]) or it can be constructued from a [BaseConstraints::PartialSolution]
+/// by calling [Problem::decorate_solution].
 #[derive(Clone)]
 pub struct DecoratedSolution<'a, M, S, T, P>
 where
@@ -516,14 +559,25 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// Returns the inner solution
+    ///
+    /// This returns the [BaseConstraints::PartialSolution]
+    /// the rest of the program usually cares about.
     pub fn inner(&self) -> &T::PartialSolution {
         &self.internal_solution
     }
 
+    /// Returns the inner solution
+    ///
+    /// This method works like [Self::inner] but consumes the [DecoratedSolution].
     pub fn into_innter(self) -> T::PartialSolution {
         self.internal_solution
     }
 
+    /// Blame general constraints
+    ///
+    /// Returns a list of descriptions of general constraints that are not satisfied.
+    /// If no such constraints exist, an empty list is returned.
     pub fn blame(&self) -> Vec<T::GeneralConstraintDesc> {
         self.ilp_config
             .blame()
@@ -531,6 +585,12 @@ where
             .collect()
     }
 
+    /// Blame general constraints for problem extension
+    ///
+    /// Returns a list of descriptions of general constraints from a problem extension that are not satisfied.
+    /// The problem extension to consider is given by the translator used.
+    ///
+    /// If no such constraints exist, an empty list is returned.
     pub fn blame_extra<E: ExtraConstraints<T>>(
         &self,
         translator: &ExtraTranslator<T, E>,
@@ -541,6 +601,13 @@ where
             .collect()
     }
 
+    /// Blame structure constraints
+    ///
+    /// Returns a list of descriptions of structure constraints that are not satisfied.
+    /// If no such constraints exist, an empty list is returned.
+    ///
+    /// If no programming error is present in the reconstruction functions, this should
+    /// *always* return an empty list.
     pub fn check_structure(&self) -> Vec<T::StructureConstraintDesc> {
         self.ilp_config
             .blame()
@@ -548,6 +615,14 @@ where
             .collect()
     }
 
+    /// Blame structure constraints for problem extension
+    ///
+    /// Returns a list of descriptions of structure constraints from a problem extension that are not satisfied.
+    /// The problem extension to consider is given by the translator used.
+    ///
+    /// If no such constraints exist, an empty list is returned.
+    /// If no programming error is present in the reconstruction functions, this should
+    /// *always* return an empty list.
     pub fn check_structure_extra<E: ExtraConstraints<T>>(
         &self,
         translator: &ExtraTranslator<T, E>,
@@ -559,6 +634,10 @@ where
     }
 }
 
+/// Type returned by [Problem::solve_with_time_limit].
+///
+/// This contains a normal decorated solution and says if the time limit was reached.
+/// It is functionally similar to [collomatique_ilp::solvers::TimeLimitSolution].
 #[derive(Clone)]
 pub struct TimeLimitSolution<'a, M, S, T, P>
 where
@@ -567,7 +646,11 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// The actual decorated solution that is returned
     pub solution: DecoratedSolution<'a, M, S, T, P>,
+    /// Wether the time limit was reached
+    ///
+    /// If the time limit is reached, the solution might not be optimal.
     pub time_limit_reached: bool,
 }
 
@@ -578,6 +661,14 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// Decorate a solutions
+    ///
+    /// This functions takes a potential solution of type [BaseConstraints::PartialSolution]
+    /// and "decorates" it. This means that all the internal ILP variables are reconstructed and packaged
+    /// into a [DecoratedSolution].
+    ///
+    /// This function can fail (and return `None` in that case) if there are issues with the
+    /// reconstruction (usually unexpected or undefined variables).
     pub fn decorate_solution<'a>(
         &'a self,
         solution: T::PartialSolution,
@@ -615,6 +706,9 @@ where
         })
     }
 
+    /// Used internally
+    ///
+    /// Transforms the result of a solver into a usable [collomatique_ilp::ConfigData]
     fn feasable_config_into_config_data(
         &self,
         feasable_config: &collomatique_ilp::FeasableConfig<
@@ -635,6 +729,10 @@ where
         config_data
     }
 
+    /// Solves the problem using a solver
+    ///
+    /// This will use the solver to solve the ILP problem. It returns `None` if there is no solution.
+    /// Otherwise it returns a [DecoratedSolution] reprenseting the solution that was found.
     pub fn solve<
         'a,
         Solver: collomatique_ilp::solvers::Solver<ExtraVariable<M, S, IdVariable>, InternalId, P>,
@@ -654,6 +752,10 @@ where
         })
     }
 
+    /// Solves the problem using a solver
+    ///
+    /// This will use the solver to solve the ILP problem but with a time limit.
+    /// The details of the result are returned through a [TimeLimitSolution] struct.
     pub fn solve_with_time_limit<
         'a,
         Solver: collomatique_ilp::solvers::SolverWithTimeLimit<
