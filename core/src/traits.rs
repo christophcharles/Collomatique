@@ -3,38 +3,6 @@ use collomatique_ilp::{
 };
 use std::collections::BTreeMap;
 
-pub trait PartialSolution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq {
-    fn is_complete(&self) -> bool;
-}
-
-pub struct CompleteSolution<T: PartialSolution>(T);
-
-impl<T: PartialSolution> CompleteSolution<T> {
-    pub fn new(sol: T) -> Option<Self> {
-        if !sol.is_complete() {
-            return None;
-        }
-
-        Some(CompleteSolution(sol))
-    }
-
-    pub fn inner(&self) -> &T {
-        &self.0
-    }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T: PartialSolution> std::ops::Deref for CompleteSolution<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner()
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BaseVariable<M: UsableData, S: UsableData> {
     Main(M),
@@ -52,80 +20,12 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-enum ReconstructionDesc<S: UsableData, V: UsableData> {
-    Structure(S),
-    ValueFixer(V, ordered_float::OrderedFloat<f64>),
-}
-
-impl<S: UsableData + std::fmt::Display, V: UsableData + std::fmt::Display> std::fmt::Display
-    for ReconstructionDesc<S, V>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Structure(d) => write!(f, "{}", d),
-            Self::ValueFixer(var, value) => {
-                write!(f, "Fixes variable {} to value {}", var, value.into_inner())
-            }
-        }
-    }
-}
-
-fn default_structure_variable_reconstruction<
-    V: UsableData,
-    S: UsableData,
-    C: UsableData,
-    F: FnMut(V) -> Option<S>,
->(
-    structure_constraints: Vec<(Constraint<V>, C)>,
-    structure_variables: BTreeMap<V, Variable>,
-    main_values: ConfigData<V>,
-    mut f: F,
-) -> ConfigData<S> {
-    let ilp_problem: collomatique_ilp::Problem<V, ReconstructionDesc<C, V>> =
-        collomatique_ilp::ProblemBuilder::new()
-            .set_variables(structure_variables)
-            .set_variables(main_values.get_values().into_iter().map(
-                |(var, _value)| (var, Variable::continuous()), // We don't care about the type of variable, the value will be fixed
-            ))
-            .add_constraints(
-                structure_constraints
-                    .into_iter()
-                    .map(|(constraint, desc)| (constraint, ReconstructionDesc::Structure(desc))),
-            )
-            .add_constraints(main_values.get_values().into_iter().map(|(var, value)| {
-                let lhs = LinExpr::var(var.clone());
-                let rhs = LinExpr::constant(value);
-
-                (
-                    lhs.eq(&rhs),
-                    ReconstructionDesc::ValueFixer(var, ordered_float::OrderedFloat(value)),
-                )
-            }))
-            .build()
-            .expect("Variables and constraints should match");
-
-    use collomatique_ilp::solvers::{self, Solver};
-
-    let cbc_solver = solvers::coin_cbc::CbcSolver::new();
-    let feasable_config = cbc_solver
-        .solve(&ilp_problem)
-        .expect("There should always be a solution for reconstructing structure variables");
-
-    let filtered_variables = feasable_config
-        .get_values()
-        .into_iter()
-        .filter_map(|(var, value)| f(var).map(|x| (x, value)));
-
-    ConfigData::new().set_iter(filtered_variables)
-}
-
 pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     type MainVariable: UsableData;
     type StructureVariable: UsableData;
     type StructureConstraintDesc: UsableData;
     type GeneralConstraintDesc: UsableData;
-    type Solution: PartialSolution;
+    type PartialSolution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq;
 
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable>;
     fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable>;
@@ -147,40 +47,13 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
 
-    fn solution_to_configuration(&self, sol: &Self::Solution) -> ConfigData<Self::MainVariable>;
-    fn configuration_to_solution(&self, config: &ConfigData<Self::MainVariable>) -> Self::Solution;
+    fn partial_solution_to_configuration(&self, sol: &Self::PartialSolution) -> ConfigData<Self::MainVariable>;
+    fn configuration_to_partial_solution(&self, config: &ConfigData<Self::MainVariable>) -> Self::PartialSolution;
 
     fn reconstruct_structure_variables(
         &self,
-        config: &CompleteSolution<Self::Solution>,
-    ) -> ConfigData<Self::StructureVariable> {
-        let config_data = self.solution_to_configuration(config.inner());
-
-        let structure_constraints = self.structure_constraints();
-        let structure_variables = self
-            .structure_variables()
-            .into_iter()
-            .map(|(v_name, v_desc)| (BaseVariable::Structure(v_name), v_desc))
-            .collect();
-        let main_values = ConfigData::new().set_iter(
-            config_data
-                .get_values()
-                .into_iter()
-                .map(|(var, value)| (BaseVariable::Main(var), value)),
-        );
-
-        let f = |v| match v {
-            BaseVariable::Main(_) => None,
-            BaseVariable::Structure(v) => Some(v),
-        };
-
-        default_structure_variable_reconstruction(
-            structure_constraints,
-            structure_variables,
-            main_values,
-            f,
-        )
-    }
+        config: &ConfigData<Self::MainVariable>,
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -227,55 +100,6 @@ pub trait ExtraConstraints<T: BaseConstraints> {
         Self::GeneralConstraintDesc,
     )>;
 
-    fn reconstruct_extra_structure_variables(
-        &self,
-        base: &T,
-        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> ConfigData<Self::StructureVariable> {
-        let structure_constraints = self.extra_structure_constraints(base);
-        let structure_variables = self
-            .extra_structure_variables(base)
-            .into_iter()
-            .map(|(v_name, v_desc)| (ExtraVariable::Extra(v_name), v_desc))
-            .collect();
-        let main_values =
-            ConfigData::new().set_iter(config.get_values().into_iter().map(|(var, value)| {
-                (
-                    match var {
-                        BaseVariable::Main(v) => ExtraVariable::BaseMain(v),
-                        BaseVariable::Structure(v) => ExtraVariable::BaseStructure(v),
-                    },
-                    value,
-                )
-            }));
-
-        let f = |v| match v {
-            ExtraVariable::Extra(v) => Some(v),
-            _ => None,
-        };
-
-        default_structure_variable_reconstruction(
-            structure_constraints,
-            structure_variables,
-            main_values,
-            f,
-        )
-    }
-}
-
-pub trait ExtraObjective<T: BaseConstraints> {
-    type StructureVariable: UsableData;
-    type StructureConstraintDesc: UsableData;
-
-    fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable>;
-    fn extra_structure_constraints(
-        &self,
-        base: &T,
-    ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
-        Self::StructureConstraintDesc,
-    )>;
-
     fn extra_objective(
         &self,
         base: &T,
@@ -285,36 +109,7 @@ pub trait ExtraObjective<T: BaseConstraints> {
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> ConfigData<Self::StructureVariable> {
-        let structure_constraints = self.extra_structure_constraints(base);
-        let structure_variables = self
-            .extra_structure_variables(base)
-            .into_iter()
-            .map(|(v_name, v_desc)| (ExtraVariable::Extra(v_name), v_desc))
-            .collect();
-        let main_values =
-            ConfigData::new().set_iter(config.get_values().into_iter().map(|(var, value)| {
-                (
-                    match var {
-                        BaseVariable::Main(v) => ExtraVariable::BaseMain(v),
-                        BaseVariable::Structure(v) => ExtraVariable::BaseStructure(v),
-                    },
-                    value,
-                )
-            }));
-
-        let f = |v| match v {
-            ExtraVariable::Extra(v) => Some(v),
-            _ => None,
-        };
-
-        default_structure_variable_reconstruction(
-            structure_constraints,
-            structure_variables,
-            main_values,
-            f,
-        )
-    }
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -359,10 +154,11 @@ impl<S: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display> std::
     }
 }
 
-impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConstraints<T, E> {
+impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftConstraints<T, E> {
     type StructureConstraintDesc =
         SoftConstraint<E::StructureConstraintDesc, E::GeneralConstraintDesc>;
     type StructureVariable = SoftVariable<E::StructureVariable, E::GeneralConstraintDesc>;
+    type GeneralConstraintDesc = ();
 
     fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
         self.internal_extra
@@ -435,6 +231,16 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
                     }),
             )
             .collect()
+    }
+
+    fn extra_general_constraints(
+            &self,
+            _base: &T,
+        ) -> Vec<(
+            Constraint<ExtraVariable<<T as BaseConstraints>::MainVariable, <T as BaseConstraints>::StructureVariable, Self::StructureVariable>>,
+            Self::GeneralConstraintDesc,
+        )> {
+        vec![]
     }
 
     fn extra_objective(

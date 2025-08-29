@@ -271,15 +271,18 @@ where
     pub fn add_constraints<E: ExtraConstraints<T>>(
         &mut self,
         extra: E,
-    ) -> Option<ConstraintsTranslator<T, E>> {
+        obj_coef: f64,
+    ) -> Option<ExtraTranslator<T, E>> {
         let extra_variables = extra.extra_structure_variables(&self.base);
         let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
         let extra_general_constraints = extra.extra_general_constraints(&self.base);
+        let objective = extra.extra_objective(&self.base);
 
         let (rev_v_map, v_map) = self.scan_variables(extra_variables);
 
         if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
             || !self.check_variables_in_constraints(&extra_general_constraints, &rev_v_map)
+            || !self.check_variables_in_expr(objective.get_function(), &rev_v_map)
         {
             return None;
         }
@@ -289,39 +292,12 @@ where
         let structure_c_map =
             self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
-        Some(ConstraintsTranslator {
-            extra,
-            general_c_map,
-            structure_c_map,
-        })
-    }
-
-    pub fn add_objective<E: ExtraObjective<T>>(
-        &mut self,
-        extra: E,
-        obj_coef: f64,
-    ) -> Option<ObjectiveTranslator<T, E>> {
-        let extra_structure_variables = extra.extra_structure_variables(&self.base);
-        let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
-        let objective = extra.extra_objective(&self.base);
-
-        let (rev_v_map, v_map) = self.scan_variables(extra_structure_variables);
-
-        if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
-            || !self.check_variables_in_expr(objective.get_function(), &rev_v_map)
-        {
-            return None;
-        }
-
-        self.add_variables(v_map);
-        let structure_c_map =
-            self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
-
         let new_obj = objective.transmute(|x| self.update_var(x, &rev_v_map));
         self.objective = &self.objective + obj_coef * new_obj;
 
-        Some(ObjectiveTranslator {
+        Some(ExtraTranslator {
             extra,
+            general_c_map,
             structure_c_map,
         })
     }
@@ -344,15 +320,9 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConstraintsTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
+pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
     extra: E,
     general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
-    structure_c_map: BTreeMap<InternalId, E::StructureConstraintDesc>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ObjectiveTranslator<T: BaseConstraints, E: ExtraObjective<T>> {
-    extra: E,
     structure_c_map: BTreeMap<InternalId, E::StructureConstraintDesc>,
 }
 
@@ -379,7 +349,7 @@ where
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     problem: &'a Problem<M, S, T, P>,
-    internal_solution: T::Solution,
+    internal_solution: T::PartialSolution,
     ilp_config: collomatique_ilp::Config<'a, ExtraVariable<M, S, IdVariable>, InternalId, P>,
 }
 
@@ -390,11 +360,11 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
-    pub fn inner(&self) -> &T::Solution {
+    pub fn inner(&self) -> &T::PartialSolution {
         &self.internal_solution
     }
 
-    pub fn into_innter(self) -> T::Solution {
+    pub fn into_innter(self) -> T::PartialSolution {
         self.internal_solution
     }
 
@@ -407,7 +377,7 @@ where
 
     pub fn blame_with_extra_constraint<'b, E: ExtraConstraints<T>>(
         &self,
-        _translator: &'b ConstraintsTranslator<T, E>,
+        _translator: &'b ExtraTranslator<T, E>,
     ) -> impl ExactSizeIterator<Item = &'b E::GeneralConstraintDesc> {
         if false {
             return vec![].into_iter();
@@ -422,19 +392,9 @@ where
         todo!()
     }
 
-    pub fn check_structure_with_extra_constraint<'b, E: ExtraConstraints<T>>(
+    pub fn check_extra_structure<'b, E: ExtraConstraints<T>>(
         &self,
-        _translator: &'b ConstraintsTranslator<T, E>,
-    ) -> impl ExactSizeIterator<Item = &'b E::StructureConstraintDesc> {
-        if false {
-            return vec![].into_iter();
-        }
-        todo!()
-    }
-
-    pub fn check_structure_with_extra_objective<'b, E: ExtraObjective<T>>(
-        &self,
-        _translator: &'b ObjectiveTranslator<T, E>,
+        _translator: &'b ExtraTranslator<T, E>,
     ) -> impl ExactSizeIterator<Item = &'b E::StructureConstraintDesc> {
         if false {
             return vec![].into_iter();
@@ -492,7 +452,7 @@ where
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self
             .base
-            .configuration_to_solution(&self.feasable_config_into_config_data(&feasable_config));
+            .configuration_to_partial_solution(&self.feasable_config_into_config_data(&feasable_config));
 
         Some(DecoratedSolution {
             problem: self,
@@ -515,7 +475,7 @@ where
     ) -> Option<TimeLimitSolution<'a, M, S, T, P>> {
         let time_limit_sol =
             solver.solve_with_time_limit(&self.ilp_problem, time_limit_in_seconds)?;
-        let internal_solution = self.base.configuration_to_solution(
+        let internal_solution = self.base.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&time_limit_sol.config),
         );
 
