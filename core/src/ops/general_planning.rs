@@ -320,6 +320,27 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        let mut new_student = student.clone();
+                        new_student.excluded_periods.insert(new_id.clone());
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Student(
+                                    collomatique_state_colloscopes::StudentOp::Update(
+                                        *student_id,
+                                        new_student,
+                                    ),
+                                ),
+                                "Dupliquer l'état de la période découpée sur un élève".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
                 *data = session.commit(self.get_desc());
                 Ok(Some(new_id))
             }
@@ -372,7 +393,28 @@ impl GeneralPlanningUpdateOp {
                                         new_subject,
                                     ),
                                 ),
-                                "Enlever une référence à la période à effacer".into(),
+                                "Enlever une référence à la période pour une matière".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        let mut new_student = student.clone();
+                        new_student.excluded_periods.remove(period_id);
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Student(
+                                    collomatique_state_colloscopes::StudentOp::Update(
+                                        *student_id,
+                                        new_student,
+                                    ),
+                                ),
+                                "Enlever une référence à la période pour un élève".into(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
