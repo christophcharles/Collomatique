@@ -1747,9 +1747,7 @@ impl<'a> IlpTranslator<'a> {
     }
 
     pub fn problem(&self) -> Problem<Variable> {
-        self.problem_builder()
-            .simplify_trivial_constraints()
-            .build()
+        self.problem_builder().build()
     }
 
     fn compute_period_length(&self) -> NonZeroU32 {
