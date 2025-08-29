@@ -4,7 +4,7 @@ use super::*;
 pub enum SlotsUpdateWarning {}
 
 impl SlotsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         _data: &T,
     ) -> String {
@@ -114,14 +114,14 @@ impl SlotsUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         _data: &T,
     ) -> Vec<SlotsUpdateWarning> {
         vec![]
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::SlotId>, SlotsUpdateError> {
@@ -200,7 +200,7 @@ impl SlotsUpdateOp {
                 Ok(None)
             }
             Self::DeleteSlot(slot_id) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 let result = session
                     .apply(

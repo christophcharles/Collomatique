@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
+use collomatique_core::ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
@@ -46,7 +47,7 @@ pub enum EditorInput {
     CancelOp,
     RunScriptClicked,
     RunScript(PathBuf, String),
-    NewStateFromScript(AppState<Data>),
+    NewStateFromScript(AppState<Data, Desc>),
 }
 
 #[derive(Debug)]
@@ -129,7 +130,7 @@ impl PanelNumbers {
 
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
-    data: AppState<Data>,
+    data: AppState<Data, Desc>,
     dirty: bool,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,

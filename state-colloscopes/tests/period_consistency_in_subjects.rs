@@ -7,7 +7,7 @@ use std::{collections::BTreeSet, num::NonZeroU32};
 
 #[test]
 fn add_subject_referencing_period_then_remove_period() {
-    let mut app_state = AppState::new(Data::new());
+    let mut app_state = AppState::<_, String>::new(Data::new());
 
     // Prepare periods
     let Ok(Some(NewId::PeriodId(id1))) = app_state.apply(
@@ -67,7 +67,7 @@ fn add_subject_referencing_period_then_remove_period() {
 
 #[test]
 fn add_subject_referencing_period_then_remove_period_and_then_undo() {
-    let mut app_state = AppState::new(Data::new());
+    let mut app_state = AppState::<_, String>::new(Data::new());
 
     // Prepare periods
     let Ok(Some(NewId::PeriodId(id1))) = app_state.apply(
@@ -166,7 +166,7 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
 
 #[test]
 fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
-    let mut app_state = AppState::new(Data::new());
+    let mut app_state = AppState::<_, String>::new(Data::new());
 
     // Prepare periods
     let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(

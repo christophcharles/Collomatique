@@ -9,7 +9,7 @@ pub enum StudentsUpdateWarning {
 }
 
 impl StudentsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> String {
@@ -86,7 +86,7 @@ impl StudentsUpdateOp {
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<StudentsUpdateWarning> {
@@ -130,7 +130,7 @@ impl StudentsUpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::StudentId>, StudentsUpdateError> {
@@ -164,7 +164,7 @@ impl StudentsUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateStudent(student_id, student) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
                 else {
@@ -238,7 +238,7 @@ impl StudentsUpdateOp {
                 Ok(None)
             }
             Self::DeleteStudent(student_id) => {
-                let mut session = collomatique_state::AppSession::new(data.clone());
+                let mut session = collomatique_state::AppSession::<_, String>::new(data.clone());
 
                 for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
                 {

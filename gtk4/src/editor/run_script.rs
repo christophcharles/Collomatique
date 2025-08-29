@@ -6,6 +6,7 @@ use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
+use collomatique_core::ops::Desc;
 use collomatique_state::{AppSession, AppState};
 use collomatique_state_colloscopes::Data;
 
@@ -26,12 +27,12 @@ pub struct Dialog {
     rpc_logger: Controller<rpc_server::RpcLogger>,
     commands: FactoryVecDeque<msg_display::Entry>,
     adjust_scrolling: bool,
-    app_session: Option<AppSession<AppState<Data>>>,
+    app_session: Option<AppSession<AppState<Data, Desc>, Desc>>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Run(PathBuf, String, AppState<Data>),
+    Run(PathBuf, String, AppState<Data, Desc>),
     CancelRequest,
     Accept,
 
@@ -49,7 +50,7 @@ pub enum DialogCmdOutput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    NewData(AppState<Data>),
+    NewData(AppState<Data, Desc>),
 }
 
 #[relm4::component(pub)]

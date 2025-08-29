@@ -14,12 +14,12 @@ use history::ModificationHistory;
 /// structure implementing [InMemoryData]. [AppState] takes
 /// ownership of this data and maintains a consistent history of modifications.
 #[derive(Debug, Clone)]
-pub struct AppState<T: InMemoryData> {
+pub struct AppState<T: InMemoryData, D: Description> {
     data: T,
-    mod_history: ModificationHistory<T::AnnotatedOperation>,
+    mod_history: ModificationHistory<T::AnnotatedOperation, D>,
 }
 
-impl<T: InMemoryData> AppState<T> {
+impl<T: InMemoryData, D: Description> AppState<T, D> {
     /// Builds a new [AppState] from an [InMemoryData] structure
     ///
     /// The new [AppState] takes ownership of the structure.
@@ -56,8 +56,9 @@ impl<T: InMemoryData> AppState<T> {
     }
 }
 
-impl<T: InMemoryData> traits::private::ManagerInternal for AppState<T> {
+impl<T: InMemoryData, D: Description> traits::private::ManagerInternal for AppState<T, D> {
     type Data = T;
+    type Desc = D;
 
     fn get_in_memory_data(&self) -> &Self::Data {
         &self.data
@@ -67,10 +68,12 @@ impl<T: InMemoryData> traits::private::ManagerInternal for AppState<T> {
         &mut self.data
     }
 
-    fn get_modification_history(&self) -> &ModificationHistory<T::AnnotatedOperation> {
+    fn get_modification_history(&self) -> &ModificationHistory<T::AnnotatedOperation, D> {
         &self.mod_history
     }
-    fn get_modification_history_mut(&mut self) -> &mut ModificationHistory<T::AnnotatedOperation> {
+    fn get_modification_history_mut(
+        &mut self,
+    ) -> &mut ModificationHistory<T::AnnotatedOperation, D> {
         &mut self.mod_history
     }
 }
@@ -94,14 +97,15 @@ impl<T: InMemoryData> traits::private::ManagerInternal for AppState<T> {
 /// Simply droping [AppSession] means also loosing the corresponding [traits::Manager].
 #[derive(Debug, Clone)]
 
-pub struct AppSession<T: traits::Manager> {
+pub struct AppSession<T: traits::Manager, D: Description> {
     op_manager: T,
     session_history: ModificationHistory<
         <<T as traits::private::ManagerInternal>::Data as InMemoryData>::AnnotatedOperation,
+        D,
     >,
 }
 
-impl<T: traits::Manager> AppSession<T> {
+impl<T: traits::Manager, D: Description> AppSession<T, D> {
     /// Builds a new [AppSession]
     ///
     /// An [AppSession] is created from a mutable reference to
@@ -118,12 +122,12 @@ impl<T: traits::Manager> AppSession<T> {
     }
 
     /// Commits the session and returns the Manager with one aggregated op in history
-    pub fn commit(mut self, name: String) -> T {
+    pub fn commit(mut self, desc: T::Desc) -> T {
         let aggregated_op = self.session_history.build_aggregated_op();
         // We only update the history: the state is already up to date
         self.op_manager
             .get_modification_history_mut()
-            .store(aggregated_op, name);
+            .store(aggregated_op, desc);
         self.op_manager
     }
 
@@ -138,8 +142,9 @@ impl<T: traits::Manager> AppSession<T> {
     }
 }
 
-impl<T: traits::Manager> traits::private::ManagerInternal for AppSession<T> {
+impl<T: traits::Manager, D: Description> traits::private::ManagerInternal for AppSession<T, D> {
     type Data = T::Data;
+    type Desc = D;
 
     fn get_in_memory_data(&self) -> &Self::Data {
         self.op_manager.get_in_memory_data()
@@ -150,12 +155,12 @@ impl<T: traits::Manager> traits::private::ManagerInternal for AppSession<T> {
 
     fn get_modification_history(
         &self,
-    ) -> &ModificationHistory<<T::Data as InMemoryData>::AnnotatedOperation> {
+    ) -> &ModificationHistory<<T::Data as InMemoryData>::AnnotatedOperation, D> {
         &self.session_history
     }
     fn get_modification_history_mut(
         &mut self,
-    ) -> &mut ModificationHistory<<T::Data as InMemoryData>::AnnotatedOperation> {
+    ) -> &mut ModificationHistory<<T::Data as InMemoryData>::AnnotatedOperation, D> {
         &mut self.session_history
     }
 }
