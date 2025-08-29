@@ -56,6 +56,7 @@ use std::num::NonZeroU32;
 struct GeneralDataDb {
     interrogations_per_week: Option<std::ops::Range<u32>>,
     max_interrogations_per_day: Option<NonZeroU32>,
+    week_count: NonZeroU32,
 }
 
 impl Store {
@@ -258,6 +259,7 @@ CREATE TABLE "group_items" (
         .bind(serde_json::to_string(&GeneralDataDb {
             interrogations_per_week: None,
             max_interrogations_per_day: None,
+            week_count: NonZeroU32::new(30).unwrap(),
         }).expect("should serialize to valid json"))
         .execute(pool)
         .await?;
@@ -330,13 +332,14 @@ impl Storage for Store {
 
     type InternalError = Error;
 
-    async fn general_data_set(
+    async unsafe fn general_data_set_unchecked(
         &mut self,
         general_data: &GeneralData,
     ) -> std::result::Result<(), Self::InternalError> {
         let general_data_json = GeneralDataDb {
             interrogations_per_week: general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: general_data.max_interrogations_per_day.clone(),
+            week_count: general_data.week_count,
         };
 
         let mut conn = self.pool.acquire().await.map_err(Error::from)?;
@@ -386,6 +389,7 @@ impl Storage for Store {
         let general_data = GeneralData {
             interrogations_per_week: general_data_json.interrogations_per_week,
             max_interrogations_per_day: general_data_json.max_interrogations_per_day,
+            week_count: general_data_json.week_count,
         };
 
         Ok(general_data)
@@ -412,7 +416,7 @@ impl Storage for Store {
     > + Send {
         week_patterns::get_all(&self.pool)
     }
-    fn week_patterns_add(
+    unsafe fn week_patterns_add_unchecked(
         &mut self,
         pattern: &WeekPattern,
     ) -> impl core::future::Future<
@@ -427,13 +431,12 @@ impl Storage for Store {
     {
         week_patterns::remove(&self.pool, index)
     }
-    fn week_patterns_update(
+    unsafe fn week_patterns_update_unchecked(
         &mut self,
         index: Self::WeekPatternId,
         pattern: &WeekPattern,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         week_patterns::update(&self.pool, index, pattern)
     }
 
