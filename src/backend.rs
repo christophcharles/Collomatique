@@ -260,7 +260,6 @@ use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
-#[trait_variant::make(Send)]
 pub trait Storage: Send + Sync + std::fmt::Debug {
     type WeekPatternId: OrdId;
     type TeacherId: OrdId;
@@ -277,151 +276,151 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
 
     type InternalError: std::fmt::Debug + std::error::Error + Send;
 
-    async unsafe fn general_data_set_unchecked(
+    unsafe fn general_data_set_unchecked(
         &mut self,
         general_data: &GeneralData,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn general_data_get(&self) -> std::result::Result<GeneralData, Self::InternalError>;
+    fn general_data_get(&self) -> std::result::Result<GeneralData, Self::InternalError>;
 
-    async fn week_patterns_get_all(
+    fn week_patterns_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<Self::WeekPatternId, WeekPattern>, Self::InternalError>;
-    async fn week_patterns_get(
+    fn week_patterns_get(
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<WeekPattern, IdError<Self::InternalError, Self::WeekPatternId>>;
-    async unsafe fn week_patterns_add_unchecked(
+    unsafe fn week_patterns_add_unchecked(
         &mut self,
         pattern: &WeekPattern,
     ) -> std::result::Result<Self::WeekPatternId, Self::InternalError>;
-    async unsafe fn week_patterns_remove_unchecked(
+    unsafe fn week_patterns_remove_unchecked(
         &mut self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn week_patterns_update_unchecked(
+    unsafe fn week_patterns_update_unchecked(
         &mut self,
         index: Self::WeekPatternId,
         pattern: &WeekPattern,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn teachers_get_all(
+    fn teachers_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<Self::TeacherId, Teacher>, Self::InternalError>;
-    async fn teachers_get(
+    fn teachers_get(
         &self,
         index: Self::TeacherId,
     ) -> std::result::Result<Teacher, IdError<Self::InternalError, Self::TeacherId>>;
-    async fn teachers_add(
+    fn teachers_add(
         &mut self,
         teacher: &Teacher,
     ) -> std::result::Result<Self::TeacherId, Self::InternalError>;
-    async unsafe fn teachers_remove_unchecked(
+    unsafe fn teachers_remove_unchecked(
         &mut self,
         index: Self::TeacherId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn teachers_update(
+    fn teachers_update(
         &mut self,
         index: Self::TeacherId,
         teacher: &Teacher,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
 
-    async fn students_get_all(
+    fn students_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<Self::StudentId, Student>, Self::InternalError>;
-    async fn students_get(
+    fn students_get(
         &self,
         index: Self::StudentId,
     ) -> std::result::Result<Student, IdError<Self::InternalError, Self::StudentId>>;
-    async fn students_add(
+    fn students_add(
         &mut self,
         student: &Student,
     ) -> std::result::Result<Self::StudentId, Self::InternalError>;
-    async unsafe fn students_remove_unchecked(
+    unsafe fn students_remove_unchecked(
         &mut self,
         index: Self::StudentId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn students_update(
+    fn students_update(
         &mut self,
         index: Self::StudentId,
         student: &Student,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
 
-    async fn subject_groups_get_all(
+    fn subject_groups_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<Self::SubjectGroupId, SubjectGroup>, Self::InternalError>;
-    async fn subject_groups_get(
+    fn subject_groups_get(
         &self,
         index: Self::SubjectGroupId,
     ) -> std::result::Result<SubjectGroup, IdError<Self::InternalError, Self::SubjectGroupId>>;
-    async fn subject_groups_add(
+    fn subject_groups_add(
         &mut self,
         subject_group: &SubjectGroup,
     ) -> std::result::Result<Self::SubjectGroupId, Self::InternalError>;
-    async unsafe fn subject_groups_remove_unchecked(
+    unsafe fn subject_groups_remove_unchecked(
         &mut self,
         index: Self::SubjectGroupId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn subject_groups_update(
+    fn subject_groups_update(
         &mut self,
         index: Self::SubjectGroupId,
         subject_group: &SubjectGroup,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
 
-    async fn incompats_get_all(
+    fn incompats_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::IncompatId, Incompat<Self::WeekPatternId>>,
         Self::InternalError,
     >;
-    async fn incompats_get(
+    fn incompats_get(
         &self,
         index: Self::IncompatId,
     ) -> std::result::Result<
         Incompat<Self::WeekPatternId>,
         IdError<Self::InternalError, Self::IncompatId>,
     >;
-    async unsafe fn incompats_add_unchecked(
+    unsafe fn incompats_add_unchecked(
         &mut self,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<Self::IncompatId, Self::InternalError>;
-    async unsafe fn incompats_remove_unchecked(
+    unsafe fn incompats_remove_unchecked(
         &mut self,
         index: Self::IncompatId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn incompats_update_unchecked(
+    unsafe fn incompats_update_unchecked(
         &mut self,
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn group_lists_get_all(
+    fn group_lists_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::GroupListId, GroupList<Self::StudentId>>,
         Self::InternalError,
     >;
-    async fn group_lists_get(
+    fn group_lists_get(
         &self,
         index: Self::GroupListId,
     ) -> std::result::Result<
         GroupList<Self::StudentId>,
         IdError<Self::InternalError, Self::GroupListId>,
     >;
-    async unsafe fn group_lists_add_unchecked(
+    unsafe fn group_lists_add_unchecked(
         &mut self,
         group_list: &GroupList<Self::StudentId>,
     ) -> std::result::Result<Self::GroupListId, Self::InternalError>;
-    async unsafe fn group_lists_remove_unchecked(
+    unsafe fn group_lists_remove_unchecked(
         &mut self,
         index: Self::GroupListId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn group_lists_update_unchecked(
+    unsafe fn group_lists_update_unchecked(
         &mut self,
         index: Self::GroupListId,
         group_list: &GroupList<Self::StudentId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn subjects_get_all(
+    fn subjects_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<
@@ -430,115 +429,115 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         >,
         Self::InternalError,
     >;
-    async fn subjects_get(
+    fn subjects_get(
         &self,
         index: Self::SubjectId,
     ) -> std::result::Result<
         Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
         IdError<Self::InternalError, Self::SubjectId>,
     >;
-    async unsafe fn subjects_add_unchecked(
+    unsafe fn subjects_add_unchecked(
         &mut self,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     ) -> std::result::Result<Self::SubjectId, Self::InternalError>;
-    async unsafe fn subjects_remove_unchecked(
+    unsafe fn subjects_remove_unchecked(
         &mut self,
         index: Self::SubjectId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn subjects_update_unchecked(
+    unsafe fn subjects_update_unchecked(
         &mut self,
         index: Self::SubjectId,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn time_slots_get_all(
+    fn time_slots_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::TimeSlotId, TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>>,
         Self::InternalError,
     >;
-    async fn time_slots_get(
+    fn time_slots_get(
         &self,
         index: Self::TimeSlotId,
     ) -> std::result::Result<
         TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
         IdError<Self::InternalError, Self::TimeSlotId>,
     >;
-    async unsafe fn time_slots_add_unchecked(
+    unsafe fn time_slots_add_unchecked(
         &mut self,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     ) -> std::result::Result<Self::TimeSlotId, Self::InternalError>;
-    async unsafe fn time_slots_remove_unchecked(
+    unsafe fn time_slots_remove_unchecked(
         &mut self,
         index: Self::TimeSlotId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn time_slots_update_unchecked(
+    unsafe fn time_slots_update_unchecked(
         &mut self,
         index: Self::TimeSlotId,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn groupings_get_all(
+    fn groupings_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::GroupingId, Grouping<Self::TimeSlotId>>,
         Self::InternalError,
     >;
-    async fn groupings_get(
+    fn groupings_get(
         &self,
         index: Self::GroupingId,
     ) -> std::result::Result<
         Grouping<Self::TimeSlotId>,
         IdError<Self::InternalError, Self::GroupingId>,
     >;
-    async unsafe fn groupings_add_unchecked(
+    unsafe fn groupings_add_unchecked(
         &mut self,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> std::result::Result<Self::GroupingId, Self::InternalError>;
-    async unsafe fn groupings_remove_unchecked(
+    unsafe fn groupings_remove_unchecked(
         &mut self,
         index: Self::GroupingId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn groupings_update_unchecked(
+    unsafe fn groupings_update_unchecked(
         &mut self,
         index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn grouping_incompats_get_all(
+    fn grouping_incompats_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::GroupingIncompatId, GroupingIncompat<Self::GroupingId>>,
         Self::InternalError,
     >;
-    async fn grouping_incompats_get(
+    fn grouping_incompats_get(
         &self,
         index: Self::GroupingIncompatId,
     ) -> std::result::Result<
         GroupingIncompat<Self::GroupingId>,
         IdError<Self::InternalError, Self::GroupingIncompatId>,
     >;
-    async unsafe fn grouping_incompats_add_unchecked(
+    unsafe fn grouping_incompats_add_unchecked(
         &mut self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> std::result::Result<Self::GroupingIncompatId, Self::InternalError>;
-    async unsafe fn grouping_incompats_remove_unchecked(
+    unsafe fn grouping_incompats_remove_unchecked(
         &mut self,
         index: Self::GroupingIncompatId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn grouping_incompats_update_unchecked(
+    unsafe fn grouping_incompats_update_unchecked(
         &mut self,
         index: Self::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async unsafe fn subject_group_for_student_set_unchecked(
+    unsafe fn subject_group_for_student_set_unchecked(
         &mut self,
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
         subject_id: Option<Self::SubjectId>,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn subject_group_for_student_get(
+    fn subject_group_for_student_get(
         &self,
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
@@ -547,67 +546,67 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
     >;
 
-    async unsafe fn incompat_for_student_set_unchecked(
+    unsafe fn incompat_for_student_set_unchecked(
         &mut self,
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
         enabled: bool,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn incompat_for_student_get(
+    fn incompat_for_student_get(
         &self,
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
     ) -> std::result::Result<bool, Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
 
-    async fn colloscopes_get_all(
+    fn colloscopes_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::ColloscopeId, Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>>,
         Self::InternalError,
     >;
-    async fn colloscopes_get(
+    fn colloscopes_get(
         &self,
         index: Self::ColloscopeId,
     ) -> std::result::Result<
         Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
         IdError<Self::InternalError, Self::ColloscopeId>,
     >;
-    async unsafe fn colloscopes_add_unchecked(
+    unsafe fn colloscopes_add_unchecked(
         &mut self,
         colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
     ) -> std::result::Result<Self::ColloscopeId, Self::InternalError>;
-    async unsafe fn colloscopes_remove_unchecked(
+    unsafe fn colloscopes_remove_unchecked(
         &mut self,
         index: Self::ColloscopeId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn colloscopes_update_unchecked(
+    unsafe fn colloscopes_update_unchecked(
         &mut self,
         index: Self::ColloscopeId,
         colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
     ) -> std::result::Result<(), Self::InternalError>;
 
-    async fn slot_selections_get_all(
+    fn slot_selections_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<Self::SlotSelectionId, SlotSelection<Self::SubjectId, Self::TimeSlotId>>,
         Self::InternalError,
     >;
-    async fn slot_selections_get(
+    fn slot_selections_get(
         &self,
         index: Self::SlotSelectionId,
     ) -> std::result::Result<
         SlotSelection<Self::SubjectId, Self::TimeSlotId>,
         IdError<Self::InternalError, Self::SlotSelectionId>,
     >;
-    async unsafe fn slot_selections_add_unchecked(
+    unsafe fn slot_selections_add_unchecked(
         &mut self,
         slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
     ) -> std::result::Result<Self::SlotSelectionId, Self::InternalError>;
-    async unsafe fn slot_selections_remove_unchecked(
+    unsafe fn slot_selections_remove_unchecked(
         &mut self,
         index: Self::SlotSelectionId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async unsafe fn slot_selections_update_unchecked(
+    unsafe fn slot_selections_update_unchecked(
         &mut self,
         index: Self::SlotSelectionId,
         slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
@@ -1050,11 +1049,11 @@ impl<T: Storage> Logic<T> {
 }
 
 impl<T: Storage> Logic<T> {
-    pub async fn general_data_set(
+    pub fn general_data_set(
         &mut self,
         general_data: &GeneralData,
     ) -> std::result::Result<(), CheckedError<T::InternalError, Vec<T::WeekPatternId>>> {
-        let week_patterns = self.week_patterns_get_all().await?;
+        let week_patterns = self.week_patterns_get_all()?;
 
         let mut errors = vec![];
         for (&week_pattern_id, week_pattern) in &week_patterns {
@@ -1069,36 +1068,36 @@ impl<T: Storage> Logic<T> {
             return Err(CheckedError::CheckFailed(errors));
         }
 
-        Ok(unsafe { self.storage.general_data_set_unchecked(general_data) }.await?)
+        Ok(unsafe { self.storage.general_data_set_unchecked(general_data) }?)
     }
-    pub async fn general_data_get(&self) -> std::result::Result<GeneralData, T::InternalError> {
-        self.storage.general_data_get().await
+    pub fn general_data_get(&self) -> std::result::Result<GeneralData, T::InternalError> {
+        self.storage.general_data_get()
     }
 
-    pub async fn week_patterns_get_all(
+    pub fn week_patterns_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::WeekPatternId, WeekPattern>, T::InternalError> {
-        self.storage.week_patterns_get_all().await
+        self.storage.week_patterns_get_all()
     }
-    pub async fn week_patterns_get(
+    pub fn week_patterns_get(
         &self,
         index: T::WeekPatternId,
     ) -> std::result::Result<WeekPattern, IdError<T::InternalError, T::WeekPatternId>> {
-        self.storage.week_patterns_get(index).await
+        self.storage.week_patterns_get(index)
     }
-    pub async fn week_patterns_check_id(
+    pub fn week_patterns_check_id(
         &self,
         index: T::WeekPatternId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let week_patterns = self.week_patterns_get_all().await?;
+        let week_patterns = self.week_patterns_get_all()?;
 
         Ok(week_patterns.contains_key(&index))
     }
-    pub async fn week_patterns_check_data(
+    pub fn week_patterns_check_data(
         &self,
         pattern: &WeekPattern,
     ) -> std::result::Result<(), WeekPatternError<T::InternalError>> {
-        let general_data = self.general_data_get().await?;
+        let general_data = self.general_data_get()?;
 
         if let Some(last_week) = pattern.weeks.last() {
             if last_week.0 >= general_data.week_count.get() {
@@ -1108,36 +1107,35 @@ impl<T: Storage> Logic<T> {
 
         Ok(())
     }
-    pub async fn week_patterns_add(
+    pub fn week_patterns_add(
         &mut self,
         pattern: &WeekPattern,
     ) -> std::result::Result<T::WeekPatternId, WeekPatternError<T::InternalError>> {
-        self.week_patterns_check_data(pattern).await?;
+        self.week_patterns_check_data(pattern)?;
 
-        Ok(unsafe { self.storage.week_patterns_add_unchecked(pattern) }.await?)
+        Ok(unsafe { self.storage.week_patterns_add_unchecked(pattern) }?)
     }
-    pub async fn week_patterns_update(
+    pub fn week_patterns_update(
         &mut self,
         index: T::WeekPatternId,
         pattern: &WeekPattern,
     ) -> std::result::Result<(), WeekPatternIdError<T::InternalError, T::WeekPatternId>> {
-        if !self.week_patterns_check_id(index).await? {
+        if !self.week_patterns_check_id(index)? {
             return Err(WeekPatternIdError::InvalidId(index));
         }
         self.week_patterns_check_data(pattern)
-            .await
             .map_err(WeekPatternIdError::from_week_pattern_error)?;
 
-        Ok(unsafe { self.storage.week_patterns_update_unchecked(index, pattern) }.await?)
+        Ok(unsafe { self.storage.week_patterns_update_unchecked(index, pattern) }?)
     }
-    pub async fn week_patterns_check_can_remove(
+    pub fn week_patterns_check_can_remove(
         &self,
         index: T::WeekPatternId,
     ) -> std::result::Result<
         Vec<WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
         IdError<T::InternalError, T::WeekPatternId>,
     > {
-        let week_patterns = self.week_patterns_get_all().await?;
+        let week_patterns = self.week_patterns_get_all()?;
 
         if !week_patterns.contains_key(&index) {
             return Err(IdError::InvalidId(index));
@@ -1145,14 +1143,14 @@ impl<T: Storage> Logic<T> {
 
         let mut dependancies = Vec::new();
 
-        let incompats = self.incompats_get_all().await?;
+        let incompats = self.incompats_get_all()?;
         for (incompat_id, incompat) in incompats {
             if incompat.references_week_pattern(index) {
                 dependancies.push(WeekPatternDependancy::Incompat(incompat_id));
             }
         }
 
-        let time_slots = self.time_slots_get_all().await?;
+        let time_slots = self.time_slots_get_all()?;
         for (time_slot_id, time_slot) in time_slots {
             if time_slot.week_pattern_id == index {
                 dependancies.push(WeekPatternDependancy::TimeSlot(time_slot_id));
@@ -1161,7 +1159,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn week_patterns_remove(
+    pub fn week_patterns_remove(
         &mut self,
         index: T::WeekPatternId,
     ) -> std::result::Result<
@@ -1174,47 +1172,46 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .week_patterns_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.week_patterns_remove_unchecked(index) }.await?;
+        unsafe { self.storage.week_patterns_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn teachers_get_all(
+    pub fn teachers_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::TeacherId, Teacher>, T::InternalError> {
-        self.storage.teachers_get_all().await
+        self.storage.teachers_get_all()
     }
-    pub async fn teachers_get(
+    pub fn teachers_get(
         &self,
         index: T::TeacherId,
     ) -> std::result::Result<Teacher, IdError<T::InternalError, T::TeacherId>> {
-        self.storage.teachers_get(index).await
+        self.storage.teachers_get(index)
     }
-    pub async fn teachers_add(
+    pub fn teachers_add(
         &mut self,
         teacher: &Teacher,
     ) -> std::result::Result<T::TeacherId, T::InternalError> {
-        self.storage.teachers_add(teacher).await
+        self.storage.teachers_add(teacher)
     }
-    pub async fn teachers_update(
+    pub fn teachers_update(
         &mut self,
         index: T::TeacherId,
         teacher: &Teacher,
     ) -> std::result::Result<(), IdError<T::InternalError, T::TeacherId>> {
-        self.storage.teachers_update(index, teacher).await
+        self.storage.teachers_update(index, teacher)
     }
-    pub async fn teachers_check_can_remove(
+    pub fn teachers_check_can_remove(
         &self,
         index: T::TeacherId,
     ) -> std::result::Result<
         Vec<TeacherDependancy<T::TimeSlotId, T::ColloscopeId>>,
         IdError<T::InternalError, T::TeacherId>,
     > {
-        let teachers = self.teachers_get_all().await?;
+        let teachers = self.teachers_get_all()?;
 
         if !teachers.contains_key(&index) {
             return Err(IdError::InvalidId(index));
@@ -1222,14 +1219,14 @@ impl<T: Storage> Logic<T> {
 
         let mut dependancies = Vec::new();
 
-        let time_slots = self.time_slots_get_all().await?;
+        let time_slots = self.time_slots_get_all()?;
         for (time_slot_id, time_slot) in time_slots {
             if time_slot.teacher_id == index {
                 dependancies.push(TeacherDependancy::TimeSlot(time_slot_id));
             }
         }
 
-        let colloscopes = self.colloscopes_get_all().await?;
+        let colloscopes = self.colloscopes_get_all()?;
         for (colloscope_id, colloscope) in colloscopes {
             if colloscope.references_teacher(index) {
                 dependancies.push(TeacherDependancy::Colloscope(colloscope_id));
@@ -1238,7 +1235,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn teachers_remove(
+    pub fn teachers_remove(
         &mut self,
         index: T::TeacherId,
     ) -> std::result::Result<
@@ -1251,47 +1248,46 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .teachers_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.teachers_remove_unchecked(index) }.await?;
+        unsafe { self.storage.teachers_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn students_get_all(
+    pub fn students_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::StudentId, Student>, T::InternalError> {
-        self.storage.students_get_all().await
+        self.storage.students_get_all()
     }
-    pub async fn students_get(
+    pub fn students_get(
         &self,
         index: T::StudentId,
     ) -> std::result::Result<Student, IdError<T::InternalError, T::StudentId>> {
-        self.storage.students_get(index).await
+        self.storage.students_get(index)
     }
-    pub async fn students_add(
+    pub fn students_add(
         &mut self,
         student: &Student,
     ) -> std::result::Result<T::StudentId, T::InternalError> {
-        self.storage.students_add(student).await
+        self.storage.students_add(student)
     }
-    pub async fn students_update(
+    pub fn students_update(
         &mut self,
         index: T::StudentId,
         student: &Student,
     ) -> std::result::Result<(), IdError<T::InternalError, T::StudentId>> {
-        self.storage.students_update(index, student).await
+        self.storage.students_update(index, student)
     }
-    pub async fn students_check_can_remove(
+    pub fn students_check_can_remove(
         &self,
         index: T::StudentId,
     ) -> std::result::Result<
         Vec<StudentDependancy<T::GroupListId, T::ColloscopeId>>,
         IdError<T::InternalError, T::StudentId>,
     > {
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
 
         if !students.contains_key(&index) {
             return Err(IdError::InvalidId(index));
@@ -1299,14 +1295,14 @@ impl<T: Storage> Logic<T> {
 
         let mut dependancies = Vec::new();
 
-        let group_lists = self.group_lists_get_all().await?;
+        let group_lists = self.group_lists_get_all()?;
         for (group_list_id, group_list) in group_lists {
             if group_list.references_student(index) {
                 dependancies.push(StudentDependancy::GroupList(group_list_id));
             }
         }
 
-        let colloscopes = self.colloscopes_get_all().await?;
+        let colloscopes = self.colloscopes_get_all()?;
         for (colloscope_id, colloscope) in colloscopes {
             if colloscope.references_student(index) {
                 dependancies.push(StudentDependancy::Colloscope(colloscope_id));
@@ -1315,7 +1311,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn students_remove(
+    pub fn students_remove(
         &mut self,
         index: T::StudentId,
     ) -> std::result::Result<
@@ -1328,49 +1324,46 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .students_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.students_remove_unchecked(index) }.await?;
+        unsafe { self.storage.students_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn subject_groups_get_all(
+    pub fn subject_groups_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::SubjectGroupId, SubjectGroup>, T::InternalError> {
-        self.storage.subject_groups_get_all().await
+        self.storage.subject_groups_get_all()
     }
-    pub async fn subject_groups_get(
+    pub fn subject_groups_get(
         &self,
         index: T::SubjectGroupId,
     ) -> std::result::Result<SubjectGroup, IdError<T::InternalError, T::SubjectGroupId>> {
-        self.storage.subject_groups_get(index).await
+        self.storage.subject_groups_get(index)
     }
-    pub async fn subject_groups_add(
+    pub fn subject_groups_add(
         &mut self,
         subject_group: &SubjectGroup,
     ) -> std::result::Result<T::SubjectGroupId, T::InternalError> {
-        self.storage.subject_groups_add(subject_group).await
+        self.storage.subject_groups_add(subject_group)
     }
-    pub async fn subject_groups_update(
+    pub fn subject_groups_update(
         &mut self,
         index: T::SubjectGroupId,
         subject_group: &SubjectGroup,
     ) -> std::result::Result<(), IdError<T::InternalError, T::SubjectGroupId>> {
-        self.storage
-            .subject_groups_update(index, subject_group)
-            .await
+        self.storage.subject_groups_update(index, subject_group)
     }
-    pub async fn subject_groups_check_can_remove(
+    pub fn subject_groups_check_can_remove(
         &self,
         index: T::SubjectGroupId,
     ) -> std::result::Result<
         Vec<SubjectGroupDependancy<T::SubjectId, T::StudentId>>,
         IdError<T::InternalError, T::SubjectGroupId>,
     > {
-        let subject_groups = self.subject_groups_get_all().await?;
+        let subject_groups = self.subject_groups_get_all()?;
 
         if !subject_groups.contains_key(&index) {
             return Err(IdError::InvalidId(index));
@@ -1378,17 +1371,16 @@ impl<T: Storage> Logic<T> {
 
         let mut dependancies = Vec::new();
 
-        let subjects = self.subjects_get_all().await?;
+        let subjects = self.subjects_get_all()?;
         for (subject_id, subject) in subjects {
             if subject.subject_group_id == index {
                 dependancies.push(SubjectGroupDependancy::Subject(subject_id));
             }
         }
 
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
         for (student_id, _student) in students {
             let subject_for_student = self.subject_group_for_student_get(student_id, index)
-                .await
                 .map_err(
                     |e| match e {
                         Id2Error::InternalError(int_err) => IdError::InternalError(int_err),
@@ -1403,7 +1395,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn subject_groups_remove(
+    pub fn subject_groups_remove(
         &mut self,
         index: T::SubjectGroupId,
     ) -> std::result::Result<
@@ -1416,41 +1408,40 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .subject_groups_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.subject_groups_remove_unchecked(index) }.await?;
+        unsafe { self.storage.subject_groups_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn incompats_get_all(
+    pub fn incompats_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::IncompatId, Incompat<T::WeekPatternId>>, T::InternalError>
     {
-        self.storage.incompats_get_all().await
+        self.storage.incompats_get_all()
     }
-    pub async fn incompats_get(
+    pub fn incompats_get(
         &self,
         index: T::IncompatId,
     ) -> std::result::Result<Incompat<T::WeekPatternId>, IdError<T::InternalError, T::IncompatId>>
     {
-        self.storage.incompats_get(index).await
+        self.storage.incompats_get(index)
     }
-    pub async fn incompats_check_id(
+    pub fn incompats_check_id(
         &self,
         index: T::IncompatId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let incompats = self.incompats_get_all().await?;
+        let incompats = self.incompats_get_all()?;
 
         Ok(incompats.contains_key(&index))
     }
-    pub async fn incompats_check_data(
+    pub fn incompats_check_data(
         &self,
         incompat: &Incompat<T::WeekPatternId>,
     ) -> std::result::Result<DataStatusWithId<T::WeekPatternId>, T::InternalError> {
-        let week_patterns = self.week_patterns_get_all().await?;
+        let week_patterns = self.week_patterns_get_all()?;
 
         for incompat_group in &incompat.groups {
             for incompat_slot in &incompat_group.slots {
@@ -1462,62 +1453,61 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithId::Ok)
     }
-    pub async fn incompats_add(
+    pub fn incompats_add(
         &mut self,
         incompat: &Incompat<T::WeekPatternId>,
     ) -> std::result::Result<T::IncompatId, CrossError<T::InternalError, T::WeekPatternId>> {
-        let data_status = self.incompats_check_data(incompat).await?;
+        let data_status = self.incompats_check_data(incompat)?;
         match data_status {
             DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
             DataStatusWithId::Ok => {
-                let id = unsafe { self.storage.incompats_add_unchecked(incompat) }.await?;
+                let id = unsafe { self.storage.incompats_add_unchecked(incompat) }?;
                 Ok(id)
             }
         }
     }
-    pub async fn incompats_update(
+    pub fn incompats_update(
         &mut self,
         index: T::IncompatId,
         incompat: &Incompat<T::WeekPatternId>,
     ) -> std::result::Result<(), CrossIdError<T::InternalError, T::IncompatId, T::WeekPatternId>>
     {
-        if !self.incompats_check_id(index).await? {
+        if !self.incompats_check_id(index)? {
             return Err(CrossIdError::InvalidId(index));
         }
 
-        let data_status = self.incompats_check_data(incompat).await?;
+        let data_status = self.incompats_check_data(incompat)?;
         match data_status {
             DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
             DataStatusWithId::Ok => {
-                unsafe { self.storage.incompats_update_unchecked(index, incompat) }.await?;
+                unsafe { self.storage.incompats_update_unchecked(index, incompat) }?;
                 Ok(())
             }
         }
     }
-    pub async fn incompats_check_can_remove(
+    pub fn incompats_check_can_remove(
         &self,
         index: T::IncompatId,
     ) -> std::result::Result<
         Vec<IncompatDependancy<T::SubjectId, T::StudentId>>,
         IdError<T::InternalError, T::IncompatId>,
     > {
-        if !self.incompats_check_id(index).await? {
+        if !self.incompats_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         let mut dependancies = Vec::new();
 
-        let subjects = self.subjects_get_all().await?;
+        let subjects = self.subjects_get_all()?;
         for (subject_id, subject) in subjects {
             if subject.incompat_id == Some(index) {
                 dependancies.push(IncompatDependancy::Subject(subject_id));
             }
         }
 
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
         for (student_id, _student) in students {
             let incompat_for_student = self.incompat_for_student_get(student_id, index)
-                .await
                 .map_err(
                     |e| match e {
                         Id2Error::InternalError(int_err) => IdError::InternalError(int_err),
@@ -1532,7 +1522,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn incompats_remove(
+    pub fn incompats_remove(
         &mut self,
         index: T::IncompatId,
     ) -> std::result::Result<
@@ -1545,41 +1535,40 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .incompats_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.incompats_remove_unchecked(index) }.await?;
+        unsafe { self.storage.incompats_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn group_lists_get_all(
+    pub fn group_lists_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::GroupListId, GroupList<T::StudentId>>, T::InternalError>
     {
-        self.storage.group_lists_get_all().await
+        self.storage.group_lists_get_all()
     }
-    pub async fn group_lists_get(
+    pub fn group_lists_get(
         &self,
         index: T::GroupListId,
     ) -> std::result::Result<GroupList<T::StudentId>, IdError<T::InternalError, T::GroupListId>>
     {
-        self.storage.group_lists_get(index).await
+        self.storage.group_lists_get(index)
     }
-    pub async fn group_lists_check_id(
+    pub fn group_lists_check_id(
         &self,
         index: T::GroupListId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let group_lists = self.group_lists_get_all().await?;
+        let group_lists = self.group_lists_get_all()?;
 
         Ok(group_lists.contains_key(&index))
     }
-    pub async fn group_lists_check_data(
+    pub fn group_lists_check_data(
         &self,
         group_list: &GroupList<T::StudentId>,
     ) -> std::result::Result<DataStatusWithIdAndInvalidState<T::StudentId>, T::InternalError> {
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
 
         for (&student_id, &group) in &group_list.students_mapping {
             if !students.contains_key(&student_id) {
@@ -1593,14 +1582,14 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithIdAndInvalidState::Ok)
     }
-    pub async fn group_lists_add(
+    pub fn group_lists_add(
         &mut self,
         group_list: &GroupList<T::StudentId>,
     ) -> std::result::Result<
         T::GroupListId,
         InvalidCrossError<T::InternalError, GroupList<T::StudentId>, T::StudentId>,
     > {
-        let data_status = self.group_lists_check_data(group_list).await?;
+        let data_status = self.group_lists_check_data(group_list)?;
         match data_status {
             DataStatusWithIdAndInvalidState::BadCrossId(id) => {
                 Err(InvalidCrossError::InvalidCrossId(id))
@@ -1609,12 +1598,12 @@ impl<T: Storage> Logic<T> {
                 Err(InvalidCrossError::InvalidData(group_list.clone()))
             }
             DataStatusWithIdAndInvalidState::Ok => {
-                let id = unsafe { self.storage.group_lists_add_unchecked(group_list) }.await?;
+                let id = unsafe { self.storage.group_lists_add_unchecked(group_list) }?;
                 Ok(id)
             }
         }
     }
-    pub async fn group_lists_update(
+    pub fn group_lists_update(
         &mut self,
         index: T::GroupListId,
         group_list: &GroupList<T::StudentId>,
@@ -1627,11 +1616,11 @@ impl<T: Storage> Logic<T> {
             T::StudentId,
         >,
     > {
-        if !self.group_lists_check_id(index).await? {
+        if !self.group_lists_check_id(index)? {
             return Err(InvalidCrossIdError::InvalidId(index));
         }
 
-        let data_status = self.group_lists_check_data(group_list).await?;
+        let data_status = self.group_lists_check_data(group_list)?;
         match data_status {
             DataStatusWithIdAndInvalidState::BadCrossId(id) => {
                 Err(InvalidCrossIdError::InvalidCrossId(id))
@@ -1640,22 +1629,22 @@ impl<T: Storage> Logic<T> {
                 Err(InvalidCrossIdError::InvalidData(group_list.clone()))
             }
             DataStatusWithIdAndInvalidState::Ok => {
-                unsafe { self.storage.group_lists_update_unchecked(index, group_list) }.await?;
+                unsafe { self.storage.group_lists_update_unchecked(index, group_list) }?;
                 Ok(())
             }
         }
     }
-    pub async fn group_lists_check_can_remove(
+    pub fn group_lists_check_can_remove(
         &self,
         index: T::GroupListId,
     ) -> std::result::Result<Vec<T::SubjectId>, IdError<T::InternalError, T::GroupListId>> {
-        if !self.group_lists_check_id(index).await? {
+        if !self.group_lists_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         let mut dependancies = Vec::new();
 
-        let subjects = self.subjects_get_all().await?;
+        let subjects = self.subjects_get_all()?;
         for (subject_id, subject) in subjects {
             if subject.group_list_id == Some(index) {
                 dependancies.push(subject_id);
@@ -1664,68 +1653,67 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn group_lists_remove(
+    pub fn group_lists_remove(
         &mut self,
         index: T::GroupListId,
     ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::GroupListId, Vec<T::SubjectId>>>
     {
         let dependancies = self
             .group_lists_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.group_lists_remove_unchecked(index) }.await?;
+        unsafe { self.storage.group_lists_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn subjects_get_all(
+    pub fn subjects_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<T::SubjectId, Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>>,
         T::InternalError,
     > {
-        self.storage.subjects_get_all().await
+        self.storage.subjects_get_all()
     }
-    pub async fn subjects_get(
+    pub fn subjects_get(
         &self,
         index: T::SubjectId,
     ) -> std::result::Result<
         Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
         IdError<T::InternalError, T::SubjectId>,
     > {
-        self.storage.subjects_get(index).await
+        self.storage.subjects_get(index)
     }
-    pub async fn subjects_check_id(
+    pub fn subjects_check_id(
         &self,
         index: T::SubjectId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let subjects = self.subjects_get_all().await?;
+        let subjects = self.subjects_get_all()?;
 
         Ok(subjects.contains_key(&index))
     }
-    pub async fn subjects_check_data(
+    pub fn subjects_check_data(
         &self,
         subject: &Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
     ) -> std::result::Result<
         DataStatusWithId3<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
         T::InternalError,
     > {
-        let subject_groups = self.subject_groups_get_all().await?;
+        let subject_groups = self.subject_groups_get_all()?;
         if !subject_groups.contains_key(&subject.subject_group_id) {
             return Ok(DataStatusWithId3::BadCrossId1(subject.subject_group_id));
         }
 
         if let Some(incompat_id) = subject.incompat_id {
-            let incompats = self.incompats_get_all().await?;
+            let incompats = self.incompats_get_all()?;
             if !incompats.contains_key(&incompat_id) {
                 return Ok(DataStatusWithId3::BadCrossId2(incompat_id));
             }
         }
 
         if let Some(group_list_id) = subject.group_list_id {
-            let group_lists = self.group_lists_get_all().await?;
+            let group_lists = self.group_lists_get_all()?;
             if !group_lists.contains_key(&group_list_id) {
                 return Ok(DataStatusWithId3::BadCrossId3(group_list_id));
             }
@@ -1733,25 +1721,25 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithId3::Ok)
     }
-    pub async fn subjects_add(
+    pub fn subjects_add(
         &mut self,
         subject: &Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
     ) -> std::result::Result<
         T::SubjectId,
         Cross3Error<T::InternalError, T::SubjectGroupId, T::IncompatId, T::GroupListId>,
     > {
-        let data_status = self.subjects_check_data(subject).await?;
+        let data_status = self.subjects_check_data(subject)?;
         match data_status {
             DataStatusWithId3::BadCrossId1(id1) => Err(Cross3Error::InvalidCrossId1(id1)),
             DataStatusWithId3::BadCrossId2(id2) => Err(Cross3Error::InvalidCrossId2(id2)),
             DataStatusWithId3::BadCrossId3(id3) => Err(Cross3Error::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
-                let id = unsafe { self.storage.subjects_add_unchecked(subject) }.await?;
+                let id = unsafe { self.storage.subjects_add_unchecked(subject) }?;
                 Ok(id)
             }
         }
     }
-    pub async fn subjects_update(
+    pub fn subjects_update(
         &mut self,
         index: T::SubjectId,
         subject: &Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>,
@@ -1766,11 +1754,11 @@ impl<T: Storage> Logic<T> {
             T::StudentId,
         >,
     > {
-        if !self.subjects_check_id(index).await? {
+        if !self.subjects_check_id(index)? {
             return Err(Cross3IdWithDepError::InvalidId(index));
         }
 
-        let current_subject = self.subjects_get(index).await.map_err(|e| match e {
+        let current_subject = self.subjects_get(index).map_err(|e| match e {
             IdError::InvalidId(id) => panic!(
                 "Subject group id {:?} should be valid as it was already checked",
                 id
@@ -1779,11 +1767,10 @@ impl<T: Storage> Logic<T> {
         })?;
 
         if current_subject.subject_group_id != subject.subject_group_id {
-            let students = self.students_get_all().await?;
+            let students = self.students_get_all()?;
             for (student_id, _student) in students {
                 let subject_group_id = subject.subject_group_id;
                 let subject_group_for_student = self.subject_group_for_student_get(student_id, subject_group_id)
-                    .await
                     .map_err(
                         |e| match e {
                             Id2Error::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
@@ -1797,40 +1784,39 @@ impl<T: Storage> Logic<T> {
             }
         }
 
-        let data_status = self.subjects_check_data(subject).await?;
+        let data_status = self.subjects_check_data(subject)?;
         match data_status {
             DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
             DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
             DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
-                unsafe { self.storage.subjects_update_unchecked(index, subject) }.await?;
+                unsafe { self.storage.subjects_update_unchecked(index, subject) }?;
                 Ok(())
             }
         }
     }
-    pub async fn subjects_check_can_remove(
+    pub fn subjects_check_can_remove(
         &self,
         index: T::SubjectId,
     ) -> std::result::Result<
         Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId, T::SlotSelectionId>>,
         IdError<T::InternalError, T::SubjectId>,
     > {
-        let subject = self.subjects_get(index).await?;
+        let subject = self.subjects_get(index)?;
 
         let mut dependancies = Vec::new();
 
-        let time_slots = self.time_slots_get_all().await?;
+        let time_slots = self.time_slots_get_all()?;
         for (time_slot_id, time_slot) in time_slots {
             if time_slot.subject_id == index {
                 dependancies.push(SubjectDependancy::TimeSlot(time_slot_id));
             }
         }
 
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
         for (student_id, _student) in students {
             let subject_group_id = subject.subject_group_id;
             let subject_group_for_student = self.subject_group_for_student_get(student_id, subject_group_id)
-                .await
                 .map_err(
                     |e| match e {
                         Id2Error::InternalError(int_err) => IdError::InternalError(int_err),
@@ -1843,14 +1829,14 @@ impl<T: Storage> Logic<T> {
             }
         }
 
-        let colloscopes = self.colloscopes_get_all().await?;
+        let colloscopes = self.colloscopes_get_all()?;
         for (colloscope_id, colloscope) in colloscopes {
             if colloscope.references_subject(index) {
                 dependancies.push(SubjectDependancy::Colloscope(colloscope_id));
             }
         }
 
-        let slot_selections = self.slot_selections_get_all().await?;
+        let slot_selections = self.slot_selections_get_all()?;
         for (slot_selection_id, slot_selection) in slot_selections {
             if slot_selection.subject_id == index {
                 dependancies.push(SubjectDependancy::SlotSelection(slot_selection_id));
@@ -1859,7 +1845,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn subjects_remove(
+    pub fn subjects_remove(
         &mut self,
         index: T::SubjectId,
     ) -> std::result::Result<
@@ -1874,87 +1860,86 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .subjects_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.subjects_remove_unchecked(index) }.await?;
+        unsafe { self.storage.subjects_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn time_slots_get_all(
+    pub fn time_slots_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<T::TimeSlotId, TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>>,
         T::InternalError,
     > {
-        self.storage.time_slots_get_all().await
+        self.storage.time_slots_get_all()
     }
-    pub async fn time_slots_get(
+    pub fn time_slots_get(
         &self,
         index: T::TimeSlotId,
     ) -> std::result::Result<
         TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
         IdError<T::InternalError, T::TimeSlotId>,
     > {
-        self.storage.time_slots_get(index).await
+        self.storage.time_slots_get(index)
     }
-    pub async fn time_slots_check_id(
+    pub fn time_slots_check_id(
         &self,
         index: T::TimeSlotId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let time_slots = self.time_slots_get_all().await?;
+        let time_slots = self.time_slots_get_all()?;
 
         Ok(time_slots.contains_key(&index))
     }
-    pub async fn time_slots_check_data(
+    pub fn time_slots_check_data(
         &self,
         time_slot: &TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
     ) -> std::result::Result<
         DataStatusWithId3<T::SubjectId, T::TeacherId, T::WeekPatternId>,
         T::InternalError,
     > {
-        let subjects = self.subjects_get_all().await?;
+        let subjects = self.subjects_get_all()?;
         if !subjects.contains_key(&time_slot.subject_id) {
             return Ok(DataStatusWithId3::BadCrossId1(time_slot.subject_id));
         }
 
-        let teachers = self.teachers_get_all().await?;
+        let teachers = self.teachers_get_all()?;
         if !teachers.contains_key(&time_slot.teacher_id) {
             return Ok(DataStatusWithId3::BadCrossId2(time_slot.teacher_id));
         }
 
-        let week_patterns = self.week_patterns_get_all().await?;
+        let week_patterns = self.week_patterns_get_all()?;
         if !week_patterns.contains_key(&time_slot.week_pattern_id) {
             return Ok(DataStatusWithId3::BadCrossId3(time_slot.week_pattern_id));
         }
 
         Ok(DataStatusWithId3::Ok)
     }
-    pub async fn time_slots_add(
+    pub fn time_slots_add(
         &mut self,
         time_slot: &TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
     ) -> std::result::Result<
         T::TimeSlotId,
         Cross3Error<T::InternalError, T::SubjectId, T::TeacherId, T::WeekPatternId>,
     > {
-        let data_status = self.time_slots_check_data(time_slot).await?;
+        let data_status = self.time_slots_check_data(time_slot)?;
         match data_status {
             DataStatusWithId3::BadCrossId1(id1) => Err(Cross3Error::InvalidCrossId1(id1)),
             DataStatusWithId3::BadCrossId2(id2) => Err(Cross3Error::InvalidCrossId2(id2)),
             DataStatusWithId3::BadCrossId3(id3) => Err(Cross3Error::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
-                let id = unsafe { self.storage.time_slots_add_unchecked(time_slot) }.await?;
+                let id = unsafe { self.storage.time_slots_add_unchecked(time_slot) }?;
                 Ok(id)
             }
         }
     }
-    async fn is_time_slot_referenced_by_slot_selections(
+    fn is_time_slot_referenced_by_slot_selections(
         &self,
         index: T::TimeSlotId,
     ) -> std::result::Result<Option<T::SlotSelectionId>, T::InternalError> {
-        let slot_selections = self.slot_selections_get_all().await?;
+        let slot_selections = self.slot_selections_get_all()?;
 
         for (slot_selection_id, slot_selection) in slot_selections {
             if slot_selection.references_time_slot(index) {
@@ -1964,7 +1949,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(None)
     }
-    pub async fn time_slots_update(
+    pub fn time_slots_update(
         &mut self,
         index: T::TimeSlotId,
         time_slot: &TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
@@ -1979,15 +1964,12 @@ impl<T: Storage> Logic<T> {
             T::SlotSelectionId,
         >,
     > {
-        if !self.time_slots_check_id(index).await? {
+        if !self.time_slots_check_id(index)? {
             return Err(Cross3IdWithDepError::InvalidId(index));
         }
 
-        if let Some(slot_selection_id) = self
-            .is_time_slot_referenced_by_slot_selections(index)
-            .await?
-        {
-            let current_time_slot = self.time_slots_get(index).await.map_err(|e| match e {
+        if let Some(slot_selection_id) = self.is_time_slot_referenced_by_slot_selections(index)? {
+            let current_time_slot = self.time_slots_get(index).map_err(|e| match e {
                 IdError::InvalidId(id) => panic!(
                     "Time slot id {:?} should be valid as it was already checked",
                     id
@@ -2000,38 +1982,38 @@ impl<T: Storage> Logic<T> {
             }
         }
 
-        let data_status = self.time_slots_check_data(time_slot).await?;
+        let data_status = self.time_slots_check_data(time_slot)?;
         match data_status {
             DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
             DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
             DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
-                unsafe { self.storage.time_slots_update_unchecked(index, time_slot) }.await?;
+                unsafe { self.storage.time_slots_update_unchecked(index, time_slot) }?;
                 Ok(())
             }
         }
     }
-    pub async fn time_slots_check_can_remove(
+    pub fn time_slots_check_can_remove(
         &self,
         index: T::TimeSlotId,
     ) -> std::result::Result<
         Vec<TimeSlotDependancy<T::GroupingId, T::SlotSelectionId>>,
         IdError<T::InternalError, T::TimeSlotId>,
     > {
-        if !self.time_slots_check_id(index).await? {
+        if !self.time_slots_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         let mut dependancies = Vec::new();
 
-        let groupings = self.groupings_get_all().await?;
+        let groupings = self.groupings_get_all()?;
         for (grouping_id, grouping) in groupings {
             if grouping.references_time_slot(index) {
                 dependancies.push(TimeSlotDependancy::Grouping(grouping_id));
             }
         }
 
-        let slot_selections = self.slot_selections_get_all().await?;
+        let slot_selections = self.slot_selections_get_all()?;
         for (slot_selection_id, slot_selection) in slot_selections {
             if slot_selection.references_time_slot(index) {
                 dependancies.push(TimeSlotDependancy::SlotSelection(slot_selection_id));
@@ -2040,7 +2022,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn time_slots_remove(
+    pub fn time_slots_remove(
         &mut self,
         index: T::TimeSlotId,
     ) -> std::result::Result<
@@ -2053,41 +2035,40 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .time_slots_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.time_slots_remove_unchecked(index) }.await?;
+        unsafe { self.storage.time_slots_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn groupings_get_all(
+    pub fn groupings_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<T::GroupingId, Grouping<T::TimeSlotId>>, T::InternalError>
     {
-        self.storage.groupings_get_all().await
+        self.storage.groupings_get_all()
     }
-    pub async fn groupings_get(
+    pub fn groupings_get(
         &self,
         index: T::GroupingId,
     ) -> std::result::Result<Grouping<T::TimeSlotId>, IdError<T::InternalError, T::GroupingId>>
     {
-        self.storage.groupings_get(index).await
+        self.storage.groupings_get(index)
     }
-    pub async fn groupings_check_id(
+    pub fn groupings_check_id(
         &self,
         index: T::GroupingId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let groupings = self.groupings_get_all().await?;
+        let groupings = self.groupings_get_all()?;
 
         Ok(groupings.contains_key(&index))
     }
-    pub async fn groupings_check_data(
+    pub fn groupings_check_data(
         &self,
         grouping: &Grouping<T::TimeSlotId>,
     ) -> std::result::Result<DataStatusWithId<T::TimeSlotId>, T::InternalError> {
-        let time_slots = self.time_slots_get_all().await?;
+        let time_slots = self.time_slots_get_all()?;
         for &slot_id in &grouping.slots {
             if !time_slots.contains_key(&slot_id) {
                 return Ok(DataStatusWithId::BadCrossId(slot_id));
@@ -2096,49 +2077,49 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithId::Ok)
     }
-    pub async fn groupings_add(
+    pub fn groupings_add(
         &mut self,
         grouping: &Grouping<T::TimeSlotId>,
     ) -> std::result::Result<T::GroupingId, CrossError<T::InternalError, T::TimeSlotId>> {
-        let data_status = self.groupings_check_data(grouping).await?;
+        let data_status = self.groupings_check_data(grouping)?;
         match data_status {
             DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
             DataStatusWithId::Ok => {
-                let id = unsafe { self.storage.groupings_add_unchecked(grouping) }.await?;
+                let id = unsafe { self.storage.groupings_add_unchecked(grouping) }?;
                 Ok(id)
             }
         }
     }
-    pub async fn groupings_update(
+    pub fn groupings_update(
         &mut self,
         index: T::GroupingId,
         grouping: &Grouping<T::TimeSlotId>,
     ) -> std::result::Result<(), CrossIdError<T::InternalError, T::GroupingId, T::TimeSlotId>> {
-        if !self.groupings_check_id(index).await? {
+        if !self.groupings_check_id(index)? {
             return Err(CrossIdError::InvalidId(index));
         }
 
-        let data_status = self.groupings_check_data(grouping).await?;
+        let data_status = self.groupings_check_data(grouping)?;
         match data_status {
             DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
             DataStatusWithId::Ok => {
-                unsafe { self.storage.groupings_update_unchecked(index, grouping) }.await?;
+                unsafe { self.storage.groupings_update_unchecked(index, grouping) }?;
                 Ok(())
             }
         }
     }
-    pub async fn groupings_check_can_remove(
+    pub fn groupings_check_can_remove(
         &self,
         index: T::GroupingId,
     ) -> std::result::Result<Vec<T::GroupingIncompatId>, IdError<T::InternalError, T::GroupingId>>
     {
-        if !self.groupings_check_id(index).await? {
+        if !self.groupings_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         let mut dependancies = Vec::new();
 
-        let grouping_incompats = self.grouping_incompats_get_all().await?;
+        let grouping_incompats = self.grouping_incompats_get_all()?;
         for (grouping_incompat_id, grouping_incompat) in grouping_incompats {
             if grouping_incompat.references_grouping(index) {
                 dependancies.push(grouping_incompat_id);
@@ -2147,7 +2128,7 @@ impl<T: Storage> Logic<T> {
 
         Ok(dependancies)
     }
-    pub async fn groupings_remove(
+    pub fn groupings_remove(
         &mut self,
         index: T::GroupingId,
     ) -> std::result::Result<
@@ -2156,45 +2137,44 @@ impl<T: Storage> Logic<T> {
     > {
         let dependancies = self
             .groupings_check_can_remove(index)
-            .await
             .map_err(CheckedIdError::from_id_error)?;
         if dependancies.len() != 0 {
             return Err(CheckedIdError::CheckFailed(dependancies));
         }
-        unsafe { self.storage.groupings_remove_unchecked(index) }.await?;
+        unsafe { self.storage.groupings_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn grouping_incompats_get_all(
+    pub fn grouping_incompats_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<T::GroupingIncompatId, GroupingIncompat<T::GroupingId>>,
         T::InternalError,
     > {
-        self.storage.grouping_incompats_get_all().await
+        self.storage.grouping_incompats_get_all()
     }
-    pub async fn grouping_incompats_get(
+    pub fn grouping_incompats_get(
         &self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<
         GroupingIncompat<T::GroupingId>,
         IdError<T::InternalError, T::GroupingIncompatId>,
     > {
-        self.storage.grouping_incompats_get(index).await
+        self.storage.grouping_incompats_get(index)
     }
-    pub async fn grouping_incompats_check_id(
+    pub fn grouping_incompats_check_id(
         &self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let grouping_incompats = self.grouping_incompats_get_all().await?;
+        let grouping_incompats = self.grouping_incompats_get_all()?;
 
         Ok(grouping_incompats.contains_key(&index))
     }
-    pub async fn grouping_incompats_check_data(
+    pub fn grouping_incompats_check_data(
         &self,
         grouping_incompat: &GroupingIncompat<T::GroupingId>,
     ) -> std::result::Result<DataStatusWithId<T::GroupingId>, T::InternalError> {
-        let groupings = self.groupings_get_all().await?;
+        let groupings = self.groupings_get_all()?;
 
         for &grouping_id in &grouping_incompat.groupings {
             if !groupings.contains_key(&grouping_id) {
@@ -2204,72 +2184,66 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithId::Ok)
     }
-    pub async fn grouping_incompats_add(
+    pub fn grouping_incompats_add(
         &mut self,
         grouping_incompat: &GroupingIncompat<T::GroupingId>,
     ) -> std::result::Result<T::GroupingIncompatId, CrossError<T::InternalError, T::GroupingId>>
     {
-        let data_status = self
-            .grouping_incompats_check_data(grouping_incompat)
-            .await?;
+        let data_status = self.grouping_incompats_check_data(grouping_incompat)?;
         match data_status {
             DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
             DataStatusWithId::Ok => {
                 let id = unsafe {
                     self.storage
                         .grouping_incompats_add_unchecked(grouping_incompat)
-                }
-                .await?;
+                }?;
                 Ok(id)
             }
         }
     }
-    pub async fn grouping_incompats_update(
+    pub fn grouping_incompats_update(
         &mut self,
         index: T::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<T::GroupingId>,
     ) -> std::result::Result<(), CrossIdError<T::InternalError, T::GroupingIncompatId, T::GroupingId>>
     {
-        if !self.grouping_incompats_check_id(index).await? {
+        if !self.grouping_incompats_check_id(index)? {
             return Err(CrossIdError::InvalidId(index));
         }
 
-        let data_status = self
-            .grouping_incompats_check_data(grouping_incompat)
-            .await?;
+        let data_status = self.grouping_incompats_check_data(grouping_incompat)?;
         match data_status {
             DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
             DataStatusWithId::Ok => {
                 unsafe {
                     self.storage
                         .grouping_incompats_update_unchecked(index, grouping_incompat)
-                }
-                .await?;
+                }?;
                 Ok(())
             }
         }
     }
-    pub async fn grouping_incompats_check_can_remove(
+    pub fn grouping_incompats_check_can_remove(
         &self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::GroupingIncompatId>> {
-        if !self.grouping_incompats_check_id(index).await? {
+        if !self.grouping_incompats_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         Ok(())
     }
-    pub async fn grouping_incompats_remove(
+    pub fn grouping_incompats_remove(
         &mut self,
         index: T::GroupingIncompatId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::GroupingIncompatId>> {
-        self.grouping_incompats_check_can_remove(index).await?;
+        self.grouping_incompats_check_can_remove(index)?;
 
-        unsafe { self.storage.grouping_incompats_remove_unchecked(index) }.await?;
+        unsafe { self.storage.grouping_incompats_remove_unchecked(index) }?;
         Ok(())
     }
 
-    pub async fn subject_group_for_student_get(
+    pub fn subject_group_for_student_get(
         &self,
         student_id: T::StudentId,
         subject_group_id: T::SubjectGroupId,
@@ -2279,9 +2253,8 @@ impl<T: Storage> Logic<T> {
     > {
         self.storage
             .subject_group_for_student_get(student_id, subject_group_id)
-            .await
     }
-    pub async fn subject_group_for_student_set(
+    pub fn subject_group_for_student_set(
         &mut self,
         student_id: T::StudentId,
         subject_group_id: T::SubjectGroupId,
@@ -2296,16 +2269,16 @@ impl<T: Storage> Logic<T> {
             T::SubjectId,
         >,
     > {
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
         if !students.contains_key(&student_id) {
             return Err(CrossId3Error::InvalidId1(student_id));
         }
-        let subject_groups = self.subject_groups_get_all().await?;
+        let subject_groups = self.subject_groups_get_all()?;
         if !subject_groups.contains_key(&subject_group_id) {
             return Err(CrossId3Error::InvalidId2(subject_group_id));
         }
         if let Some(id) = subject_id {
-            let subject = self.subjects_get(id).await.map_err(|e| match e {
+            let subject = self.subjects_get(id).map_err(|e| match e {
                 IdError::InternalError(int_err) => CrossId3Error::InternalError(int_err),
                 IdError::InvalidId(_) => CrossId3Error::InvalidId3(id),
             })?;
@@ -2319,76 +2292,73 @@ impl<T: Storage> Logic<T> {
                 subject_group_id,
                 subject_id,
             )
-        }
-        .await?;
+        }?;
         Ok(())
     }
 
-    pub async fn incompat_for_student_get(
+    pub fn incompat_for_student_get(
         &self,
         student_id: T::StudentId,
         incompat_id: T::IncompatId,
     ) -> std::result::Result<bool, Id2Error<T::InternalError, T::StudentId, T::IncompatId>> {
         self.storage
             .incompat_for_student_get(student_id, incompat_id)
-            .await
     }
-    pub async fn incompat_for_student_set(
+    pub fn incompat_for_student_set(
         &mut self,
         student_id: T::StudentId,
         incompat_id: T::IncompatId,
         enabled: bool,
     ) -> std::result::Result<(), Id2Error<T::InternalError, T::StudentId, T::IncompatId>> {
-        let students = self.students_get_all().await?;
+        let students = self.students_get_all()?;
         if !students.contains_key(&student_id) {
             return Err(Id2Error::InvalidId1(student_id));
         }
-        if !self.incompats_check_id(incompat_id).await? {
+        if !self.incompats_check_id(incompat_id)? {
             return Err(Id2Error::InvalidId2(incompat_id));
         }
         unsafe {
             self.storage
                 .incompat_for_student_set_unchecked(student_id, incompat_id, enabled)
-        }
-        .await?;
+        }?;
         Ok(())
     }
 
-    pub async fn colloscopes_get_all(
+    pub fn colloscopes_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<T::ColloscopeId, Colloscope<T::TeacherId, T::SubjectId, T::StudentId>>,
         T::InternalError,
     > {
-        self.storage.colloscopes_get_all().await
+        self.storage.colloscopes_get_all()
     }
-    pub async fn colloscopes_get(
+    pub fn colloscopes_get(
         &self,
         index: T::ColloscopeId,
     ) -> std::result::Result<
         Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
         IdError<T::InternalError, T::ColloscopeId>,
     > {
-        self.storage.colloscopes_get(index).await
+        self.storage.colloscopes_get(index)
     }
-    pub async fn colloscopes_check_id(
+    pub fn colloscopes_check_id(
         &self,
         index: T::ColloscopeId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let colloscopes = self.colloscopes_get_all().await?;
+        let colloscopes = self.colloscopes_get_all()?;
 
         Ok(colloscopes.contains_key(&index))
     }
-    pub async fn colloscopes_check_data(
+    pub fn colloscopes_check_data(
         &self,
         colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
     ) -> std::result::Result<
         DataStatusWithId3<T::TeacherId, T::SubjectId, T::StudentId>,
         T::InternalError,
     > {
-        let teachers = self.teachers_get_all().await?;
-        let subjects = self.subjects_get_all().await?;
-        let students = self.students_get_all().await?;
+        let teachers = self.teachers_get_all()?;
+        let subjects = self.subjects_get_all()?;
+        let students = self.students_get_all()?;
 
         for (&subject_id, subject_desc) in &colloscope.subjects {
             if !subjects.contains_key(&subject_id) {
@@ -2410,44 +2380,44 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithId3::Ok)
     }
-    pub async fn colloscopes_add(
+    pub fn colloscopes_add(
         &mut self,
         colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
     ) -> std::result::Result<
         T::ColloscopeId,
         Cross3Error<T::InternalError, T::TeacherId, T::SubjectId, T::StudentId>,
     > {
-        let data_status = self.colloscopes_check_data(colloscope).await?;
+        let data_status = self.colloscopes_check_data(colloscope)?;
         match data_status {
             DataStatusWithId3::BadCrossId1(id) => Err(Cross3Error::InvalidCrossId1(id)),
             DataStatusWithId3::BadCrossId2(id) => Err(Cross3Error::InvalidCrossId2(id)),
             DataStatusWithId3::BadCrossId3(id) => Err(Cross3Error::InvalidCrossId3(id)),
             DataStatusWithId3::Ok => {
-                let id = unsafe { self.storage.colloscopes_add_unchecked(colloscope) }.await?;
+                let id = unsafe { self.storage.colloscopes_add_unchecked(colloscope) }?;
                 Ok(id)
             }
         }
     }
-    pub async fn colloscopes_check_can_remove(
+    pub fn colloscopes_check_can_remove(
         &self,
         index: T::ColloscopeId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::ColloscopeId>> {
-        if !self.colloscopes_check_id(index).await? {
+        if !self.colloscopes_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         Ok(())
     }
-    pub async fn colloscopes_remove(
+    pub fn colloscopes_remove(
         &mut self,
         index: T::ColloscopeId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::ColloscopeId>> {
-        self.colloscopes_check_can_remove(index).await?;
+        self.colloscopes_check_can_remove(index)?;
 
-        unsafe { self.storage.colloscopes_remove_unchecked(index) }.await?;
+        unsafe { self.storage.colloscopes_remove_unchecked(index) }?;
         Ok(())
     }
-    pub async fn colloscopes_update(
+    pub fn colloscopes_update(
         &mut self,
         index: T::ColloscopeId,
         colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
@@ -2455,53 +2425,53 @@ impl<T: Storage> Logic<T> {
         (),
         Cross3IdError<T::InternalError, T::ColloscopeId, T::TeacherId, T::SubjectId, T::StudentId>,
     > {
-        if !self.colloscopes_check_id(index).await? {
+        if !self.colloscopes_check_id(index)? {
             return Err(Cross3IdError::InvalidId(index));
         }
 
-        let data_status = self.colloscopes_check_data(colloscope).await?;
+        let data_status = self.colloscopes_check_data(colloscope)?;
         match data_status {
             DataStatusWithId3::BadCrossId1(id) => Err(Cross3IdError::InvalidCrossId1(id)),
             DataStatusWithId3::BadCrossId2(id) => Err(Cross3IdError::InvalidCrossId2(id)),
             DataStatusWithId3::BadCrossId3(id) => Err(Cross3IdError::InvalidCrossId3(id)),
             DataStatusWithId3::Ok => {
-                unsafe { self.storage.colloscopes_update_unchecked(index, colloscope) }.await?;
+                unsafe { self.storage.colloscopes_update_unchecked(index, colloscope) }?;
                 Ok(())
             }
         }
     }
 
-    pub async fn slot_selections_get_all(
+    pub fn slot_selections_get_all(
         &self,
     ) -> std::result::Result<
         BTreeMap<T::SlotSelectionId, SlotSelection<T::SubjectId, T::TimeSlotId>>,
         T::InternalError,
     > {
-        self.storage.slot_selections_get_all().await
+        self.storage.slot_selections_get_all()
     }
-    pub async fn slot_selections_get(
+    pub fn slot_selections_get(
         &self,
         index: T::SlotSelectionId,
     ) -> std::result::Result<
         SlotSelection<T::SubjectId, T::TimeSlotId>,
         IdError<T::InternalError, T::SlotSelectionId>,
     > {
-        self.storage.slot_selections_get(index).await
+        self.storage.slot_selections_get(index)
     }
-    pub async fn slot_selections_check_id(
+    pub fn slot_selections_check_id(
         &self,
         index: T::SlotSelectionId,
     ) -> std::result::Result<bool, T::InternalError> {
-        let slot_selections = self.slot_selections_get_all().await?;
+        let slot_selections = self.slot_selections_get_all()?;
 
         Ok(slot_selections.contains_key(&index))
     }
-    pub async fn slot_selections_check_data(
+    pub fn slot_selections_check_data(
         &self,
         slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
     ) -> std::result::Result<DataStatusWithId2<T::SubjectId, T::TimeSlotId>, T::InternalError> {
-        let subjects = self.subjects_get_all().await?;
-        let time_slots = self.time_slots_get_all().await?;
+        let subjects = self.subjects_get_all()?;
+        let time_slots = self.time_slots_get_all()?;
 
         if !subjects.contains_key(&slot_selection.subject_id) {
             return Ok(DataStatusWithId2::BadCrossId1(slot_selection.subject_id));
@@ -2522,44 +2492,43 @@ impl<T: Storage> Logic<T> {
 
         Ok(DataStatusWithId2::Ok)
     }
-    pub async fn slot_selections_add(
+    pub fn slot_selections_add(
         &mut self,
         slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
     ) -> std::result::Result<
         T::SlotSelectionId,
         Cross2Error<T::InternalError, T::SubjectId, T::TimeSlotId>,
     > {
-        let data_status = self.slot_selections_check_data(slot_selection).await?;
+        let data_status = self.slot_selections_check_data(slot_selection)?;
         match data_status {
             DataStatusWithId2::BadCrossId1(id) => Err(Cross2Error::InvalidCrossId1(id)),
             DataStatusWithId2::BadCrossId2(id) => Err(Cross2Error::InvalidCrossId2(id)),
             DataStatusWithId2::Ok => {
-                let id =
-                    unsafe { self.storage.slot_selections_add_unchecked(slot_selection) }.await?;
+                let id = unsafe { self.storage.slot_selections_add_unchecked(slot_selection) }?;
                 Ok(id)
             }
         }
     }
-    pub async fn slot_selections_check_can_remove(
+    pub fn slot_selections_check_can_remove(
         &self,
         index: T::SlotSelectionId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::SlotSelectionId>> {
-        if !self.slot_selections_check_id(index).await? {
+        if !self.slot_selections_check_id(index)? {
             return Err(IdError::InvalidId(index));
         }
 
         Ok(())
     }
-    pub async fn slot_selections_remove(
+    pub fn slot_selections_remove(
         &mut self,
         index: T::SlotSelectionId,
     ) -> std::result::Result<(), IdError<T::InternalError, T::SlotSelectionId>> {
-        self.slot_selections_check_can_remove(index).await?;
+        self.slot_selections_check_can_remove(index)?;
 
-        unsafe { self.storage.slot_selections_remove_unchecked(index) }.await?;
+        unsafe { self.storage.slot_selections_remove_unchecked(index) }?;
         Ok(())
     }
-    pub async fn slot_selections_update(
+    pub fn slot_selections_update(
         &mut self,
         index: T::SlotSelectionId,
         slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
@@ -2567,11 +2536,11 @@ impl<T: Storage> Logic<T> {
         (),
         Cross2IdError<T::InternalError, T::SlotSelectionId, T::SubjectId, T::TimeSlotId>,
     > {
-        if !self.slot_selections_check_id(index).await? {
+        if !self.slot_selections_check_id(index)? {
             return Err(Cross2IdError::InvalidId(index));
         }
 
-        let data_status = self.slot_selections_check_data(slot_selection).await?;
+        let data_status = self.slot_selections_check_data(slot_selection)?;
         match data_status {
             DataStatusWithId2::BadCrossId1(id) => Err(Cross2IdError::InvalidCrossId1(id)),
             DataStatusWithId2::BadCrossId2(id) => Err(Cross2IdError::InvalidCrossId2(id)),
@@ -2579,8 +2548,7 @@ impl<T: Storage> Logic<T> {
                 unsafe {
                     self.storage
                         .slot_selections_update_unchecked(index, slot_selection)
-                }
-                .await?;
+                }?;
                 Ok(())
             }
         }
