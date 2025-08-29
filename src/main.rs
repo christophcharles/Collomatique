@@ -441,7 +441,7 @@ async fn solve_command(
         None => num_cpus::get(),
     };
 
-    let logic = app_state.get_backend_logic();
+    let logic = app_state.get_logic();
     let gen_colloscope_translator = logic.gen_colloscope_translator();
     let data = gen_colloscope_translator.build_validated_data().await?;
 
@@ -614,7 +614,7 @@ async fn week_count_command(
             Ok(None)
         }
         WeekCountCommand::Print => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let week_count = general_data.week_count.get();
             Ok(Some(week_count.to_string()))
         }
@@ -661,7 +661,7 @@ async fn max_interrogations_per_day_command(
             Ok(None)
         }
         MaxInterrogationsPerDayCommand::Print => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let max_interrogations_per_day = general_data.max_interrogations_per_day;
             let output = match max_interrogations_per_day {
                 Some(value) => value.get().to_string(),
@@ -682,7 +682,7 @@ async fn interrogations_per_week_range_command(
         InterrogationsPerWeekRangeCommand::SetMax {
             max_interrogations_per_week,
         } => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let interrogations_per_week = match general_data.interrogations_per_week {
                 Some(value) => value.start..(max_interrogations_per_week + 1),
                 None => 0..(max_interrogations_per_week + 1),
@@ -707,7 +707,7 @@ async fn interrogations_per_week_range_command(
         InterrogationsPerWeekRangeCommand::SetMin {
             min_interrogations_per_week,
         } => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let interrogations_per_week = match general_data.interrogations_per_week {
                 Some(value) => min_interrogations_per_week..value.end,
                 None => min_interrogations_per_week..(min_interrogations_per_week + 1),
@@ -745,7 +745,7 @@ async fn interrogations_per_week_range_command(
             Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Print => {
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let interrogations_per_week = general_data.interrogations_per_week;
             let output = match interrogations_per_week {
                 Some(value) => format!("{}..={}", value.start, value.end - 1),
@@ -841,10 +841,7 @@ async fn week_patterns_check_existing_names(
 ) -> Result<()> {
     use collomatique::frontend::state::Manager;
 
-    let week_patterns = app_state
-        .get_backend_logic()
-        .week_patterns_get_all()
-        .await?;
+    let week_patterns = app_state.week_patterns_get_all().await?;
     for (_, week_pattern) in &week_patterns {
         if week_pattern.name == name {
             return Err(anyhow!(format!(
@@ -872,7 +869,7 @@ async fn week_pattern_command(
             if !force {
                 week_patterns_check_existing_names(app_state, &name).await?;
             }
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
 
             let pattern = WeekPattern {
                 name,
@@ -986,10 +983,7 @@ async fn week_pattern_command(
             Ok(None)
         }
         WeekPatternCommand::PrintAll => {
-            let week_patterns = app_state
-                .get_backend_logic()
-                .week_patterns_get_all()
-                .await?;
+            let week_patterns = app_state.week_patterns_get_all().await?;
 
             let count = week_patterns.len();
             let width = count.to_string().len();
@@ -1021,7 +1015,7 @@ async fn week_pattern_command(
             let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
 
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             let new_week_pattern = WeekPattern {
                 name,
                 weeks: predefined_week_pattern_weeks(pattern, general_data.week_count),
@@ -1082,7 +1076,7 @@ async fn week_pattern_command(
         } => {
             use collomatique::backend::Week;
 
-            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let general_data = app_state.general_data_get().await?;
             for week in &weeks {
                 if week.get() > general_data.week_count.get() {
                     return Err(anyhow!("The week number {} is invalid as it is bigger than week_count (which is {})", week.get(), general_data.week_count.get()));

@@ -21,7 +21,7 @@ use backend::{IdError, WeekPatternDependancy};
 
 #[trait_variant::make(Send)]
 pub trait Manager: ManagerInternal {
-    fn get_backend_logic(&self) -> &backend::Logic<Self::Storage>;
+    fn get_logic(&self) -> &backend::Logic<Self::Storage>;
 
     async fn general_data_get(
         &self,
@@ -62,8 +62,8 @@ pub trait Manager: ManagerInternal {
 }
 
 impl<T: ManagerInternal> Manager for T {
-    fn get_backend_logic(&self) -> &backend::Logic<T::Storage> {
-        <Self as ManagerInternal>::get_backend_logic(self)
+    fn get_logic(&self) -> &backend::Logic<T::Storage> {
+        self.get_backend_logic()
     }
 
     fn general_data_get(
