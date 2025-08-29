@@ -1134,9 +1134,13 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            constraints.extend(
-                self.build_one_interrogation_per_period_constraints_for_subject(i, subject, true),
-            );
+            if !subject.period_is_strict {
+                constraints.extend(
+                    self.build_one_interrogation_per_period_constraints_for_subject(
+                        i, subject, true,
+                    ),
+                );
+            }
         }
 
         constraints
