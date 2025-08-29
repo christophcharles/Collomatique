@@ -6,8 +6,8 @@
 //! Its main purpose is to help define structure variables
 //! by providing tools for such a task.
 //!
-//! The main trait is [AgregateVariable]. Any type that
-//! implements [AgregateVariable] defines a new structure variables
+//! The main trait is [AggregatedVariable]. Any type that
+//! implements [AggregatedVariable] defines a new structure variables
 //! built from other variables.
 //!
 //! Two such cases are already implemented [AndVariable] that
@@ -20,7 +20,7 @@ mod tests;
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, UsableData, Variable};
 use std::collections::BTreeSet;
 
-/// Constraint description for [AggregateVariable]
+/// Constraint description for [AggregatedVariable]
 ///
 /// Aggregate variables are variables defined through structure constraints.
 /// These structure constraints will need description.
@@ -42,7 +42,7 @@ pub struct AggregatedVariableConstraintDesc<ProblemVariable> {
 /// AgregateVariable trait
 ///
 /// This trait must be implemnted by aggregate variable helpers.
-/// A type that implements [AgregateVariable] signals that it defines
+/// A type that implements [AggregatedVariable] signals that it defines
 /// a new variables from some other variables.
 ///
 /// It defines such a variable through 3 functions that:
@@ -72,7 +72,7 @@ where
 
 /// Variable implementing a logical 'AND'.
 ///
-/// [AndVariable] implements [AgregateVariable] and can help
+/// [AndVariable] implements [AggregatedVariable] and can help
 /// build a logical 'AND' in problems. It takes a name for
 /// the new variable and a list of variables (that should be binary
 /// otherwise the result is undefined) that should be ANDed together.
@@ -155,7 +155,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariable<ProblemVariable>
 
 /// Variable implementing a logical 'OR'.
 ///
-/// [OrVariable] implements [AgregateVariable] and can help
+/// [OrVariable] implements [AggregatedVariable] and can help
 /// build a logical 'OR' in problems. It takes a name for
 /// the new variable and a list of variables (that should be binary
 /// otherwise the result is undefined) that should be ORed together.
