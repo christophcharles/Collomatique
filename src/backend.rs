@@ -15,6 +15,35 @@ where
 }
 
 #[derive(Error, Debug)]
+pub enum CheckedIdError<T, Id, CheckData>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CheckData: std::fmt::Debug,
+{
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Check failed. Data provided is: {0:?}")]
+    CheckFailed(CheckData),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+impl<T, Id, CheckData> CheckedIdError<T, Id, CheckData>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CheckData: std::fmt::Debug,
+{
+    fn from_id_error(id_error: IdError<T, Id>) -> Self {
+        match id_error {
+            IdError::InvalidId(id) => CheckedIdError::InvalidId(id),
+            IdError::InternalError(int_err) => CheckedIdError::InternalError(int_err),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
 pub enum Id2Error<T, Id1, Id2>
 where
     T: std::fmt::Debug + std::error::Error,
@@ -146,8 +175,14 @@ where
     InternalError(#[from] T),
 }
 
-pub trait OrdId: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send {}
-impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send> OrdId for T {}
+pub trait OrdId:
+    std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy
+{
+}
+impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy> OrdId
+    for T
+{
+}
 
 #[derive(Error, Debug)]
 pub enum WeekPatternDependancy<IncompatId: OrdId, TimeSlotId: OrdId> {
@@ -194,12 +229,68 @@ pub trait Storage: Send + Sync {
     async unsafe fn week_patterns_remove_unchecked(
         &mut self,
         index: Self::WeekPatternId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async fn week_patterns_update(
         &mut self,
         index: Self::WeekPatternId,
         pattern: &WeekPattern,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
+    async fn week_patterns_check_can_remove(
+        &mut self,
+        index: Self::WeekPatternId,
+    ) -> std::result::Result<
+        Vec<WeekPatternDependancy<Self::IncompatId, Self::TimeSlotId>>,
+        IdError<Self::InternalError, Self::WeekPatternId>,
+    > {
+        async move {
+            let week_patterns = self.week_patterns_get_all().await?;
+
+            if !week_patterns.contains_key(&index) {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let incompats = self.incompats_get_all().await?;
+            for (incompat_id, incompat) in incompats {
+                if incompat.references_week_pattern(index) {
+                    dependancies.push(WeekPatternDependancy::Incompat(incompat_id));
+                }
+            }
+
+            let time_slots = self.time_slots_get_all().await?;
+            for (time_slot_id, time_slot) in time_slots {
+                if time_slot.week_pattern_id == index {
+                    dependancies.push(WeekPatternDependancy::TimeSlot(time_slot_id));
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn week_patterns_remove(
+        &mut self,
+        index: Self::WeekPatternId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            Self::InternalError,
+            Self::WeekPatternId,
+            Vec<WeekPatternDependancy<Self::IncompatId, Self::TimeSlotId>>,
+        >,
+    > {
+        async move {
+            let dependancies = self
+                .week_patterns_check_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.week_patterns_remove_unchecked(index) }.await?;
+            Ok(())
+        }
+    }
 
     async fn teachers_get_all(
         &self,
@@ -577,6 +668,19 @@ pub struct Incompat<WeekPatternId: OrdId> {
     pub name: String,
     pub max_count: usize,
     pub groups: BTreeSet<IncompatGroup<WeekPatternId>>,
+}
+
+impl<WeekPatternId: OrdId> Incompat<WeekPatternId> {
+    pub fn references_week_pattern(&self, week_pattern_id: WeekPatternId) -> bool {
+        for group in &self.groups {
+            for slot in &group.slots {
+                if slot.week_pattern_id == week_pattern_id {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
