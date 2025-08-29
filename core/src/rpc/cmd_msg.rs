@@ -8,6 +8,8 @@ pub mod subjects;
 pub use subjects::*;
 pub mod teachers;
 pub use teachers::*;
+pub mod students;
+pub use students::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
@@ -20,6 +22,7 @@ pub enum UpdateMsg {
     GeneralPlanning(GeneralPlanningCmdMsg),
     Subjects(SubjectsCmdMsg),
     Teachers(TeachersCmdMsg),
+    Students(StudentsCmdMsg),
 }
 
 impl UpdateMsg {
@@ -33,6 +36,7 @@ impl UpdateMsg {
             }
             UpdateMsg::Subjects(op) => crate::ops::UpdateOp::Subjects(op.promote(data)?),
             UpdateMsg::Teachers(op) => crate::ops::UpdateOp::Teachers(op.promote(data)?),
+            UpdateMsg::Students(op) => crate::ops::UpdateOp::Students(op.promote(data)?),
         })
     }
 }
