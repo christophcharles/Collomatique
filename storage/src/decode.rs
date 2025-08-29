@@ -88,14 +88,14 @@ fn check_entries_consistency(
                 }
                 caveats.insert(Caveat::UnknownEntries);
             }
-            _ => {
-                if entry.minimum_spec_version != entry.content.minimum_spec_version() {
+            EntryContent::ValidEntry(valid_entry) => {
+                if entry.minimum_spec_version != valid_entry.minimum_spec_version() {
                     return Err(DecodeError::MismatchedSpecRequirementInEntry);
                 }
-                if entry.needed_entry != entry.content.needed_entry() {
+                if entry.needed_entry != valid_entry.needed_entry() {
                     return Err(DecodeError::MismatchedSpecRequirementInEntry);
                 }
-                let tag = EntryTag::from(&entry.content);
+                let tag = EntryTag::from(valid_entry);
                 if !entries_found_so_far.insert(tag) {
                     return Err(DecodeError::DuplicatedEntry(tag));
                 }
@@ -126,9 +126,12 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
     let mut pre_data = PreData::default();
 
     for entry in entries {
-        match entry.content {
-            EntryContent::UnknownEntry => continue,
-            EntryContent::StudentList(student_list) => {
+        let EntryContent::ValidEntry(valid_entry) = entry.content else {
+            continue;
+        };
+
+        match valid_entry {
+            ValidEntry::StudentList(student_list) => {
                 student_list::decode_entry(student_list, &mut pre_data)?;
             }
         }
@@ -142,14 +145,12 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum EntryTag {
     StudentList,
-    UnknownEntry,
 }
 
-impl From<&EntryContent> for EntryTag {
-    fn from(value: &EntryContent) -> Self {
+impl From<&ValidEntry> for EntryTag {
+    fn from(value: &ValidEntry) -> Self {
         match value {
-            EntryContent::StudentList(_) => EntryTag::StudentList,
-            EntryContent::UnknownEntry => panic!("No tag for unknown entries"),
+            ValidEntry::StudentList(_) => EntryTag::StudentList,
         }
     }
 }
