@@ -84,18 +84,18 @@ impl From<&backend::GeneralData> for GeneralData {
             week_count: value.week_count,
             periodicity_cuts: value.periodicity_cuts.clone(),
             max_interrogations_per_day_for_single_student_cost: value
-                .costs_adjustements
+                .costs_adjustments
                 .max_interrogations_per_day_for_single_student,
             max_interrogations_per_day_for_all_students_cost: value
-                .costs_adjustements
+                .costs_adjustments
                 .max_interrogations_per_day_for_all_students,
             interrogations_per_week_range_for_single_student_cost: value
-                .costs_adjustements
+                .costs_adjustments
                 .interrogations_per_week_range_for_single_student,
             interrogations_per_week_range_for_all_students_cost: value
-                .costs_adjustements
+                .costs_adjustments
                 .interrogations_per_week_range_for_all_students,
-            balancing_cost: value.costs_adjustements.balancing,
+            balancing_cost: value.costs_adjustments.balancing,
         }
     }
 }
@@ -115,7 +115,7 @@ impl From<&GeneralData> for backend::GeneralData {
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
             periodicity_cuts: value.periodicity_cuts.clone(),
-            costs_adjustements: backend::CostsAdjustements {
+            costs_adjustments: backend::CostsAdjustments {
                 max_interrogations_per_day_for_single_student: value
                     .max_interrogations_per_day_for_single_student_cost,
                 max_interrogations_per_day_for_all_students: value
