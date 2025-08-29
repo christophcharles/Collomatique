@@ -70,6 +70,6 @@ fn test_dijkstra() {
 
     assert_eq!(
         solution,
-        Some(Config::from_iter(["x11", "y12", "y21", "x22",]))
+        Some(Config::from_iter(["x11", "y12", "y21", "x22"]))
     );
 }
