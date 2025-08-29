@@ -2675,7 +2675,7 @@ fn group_on_slot_selection_variables() {
 }
 
 #[test]
-fn no_group_on_slot_selection_variables() {
+fn default_group_on_slot_selection_variables() {
     let general = GeneralData {
         periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
@@ -2820,7 +2820,13 @@ fn no_group_on_slot_selection_variables() {
     let group_on_slot_selection_variables =
         ilp_translator.build_group_on_slot_selection_variables();
 
-    assert!(group_on_slot_selection_variables.is_empty());
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 },
+        Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 },
+    ]);
+
+    assert_eq!(group_on_slot_selection_variables, expected_result);
 }
 
 #[test]
@@ -6316,22 +6322,22 @@ fn simple_colloscope() {
     let gis_1_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 1 });
 
     #[rustfmt::skip]
-    let gossa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gossa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 0 });
+    let goss_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 0 });
     #[rustfmt::skip]
-    let gossa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 0 });
+    let goss_1_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gossa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 0 });
+    let goss_1_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 1, group: 0 });
 
     #[rustfmt::skip]
-    let gossa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gossa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 1 });
+    let goss_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 1 });
     #[rustfmt::skip]
-    let gossa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 1 });
+    let goss_1_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gossa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 1 });
+    let goss_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 1, group: 1 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
@@ -6351,34 +6357,34 @@ fn simple_colloscope() {
         (&gis_1_1_0 + &gis_1_1_1).leq(&Expr::constant(1)),
 
         // Auto Group On Week Selection
-        gis_0_0_0.leq(&gossa_0_0_0),
-        gis_0_0_0.geq(&gossa_0_0_0),
+        gis_0_0_0.leq(&goss_0_0_0),
+        gis_0_0_0.geq(&goss_0_0_0),
 
-        gis_0_1_0.leq(&gossa_0_1_0),
-        gis_0_1_0.geq(&gossa_0_1_0),
+        gis_0_1_0.leq(&goss_0_1_0),
+        gis_0_1_0.geq(&goss_0_1_0),
 
-        gis_1_0_0.leq(&gossa_1_0_0),
-        gis_1_0_0.geq(&gossa_1_0_0),
+        gis_1_0_0.leq(&goss_1_0_0),
+        gis_1_0_0.geq(&goss_1_0_0),
 
-        gis_1_1_0.leq(&gossa_1_1_0),
-        gis_1_1_0.geq(&gossa_1_1_0),
+        gis_1_1_0.leq(&goss_1_1_0),
+        gis_1_1_0.geq(&goss_1_1_0),
 
-        gis_0_0_1.leq(&gossa_0_0_1),
-        gis_0_0_1.geq(&gossa_0_0_1),
+        gis_0_0_1.leq(&goss_0_0_1),
+        gis_0_0_1.geq(&goss_0_0_1),
 
-        gis_0_1_1.leq(&gossa_0_1_1),
-        gis_0_1_1.geq(&gossa_0_1_1),
+        gis_0_1_1.leq(&goss_0_1_1),
+        gis_0_1_1.geq(&goss_0_1_1),
 
-        gis_1_0_1.leq(&gossa_1_0_1),
-        gis_1_0_1.geq(&gossa_1_0_1),
+        gis_1_0_1.leq(&goss_1_0_1),
+        gis_1_0_1.geq(&goss_1_0_1),
 
-        gis_1_1_1.leq(&gossa_1_1_1),
-        gis_1_1_1.geq(&gossa_1_1_1),
+        gis_1_1_1.leq(&goss_1_1_1),
+        gis_1_1_1.geq(&goss_1_1_1),
 
-        (&gossa_0_0_0 + &gossa_0_1_0).eq(&Expr::constant(1)),
-        (&gossa_1_0_0 + &gossa_1_1_0).eq(&Expr::constant(1)),
-        (&gossa_0_0_1 + &gossa_0_1_1).eq(&Expr::constant(1)),
-        (&gossa_1_0_1 + &gossa_1_1_1).eq(&Expr::constant(1)),
+        (&goss_0_0_0 + &goss_0_1_0).eq(&Expr::constant(1)),
+        (&goss_1_0_0 + &goss_1_1_0).eq(&Expr::constant(1)),
+        (&goss_0_0_1 + &goss_0_1_1).eq(&Expr::constant(1)),
+        (&goss_1_0_1 + &goss_1_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(constraints, expected_result);
@@ -6594,22 +6600,22 @@ fn colloscope_with_dynamic_groups() {
     let dga_1_1_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 5 });
 
     #[rustfmt::skip]
-    let gossa_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 0 });
+    let goss_0_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gossa_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 0 });
+    let goss_0_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 0 });
     #[rustfmt::skip]
-    let gossa_1_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 0 });
+    let goss_1_0_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 0, group: 0 });
     #[rustfmt::skip]
-    let gossa_1_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 0 });
+    let goss_1_1_0 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 1, group: 0 });
 
     #[rustfmt::skip]
-    let gossa_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 0, group: 1 });
+    let goss_0_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gossa_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 0, slot_selection: 1, group: 1 });
+    let goss_0_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 0, slot_selection: 1, group: 1 });
     #[rustfmt::skip]
-    let gossa_1_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 0, group: 1 });
+    let goss_1_0_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 0, group: 1 });
     #[rustfmt::skip]
-    let gossa_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelectionAuto { subject: 1, slot_selection: 1, group: 1 });
+    let goss_1_1_1 = Expr::<Variable>::var(Variable::GroupOnSlotSelection { subject: 1, slot_selection: 1, group: 1 });
 
     #[rustfmt::skip]
     let expected_result = BTreeSet::from([
@@ -6710,34 +6716,34 @@ fn colloscope_with_dynamic_groups() {
         dga_1_1_1_5.leq(&sig_1_5_1),
 
         // Auto Group On Week Selection
-        gis_0_0_0.leq(&gossa_0_0_0),
-        gis_0_0_0.geq(&gossa_0_0_0),
+        gis_0_0_0.leq(&goss_0_0_0),
+        gis_0_0_0.geq(&goss_0_0_0),
 
-        gis_0_1_0.leq(&gossa_0_1_0),
-        gis_0_1_0.geq(&gossa_0_1_0),
+        gis_0_1_0.leq(&goss_0_1_0),
+        gis_0_1_0.geq(&goss_0_1_0),
 
-        gis_1_0_0.leq(&gossa_1_0_0),
-        gis_1_0_0.geq(&gossa_1_0_0),
+        gis_1_0_0.leq(&goss_1_0_0),
+        gis_1_0_0.geq(&goss_1_0_0),
 
-        gis_1_1_0.leq(&gossa_1_1_0),
-        gis_1_1_0.geq(&gossa_1_1_0),
+        gis_1_1_0.leq(&goss_1_1_0),
+        gis_1_1_0.geq(&goss_1_1_0),
 
-        gis_0_0_1.leq(&gossa_0_0_1),
-        gis_0_0_1.geq(&gossa_0_0_1),
+        gis_0_0_1.leq(&goss_0_0_1),
+        gis_0_0_1.geq(&goss_0_0_1),
 
-        gis_0_1_1.leq(&gossa_0_1_1),
-        gis_0_1_1.geq(&gossa_0_1_1),
+        gis_0_1_1.leq(&goss_0_1_1),
+        gis_0_1_1.geq(&goss_0_1_1),
 
-        gis_1_0_1.leq(&gossa_1_0_1),
-        gis_1_0_1.geq(&gossa_1_0_1),
+        gis_1_0_1.leq(&goss_1_0_1),
+        gis_1_0_1.geq(&goss_1_0_1),
 
-        gis_1_1_1.leq(&gossa_1_1_1),
-        gis_1_1_1.geq(&gossa_1_1_1),
+        gis_1_1_1.leq(&goss_1_1_1),
+        gis_1_1_1.geq(&goss_1_1_1),
 
-        (&gossa_0_0_0 + &gossa_0_1_0).eq(&Expr::constant(1)),
-        (&gossa_1_0_0 + &gossa_1_1_0).eq(&Expr::constant(1)),
-        (&gossa_0_0_1 + &gossa_0_1_1).eq(&Expr::constant(1)),
-        (&gossa_1_0_1 + &gossa_1_1_1).eq(&Expr::constant(1)),
+        (&goss_0_0_0 + &goss_0_1_0).eq(&Expr::constant(1)),
+        (&goss_1_0_0 + &goss_1_1_0).eq(&Expr::constant(1)),
+        (&goss_0_0_1 + &goss_0_1_1).eq(&Expr::constant(1)),
+        (&goss_1_0_1 + &goss_1_1_1).eq(&Expr::constant(1)),
     ]);
 
     assert_eq!(constraints, expected_result);
