@@ -74,3 +74,28 @@ fn test_is_feasable_no_constraint() {
     assert_eq!(pb.is_feasable(&config_2), true);
     assert_eq!(pb.is_feasable(&config_3), true);
 }
+
+#[test]
+fn problem_extra_variable() {
+    let pb = ProblemBuilder::new().add_variable("X").build();
+
+    assert_eq!(pb.variables, BTreeSet::from([String::from("X")]));
+}
+#[test]
+fn problem_extra_variables() {
+    let pb = ProblemBuilder::new()
+        .add_variable("X")
+        .add_variable("Y")
+        .add_variables([String::from("Z"), String::from("W")])
+        .build();
+
+    assert_eq!(
+        pb.variables,
+        BTreeSet::from([
+            String::from("X"),
+            String::from("Y"),
+            String::from("Z"),
+            String::from("W")
+        ])
+    );
+}
