@@ -3,7 +3,7 @@ mod tests;
 
 use std::collections::BTreeMap;
 
-#[derive(Debug,Clone,Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Expr {
     coefs: BTreeMap<String, i32>,
     constant: i32,
@@ -21,14 +21,14 @@ pub struct Config {
     values: BTreeMap<String, bool>,
 }
 
-#[derive(Debug,Clone,Copy,PartialEq,Eq,Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Sign {
     Equals,
     #[default]
     LessThan,
 }
 
-#[derive(Debug,Clone,PartialEq,Eq,Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Constraint {
     expr: Expr,
     sign: Sign,
@@ -39,9 +39,7 @@ use std::collections::BTreeSet;
 impl Expr {
     pub fn var<T: Into<String>>(name: T) -> Self {
         Expr {
-            coefs: BTreeMap::from([
-                (name.into(), 1)
-            ]),
+            coefs: BTreeMap::from([(name.into(), 1)]),
             constant: 0,
         }
     }
@@ -85,9 +83,7 @@ impl Expr {
     }
 
     pub fn clean(&mut self) {
-        self.coefs.retain(|_k, v| {
-            *v != 0
-        });
+        self.coefs.retain(|_k, v| *v != 0);
     }
 
     pub fn cleaned(&self) -> Expr {
@@ -101,18 +97,17 @@ impl Expr {
         let mut coefs = BTreeMap::new();
         for (key, coef) in self.coefs.iter() {
             match config.values.get(key) {
-                Some(val) => if *val {
-                    constant += *coef;
-                },
+                Some(val) => {
+                    if *val {
+                        constant += *coef;
+                    }
+                }
                 None => {
                     coefs.insert(key.clone(), *coef);
-                },
+                }
             }
         }
-        Expr {
-            coefs,
-            constant,
-        }
+        Expr { coefs, constant }
     }
 
     pub fn to_value(&self) -> Option<i32> {
@@ -165,12 +160,10 @@ impl Constraint {
     pub fn to_bool(&self) -> Option<bool> {
         let val = self.expr.to_value()?;
 
-        Some(
-            match self.sign {
-                Sign::Equals => val == 0,
-                Sign::LessThan => val <= 0,
-            }
-        )
+        Some(match self.sign {
+            Sign::Equals => val == 0,
+            Sign::LessThan => val <= 0,
+        })
     }
 
     pub fn eval(&self, config: &Config) -> Option<bool> {
@@ -186,13 +179,13 @@ impl std::fmt::Display for Expr {
         }
 
         let mut it = self.coefs.iter().peekable();
-        while let Some((key,value)) = it.next() {
+        while let Some((key, value)) = it.next() {
             if *value < 0 {
                 write!(f, "({})*{}", value, key)?;
             } else {
                 write!(f, "{}*{}", value, key)?;
             }
-            
+
             if it.peek().is_some() || self.constant != 0 {
                 write!(f, " + ")?;
             }
@@ -211,7 +204,8 @@ impl std::fmt::Display for Expr {
 
 impl std::fmt::Display for Sign {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,
+        write!(
+            f,
             "{}",
             match self {
                 Sign::Equals => "=",
@@ -338,7 +332,6 @@ impl std::ops::Add<Expr> for i32 {
     }
 }
 
-
 impl std::ops::Mul<&Expr> for &i32 {
     type Output = Expr;
 
@@ -391,7 +384,7 @@ impl std::ops::Neg for Expr {
     type Output = Expr;
 
     fn neg(self) -> Self::Output {
-        - &self
+        -&self
     }
 }
 
@@ -431,7 +424,7 @@ impl std::ops::Sub<&i32> for &Expr {
     type Output = Expr;
 
     fn sub(self, rhs: &i32) -> Self::Output {
-        self + (- *rhs)
+        self + (-*rhs)
     }
 }
 

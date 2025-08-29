@@ -4,7 +4,7 @@ mod tools;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug,PartialEq,Eq,Default,Clone)]
+#[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub struct ProblemBuilder {
     constraints: Vec<linexpr::Constraint>,
 }
@@ -32,14 +32,14 @@ impl ProblemBuilder {
 
         Problem {
             variables,
-            constraints: self.constraints
+            constraints: self.constraints,
         }
     }
 }
 
 use std::collections::BTreeSet;
 
-#[derive(Debug,PartialEq,Eq,Default,Clone)]
+#[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub struct Problem {
     variables: BTreeSet<String>,
     constraints: Vec<linexpr::Constraint>,
@@ -54,14 +54,14 @@ impl std::fmt::Display for Problem {
         write!(f, " ]\n")?;
 
         write!(f, "constraints :")?;
-        for (i,c) in self.constraints.iter().enumerate() {
+        for (i, c) in self.constraints.iter().enumerate() {
             write!(f, "\n{}) {}", i, c)?;
         }
         Ok(())
     }
 }
 
-#[derive(Debug,PartialEq,Eq,Default,Clone)]
+#[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub struct Config {
     variables: BTreeSet<String>,
 }
