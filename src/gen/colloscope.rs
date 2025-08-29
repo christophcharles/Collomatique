@@ -212,6 +212,16 @@ impl BalancingObject {
     pub fn teachers_and_timeslots_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
         BalancingObject::TeachersAndTimeslots(Self::build_data(slots))
     }
+
+    fn extract_week_selections(&self) -> Vec<WeekSelection> {
+        match self {
+            BalancingObject::Teachers(map) => map.iter().map(|(ws, _)| ws.clone()).collect(),
+            BalancingObject::Timeslots(map) => map.iter().map(|(ws, _)| ws.clone()).collect(),
+            BalancingObject::TeachersAndTimeslots(map) => {
+                map.iter().map(|(ws, _)| ws.clone()).collect()
+            }
+        }
+    }
 }
 
 trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
@@ -399,17 +409,7 @@ impl ValidatedData {
 
         for (i, subject) in subjects.iter().enumerate() {
             if let Some(balancing_requirements) = &subject.balancing_requirements {
-                let week_selection_list: Vec<WeekSelection> = match &balancing_requirements.object {
-                    BalancingObject::Teachers(map) => {
-                        map.iter().map(|(ws, _)| ws.clone()).collect()
-                    }
-                    BalancingObject::Timeslots(map) => {
-                        map.iter().map(|(ws, _)| ws.clone()).collect()
-                    }
-                    BalancingObject::TeachersAndTimeslots(map) => {
-                        map.iter().map(|(ws, _)| ws.clone()).collect()
-                    }
-                };
+                let week_selection_list = balancing_requirements.object.extract_week_selections();
 
                 let mut weeks = BTreeSet::new();
 
@@ -653,6 +653,11 @@ pub enum Variable {
         slot: usize,
         group: usize,
     },
+    GroupOnWeekSelection {
+        subject: usize,
+        week_selection: usize,
+        group: usize,
+    },
     DynamicGroupAssignment {
         subject: usize,
         slot: usize,
@@ -685,6 +690,11 @@ impl std::fmt::Display for Variable {
                 slot,
                 group,
             } => write!(f, "GiS_{}_{}_{}", *subject, *slot, *group),
+            Variable::GroupOnWeekSelection {
+                subject,
+                week_selection,
+                group,
+            } => write!(f, "GoWS_{}_{}_{}", *subject, *week_selection, *group),
             Variable::DynamicGroupAssignment {
                 subject,
                 slot,
@@ -2355,6 +2365,20 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .map(|subject| subject.slots.iter().map(|slot| slot.start.week).collect())
             .collect();
+        let subject_week_selection_map = self
+            .data
+            .subjects
+            .iter()
+            .map(|subject| match &subject.balancing_requirements {
+                None => vec![],
+                Some(br) => br
+                    .object
+                    .extract_week_selections()
+                    .into_iter()
+                    .map(|ws| ws.selection)
+                    .collect(),
+            })
+            .collect();
         let grouping_week_map = self
             .data
             .slot_groupings
@@ -2388,6 +2412,7 @@ impl<'a> IlpTranslator<'a> {
             period_length,
             period_count,
             subject_week_map,
+            subject_week_selection_map,
             grouping_week_map,
             incompat_groups_week_map,
             max_steps,
@@ -2481,6 +2506,7 @@ pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     period_length: NonZeroU32,
     period_count: NonZeroU32,
     subject_week_map: Vec<Vec<u32>>,
+    subject_week_selection_map: Vec<Vec<BTreeSet<u32>>>,
     grouping_week_map: Vec<BTreeSet<u32>>,
     incompat_groups_week_map: Vec<BTreeSet<u32>>,
     max_steps: Option<usize>,
@@ -2619,6 +2645,19 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         false
     }
 
+    fn does_week_selection_cover_period(
+        &self,
+        week_selection: &BTreeSet<u32>,
+        period: u32,
+    ) -> bool {
+        for week in week_selection {
+            if self.is_week_in_period(*week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn filter_relevant_variables(
         &self,
         problem_builder: ProblemBuilder<Variable>,
@@ -2632,6 +2671,14 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
             } => {
                 let week = self.subject_week_map[*subject][*slot];
                 self.is_week_in_period(week, period)
+            }
+            Variable::GroupOnWeekSelection {
+                subject,
+                week_selection,
+                group: _,
+            } => {
+                let week_selection = &self.subject_week_selection_map[*subject][*week_selection];
+                self.does_week_selection_cover_period(week_selection, period)
             }
             Variable::DynamicGroupAssignment {
                 subject,
