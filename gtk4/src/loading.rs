@@ -14,6 +14,12 @@ pub enum LoadingInput {
     Failed(PathBuf),
 }
 
+#[derive(Debug)]
+pub enum LoadingOutput {
+    Loaded(PathBuf, collomatique_state_colloscopes::Data),
+    Failed(PathBuf),
+}
+
 pub struct LoadingPanel {
     path: Option<PathBuf>,
     worker: WorkerController<file_loader::FileLoader>,
@@ -22,7 +28,7 @@ pub struct LoadingPanel {
 impl LoadingPanel {
     fn generate_loading_text(&self) -> String {
         match &self.path {
-            Some(path) => format!("Chargement de {}...", path.to_string_lossy()),
+            Some(path) => format!("Chargement de {}", path.to_string_lossy()),
             None => String::new(),
         }
     }
@@ -31,7 +37,7 @@ impl LoadingPanel {
 #[relm4::component(pub)]
 impl SimpleComponent for LoadingPanel {
     type Input = LoadingInput;
-    type Output = ();
+    type Output = LoadingOutput;
     type Init = ();
 
     view! {
@@ -97,7 +103,7 @@ impl SimpleComponent for LoadingPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             LoadingInput::Load(path) => {
                 self.path = Some(path.clone());
@@ -106,8 +112,12 @@ impl SimpleComponent for LoadingPanel {
                     .send(file_loader::FileLoadingInput::Load(path))
                     .unwrap();
             }
-            LoadingInput::Failed(_path) => {}
-            LoadingInput::Loaded(_path, _data) => {}
+            LoadingInput::Failed(path) => {
+                sender.output(LoadingOutput::Failed(path)).unwrap();
+            }
+            LoadingInput::Loaded(path, data) => {
+                sender.output(LoadingOutput::Loaded(path, data)).unwrap();
+            }
         }
     }
 }
