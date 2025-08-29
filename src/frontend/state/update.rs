@@ -1,4 +1,4 @@
-use self::backend::SubjectGroupDependancy;
+use self::backend::{IncompatDependancy, SubjectGroupDependancy};
 
 use super::*;
 use std::collections::BTreeMap;
@@ -197,13 +197,13 @@ pub trait Manager: ManagerInternal {
         IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
     >;
     async fn incompats_get_all(
-        &self,
+        &mut self,
     ) -> Result<
         BTreeMap<IncompatHandle, backend::Incompat<WeekPatternHandle>>,
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn incompats_get(
-        &self,
+        &mut self,
         handle: IncompatHandle,
     ) -> Result<
         backend::Incompat<WeekPatternHandle>,
@@ -217,7 +217,7 @@ pub trait Manager: ManagerInternal {
         <Self::Storage as backend::Storage>::InternalError,
     >;
     async fn incompats_check_can_remove(
-        &self,
+        &mut self,
         handle: IncompatHandle,
     ) -> Result<
         Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>,
@@ -778,50 +778,139 @@ impl<T: ManagerInternal> Manager for T {
     }
 
     fn incompats_get(
-        &self,
-        _index: IncompatHandle,
+        &mut self,
+        handle: IncompatHandle,
     ) -> impl core::future::Future<
         Output = Result<
             backend::Incompat<WeekPatternHandle>,
             IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().incompats;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let incompat = self
+                .get_backend_logic()
+                .incompats_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_incompat_to_handles(
+                incompat,
+                self.get_handle_managers_mut(),
+            ))
+        }
     }
 
     fn incompats_get_all(
-        &self,
+        &mut self,
     ) -> impl core::future::Future<
         Output = Result<
             BTreeMap<IncompatHandle, backend::Incompat<WeekPatternHandle>>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let incompats_backend = self.get_backend_logic().incompats_get_all().await?;
+
+            let incompats = incompats_backend
+                .into_iter()
+                .map(|(id, incompat)| {
+                    let handle = self.get_handle_managers_mut().incompats.get_handle(id);
+                    let incompat = private::convert_incompat_to_handles(
+                        incompat,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, incompat)
+                })
+                .collect();
+
+            Ok(incompats)
+        }
     }
 
     fn incompats_check_data(
         &self,
-        _incompat: &backend::Incompat<WeekPatternHandle>,
+        incompat: &backend::Incompat<WeekPatternHandle>,
     ) -> impl core::future::Future<
         Output = Result<
             backend::DataStatusWithId<WeekPatternHandle>,
             <Self::Storage as backend::Storage>::InternalError,
         >,
     > + Send {
-        async { todo!() }
+        async {
+            let incompat_backend = match private::convert_incompat_from_handles(
+                incompat.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .incompats_check_data(&incompat_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId::BadCrossId(_id) => {
+                    panic!("WeekPatternId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId::Ok => backend::DataStatusWithId::Ok,
+            };
+
+            Ok(status)
+        }
     }
 
     fn incompats_check_can_remove(
-        &self,
-        _index: IncompatHandle,
+        &mut self,
+        handle: IncompatHandle,
     ) -> impl core::future::Future<
         Output = Result<
             Vec<backend::IncompatDependancy<SubjectHandle, StudentHandle>>,
             IdError<<Self::Storage as backend::Storage>::InternalError, IncompatHandle>,
         >,
     > + Send {
-        async { todo!() }
+        async move {
+            let handle_manager = &self.get_handle_managers().incompats;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let incompat_deps_backend = self
+                .get_backend_logic()
+                .incompats_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let subject_handle_manager = &mut handle_managers.subjects;
+            let student_handle_manager = &mut handle_managers.students;
+
+            let incompat_deps = incompat_deps_backend
+                .into_iter()
+                .map(|dep| match dep {
+                    IncompatDependancy::Student(id) => {
+                        IncompatDependancy::Student(student_handle_manager.get_handle(id))
+                    }
+                    IncompatDependancy::Subject(id) => {
+                        IncompatDependancy::Subject(subject_handle_manager.get_handle(id))
+                    }
+                })
+                .collect();
+
+            Ok(incompat_deps)
+        }
     }
 
     fn group_lists_get(
@@ -1824,5 +1913,67 @@ pub(super) mod private {
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
+    }
+
+    pub fn convert_incompat_to_handles<T: backend::Storage>(
+        incompat: backend::Incompat<T::WeekPatternId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::Incompat<WeekPatternHandle> {
+        backend::Incompat {
+            name: incompat.name,
+            max_count: incompat.max_count,
+            groups: incompat
+                .groups
+                .into_iter()
+                .map(|g| backend::IncompatGroup {
+                    slots: g
+                        .slots
+                        .into_iter()
+                        .map(|s| backend::IncompatSlot {
+                            week_pattern_id: handle_managers
+                                .week_patterns
+                                .get_handle(s.week_pattern_id),
+                            start: s.start,
+                            duration: s.duration,
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+
+    pub fn convert_incompat_from_handles<T: backend::Storage>(
+        incompat: backend::Incompat<WeekPatternHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<backend::Incompat<T::WeekPatternId>, backend::DataStatusWithId<WeekPatternHandle>>
+    {
+        Ok(backend::Incompat {
+            name: incompat.name,
+            max_count: incompat.max_count,
+            groups: incompat
+                .groups
+                .into_iter()
+                .map(|g| {
+                    Ok(backend::IncompatGroup {
+                        slots: g
+                            .slots
+                            .into_iter()
+                            .map(|s| {
+                                Ok(backend::IncompatSlot {
+                                    week_pattern_id: handle_managers
+                                        .week_patterns
+                                        .get_id(s.week_pattern_id)
+                                        .ok_or(backend::DataStatusWithId::BadCrossId(
+                                            s.week_pattern_id,
+                                        ))?,
+                                    start: s.start,
+                                    duration: s.duration,
+                                })
+                            })
+                            .collect::<Result<_, _>>()?,
+                    })
+                })
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
