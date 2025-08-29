@@ -119,12 +119,32 @@ pub enum Error {
     PeriodIdAlreadyExists(PeriodId),
 }
 
+/// Potential new id returned by annotation
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NewId {
+    StudentId(StudentId),
+    PeriodId(PeriodId),
+}
+
+impl From<StudentId> for NewId {
+    fn from(value: StudentId) -> Self {
+        NewId::StudentId(value)
+    }
+}
+
+impl From<PeriodId> for NewId {
+    fn from(value: PeriodId) -> Self {
+        NewId::PeriodId(value)
+    }
+}
+
 impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
+    type NewInfo = Option<NewId>;
     type Error = Error;
 
-    fn annotate(&mut self, op: Op) -> AnnotatedOp {
+    fn annotate(&mut self, op: Op) -> (AnnotatedOp, Option<NewId>) {
         AnnotatedOp::annotate(op, &mut self.id_issuer)
     }
 

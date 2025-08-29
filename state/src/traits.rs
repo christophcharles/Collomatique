@@ -24,6 +24,13 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// if the original operation is indeed complete.
     type AnnotatedOperation: Operation;
 
+    /// Additionnal information when annotating
+    ///
+    /// Annotating technically adds informations to an operation
+    /// This type should encode relevant info that might be
+    /// useful for the operation issuer.
+    type NewInfo;
+
     /// Error type for when [Self::apply] fails.
     type Error: std::error::Error + Send + Sync + Clone;
 
@@ -37,7 +44,10 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// less complete description operation that should be annotated with ids.
     /// The [InMemoryData] object must then issue ids and complete the type
     /// accordingly.
-    fn annotate(&mut self, op: Self::OriginalOperation) -> Self::AnnotatedOperation;
+    fn annotate(
+        &mut self,
+        op: Self::OriginalOperation,
+    ) -> (Self::AnnotatedOperation, Self::NewInfo);
 
     /// Build the reverse of an operation
     ///
@@ -95,8 +105,11 @@ pub trait Manager: private::ManagerInternal {
         &mut self,
         op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
         name: String,
-    ) -> Result<(), <<Self as private::ManagerInternal>::Data as InMemoryData>::Error> {
-        let annotated_op = self.get_in_memory_data_mut().annotate(op);
+    ) -> Result<
+        <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
+        <<Self as private::ManagerInternal>::Data as InMemoryData>::Error,
+    > {
+        let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
 
         let reverse_operation = self
             .get_in_memory_data()
@@ -112,7 +125,7 @@ pub trait Manager: private::ManagerInternal {
         self.get_modification_history_mut()
             .store(aggregated_op, name);
 
-        Ok(())
+        Ok(new_info)
     }
 
     /// Returns the name of the last operation if it exists
