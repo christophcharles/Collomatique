@@ -1,21 +1,25 @@
-use gtk::prelude::{ButtonExt, GtkWindowExt, TextBufferExt, TextViewExt, WidgetExt};
+use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+
+use std::path::PathBuf;
+
 pub struct Dialog {
     hidden: bool,
+    path: PathBuf,
     text: String,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(String),
+    Show(PathBuf, String),
     Cancel,
     Run,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Run(String),
+    Run(PathBuf, String),
 }
 
 #[relm4::component(pub)]
@@ -33,7 +37,7 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Exécution du script Python"),
+            set_title: Some("Exécuter un script Python"),
 
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
@@ -54,20 +58,32 @@ impl SimpleComponent for Dialog {
                     set_revealed: true,
                 },
                 #[wrap(Some)]
-                set_content = &gtk::ScrolledWindow {
+                set_content = &gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
                     set_hexpand: true,
-                    set_margin_all: 5,
-                    set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-                    gtk::TextView {
-                        set_editable: false,
-                        set_monospace: true,
-                        #[wrap(Some)]
-                        set_buffer = &gtk::TextBuffer {
-                            #[watch]
-                            set_text: &model.text,
-                        },
-                    }
-                }
+                    set_vexpand: true,
+                    gtk::ScrolledWindow {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_margin_all: 5,
+                        set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                        gtk::TextView {
+                            set_editable: false,
+                            set_monospace: true,
+                            #[wrap(Some)]
+                            set_buffer = &gtk::TextBuffer {
+                                #[watch]
+                                set_text: &model.text,
+                            },
+                        }
+                    },
+                    gtk::Label {
+                        set_margin_all: 5,
+                        add_css_class: "dimmed",
+                        #[watch]
+                        set_label: &model.path.to_string_lossy(),
+                    },
+                },
             }
         }
     }
@@ -79,6 +95,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            path: PathBuf::new(),
             text: String::new(),
         };
 
@@ -89,8 +106,9 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show(text) => {
+            DialogInput::Show(path, text) => {
                 self.hidden = false;
+                self.path = path;
                 self.text = text;
             }
             DialogInput::Cancel => {
@@ -98,7 +116,9 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::Run => {
                 self.hidden = true;
-                sender.output(DialogOutput::Run(self.text.clone())).unwrap();
+                sender
+                    .output(DialogOutput::Run(self.path.clone(), self.text.clone()))
+                    .unwrap();
             }
         }
     }
