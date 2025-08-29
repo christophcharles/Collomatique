@@ -33,6 +33,18 @@ pub enum UpdateError<IntError: std::error::Error> {
     SubjectGroupDependanciesRemaining(
         Vec<backend::SubjectGroupDependancy<SubjectHandle, StudentHandle>>,
     ),
+    #[error("Incompat corresponding to handle {0:?} was previously removed")]
+    IncompatRemoved(IncompatHandle),
+    #[error("Group list corresponding to handle {0:?} was previously removed")]
+    GroupListRemoved(GroupListHandle),
+    #[error("Subject corresponding to handle {0:?} was previously removed")]
+    SubjectRemoved(SubjectHandle),
+    #[error("Time slot corresponding to handle {0:?} was previously removed")]
+    TimeSlotRemoved(TimeSlotHandle),
+    #[error("Grouping corresponding to handle {0:?} was previously removed")]
+    GroupingRemoved(GroupingHandle),
+    #[error("Grouping ncompat corresponding to handle {0:?} was previously removed")]
+    GroupingIncompatRemoved(GroupingIncompatHandle),
 }
 
 #[derive(Debug, Error)]
@@ -47,6 +59,18 @@ pub enum RevError<IntError: std::error::Error> {
     StudentRemoved(StudentHandle),
     #[error("Subject group corresponding to handle {0:?} was previously removed")]
     SubjectGroupRemoved(SubjectGroupHandle),
+    #[error("Incompat corresponding to handle {0:?} was previously removed")]
+    IncompatRemoved(IncompatHandle),
+    #[error("Group list corresponding to handle {0:?} was previously removed")]
+    GroupListRemoved(GroupListHandle),
+    #[error("Subject corresponding to handle {0:?} was previously removed")]
+    SubjectRemoved(SubjectHandle),
+    #[error("Time slot corresponding to handle {0:?} was previously removed")]
+    TimeSlotRemoved(TimeSlotHandle),
+    #[error("Grouping corresponding to handle {0:?} was previously removed")]
+    GroupingRemoved(GroupingHandle),
+    #[error("Grouping ncompat corresponding to handle {0:?} was previously removed")]
+    GroupingIncompatRemoved(GroupingIncompatHandle),
 }
 
 impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntError> {
@@ -57,6 +81,14 @@ impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntEr
             RevError::TeacherRemoved(handle) => UpdateError::TeacherRemoved(handle),
             RevError::StudentRemoved(handle) => UpdateError::StudentRemoved(handle),
             RevError::SubjectGroupRemoved(handle) => UpdateError::SubjectGroupRemoved(handle),
+            RevError::IncompatRemoved(handle) => UpdateError::IncompatRemoved(handle),
+            RevError::GroupListRemoved(handle) => UpdateError::GroupListRemoved(handle),
+            RevError::SubjectRemoved(handle) => UpdateError::SubjectRemoved(handle),
+            RevError::TimeSlotRemoved(handle) => UpdateError::TimeSlotRemoved(handle),
+            RevError::GroupingRemoved(handle) => UpdateError::GroupingRemoved(handle),
+            RevError::GroupingIncompatRemoved(handle) => {
+                UpdateError::GroupingIncompatRemoved(handle)
+            }
         }
     }
 }
@@ -68,6 +100,7 @@ pub enum ReturnHandle {
     Teacher(TeacherHandle),
     Student(StudentHandle),
     SubjectGroup(SubjectGroupHandle),
+    Incompat(IncompatHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -1046,6 +1079,12 @@ pub(super) mod private {
             AnnotatedOperation::Teachers(op) => update_teachers_state(manager, op).await,
             AnnotatedOperation::Students(op) => update_students_state(manager, op).await,
             AnnotatedOperation::SubjectGroups(op) => update_subject_groups_state(manager, op).await,
+            AnnotatedOperation::Incompats(op) => todo!(),
+            AnnotatedOperation::GroupLists(op) => todo!(),
+            AnnotatedOperation::Subjects(op) => todo!(),
+            AnnotatedOperation::TimeSlots(op) => todo!(),
+            AnnotatedOperation::Groupings(op) => todo!(),
+            AnnotatedOperation::GroupingIncompats(op) => todo!(),
         }
     }
 
@@ -1320,6 +1359,12 @@ pub(super) mod private {
             AnnotatedOperation::SubjectGroups(op) => AnnotatedOperation::SubjectGroups(
                 build_backward_subject_groups_op(manager, op).await?,
             ),
+            AnnotatedOperation::Incompats(op) => todo!(),
+            AnnotatedOperation::GroupLists(op) => todo!(),
+            AnnotatedOperation::Subjects(op) => todo!(),
+            AnnotatedOperation::TimeSlots(op) => todo!(),
+            AnnotatedOperation::Groupings(op) => todo!(),
+            AnnotatedOperation::GroupingIncompats(op) => todo!(),
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
