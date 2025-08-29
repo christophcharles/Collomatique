@@ -260,3 +260,113 @@ impl From<Teacher> for backend::Teacher {
         backend::Teacher::from(&value)
     }
 }
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StudentHandle {
+    pub handle: state::StudentHandle,
+}
+
+impl From<&state::StudentHandle> for StudentHandle {
+    fn from(value: &state::StudentHandle) -> Self {
+        StudentHandle {
+            handle: value.clone(),
+        }
+    }
+}
+
+impl From<state::StudentHandle> for StudentHandle {
+    fn from(value: state::StudentHandle) -> Self {
+        StudentHandle::from(&value)
+    }
+}
+
+impl From<&StudentHandle> for state::StudentHandle {
+    fn from(value: &StudentHandle) -> Self {
+        value.handle.clone()
+    }
+}
+
+impl From<StudentHandle> for state::StudentHandle {
+    fn from(value: StudentHandle) -> Self {
+        state::StudentHandle::from(&value)
+    }
+}
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Student {
+    #[pyo3(set, get)]
+    surname: String,
+    #[pyo3(set, get)]
+    firstname: String,
+    #[pyo3(set, get)]
+    email: Option<String>,
+    #[pyo3(set, get)]
+    phone: Option<String>,
+}
+
+#[pymethods]
+impl Student {
+    #[new]
+    fn new(surname: String, firstname: String) -> Self {
+        Student {
+            surname,
+            firstname,
+            email: None,
+            phone: None,
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!(
+            "{{ surname = {}, firstname = {}, email = {}, phone = {} }}",
+            self_.surname,
+            self_.firstname,
+            match &self_.email {
+                Some(email) => email.clone(),
+                None => "none".to_string(),
+            },
+            match &self_.phone {
+                Some(phone) => phone.clone(),
+                None => "none".to_string(),
+            },
+        );
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::Student> for Student {
+    fn from(value: &backend::Student) -> Self {
+        Student {
+            surname: value.surname.clone(),
+            firstname: value.firstname.clone(),
+            email: value.email.clone(),
+            phone: value.phone.clone(),
+        }
+    }
+}
+
+impl From<backend::Student> for Student {
+    fn from(value: backend::Student) -> Self {
+        Student::from(&value)
+    }
+}
+
+impl From<&Student> for backend::Student {
+    fn from(value: &Student) -> Self {
+        backend::Student {
+            surname: value.surname.clone(),
+            firstname: value.firstname.clone(),
+            email: value.email.clone(),
+            phone: value.phone.clone(),
+        }
+    }
+}
+
+impl From<Student> for backend::Student {
+    fn from(value: Student) -> Self {
+        backend::Student::from(&value)
+    }
+}
