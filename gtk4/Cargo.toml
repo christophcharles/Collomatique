@@ -13,7 +13,6 @@ libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
 rustix = { version = "1.0", features = [ "pty" ] }
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
-ashpd = "0.11.0"
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 chrono.workspace = true

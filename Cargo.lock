@@ -340,7 +340,6 @@ dependencies = [
 name = "collomatique-gtk4"
 version = "0.1.0"
 dependencies = [
- "ashpd",
  "chrono",
  "clap",
  "collomatique-state",
