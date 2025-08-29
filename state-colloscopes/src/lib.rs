@@ -269,6 +269,15 @@ pub enum Error {
     Assignment(#[from] AssignmentError),
 }
 
+/// Errors for IDs
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum FromDataError {
+    #[error(transparent)]
+    IdError(#[from] tools::IdError),
+    #[error("Inconsistent assignments")]
+    InconsistentAssignments,
+}
+
 /// Potential new id returned by annotation
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NewId {
@@ -707,7 +716,7 @@ impl Data {
         teachers: teachers::TeachersExternalData,
         students: students::StudentsExternalData,
         assignments: assignments::AssignmentsExternalData,
-    ) -> Result<Data, tools::IdError> {
+    ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
@@ -720,7 +729,7 @@ impl Data {
             .map(|(id, _d)| *id)
             .collect();
         if !subjects.validate_all(&period_ids) {
-            return Err(tools::IdError::InvalidId);
+            return Err(tools::IdError::InvalidId.into());
         }
         let subject_ids: std::collections::BTreeSet<_> = subjects
             .ordered_subject_list
@@ -728,13 +737,13 @@ impl Data {
             .map(|(id, _d)| *id)
             .collect();
         if !teachers.validate_all(&subject_ids) {
-            return Err(tools::IdError::InvalidId);
+            return Err(tools::IdError::InvalidId.into());
         }
         if !students.validate_all(&period_ids) {
-            return Err(tools::IdError::InvalidId);
+            return Err(tools::IdError::InvalidId.into());
         }
         if !assignments.validate_all(&period_ids, &students, &subjects) {
-            return Err(tools::IdError::InvalidId);
+            return Err(FromDataError::InconsistentAssignments);
         }
 
         // Ids have been validated
