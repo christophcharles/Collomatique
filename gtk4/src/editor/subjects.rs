@@ -28,7 +28,6 @@ impl Component for Subjects {
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
-                    set_margin_top: 20,
                     set_spacing: 30,
                     gtk::Box {
                         set_hexpand: true,
