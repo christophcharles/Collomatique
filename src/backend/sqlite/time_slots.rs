@@ -11,7 +11,7 @@ pub async fn get_all(
 > {
     let records = sqlx::query!(
         r#"
-SELECT time_slot_id, subject_id, teacher_id, start_day, start_time, week_pattern_id, room
+SELECT time_slot_id, subject_id, teacher_id, start_day, start_time, week_pattern_id, room, cost
 FROM time_slots
         "#
     )
@@ -46,6 +46,12 @@ FROM time_slots
                 start_time_u32, record.time_slot_id
             )))?;
         let start = SlotStart { day, time };
+        let cost_u32 = u32::try_from(record.cost).map_err(|_| {
+            Error::CorruptedDatabase(format!(
+                "Database uses cost that does not fit in u32 (cost = {})",
+                record.cost
+            ))
+        })?;
 
         output.insert(
             Id(record.time_slot_id),
@@ -55,7 +61,7 @@ FROM time_slots
                 start,
                 week_pattern_id: week_patterns::Id(record.week_pattern_id),
                 room: record.room,
-                cost: 0,
+                cost: cost_u32,
             },
         );
     }
@@ -72,7 +78,7 @@ pub async fn get(
 > {
     let record_opt = sqlx::query!(
         r#"
-SELECT subject_id, teacher_id, start_day, start_time, week_pattern_id, room
+SELECT subject_id, teacher_id, start_day, start_time, week_pattern_id, room, cost
 FROM time_slots WHERE time_slot_id = ?
         "#,
         index.0
@@ -106,6 +112,12 @@ FROM time_slots WHERE time_slot_id = ?
         start_time_u32, index.0
     )))?;
     let start = SlotStart { day, time };
+    let cost_u32 = u32::try_from(record.cost).map_err(|_| {
+        Error::CorruptedDatabase(format!(
+            "Database uses cost that does not fit in u32 (cost = {})",
+            record.cost
+        ))
+    })?;
 
     let output = TimeSlot {
         subject_id: subjects::Id(record.subject_id),
@@ -113,7 +125,7 @@ FROM time_slots WHERE time_slot_id = ?
         start,
         week_pattern_id: week_patterns::Id(record.week_pattern_id),
         room: record.room,
-        cost: 0,
+        cost: cost_u32,
     };
 
     Ok(output)
@@ -133,8 +145,8 @@ pub async fn add(
     let time_slot_id = sqlx::query!(
         r#"
 INSERT INTO time_slots
-(subject_id, teacher_id, start_day, start_time, week_pattern_id, room)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6);
+(subject_id, teacher_id, start_day, start_time, week_pattern_id, room, cost)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);
         "#,
         time_slot.subject_id.0,
         time_slot.teacher_id.0,
@@ -142,6 +154,7 @@ VALUES (?1, ?2, ?3, ?4, ?5, ?6);
         start_time,
         time_slot.week_pattern_id.0,
         time_slot.room,
+        time_slot.cost,
     )
     .execute(&mut *conn)
     .await
@@ -192,8 +205,8 @@ pub async fn update(
     let rows_affected = sqlx::query!(
         r#"
 UPDATE time_slots
-SET subject_id = ?1, teacher_id = ?2, start_day = ?3, start_time = ?4, week_pattern_id = ?5, room = ?6
-WHERE time_slot_id = ?7
+SET subject_id = ?1, teacher_id = ?2, start_day = ?3, start_time = ?4, week_pattern_id = ?5, room = ?6, cost = ?7
+WHERE time_slot_id = ?8
         "#,
         time_slot.subject_id.0,
         time_slot.teacher_id.0,
@@ -201,6 +214,7 @@ WHERE time_slot_id = ?7
         start_time,
         time_slot.week_pattern_id.0,
         time_slot.room,
+        time_slot.cost,
         time_slot_id,
     )
     .execute(&mut *conn)
