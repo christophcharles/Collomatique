@@ -75,6 +75,8 @@ pub enum AppInput {
     OpenExistingColloscopeWithDialog,
     RequestQuit,
     Quit,
+    RequestCloseFile,
+    CloseFile,
 }
 
 relm4::new_action_group!(AppActionGroup, "app");
@@ -118,9 +120,12 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let editor = editor::EditorPanel::builder()
-            .launch(())
-            .forward(sender.input_sender(), |_msg| AppInput::Ignore);
+        let editor = editor::EditorPanel::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                editor::EditorOutput::RequestCloseFile => AppInput::RequestCloseFile,
+            },
+        );
 
         let loading =
             loading::LoadingPanel::builder()
@@ -305,6 +310,21 @@ impl SimpleComponent for AppModel {
             }
             AppInput::Quit => {
                 relm4::main_application().quit();
+            }
+            AppInput::RequestCloseFile => {
+                self.send_but_check_dirty(sender, AppInput::CloseFile);
+            }
+            AppInput::CloseFile => {
+                self.state = GlobalState::WelcomeScreen;
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile {
+                        file_name: None,
+                        data: collomatique_state_colloscopes::Data::new(),
+                        dirty: false,
+                    })
+                    .unwrap();
             }
         }
     }
