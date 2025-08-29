@@ -30,6 +30,8 @@
 pub mod colloscopes;
 pub mod time;
 
+use std::collections::BTreeMap;
+
 use collomatique_ilp::{ConfigData, Constraint, LinExpr, ObjectiveSense, UsableData, Variable};
 
 pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
@@ -159,6 +161,14 @@ where
     base: T,
     id_issuer: IdIssuer,
     phantom_p: std::marker::PhantomData<P>,
+
+    objective_func: LinExpr<VariableName<V>>,
+    objective_sense: ObjectiveSense,
+
+    variables: Vec<(VariableName<V>, Variable)>,
+
+    constraint_descs: BTreeMap<InternalId, T::ConstraintDesc>,
+    constraints: Vec<(Constraint<VariableName<V>>, InternalId)>,
 }
 
 impl<V, T, P> ProblemBuilder<V, T, P>
@@ -168,10 +178,51 @@ where
     T: BaseConstraints<VariableName = V>,
 {
     pub fn new(base: T) -> Self {
+        let original_objective_func = base.objective_func();
+        let mut objective_func = LinExpr::constant(original_objective_func.get_constant());
+        for (v, value) in original_objective_func.coefficients() {
+            objective_func = objective_func + value * LinExpr::var(VariableName::Base(v.clone()));
+        }
+
+        let objective_sense = base.objective_sense();
+
+        let variables = base
+            .variables()
+            .into_iter()
+            .map(|(v_name, v_desc)| (VariableName::Base(v_name), v_desc))
+            .collect();
+
+        let mut id_issuer = IdIssuer::new();
+
+        let mut constraint_descs = BTreeMap::new();
+        let mut constraints = Vec::new();
+
+        for (orig_constraint, c_desc) in base.constraints() {
+            let mut expr = LinExpr::constant(orig_constraint.get_constant());
+            for (v, value) in orig_constraint.coefficients() {
+                expr = expr + value * LinExpr::var(VariableName::Base(v.clone()));
+            }
+
+            let constraint = match orig_constraint.get_symbol() {
+                collomatique_ilp::linexpr::EqSymbol::Equals => expr.eq(&LinExpr::constant(0.)),
+                collomatique_ilp::linexpr::EqSymbol::LessThan => expr.leq(&LinExpr::constant(0.)),
+            };
+
+            let desc_id = id_issuer.get();
+
+            constraints.push((constraint, desc_id));
+            constraint_descs.insert(desc_id, c_desc);
+        }
+
         ProblemBuilder {
             base,
-            id_issuer: IdIssuer::new(),
+            id_issuer,
             phantom_p: std::marker::PhantomData,
+            objective_func,
+            objective_sense,
+            variables,
+            constraint_descs,
+            constraints,
         }
     }
 
