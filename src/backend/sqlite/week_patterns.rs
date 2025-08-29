@@ -1,35 +1,31 @@
 use super::*;
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Week pattern id {0} is invalid")]
-    InvalidId(WeekPatternId),
-    #[error("sqlx error")]
-    SqlxError(#[from] sqlx::Error),
-    #[error("Corrupted database: {0}")]
-    CorruptedDatabase(String),
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Id(pub(super) i64);
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-pub async fn get(pool: &SqlitePool, index: WeekPatternId) -> Result<WeekPattern> {
-    let week_pattern_id = i64::try_from(index.0).map_err(|_| Error::InvalidId(index))?;
+pub async fn get(
+    pool: &SqlitePool,
+    index: Id,
+) -> std::result::Result<WeekPattern, IdError<Error, Id>> {
+    let week_pattern_id = index.0;
 
     let name_opt = sqlx::query!(
         "SELECT name FROM week_patterns WHERE week_pattern_id = ?",
         week_pattern_id
     )
     .fetch_optional(pool)
-    .await?;
+    .await
+    .map_err(Error::from)?;
 
-    let name = name_opt.ok_or(Error::InvalidId(index))?;
+    let name = name_opt.ok_or(IdError::InvalidId(index))?;
 
     let data = sqlx::query!(
         "SELECT week FROM weeks WHERE week_pattern_id = ?",
         week_pattern_id
     )
     .fetch_all(pool)
-    .await?;
+    .await
+    .map_err(Error::from)?;
 
     let weeks = data
         .iter()
@@ -91,7 +87,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<WeekPattern>> {
     Ok(output)
 }
 
-pub async fn add(pool: &SqlitePool, pattern: WeekPattern) -> Result<WeekPatternId> {
+pub async fn add(pool: &SqlitePool, pattern: WeekPattern) -> Result<Id> {
     let mut conn = pool.acquire().await?;
 
     let id = sqlx::query!("INSERT INTO week_patterns (name) VALUES (?)", pattern.name)
@@ -109,29 +105,31 @@ pub async fn add(pool: &SqlitePool, pattern: WeekPattern) -> Result<WeekPatternI
         .await?;
     }
 
-    let week_pattern_id = WeekPatternId(usize::try_from(id).expect("Should be valid usize id"));
+    let week_pattern_id = Id(id);
 
     Ok(week_pattern_id)
 }
 
-pub async fn remove(pool: &SqlitePool, index: WeekPatternId) -> Result<()> {
-    let week_pattern_id = i64::try_from(index.0).map_err(|_| Error::InvalidId(index))?;
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+    let week_pattern_id = index.0;
 
-    let mut conn = pool.acquire().await?;
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let _ = sqlx::query!(
         "DELETE FROM weeks WHERE week_pattern_id = ?",
         week_pattern_id
     )
     .execute(&mut *conn)
-    .await?;
+    .await
+    .map_err(Error::from)?;
 
     let _ = sqlx::query!(
         "DELETE FROM week_patterns WHERE week_pattern_id = ?",
         week_pattern_id
     )
     .execute(&mut *conn)
-    .await?;
+    .await
+    .map_err(Error::from)?;
 
     Ok(())
 }

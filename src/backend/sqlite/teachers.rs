@@ -1,19 +1,10 @@
 use super::*;
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Teacher id {0} is invalid")]
-    InvalidId(TeacherId),
-    #[error("sqlx error")]
-    SqlxError(#[from] sqlx::Error),
-    #[error("Corrupted database: {0}")]
-    CorruptedDatabase(String),
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Id(pub(super) i64);
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-pub async fn get(pool: &SqlitePool, index: TeacherId) -> Result<Teacher> {
-    let teacher_id = i64::try_from(index.0).map_err(|_| Error::InvalidId(index))?;
+pub async fn get(pool: &SqlitePool, index: Id) -> std::result::Result<Teacher, IdError<Error, Id>> {
+    let teacher_id = index.0;
 
     let record_opt = sqlx::query_as!(
         Teacher,
@@ -21,9 +12,10 @@ pub async fn get(pool: &SqlitePool, index: TeacherId) -> Result<Teacher> {
         teacher_id
     )
     .fetch_optional(pool)
-    .await?;
+    .await
+    .map_err(Error::from)?;
 
-    let record = record_opt.ok_or(Error::InvalidId(index))?;
+    let record = record_opt.ok_or(IdError::InvalidId(index))?;
 
     Ok(record)
 }
@@ -36,7 +28,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Teacher>> {
     Ok(records)
 }
 
-pub async fn add(pool: &SqlitePool, teacher: Teacher) -> Result<TeacherId> {
+pub async fn add(pool: &SqlitePool, teacher: Teacher) -> Result<Id> {
     let mut conn = pool.acquire().await?;
 
     let id = sqlx::query!(
@@ -49,23 +41,24 @@ pub async fn add(pool: &SqlitePool, teacher: Teacher) -> Result<TeacherId> {
     .await?
     .last_insert_rowid();
 
-    let teacher_id = TeacherId(usize::try_from(id).expect("Should be valid usize id"));
+    let teacher_id = Id(id);
 
     Ok(teacher_id)
 }
 
-pub async fn remove(pool: &SqlitePool, index: TeacherId) -> Result<()> {
-    let teacher_id = i64::try_from(index.0).map_err(|_| Error::InvalidId(index))?;
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+    let teacher_id = index.0;
 
-    let mut conn = pool.acquire().await?;
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let count = sqlx::query!("DELETE FROM teachers WHERE teacher_id = ?", teacher_id)
         .execute(&mut *conn)
-        .await?
+        .await
+        .map_err(Error::from)?
         .rows_affected();
 
     if count == 0 {
-        return Err(Error::InvalidId(index));
+        return Err(IdError::InvalidId(index));
     }
 
     Ok(())
