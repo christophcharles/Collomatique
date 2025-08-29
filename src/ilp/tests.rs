@@ -182,3 +182,38 @@ fn problem_iterate_simplify() {
         (simplified_constraints, trivialized_variables)
     );
 }
+
+#[test]
+fn problem_filter_variable() {
+    use crate::ilp::linexpr::Expr;
+
+    let pb1 = ProblemBuilder::<String>::new()
+        .add_variables(["X", "Y", "Z", "W"])
+        .unwrap()
+        .add_constants([("T", false), ("S", true)])
+        .unwrap()
+        .add_constraints([
+            (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
+            (Expr::var("X") + Expr::var("Z")).eq(&Expr::constant(1)),
+            (Expr::var("Y") + Expr::var("Z")).leq(&Expr::constant(1)),
+            (Expr::var("Y") + Expr::var("W")).leq(&Expr::constant(1)),
+            (Expr::var("Z") + Expr::var("W")).eq(&Expr::constant(1)),
+        ])
+        .unwrap()
+        .filter_variables(|v| (*v != String::from("Z")) && (*v != String::from("S")));
+
+    let pb2 = ProblemBuilder::<String>::new()
+        .add_variables(["X", "Y", "W"])
+        .unwrap()
+        .add_constants([("T", false)])
+        .unwrap()
+        .add_constraints([
+            (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
+            (Expr::var("Y") + Expr::var("W")).leq(&Expr::constant(1)),
+        ])
+        .unwrap();
+
+    assert_eq!(pb1.constraints, pb2.constraints);
+    assert_eq!(pb1.variables, pb2.variables);
+    assert_eq!(pb1.constants, pb2.constants);
+}
