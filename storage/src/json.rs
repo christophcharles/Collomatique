@@ -98,6 +98,7 @@ pub mod common;
 pub mod period_list;
 pub mod student_list;
 pub mod subject_list;
+pub mod teacher_list;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
@@ -126,9 +127,10 @@ pub enum ValidEntry {
     StudentList(student_list::List),
     PeriodList(period_list::List),
     SubjectList(subject_list::List),
+    TeacherList(teacher_list::List),
 }
 
-pub const CURRENT_SPEC_VERSION: u32 = 3;
+pub const CURRENT_SPEC_VERSION: u32 = 4;
 
 impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {
@@ -136,6 +138,7 @@ impl ValidEntry {
             ValidEntry::StudentList(_) => 1,
             ValidEntry::PeriodList(_) => 2,
             ValidEntry::SubjectList(_) => 3,
+            ValidEntry::TeacherList(_) => 4,
         }
     }
 
@@ -144,6 +147,7 @@ impl ValidEntry {
             ValidEntry::StudentList(_) => true,
             ValidEntry::PeriodList(_) => true,
             ValidEntry::SubjectList(_) => true,
+            ValidEntry::TeacherList(_) => true,
         }
     }
 }

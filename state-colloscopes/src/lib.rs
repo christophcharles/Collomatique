@@ -330,7 +330,7 @@ impl Data {
             assert!(ids_so_far.insert(id.inner()));
         }
 
-        for (id, _) in &self.inner_data.teachers.teachers {
+        for (id, _) in &self.inner_data.teachers.teacher_map {
             assert!(ids_so_far.insert(id.inner()));
         }
     }
@@ -427,7 +427,7 @@ impl Data {
     ///
     /// checks all the invariants in subject data
     fn check_teachers_data_consistency(&self, subject_ids: &BTreeSet<SubjectId>) {
-        for (_teacher_id, teacher) in &self.inner_data.teachers.teachers {
+        for (_teacher_id, teacher) in &self.inner_data.teachers.teacher_map {
             Self::validate_teacher_internal(teacher, subject_ids).unwrap();
         }
     }
@@ -501,7 +501,7 @@ impl Data {
         let student_ids = student_list.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
-        let teacher_ids = teachers.teachers.iter().map(|(id, _d)| *id);
+        let teacher_ids = teachers.teacher_map.iter().map(|(id, _d)| *id);
         let id_issuer = IdIssuer::new(student_ids, period_ids, subject_ids, teacher_ids)?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
@@ -560,6 +560,11 @@ impl Data {
     /// Return the description of the periods
     pub fn get_periods(&self) -> &periods::Periods {
         &self.inner_data.periods
+    }
+
+    /// Get the subjects
+    pub fn get_teachers(&self) -> &teachers::Teachers {
+        &self.inner_data.teachers
     }
 
     /// Used internally
