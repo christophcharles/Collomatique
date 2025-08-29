@@ -442,7 +442,11 @@ async fn solve_command(
         solver.solve(&problem, minimize_objective)
     };
 
-    pb.finish_with_message("Done. Found valid colloscope");
+    pb.finish_with_message(if config_opt.is_some() {
+        "Done. Found valid colloscope"
+    } else {
+        "Done"
+    });
 
     let config = match config_opt {
         Some(value) => value,
