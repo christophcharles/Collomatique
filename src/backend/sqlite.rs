@@ -774,12 +774,8 @@ impl Storage for Store {
     unsafe fn groupings_add_unchecked(
         &mut self,
         grouping: &Grouping<Self::TimeSlotId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            Self::GroupingId,
-            CrossError<Self::InternalError, Self::TimeSlotId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<Self::GroupingId, Self::InternalError>>
+           + Send {
         groupings::add(&self.pool, grouping)
     }
     unsafe fn groupings_remove_unchecked(
@@ -794,12 +790,8 @@ impl Storage for Store {
         &mut self,
         index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            CrossIdError<Self::InternalError, Self::GroupingId, Self::TimeSlotId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         groupings::update(&self.pool, index, grouping)
     }
 
