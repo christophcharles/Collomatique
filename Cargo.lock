@@ -349,6 +349,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "collomatique-python",
  "collomatique-rpc",
  "collomatique-state",
  "collomatique-state-colloscopes",
@@ -386,8 +387,6 @@ dependencies = [
 name = "collomatique-rpc"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "collomatique-python",
  "serde",
  "serde_json",
 ]
