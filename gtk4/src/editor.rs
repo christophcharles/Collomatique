@@ -96,10 +96,11 @@ impl EditorPanel {
         }
     }
 
-    fn generate_tooltip_text(&self) -> Option<String> {
-        self.file_name
-            .as_ref()
-            .map(|x| x.to_string_lossy().to_string())
+    fn generate_tooltip_text(&self) -> String {
+        match &self.file_name {
+            Some(x) => x.to_string_lossy().into(),
+            None => "(Fichier non enregistré)".into(),
+        }
     }
 }
 
@@ -127,7 +128,7 @@ impl Component for EditorPanel {
                             #[watch]
                             set_subtitle: &model.generate_subtitle(),
                             #[watch]
-                            set_tooltip_text: model.generate_tooltip_text().as_deref(),
+                            set_tooltip_text: Some(&model.generate_tooltip_text()),
                         },
                         pack_end = &gtk::MenuButton {
                             set_icon_name: "open-menu-symbolic",
