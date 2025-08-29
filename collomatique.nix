@@ -14,6 +14,6 @@ rustPlatform.buildRustPackage {
 
     meta = {
         description = "Automatic colloscope building program";
-        license = lib.licenses.agpl3;
+        license = lib.licenses.agpl3Plus;
     };
 }
