@@ -1,6 +1,18 @@
 use super::*;
 
 #[derive(Debug)]
+pub enum GeneralPlanningUpdateWarning {}
+
+impl GeneralPlanningUpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> String {
+        String::new()
+    }
+}
+
+#[derive(Debug)]
 pub enum GeneralPlanningUpdateOp {
     DeleteFirstWeek,
     UpdateFirstWeek(collomatique_time::NaiveMondayDate),
@@ -88,6 +100,10 @@ impl GeneralPlanningUpdateOp {
                 }
             }
         }
+    }
+
+    pub fn get_warnings(&self) -> Vec<GeneralPlanningUpdateWarning> {
+        vec![]
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(

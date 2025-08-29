@@ -1,6 +1,18 @@
 use super::*;
 
 #[derive(Debug)]
+pub enum StudentsUpdateWarning {}
+
+impl StudentsUpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> String {
+        String::new()
+    }
+}
+
+#[derive(Debug)]
 pub enum StudentsUpdateOp {
     AddNewStudent(collomatique_state_colloscopes::students::Student),
     UpdateStudent(
@@ -47,6 +59,10 @@ impl StudentsUpdateOp {
             StudentsUpdateOp::UpdateStudent(_id, _desc) => "Modifier un élève".into(),
             StudentsUpdateOp::DeleteStudent(_id) => "Supprimer un élève".into(),
         }
+    }
+
+    pub fn get_warnings(&self) -> Vec<StudentsUpdateWarning> {
+        vec![]
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(

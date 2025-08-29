@@ -3,6 +3,18 @@ use std::collections::BTreeSet;
 use super::*;
 
 #[derive(Debug)]
+pub enum SubjectsUpdateWarning {}
+
+impl SubjectsUpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> String {
+        String::new()
+    }
+}
+
+#[derive(Debug)]
 pub enum SubjectsUpdateOp {
     AddNewSubject(collomatique_state_colloscopes::subjects::SubjectParameters),
     UpdateSubject(
@@ -103,6 +115,10 @@ impl SubjectsUpdateOp {
                 }
             }
         }
+    }
+
+    pub fn get_warnings(&self) -> Vec<SubjectsUpdateWarning> {
+        vec![]
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(

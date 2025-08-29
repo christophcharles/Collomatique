@@ -1,6 +1,18 @@
 use super::*;
 
 #[derive(Debug)]
+pub enum AssignmentsUpdateWarning {}
+
+impl AssignmentsUpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> String {
+        String::new()
+    }
+}
+
+#[derive(Debug)]
 pub enum AssignmentsUpdateOp {
     Assign(
         collomatique_state_colloscopes::PeriodId,
@@ -105,6 +117,10 @@ impl AssignmentsUpdateOp {
                 }
             }
         }
+    }
+
+    pub fn get_warnings(&self) -> Vec<AssignmentsUpdateWarning> {
+        vec![]
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
