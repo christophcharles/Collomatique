@@ -2725,6 +2725,21 @@ impl<T: Storage> Logic<T> {
             })
             .collect::<BackupResult<_, _>>()?;
 
+        let mut slot_selection_ids = BTreeMap::<T::SlotSelectionId, BackupSlotSelectionId>::new();
+        let slot_selections: BTreeMap<_, _> = self
+            .slot_selections_get_all()
+            .await?
+            .into_iter()
+            .map(|(id, x)| {
+                let new_id = get_backup_id(&mut next_id, &mut slot_selection_ids, id);
+                BackupResult::<_, T::InternalError>::Ok((
+                    new_id,
+                    translate_slot_selection(x, &subject_ids, &time_slot_ids)
+                        .ok_or(BackupError::InconsistentId)?,
+                ))
+            })
+            .collect::<BackupResult<_, _>>()?;
+
         todo!()
     }
 }
@@ -2948,6 +2963,30 @@ fn translate_colloscope<T: OrdId, U: OrdId, V: OrdId>(
                     translate_colloscope_subject(colloscope_subject, teacher_ids, student_ids)?;
 
                 Some((new_subject_id, new_colloscope_subject))
+            })
+            .collect::<Option<_>>()?,
+    })
+}
+
+fn translate_slot_selection<T: OrdId, U: OrdId>(
+    slot_selection: SlotSelection<T, U>,
+    subject_ids: &BTreeMap<T, BackupSubjectId>,
+    time_slot_ids: &BTreeMap<U, BackupTimeSlotId>,
+) -> Option<SlotSelection<BackupSubjectId, BackupTimeSlotId>> {
+    Some(SlotSelection {
+        subject_id: subject_ids.get(&slot_selection.subject_id).cloned()?,
+        slot_groups: slot_selection
+            .slot_groups
+            .into_iter()
+            .map(|slot_group| {
+                Some(SlotGroup {
+                    slots: slot_group
+                        .slots
+                        .into_iter()
+                        .map(|slot_id| time_slot_ids.get(&slot_id).cloned())
+                        .collect::<Option<_>>()?,
+                    count: slot_group.count,
+                })
             })
             .collect::<Option<_>>()?,
     })
