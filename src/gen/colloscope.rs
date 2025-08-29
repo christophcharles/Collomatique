@@ -692,7 +692,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_at_most_one_group_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_at_most_max_groups_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         self.data
             .subjects
             .iter()
@@ -710,7 +710,12 @@ impl<'a> IlpTranslator<'a> {
                             });
                     }
 
-                    expr.leq(&Expr::constant(1))
+                    let max_groups_per_slot = subject
+                        .max_groups_per_slot
+                        .get()
+                        .try_into()
+                        .expect("Should be less than 2^31 maximum");
+                    expr.leq(&Expr::constant(max_groups_per_slot))
                 })
             })
             .collect()
@@ -1695,7 +1700,7 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
             .expect("Should not have duplicates")
-            .add_constraints(self.build_at_most_one_group_per_slot_constraints())
+            .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .expect("Variables should be declared")
@@ -1858,7 +1863,7 @@ impl<'a> IlpTranslator<'a> {
         let mut slots = Vec::with_capacity(subject.slots.len());
 
         for (j, _slot) in subject.slots.iter().enumerate() {
-            let mut assigned_group = None;
+            let mut assigned_groups = BTreeSet::new();
 
             for k in 0..subject.groups.prefilled_groups.len() {
                 if config
@@ -1869,12 +1874,11 @@ impl<'a> IlpTranslator<'a> {
                     })
                     .ok()?
                 {
-                    assigned_group = Some(k);
-                    break;
+                    assigned_groups.insert(k);
                 }
             }
 
-            slots.push(assigned_group);
+            slots.push(assigned_groups);
         }
 
         Some(ColloscopeSubject { groups, slots })
@@ -1899,7 +1903,7 @@ pub struct Colloscope {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeSubject {
     pub groups: Vec<BTreeSet<usize>>,
-    pub slots: Vec<Option<usize>>,
+    pub slots: Vec<BTreeSet<usize>>,
 }
 
 #[derive(Clone, Debug)]
