@@ -46,6 +46,8 @@ pub enum EditorOutput {
     UpdateActions,
     SaveError(PathBuf, String),
     PythonLoadingError(PathBuf, String),
+    StartOpenSaveDialog,
+    EndOpenSaveDialog,
 }
 
 #[derive(Debug)]
@@ -396,6 +398,7 @@ impl Component for EditorPanel {
             },
             EditorInput::SaveAsClicked => {
                 let file_name = self.file_name.clone();
+                sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
                 sender.oneshot_command(async move {
                     match tools::open_save::save_dialog(match &file_name {
                         Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
@@ -460,6 +463,7 @@ impl Component for EditorPanel {
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::RunScriptClicked => {
+                sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
                 sender.oneshot_command(async move {
                     match tools::open_save::open_python_dialog().await {
                         Some(path) => EditorCommandOutput::ScriptChosen(path),
@@ -483,8 +487,11 @@ impl Component for EditorPanel {
         _root: &Self::Root,
     ) {
         match message {
-            EditorCommandOutput::FileNotChosen => {}
+            EditorCommandOutput::FileNotChosen => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
+            }
             EditorCommandOutput::FileChosen(path) => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
                 sender.input(EditorInput::SaveCurrentFileAs(path));
             }
             EditorCommandOutput::SaveSuccessful(path) => {
@@ -503,6 +510,7 @@ impl Component for EditorPanel {
                 sender.output(EditorOutput::SaveError(path, error)).unwrap();
             }
             EditorCommandOutput::ScriptChosen(path) => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
                 sender.oneshot_command(async move {
                     match tokio::fs::read_to_string(&path).await {
                         Ok(text) => EditorCommandOutput::ScriptLoaded(path, text),
@@ -510,7 +518,9 @@ impl Component for EditorPanel {
                     }
                 });
             }
-            EditorCommandOutput::ScriptNotChosen => {}
+            EditorCommandOutput::ScriptNotChosen => {
+                sender.output(EditorOutput::EndOpenSaveDialog).unwrap();
+            }
             EditorCommandOutput::ScriptLoaded(path, text) => {
                 self.check_script_dialog
                     .sender()
