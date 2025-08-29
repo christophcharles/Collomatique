@@ -2,7 +2,7 @@ use super::*;
 
 use pyo3::types::PyString;
 
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 
 #[pyclass(eq)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,7 +21,7 @@ impl GeneralData {
         let output = format!(
             "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {} }}",
             match self_.interrogations_per_week_range {
-                Some(val) => format!("{}..{}", val.0, val.1),
+                Some(val) => format!("{}..{}", val.0, val.1 as i64),
                 None => String::from("none"),
             },
             match self_.max_interrogations_per_day {
@@ -1094,7 +1094,7 @@ impl From<GroupList> for backend::GroupList<state::StudentHandle> {
     }
 }
 
-/*#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubjectHandle {
     pub handle: state::SubjectHandle,
@@ -1103,9 +1103,7 @@ pub struct SubjectHandle {
 #[pymethods]
 impl SubjectHandle {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!(
-            "{:?}", *self_
-        );
+        let output = format!("{:?}", *self_);
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
@@ -1142,57 +1140,168 @@ pub struct Subject {
     #[pyo3(set, get)]
     name: String,
     #[pyo3(set, get)]
-    optional: bool,
+    subject_group_handle: SubjectGroupHandle,
+    #[pyo3(set, get)]
+    incompat_handle: Option<IncompatHandle>,
+    #[pyo3(set, get)]
+    group_list_handle: Option<GroupListHandle>,
+    #[pyo3(set, get)]
+    duration: NonZeroU32,
+    #[pyo3(set, get)]
+    students_per_group_range: (NonZeroUsize, NonZeroUsize),
+    #[pyo3(set, get)]
+    period: NonZeroU32,
+    #[pyo3(set, get)]
+    period_is_strict: bool,
+    #[pyo3(set, get)]
+    is_tutorial: bool,
+    #[pyo3(set, get)]
+    max_groups_per_slot: NonZeroUsize,
+    #[pyo3(set, get)]
+    balance_teachers: bool,
+    #[pyo3(set, get)]
+    balance_timeslots: bool,
 }
 
 #[pymethods]
 impl Subject {
     #[new]
-    fn new(name: String) -> Self {
+    fn new(name: String, subject_group_handle: SubjectGroupHandle) -> Self {
         Subject {
             name,
-            optional: false,
+            subject_group_handle,
+            incompat_handle: None,
+            group_list_handle: None,
+            duration: NonZeroU32::new(60).unwrap(),
+            students_per_group_range: (
+                NonZeroUsize::new(2).unwrap(),
+                NonZeroUsize::new(3).unwrap(),
+            ),
+            period: NonZeroU32::new(32).unwrap(),
+            period_is_strict: false,
+            is_tutorial: false,
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+            balance_teachers: false,
+            balance_timeslots: false,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{{ name = {}, optional = {} }}", self_.name, self_.optional,);
+        let output = format!(
+            "{{ name = {}, subject_group_handle = {:?}, incompat_handle = {}, group_list_handle = {}, duration = {}, students_per_group_range = {}..={}, period = {}, period_is_strict = {}, is_tutorial = {}, max_groups_per_slot = {}, balance_teachers = {}, balance_timeslots = {} }}",
+            self_.name,
+            self_.subject_group_handle,
+            match &self_.incompat_handle {
+                Some(handle) => {
+                    format!("{:?}", handle)
+                }
+                None => {
+                    "none".to_string()
+                }
+            },
+            match &self_.group_list_handle {
+                Some(handle) => {
+                    format!("{:?}", handle)
+                }
+                None => {
+                    "none".to_string()
+                }
+            },
+            self_.duration,
+            self_.students_per_group_range.0.get(),
+            self_.students_per_group_range.1.get(),
+            self_.period.get(),
+            self_.period_is_strict,
+            self_.is_tutorial,
+            self_.max_groups_per_slot.get(),
+            self_.balance_teachers,
+            self_.balance_timeslots,
+
+        );
 
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
 
-impl From<&backend::Subject> for Subject {
-    fn from(value: &backend::Subject) -> Self {
+impl
+    From<
+        &backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>,
+    > for Subject
+{
+    fn from(
+        value: &backend::Subject<
+            state::SubjectGroupHandle,
+            state::IncompatHandle,
+            state::GroupListHandle,
+        >,
+    ) -> Self {
         Subject {
             name: value.name.clone(),
-            optional: value.optional,
+            subject_group_handle: value.subject_group_id.into(),
+            incompat_handle: value.incompat_id.map(|x| x.into()),
+            group_list_handle: value.group_list_id.map(|x| x.into()),
+            duration: value.duration,
+            students_per_group_range: (
+                *value.students_per_group.start(),
+                *value.students_per_group.end(),
+            ),
+            period: value.period,
+            period_is_strict: value.period_is_strict,
+            is_tutorial: value.is_tutorial,
+            max_groups_per_slot: value.max_groups_per_slot,
+            balance_teachers: value.balancing_requirements.teachers,
+            balance_timeslots: value.balancing_requirements.timeslots,
         }
     }
 }
 
-impl From<backend::Subject> for Subject {
-    fn from(value: backend::Subject) -> Self {
+impl
+    From<backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>>
+    for Subject
+{
+    fn from(
+        value: backend::Subject<
+            state::SubjectGroupHandle,
+            state::IncompatHandle,
+            state::GroupListHandle,
+        >,
+    ) -> Self {
         Subject::from(&value)
     }
 }
 
-impl From<&Subject> for backend::Subject {
+impl From<&Subject>
+    for backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>
+{
     fn from(value: &Subject) -> Self {
         backend::Subject {
             name: value.name.clone(),
-            optional: value.optional,
+            subject_group_id: value.subject_group_handle.clone().into(),
+            incompat_id: value.incompat_handle.clone().map(|x| x.into()),
+            group_list_id: value.group_list_handle.clone().map(|x| x.into()),
+            duration: value.duration,
+            students_per_group: value.students_per_group_range.0..=value.students_per_group_range.1,
+            period: value.period,
+            period_is_strict: value.period_is_strict,
+            is_tutorial: value.is_tutorial,
+            max_groups_per_slot: value.max_groups_per_slot,
+            balancing_requirements: backend::BalancingRequirements {
+                teachers: value.balance_teachers,
+                timeslots: value.balance_timeslots,
+            },
         }
     }
 }
 
-impl From<Subject> for backend::Subject {
+impl From<Subject>
+    for backend::Subject<state::SubjectGroupHandle, state::IncompatHandle, state::GroupListHandle>
+{
     fn from(value: Subject) -> Self {
         backend::Subject::from(&value)
     }
 }
 
-#[pyclass(eq, hash, frozen)]
+/*#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TimeSlotHandle {
     pub handle: state::TimeSlotHandle,
