@@ -286,7 +286,8 @@ impl_backup_id_from!(ColloscopeId);
 impl_backup_id_from!(SlotSelectionId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Assignments {
+pub struct JsonStudent {
+    pub student: Student,
     pub subject_groups: BTreeMap<SubjectGroupId, SubjectId>,
     pub incompats: BTreeSet<IncompatId>,
 }
@@ -296,7 +297,7 @@ pub struct JsonData {
     general_data: GeneralData,
     week_patterns: BTreeMap<WeekPatternId, WeekPattern>,
     teachers: BTreeMap<TeacherId, Teacher>,
-    students: BTreeMap<StudentId, Student>,
+    students: BTreeMap<StudentId, JsonStudent>,
     subject_groups: BTreeMap<SubjectGroupId, SubjectGroup>,
     incompats: BTreeMap<IncompatId, Incompat<WeekPatternId>>,
     group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
@@ -306,7 +307,6 @@ pub struct JsonData {
     grouping_incompats: BTreeMap<GroupingIncompatId, GroupingIncompat<GroupingId>>,
     colloscopes: BTreeMap<ColloscopeId, Colloscope<TeacherId, SubjectId, StudentId>>,
     slot_selections: BTreeMap<SlotSelectionId, SlotSelection<SubjectId, TimeSlotId>>,
-    student_assignments: BTreeMap<StudentId, Assignments>,
 }
 
 impl JsonData {
@@ -361,13 +361,19 @@ impl JsonStore {
             .collect();
 
         let mut student_ids = BTreeMap::<T::StudentId, StudentId>::new();
-        let students: BTreeMap<_, _> = logic
+        let mut students: BTreeMap<_, _> = logic
             .students_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut student_ids, id);
-                (new_id, x)
+                let json_student = JsonStudent {
+                    student: x,
+                    subject_groups: BTreeMap::new(),
+                    incompats: BTreeSet::new(),
+                };
+
+                (new_id, json_student)
             })
             .collect();
 
@@ -501,9 +507,11 @@ impl JsonStore {
             })
             .collect::<FromLogicResult<_, _>>()?;
 
-        let mut student_assignments = BTreeMap::<_, _>::new();
         for (old_student_id, new_student_id) in &student_ids {
-            let mut incompats = BTreeSet::<IncompatId>::new();
+            let student_data = students
+                .get_mut(new_student_id)
+                .ok_or(FromLogicError::InconsistentId)?;
+
             for (old_incompat_id, new_incompat_id) in &incompat_ids {
                 if logic
                     .incompat_for_student_get(*old_student_id, *old_incompat_id)
@@ -514,7 +522,7 @@ impl JsonStore {
                         Id2Error::InvalidId2(_) => FromLogicError::InconsistentId,
                     })?
                 {
-                    incompats.insert(*new_incompat_id);
+                    student_data.incompats.insert(*new_incompat_id);
                 }
             }
 
@@ -534,17 +542,11 @@ impl JsonStore {
                         .get(&old_subject_id)
                         .cloned()
                         .ok_or(FromLogicError::InconsistentId)?;
-                    subject_groups.insert(*new_subject_group_id, new_subject_id);
+                    student_data
+                        .subject_groups
+                        .insert(*new_subject_group_id, new_subject_id);
                 }
             }
-
-            student_assignments.insert(
-                *new_student_id,
-                Assignments {
-                    subject_groups,
-                    incompats,
-                },
-            );
         }
 
         Ok(JsonStore {
@@ -563,7 +565,6 @@ impl JsonStore {
                 grouping_incompats,
                 colloscopes,
                 slot_selections,
-                student_assignments,
             },
         })
     }
