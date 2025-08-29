@@ -329,7 +329,7 @@ pub enum ObjectiveSense {
 /// Each variable used either by a constraint or by the objective function must be declared. This is necessary
 /// as each variable type and range must be specified. This is also used as a consistency check.
 /// 
-/// You can optionnaly specify an objective function with [ProblemBuilder::set_objective_function].
+/// You can optionally specify an objective function with [ProblemBuilder::set_objective_function].
 /// 
 /// Once the problem is fully specified, you can call [ProblemBuilder::build]. This will return a [Problem] struct
 /// that you can use with a solver.
