@@ -12,6 +12,7 @@
 
 pub mod examples;
 pub mod generics;
+pub mod simplified;
 pub mod solver;
 pub mod tools;
 
