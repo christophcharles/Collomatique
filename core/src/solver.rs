@@ -726,6 +726,14 @@ where
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
+    /// Creates a new complete solution from a partial solution
+    ///
+    /// This functions fail if the given [DecoratedPartialSolution]
+    /// is not complete.
+    pub fn new(partial: DecoratedPartialSolution<'a, M, S, T, P>) -> Option<Self> {
+        partial.into_complete()
+    }
+
     /// Returns the inner solution
     ///
     /// This returns the [BaseConstraints::PartialSolution]
@@ -739,6 +747,30 @@ where
     /// This method works like [Self::inner] but consumes the [DecoratedCompleteSolution].
     pub fn into_inner(self) -> T::PartialSolution {
         self.internal_solution
+    }
+
+    /// Checks if the solution is feasable
+    ///
+    /// A complete solution is feasable if it satisfied all the constraints.
+    /// It does not have to be optimal to be feasable (there might be some other
+    /// feasable solution that has a better score).
+    pub fn is_feasable(&self) -> bool {
+        self.ilp_config.is_feasable()
+    }
+
+    /// Builds a feasable solution from the complete solution
+    ///
+    /// A complete solution is feasable if it satisfied all the constraints.
+    /// It does not have to be optimal to be feasable (there might be some other
+    /// feasable solution that has a better score).
+    ///
+    /// This returns a [DecoratedFeasableSolution]. It can fail and returns `None`
+    /// if the solution is not feasable.
+    pub fn into_feasable(self) -> Option<DecoratedFeasableSolution<'a, M, S, T, P>> {
+        if !self.is_feasable() {
+            return None;
+        }
+        Some(DecoratedFeasableSolution(self))
     }
 
     /// Blame general constraints
@@ -798,6 +830,74 @@ where
             .blame()
             .filter_map(|(_c, d)| translator.structure_c_map.get(d).cloned())
             .collect()
+    }
+}
+
+/// Represents a feasable solution
+///
+/// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
+/// This type will be used in the rest of the program. However, this representation usually lacks
+/// some information to properly test the solution.
+///
+/// This is the decoration provided here: all the necessary variables are correctly reconstructed
+/// and stored.
+///
+/// Compared to [DecoratedPartialSolution], this type garantees that the solution is *complete*
+/// meaning that all variables are defined and checking if it is a feasable solution is actually
+/// trivial.
+///
+/// Compared to [DecoratedCompleteSolution], this type also garantees that the solution is *feasable*
+/// meaning that it actually satisfies all the constraints of the corresponding problem
+/// (though it might not do it optimally).
+#[derive(Clone)]
+pub struct DecoratedFeasableSolution<'a, M, S, T, P>(DecoratedCompleteSolution<'a, M, S, T, P>)
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>;
+
+impl<'a, M, S, T, P> DecoratedFeasableSolution<'a, M, S, T, P>
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+{
+    /// Creates a new feasable solution from a complete solution
+    ///
+    /// This functions fail if the given [DecoratedCompleteSolution]
+    /// is not feasable.
+    pub fn new(complete: DecoratedCompleteSolution<'a, M, S, T, P>) -> Option<Self> {
+        complete.into_feasable()
+    }
+
+    /// Returns the inner decorated solution
+    ///
+    /// This returns the underlying [DecoratedCompleteSolution].
+    pub fn inner(&self) -> &DecoratedCompleteSolution<'a, M, S, T, P> {
+        &self.0
+    }
+
+    /// Returns the inner decorated solution
+    ///
+    /// This method works like [Self::inner] but consumes the [DecoratedFeasableSolution].
+    pub fn into_inner(self) -> DecoratedCompleteSolution<'a, M, S, T, P> {
+        self.0
+    }
+}
+
+impl<'a, M, S, T, P> std::ops::Deref for DecoratedFeasableSolution<'a, M, S, T, P>
+where
+    M: UsableData,
+    S: UsableData,
+    P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
+    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+{
+    type Target = DecoratedCompleteSolution<'a, M, S, T, P>;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
     }
 }
 
