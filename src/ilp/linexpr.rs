@@ -89,6 +89,28 @@ impl<V: VariableName> Expr<V> {
         output.clean();
         output
     }
+
+    pub fn reduce(&mut self, vars: &BTreeMap<V, bool>) {
+        *self = self.reduced(vars);
+    }
+
+    pub fn reduced(&self, vars: &BTreeMap<V, bool>) -> Expr<V> {
+        let mut constant = self.constant;
+        let mut coefs = BTreeMap::new();
+
+        for (v, c) in &self.coefs {
+            match vars.get(v) {
+                Some(val) => {
+                    constant += if *val { *c } else { 0 };
+                }
+                None => {
+                    coefs.insert(v.clone(), *c);
+                }
+            }
+        }
+
+        Expr { coefs, constant }
+    }
 }
 
 impl<V: VariableName> Constraint<V> {
@@ -115,6 +137,16 @@ impl<V: VariableName> Constraint<V> {
     pub fn cleaned(&self) -> Constraint<V> {
         let mut output = self.clone();
         output.clean();
+        output
+    }
+
+    pub fn reduce(&mut self, vars: &BTreeMap<V, bool>) {
+        self.expr.reduce(vars);
+    }
+
+    pub fn reduced(&self, vars: &BTreeMap<V, bool>) -> Constraint<V> {
+        let mut output = self.clone();
+        output.reduce(vars);
         output
     }
 }

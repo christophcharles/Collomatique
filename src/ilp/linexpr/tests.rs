@@ -77,3 +77,61 @@ fn expr_mul() {
     let expr2 = Expr::<String>::constant(0);
     assert_eq!((0 * expr1).cleaned(), expr2.cleaned());
 }
+
+#[test]
+fn expr_reduced() {
+    let expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b")
+        - 4 * Expr::<String>::var("c")
+        + 2;
+    let expr2 = -2 * Expr::<String>::var("a") + 5;
+
+    let vars = BTreeMap::from([(String::from("b"), true), (String::from("c"), false)]);
+
+    assert_eq!(expr1.reduced(&vars), expr2)
+}
+
+#[test]
+fn expr_reduce() {
+    let mut expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b")
+        - 4 * Expr::<String>::var("c")
+        + 2;
+    let expr2 = -2 * Expr::<String>::var("a") - 2;
+
+    let vars = BTreeMap::from([(String::from("b"), false), (String::from("c"), true)]);
+
+    expr1.reduce(&vars);
+
+    assert_eq!(expr1, expr2)
+}
+
+#[test]
+fn constraint_reduce() {
+    let expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b")
+        - 4 * Expr::<String>::var("c")
+        + 2;
+    let expr2 = -2 * Expr::<String>::var("a") + 5;
+
+    let mut constraint1 = expr1.leq(&Expr::constant(42));
+    let constraint2 = expr2.leq(&Expr::constant(42));
+
+    let vars = BTreeMap::from([(String::from("b"), true), (String::from("c"), false)]);
+
+    constraint1.reduce(&vars);
+
+    assert_eq!(constraint1, constraint2);
+}
+
+#[test]
+fn constraint_reduced() {
+    let expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b")
+        - 4 * Expr::<String>::var("c")
+        + 2;
+    let expr2 = -2 * Expr::<String>::var("a") - 2;
+
+    let constraint1 = expr1.leq(&Expr::constant(42));
+    let constraint2 = expr2.leq(&Expr::constant(42));
+
+    let vars = BTreeMap::from([(String::from("b"), false), (String::from("c"), true)]);
+
+    assert_eq!(constraint1.reduced(&vars), constraint2);
+}
