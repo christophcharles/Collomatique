@@ -200,7 +200,7 @@ CREATE TABLE "groups" (
 
 CREATE TABLE "group_list_items" (
 	"group_list_id"	INTEGER NOT NULL,
-	"group_id"	INTEGER NOT NULL,
+	"group_id"	INTEGER NOT NULL UNIQUE,
 	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
 	FOREIGN KEY("group_id") REFERENCES "groups"("group_id"),
 	PRIMARY KEY("group_list_id","group_id")
