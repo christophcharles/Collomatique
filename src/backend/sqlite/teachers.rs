@@ -75,3 +75,31 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
 
     Ok(())
 }
+
+pub async fn update(
+    pool: &SqlitePool,
+    index: Id,
+    teacher: Teacher,
+) -> std::result::Result<(), IdError<Error, Id>> {
+    let teacher_id = index.0;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let rows_affected = sqlx::query!(
+        "UPDATE teachers SET surname = ?1, firstname = ?2, contact = ?3 WHERE teacher_id = ?4",
+        teacher.surname,
+        teacher.firstname,
+        teacher.contact,
+        teacher_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if rows_affected != 1 {
+        return Err(IdError::InvalidId(index));
+    }
+
+    Ok(())
+}
