@@ -94,15 +94,15 @@ fn main() {
                         can_be_extended: false,
                     },
                     GroupDesc {
-                        students: BTreeSet::from([6, 7, 8]),
-                        can_be_extended: false,
+                        students: BTreeSet::from([7, 8]),
+                        can_be_extended: true,
                     },
                     GroupDesc {
-                        students: BTreeSet::from([9, 10, 11]),
-                        can_be_extended: false,
+                        students: BTreeSet::from([10, 11]),
+                        can_be_extended: true,
                     },
                 ],
-                not_assigned: BTreeSet::new(),
+                not_assigned: BTreeSet::from([6, 9]),
             },
         },
         Subject {
@@ -155,15 +155,15 @@ fn main() {
                         can_be_extended: false,
                     },
                     GroupDesc {
-                        students: BTreeSet::from([6, 7, 8]),
-                        can_be_extended: false,
+                        students: BTreeSet::from([7, 8]),
+                        can_be_extended: true,
                     },
                     GroupDesc {
-                        students: BTreeSet::from([9, 10, 11]),
-                        can_be_extended: false,
+                        students: BTreeSet::from([10, 11]),
+                        can_be_extended: true,
                     },
                 ],
-                not_assigned: BTreeSet::new(),
+                not_assigned: BTreeSet::from([6, 9]),
             },
         },
         Subject {
@@ -317,6 +317,7 @@ fn main() {
     let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
     sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
+    sa_optimizer.set_max_steps(Some(1000));
 
     use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
     let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
