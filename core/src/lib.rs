@@ -112,7 +112,7 @@ fn default_structure_variable_reconstruction<
     structure_variables: BTreeMap<V, Variable>,
     main_values: ConfigData<V>,
     mut f: F,
-) -> Option<ConfigData<S>> {
+) -> ConfigData<S> {
     let ilp_problem: collomatique_ilp::Problem<V, ReconstructionDesc<C, V>> =
         collomatique_ilp::ProblemBuilder::new()
             .set_variables(structure_variables)
@@ -134,21 +134,21 @@ fn default_structure_variable_reconstruction<
                 )
             }))
             .build()
-            .ok()?;
+            .expect("Variables and constraints should match");
 
     use collomatique_ilp::solvers::{self, Solver};
 
     let cbc_solver = solvers::coin_cbc::CbcSolver::new();
-    let feasable_config = cbc_solver.solve(&ilp_problem)?;
+    let feasable_config = cbc_solver
+        .solve(&ilp_problem)
+        .expect("There should always be a solution for reconstructing structure variables");
 
     let filtered_variables = feasable_config
         .get_values()
         .into_iter()
         .filter_map(|(var, value)| f(var).map(|x| (x, value)));
 
-    let config_data = ConfigData::new().set_iter(filtered_variables);
-
-    Some(config_data)
+    ConfigData::new().set_iter(filtered_variables)
 }
 
 pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
@@ -185,7 +185,7 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     fn reconstruct_structure_variables(
         &self,
         config: &CompleteSolution<Self::Solution>,
-    ) -> Option<ConfigData<Self::StructureVariable>> {
+    ) -> ConfigData<Self::StructureVariable> {
         let config_data = self.solution_to_configuration(config.inner());
 
         let structure_constraints = self.structure_constraints();
@@ -263,7 +263,7 @@ pub trait ExtraConstraints<T: BaseConstraints> {
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> Option<ConfigData<Self::StructureVariable>> {
+    ) -> ConfigData<Self::StructureVariable> {
         let structure_constraints = self.extra_structure_constraints(base);
         let structure_variables = self
             .extra_structure_variables(base)
@@ -320,7 +320,7 @@ pub trait ExtraObjective<T: BaseConstraints> {
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> Option<ConfigData<Self::StructureVariable>> {
+    ) -> ConfigData<Self::StructureVariable> {
         let structure_constraints = self.extra_structure_constraints(base);
         let structure_variables = self
             .extra_structure_variables(base)
@@ -500,10 +500,10 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> Option<ConfigData<Self::StructureVariable>> {
+    ) -> ConfigData<Self::StructureVariable> {
         let orig_structure_variables = self
             .internal_extra
-            .reconstruct_extra_structure_variables(base, config)?;
+            .reconstruct_extra_structure_variables(base, config);
 
         let values = config
             .transmute(|x| match x {
@@ -525,7 +525,10 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
             .into_iter()
             .enumerate()
         {
-            let value = c.get_lhs().eval(&values).ok()?;
+            let value = c
+                .get_lhs()
+                .eval(&values)
+                .expect("All variables pertinent to the problem should be fixed");
             let var = SoftVariable::Soft(i, desc);
 
             match c.get_symbol() {
@@ -538,7 +541,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
             }
         }
 
-        Some(output)
+        output
     }
 }
 
