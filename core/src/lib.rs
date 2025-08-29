@@ -91,7 +91,7 @@ pub trait ExtraObjective<T: BaseConstraints> {
     type VariableName: UsableData;
     type ConstraintDesc: UsableData;
 
-    fn extra_variables(&self, base: &T) -> Vec<Self::VariableName>;
+    fn extra_variables(&self, base: &T) -> Vec<(Self::VariableName, Variable)>;
     fn structure_constraints(
         &self,
         base: &T,
@@ -251,21 +251,54 @@ where
         self.variables.extend(vars);
     }
 
+    fn check_variables_expr<U: UsableData>(
+        &self,
+        expr: &LinExpr<ExtraVariable<V, U>>,
+        v_map: &BTreeMap<U, VariableName<V>>,
+    ) -> bool {
+        for (v, _value) in expr.coefficients() {
+            if let ExtraVariable::Extra(v_extra) = v {
+                if !v_map.contains_key(v_extra) {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
     fn check_variables<U: UsableData, C: UsableData>(
-        &mut self,
+        &self,
         constraints: &Vec<(Constraint<ExtraVariable<V, U>>, C)>,
         v_map: &BTreeMap<U, VariableName<V>>,
     ) -> bool {
         for (c, _c_desc) in constraints {
-            for (v, _value) in c.coefficients() {
-                if let ExtraVariable::Extra(v_extra) = v {
-                    if !v_map.contains_key(v_extra) {
-                        return false;
-                    }
-                }
+            if !self.check_variables_expr(c.get_lhs(), v_map) {
+                return false;
             }
         }
+
         true
+    }
+
+    fn update_var_in_expr<U: UsableData>(
+        &self,
+        e: &LinExpr<ExtraVariable<V, U>>,
+        v_map: &BTreeMap<U, VariableName<V>>,
+    ) -> LinExpr<VariableName<V>> {
+        let mut expr = LinExpr::constant(e.get_constant());
+
+        for (v, value) in e.coefficients() {
+            let var = match v {
+                ExtraVariable::Base(v_base) => VariableName::Base(v_base.clone()),
+                ExtraVariable::Extra(v_extra) => v_map.get(v_extra)
+                    .expect("consistency between variables and constraints should be checked beforehand")
+                    .clone(),
+            };
+            expr = expr + value * LinExpr::var(var);
+        }
+
+        expr
     }
 
     fn add_constraints<U: UsableData, C: UsableData>(
@@ -276,16 +309,7 @@ where
         let mut c_map = BTreeMap::new();
 
         for (c, c_desc) in constraints {
-            let mut expr = LinExpr::constant(c.get_constant());
-            for (v, value) in c.coefficients() {
-                let var = match v {
-                    ExtraVariable::Base(v_base) => VariableName::Base(v_base.clone()),
-                    ExtraVariable::Extra(v_extra) => v_map.get(v_extra)
-                        .expect("consistency between variables and constraints should be checked beforehand")
-                        .clone(),
-                };
-                expr = expr + value * LinExpr::var(var);
-            }
+            let expr = self.update_var_in_expr(c.get_lhs(), v_map);
 
             let constraint = match c.get_symbol() {
                 collomatique_ilp::linexpr::EqSymbol::Equals => expr.eq(&LinExpr::constant(0.)),
@@ -331,16 +355,7 @@ where
         let mut obj = LinExpr::constant(0.);
 
         for (c, c_desc) in constraints {
-            let mut expr = LinExpr::constant(c.get_constant());
-            for (v, value) in c.coefficients() {
-                let var = match v {
-                    ExtraVariable::Base(v_base) => VariableName::Base(v_base.clone()),
-                    ExtraVariable::Extra(v_extra) => v_map.get(v_extra)
-                        .expect("consistency between variables and constraints should be checked beforehand")
-                        .clone(),
-                };
-                expr = expr + value * LinExpr::var(var);
-            }
+            let expr = self.update_var_in_expr(c.get_lhs(), v_map);
 
             let soft_variable_id = self.id_issuer.get_id();
             let soft_variable = VariableName::Soft(soft_variable_id, format!("{}", c_desc));
@@ -410,9 +425,32 @@ where
 
     pub fn add_objective<E: ExtraObjective<T>>(
         &mut self,
-        _extra: E,
-    ) -> ConstraintsTranslator<E::ConstraintDesc> {
-        todo!()
+        extra: E,
+        obj_coef: f64,
+    ) -> Option<ConstraintsTranslator<E::ConstraintDesc>> {
+        let extra_variables = extra.extra_variables(&self.base);
+        let structure_constraints = extra.structure_constraints(&self.base);
+        let objective_func = extra.objective_func(&self.base);
+
+        let (v_map, vars) = self.scan_variables(extra_variables);
+
+        if !self.check_variables(&structure_constraints, &v_map)
+            || !self.check_variables_expr(&objective_func, &v_map)
+        {
+            return None;
+        }
+
+        self.add_variables(vars);
+        let c_map = self.add_constraints(structure_constraints, &v_map);
+
+        let obj_func = self.update_var_in_expr(&objective_func, &v_map);
+        if self.objective_sense == extra.objective_sense(&self.base) {
+            self.objective_func = &self.objective_func + obj_coef * obj_func;
+        } else {
+            self.objective_func = &self.objective_func - obj_coef * obj_func;
+        }
+
+        Some(ConstraintsTranslator { c_map })
     }
 
     pub fn build_problem(self) -> Problem<V, T, P> {
