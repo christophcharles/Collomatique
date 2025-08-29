@@ -161,6 +161,10 @@ pub enum SubjectError {
     /// Invalid parameters : groups per interrogation
     #[error("Groups per interrogations range should allow at least one value")]
     GroupsPerInterrogationRangeIsEmpty,
+
+    /// Invalid parameters : week block has empty range for interrogation count
+    #[error("Interrogation count range should allow at least one value")]
+    InterrogationCountRangeIsEmpty,
 }
 
 /// Errors for colloscopes modification
@@ -315,6 +319,28 @@ impl Data {
         }
         if subject.parameters.groups_per_interrogation.is_empty() {
             return Err(SubjectError::GroupsPerInterrogationRangeIsEmpty);
+        }
+
+        match &subject.parameters.periodicity {
+            SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation: _,
+            } => {
+                for block in blocks {
+                    if block.interrogation_count_in_block.is_empty() {
+                        return Err(SubjectError::InterrogationCountRangeIsEmpty);
+                    }
+                }
+            }
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year,
+                minimum_week_separation: _,
+            } => {
+                if interrogation_count_in_year.is_empty() {
+                    return Err(SubjectError::InterrogationCountRangeIsEmpty);
+                }
+            }
+            _ => {}
         }
 
         Ok(())
