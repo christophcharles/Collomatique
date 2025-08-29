@@ -5,7 +5,7 @@ async fn students_add_one(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _id = store
-        .students_add(Student {
+        .students_add(&Student {
             surname: String::from("Durand"),
             firstname: String::from("Bernard"),
             email: None,
@@ -37,7 +37,7 @@ async fn students_add_multiple(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _id = store
-        .students_add(Student {
+        .students_add(&Student {
             surname: String::from("Durand"),
             firstname: String::from("Bernard"),
             email: None,
@@ -47,7 +47,7 @@ async fn students_add_multiple(pool: sqlx::SqlitePool) {
         .unwrap();
 
     let _id = store
-        .students_add(Student {
+        .students_add(&Student {
             surname: String::from("Dupont"),
             firstname: String::from("Leonard"),
             email: Some(String::from("old_school_is_cool@gmail.com")),
@@ -57,7 +57,7 @@ async fn students_add_multiple(pool: sqlx::SqlitePool) {
         .unwrap();
 
     let _id = store
-        .students_add(Student {
+        .students_add(&Student {
             surname: String::from("Tessier"),
             firstname: String::from("Lucie"),
             email: None,
@@ -229,7 +229,7 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
         .unwrap();
 
     let id = store
-        .students_add(Student {
+        .students_add(&Student {
             surname: String::from("Dupont"),
             firstname: String::from("Leonard"),
             email: Some(String::from("old_school_is_cool@gmail.com")),
@@ -289,7 +289,7 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
     store
         .students_update(
             super::super::students::Id(2),
-            Student {
+            &Student {
                 surname: String::from("Dupond"),
                 firstname: String::from("Leonard"),
                 email: Some(String::from("old_school_is_cool@gmail.com")),

@@ -351,7 +351,7 @@ impl Storage for Store {
     }
     fn week_patterns_add(
         &self,
-        pattern: WeekPattern,
+        pattern: &WeekPattern,
     ) -> impl core::future::Future<
         Output = std::result::Result<Self::WeekPatternId, Self::InternalError>,
     > + Send {
@@ -368,7 +368,7 @@ impl Storage for Store {
     fn week_patterns_update(
         &self,
         index: Self::WeekPatternId,
-        pattern: WeekPattern,
+        pattern: &WeekPattern,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>,
     > + Send {
@@ -392,7 +392,7 @@ impl Storage for Store {
     }
     fn teachers_add(
         &self,
-        teacher: Teacher,
+        teacher: &Teacher,
     ) -> impl core::future::Future<Output = std::result::Result<Self::TeacherId, Self::InternalError>>
            + Send {
         teachers::add(&self.pool, teacher)
@@ -408,7 +408,7 @@ impl Storage for Store {
     fn teachers_update(
         &self,
         index: Self::TeacherId,
-        teacher: Teacher,
+        teacher: &Teacher,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
     > + Send {
@@ -432,7 +432,7 @@ impl Storage for Store {
     }
     fn students_add(
         &self,
-        student: Student,
+        student: &Student,
     ) -> impl core::future::Future<Output = std::result::Result<Self::StudentId, Self::InternalError>>
            + Send {
         students::add(&self.pool, student)
@@ -448,7 +448,7 @@ impl Storage for Store {
     fn students_update(
         &self,
         index: Self::StudentId,
-        student: Student,
+        student: &Student,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>,
     > + Send {
@@ -478,7 +478,7 @@ impl Storage for Store {
     }
     fn subject_groups_add(
         &self,
-        subject_group: SubjectGroup,
+        subject_group: &SubjectGroup,
     ) -> impl core::future::Future<
         Output = std::result::Result<Self::SubjectGroupId, Self::InternalError>,
     > + Send {
@@ -495,7 +495,7 @@ impl Storage for Store {
     fn subject_groups_update(
         &self,
         index: Self::SubjectGroupId,
-        subject_group: SubjectGroup,
+        subject_group: &SubjectGroup,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>,
     > + Send {
@@ -525,7 +525,7 @@ impl Storage for Store {
     }
     fn incompats_add(
         &self,
-        incompat: Incompat<Self::WeekPatternId>,
+        incompat: &Incompat<Self::WeekPatternId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
             Self::IncompatId,
@@ -545,7 +545,7 @@ impl Storage for Store {
     fn incompats_update(
         &self,
         index: Self::IncompatId,
-        incompat: Incompat<Self::WeekPatternId>,
+        incompat: &Incompat<Self::WeekPatternId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
             (),

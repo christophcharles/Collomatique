@@ -19,7 +19,7 @@ async fn week_patterns_add_one(pool: sqlx::SqlitePool) {
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
     let _id = store
-        .week_patterns_add(WeekPattern {
+        .week_patterns_add(&WeekPattern {
             name: String::from("Impaires"),
             weeks,
         })
@@ -96,7 +96,7 @@ async fn week_patterns_add_multiple(pool: sqlx::SqlitePool) {
     let weeks = (0..20).into_iter().map(|x| Week(x)).collect();
 
     let _id = store
-        .week_patterns_add(WeekPattern {
+        .week_patterns_add(&WeekPattern {
             name: String::from("Toutes"),
             weeks,
         })
@@ -106,7 +106,7 @@ async fn week_patterns_add_multiple(pool: sqlx::SqlitePool) {
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
     let _id = store
-        .week_patterns_add(WeekPattern {
+        .week_patterns_add(&WeekPattern {
             name: String::from("Impaires"),
             weeks,
         })
@@ -121,7 +121,7 @@ async fn week_patterns_add_multiple(pool: sqlx::SqlitePool) {
         .collect();
 
     let _id = store
-        .week_patterns_add(WeekPattern {
+        .week_patterns_add(&WeekPattern {
             name: String::from("Paires"),
             weeks,
         })
@@ -470,7 +470,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         .unwrap();
 
     let id = store
-        .week_patterns_add(WeekPattern {
+        .week_patterns_add(&WeekPattern {
             name: String::from("Impaires"),
             weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
         })
@@ -535,7 +535,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
     store
         .week_patterns_update(
             super::super::week_patterns::Id(2),
-            WeekPattern {
+            &WeekPattern {
                 name: String::from("Une sur trois"),
                 weeks: BTreeSet::from([Week(0), Week(3), Week(6), Week(9)]),
             },

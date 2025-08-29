@@ -66,7 +66,7 @@ pub trait Storage {
     ) -> std::result::Result<WeekPattern, IdError<Self::InternalError, Self::WeekPatternId>>;
     async fn week_patterns_add(
         &self,
-        pattern: WeekPattern,
+        pattern: &WeekPattern,
     ) -> std::result::Result<Self::WeekPatternId, Self::InternalError>;
     async fn week_patterns_remove(
         &self,
@@ -75,7 +75,7 @@ pub trait Storage {
     async fn week_patterns_update(
         &self,
         index: Self::WeekPatternId,
-        pattern: WeekPattern,
+        pattern: &WeekPattern,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
 
     async fn teachers_get_all(
@@ -87,7 +87,7 @@ pub trait Storage {
     ) -> std::result::Result<Teacher, IdError<Self::InternalError, Self::TeacherId>>;
     async fn teachers_add(
         &self,
-        teacher: Teacher,
+        teacher: &Teacher,
     ) -> std::result::Result<Self::TeacherId, Self::InternalError>;
     async fn teachers_remove(
         &self,
@@ -96,7 +96,7 @@ pub trait Storage {
     async fn teachers_update(
         &self,
         index: Self::TeacherId,
-        teacher: Teacher,
+        teacher: &Teacher,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
 
     async fn students_get_all(
@@ -108,7 +108,7 @@ pub trait Storage {
     ) -> std::result::Result<Student, IdError<Self::InternalError, Self::StudentId>>;
     async fn students_add(
         &self,
-        student: Student,
+        student: &Student,
     ) -> std::result::Result<Self::StudentId, Self::InternalError>;
     async fn students_remove(
         &self,
@@ -117,7 +117,7 @@ pub trait Storage {
     async fn students_update(
         &self,
         index: Self::StudentId,
-        student: Student,
+        student: &Student,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>;
 
     async fn subject_groups_get_all(
@@ -129,7 +129,7 @@ pub trait Storage {
     ) -> std::result::Result<SubjectGroup, IdError<Self::InternalError, Self::SubjectGroupId>>;
     async fn subject_groups_add(
         &self,
-        subject_group: SubjectGroup,
+        subject_group: &SubjectGroup,
     ) -> std::result::Result<Self::SubjectGroupId, Self::InternalError>;
     async fn subject_groups_remove(
         &self,
@@ -138,7 +138,7 @@ pub trait Storage {
     async fn subject_groups_update(
         &self,
         index: Self::SubjectGroupId,
-        subject_group: SubjectGroup,
+        subject_group: &SubjectGroup,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>;
 
     async fn incompats_get_all(
@@ -156,7 +156,7 @@ pub trait Storage {
     >;
     async fn incompats_add(
         &self,
-        incompat: Incompat<Self::WeekPatternId>,
+        incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<Self::IncompatId, CrossError<Self::InternalError, Self::WeekPatternId>>;
     async fn incompats_remove(
         &self,
@@ -165,7 +165,7 @@ pub trait Storage {
     async fn incompats_update(
         &self,
         index: Self::IncompatId,
-        incompat: Incompat<Self::WeekPatternId>,
+        incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<
         (),
         CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,

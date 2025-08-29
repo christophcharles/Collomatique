@@ -11,7 +11,7 @@ async fn subject_groups_add_one(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _id = store
-        .subject_groups_add(SubjectGroup {
+        .subject_groups_add(&SubjectGroup {
             name: String::from("LV1"),
             optional: false,
         })
@@ -37,7 +37,7 @@ async fn subject_groups_add_multiple(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _id = store
-        .subject_groups_add(SubjectGroup {
+        .subject_groups_add(&SubjectGroup {
             name: String::from("LV1"),
             optional: false,
         })
@@ -45,7 +45,7 @@ async fn subject_groups_add_multiple(pool: sqlx::SqlitePool) {
         .unwrap();
 
     let _id = store
-        .subject_groups_add(SubjectGroup {
+        .subject_groups_add(&SubjectGroup {
             name: String::from("LV2"),
             optional: true,
         })
@@ -53,7 +53,7 @@ async fn subject_groups_add_multiple(pool: sqlx::SqlitePool) {
         .unwrap();
 
     let _id = store
-        .subject_groups_add(SubjectGroup {
+        .subject_groups_add(&SubjectGroup {
             name: String::from("Spécialité"),
             optional: false,
         })
@@ -215,7 +215,7 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
         .unwrap();
 
     let id = store
-        .subject_groups_add(SubjectGroup {
+        .subject_groups_add(&SubjectGroup {
             name: String::from("LV2"),
             optional: true,
         })
@@ -270,7 +270,7 @@ VALUES ("LV1", 0), ("LV2", 1), ("Spécialité", 0);
     store
         .subject_groups_update(
             super::super::subject_groups::Id(2),
-            SubjectGroup {
+            &SubjectGroup {
                 name: String::from("LVB"),
                 optional: false,
             },

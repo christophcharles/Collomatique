@@ -44,7 +44,7 @@ pub async fn get_all(pool: &SqlitePool) -> Result<BTreeMap<Id, SubjectGroup>> {
         .collect())
 }
 
-pub async fn add(pool: &SqlitePool, subject_group: SubjectGroup) -> Result<Id> {
+pub async fn add(pool: &SqlitePool, subject_group: &SubjectGroup) -> Result<Id> {
     let mut conn = pool.acquire().await?;
 
     let optional = if subject_group.optional { 1 } else { 0 };
@@ -87,7 +87,7 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
 pub async fn update(
     pool: &SqlitePool,
     index: Id,
-    subject_group: SubjectGroup,
+    subject_group: &SubjectGroup,
 ) -> std::result::Result<(), IdError<Error, Id>> {
     let subject_group_id = index.0;
 
