@@ -113,8 +113,7 @@ impl<V: VariableName> ProblemBuilder<V> {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let constraints_vec: Vec<_> = simplified_constraints.iter().cloned().collect();
-        let nd_problem = ndtools::NdProblem::new(&variables_vec, &constraints_vec);
+        let nd_problem = ndtools::NdProblem::new(&variables_vec, &simplified_constraints);
 
         Ok(Problem {
             variables,
