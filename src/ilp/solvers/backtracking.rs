@@ -239,10 +239,11 @@ enum NextStep<V: VariableName> {
 use super::FeasabilitySolver;
 
 impl<V: VariableName> FeasabilitySolver<V> for Solver {
-    fn restore_feasability_with_origin<'a>(
+    fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
         config: &Config<'a, V>,
         origin: Option<&FeasableConfig<'a, V>>,
+        mut max_steps: Option<usize>,
     ) -> Option<FeasableConfig<'a, V>> {
         let mut available_variables = match origin {
             Some(o) => config
@@ -258,6 +259,13 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
         let mut temp_config = config.clone();
         let mut choice_stack = vec![];
         loop {
+            if let Some(ms) = max_steps {
+                if ms == 0 {
+                    return None;
+                } else {
+                    max_steps = Some(ms - 1);
+                }
+            }
             match Self::compute_next_step(&temp_config, &available_variables) {
                 NextStep::Solved => return Some(unsafe { temp_config.into_feasable_unchecked() }),
                 NextStep::StepInto(var) => {
