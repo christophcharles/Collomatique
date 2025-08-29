@@ -36,5 +36,7 @@ pub mod time;
 pub mod solver;
 pub mod traits;
 
-pub use solver::{DecoratedSolution, ExtraTranslator, Problem, ProblemBuilder, TimeLimitSolution};
+pub use solver::{
+    DecoratedCompleteSolution, ExtraTranslator, Problem, ProblemBuilder, TimeLimitSolution,
+};
 pub use traits::{BaseConstraints, BaseVariable, ExtraConstraints, ExtraVariable, SoftConstraints};
