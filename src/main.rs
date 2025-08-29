@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::collections::BTreeSet;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -41,8 +42,11 @@ enum CliCommand {
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
     },
-    /// Python testing
-    Python,
+    /// Create, remove or run python script
+    Python {
+        #[command(subcommand)]
+        command: PythonCommand,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -246,6 +250,49 @@ enum WeekPatternFilling {
     Even,
     /// Fill the week pattern with every odd week for 1 to week_count
     Odd,
+}
+
+#[derive(Debug, Subcommand)]
+enum PythonCommand {
+    /// Add new python script into the database
+    Create {
+        /// Name for the python script
+        name: String,
+        /// File to load the python script from
+        file: PathBuf,
+        /// Force creating a new python scipt with an existing name
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
+    /// Delete python script from the database
+    Remove {
+        /// Name of the python script to remove
+        name: String,
+        /// If multiple python scripts have the same name, select which one to use.
+        /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        python_script_number: Option<NonZeroUsize>,
+    },
+    /// Run a python script
+    Run {
+        /// Name of the python script to run
+        name: String,
+        /// Optional csv file to give as input to the python script
+        csv: Option<PathBuf>,
+        /// If multiple python scripts have the same name, select which one to use.
+        /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        python_script_number: Option<NonZeroUsize>,
+    },
+    /// Run a python script directly from a file
+    RunFile {
+        /// Python file to run
+        script: PathBuf,
+        /// Optional csv file to give as input to the python script
+        csv: Option<PathBuf>,
+    },
 }
 
 use collomatique::backend::sqlite;
@@ -1102,6 +1149,40 @@ async fn week_pattern_command(
     }
 }
 
+async fn python_command(
+    command: PythonCommand,
+    _app_state: &mut AppState<sqlite::Store>,
+) -> Result<Option<String>> {
+    match command {
+        PythonCommand::Create {
+            name: _name,
+            file: _file,
+            force: _force,
+        } => {
+            return Err(anyhow!("python create command not yet implemented"));
+        }
+        PythonCommand::Remove {
+            name: _name,
+            python_script_number: _python_script_number,
+        } => {
+            return Err(anyhow!("python remove command not yet implemented"));
+        }
+        PythonCommand::Run {
+            name: _name,
+            csv: _csv,
+            python_script_number: _python_script_number,
+        } => {
+            return Err(anyhow!("python run command not yet implemented"));
+        }
+        PythonCommand::RunFile {
+            script: _script,
+            csv: _csv,
+        } => {
+            return Err(anyhow!("python run-file command not yet implemented"));
+        }
+    }
+}
+
 struct ReedCompleter {}
 
 impl reedline::Completer for ReedCompleter {
@@ -1248,10 +1329,7 @@ async fn execute_cli_command(
             steps,
             thread_count,
         } => solve_command(steps, thread_count, app_state).await,
-        CliCommand::Python => {
-            collomatique::frontend::python::python_test()?;
-            Ok(None)
-        }
+        CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
 
