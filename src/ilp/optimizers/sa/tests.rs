@@ -86,10 +86,8 @@ fn test_sa() {
         }))
         .build();
 
-    let mut sa_optimizer = super::Optimizer::new(&pb);
-
     let config = pb.config_from(["x11", "y12", "y21"]).unwrap(); // We choose a starting closer to the "bad" (high cost) solution
-    sa_optimizer.set_init_config(config);
+    let mut sa_optimizer = super::Optimizer::new(config);
 
     let random_gen = crate::ilp::random::DefaultRndGen::new();
     let solver = crate::ilp::solvers::a_star::Solver::new();
