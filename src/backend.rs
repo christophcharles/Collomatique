@@ -567,7 +567,7 @@ pub trait Storage: Send + Sync {
             Ok(incompats.contains_key(&index))
         }
     }
-    async fn incompats_check(
+    async fn incompats_check_data(
         &self,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<DataStatusWithId<Self::WeekPatternId>, Self::InternalError> {
@@ -591,7 +591,7 @@ pub trait Storage: Send + Sync {
     ) -> std::result::Result<Self::IncompatId, CrossError<Self::InternalError, Self::WeekPatternId>>
     {
         async move {
-            let data_status = self.incompats_check(incompat).await?;
+            let data_status = self.incompats_check_data(incompat).await?;
             match data_status {
                 DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
                 DataStatusWithId::Ok => {
@@ -614,7 +614,7 @@ pub trait Storage: Send + Sync {
                 return Err(CrossIdError::InvalidId(index));
             }
 
-            let data_status = self.incompats_check(incompat).await?;
+            let data_status = self.incompats_check_data(incompat).await?;
             match data_status {
                 DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
                 DataStatusWithId::Ok => {
