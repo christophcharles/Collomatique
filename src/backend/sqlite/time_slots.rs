@@ -55,6 +55,7 @@ FROM time_slots
                 start,
                 week_pattern_id: week_patterns::Id(record.week_pattern_id),
                 room: record.room,
+                cost: 0,
             },
         );
     }
@@ -112,6 +113,7 @@ FROM time_slots WHERE time_slot_id = ?
         start,
         week_pattern_id: week_patterns::Id(record.week_pattern_id),
         room: record.room,
+        cost: 0,
     };
 
     Ok(output)
