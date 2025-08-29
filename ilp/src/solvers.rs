@@ -45,7 +45,7 @@ pub trait Solver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
 /// the time limit was not reached and therefore the solution is indeed optimal.
 pub struct TimeLimitSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     /// The actual solution found by the solver
-    pub config: FeasableConfig<'a, V, C, P>,
+    pub config: Option<FeasableConfig<'a, V, C, P>>,
 
     /// Whether the time limit was reached.
     ///
@@ -77,5 +77,5 @@ pub trait SolverWithTimeLimit<V: UsableData, C: UsableData, P: ProblemRepr<V>>:
         &self,
         problem: &'a Problem<V, C, P>,
         time_limit_in_seconds: u32,
-    ) -> Option<TimeLimitSolution<'a, V, C, P>>;
+    ) -> TimeLimitSolution<'a, V, C, P>;
 }
