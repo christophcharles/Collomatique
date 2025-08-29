@@ -24,6 +24,8 @@ pub enum Op {
     Period(PeriodOp),
     /// Operation on the subjects
     Subject(SubjectOp),
+    /// Operation on the teachers
+    Teacher(TeacherOp),
 }
 
 impl Operation for Op {}
@@ -77,6 +79,20 @@ pub enum SubjectOp {
     Update(SubjectId, subjects::Subject),
 }
 
+/// Teacher operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// teachers we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TeacherOp {
+    /// Add a teacher
+    Add(teachers::Teacher),
+    /// Remove an existing teacher
+    Remove(TeacherId),
+    /// Update the parameters of an existing teacher
+    Update(TeacherId, teachers::Teacher),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -92,6 +108,8 @@ pub enum AnnotatedOp {
     Period(AnnotatedPeriodOp),
     /// Operation on the subjects
     Subject(AnnotatedSubjectOp),
+    /// Operation on the teachers
+    Teacher(AnnotatedTeacherOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -109,6 +127,12 @@ impl From<AnnotatedPeriodOp> for AnnotatedOp {
 impl From<AnnotatedSubjectOp> for AnnotatedOp {
     fn from(value: AnnotatedSubjectOp) -> Self {
         AnnotatedOp::Subject(value)
+    }
+}
+
+impl From<AnnotatedTeacherOp> for AnnotatedOp {
+    fn from(value: AnnotatedTeacherOp) -> Self {
+        AnnotatedOp::Teacher(value)
     }
 }
 
@@ -172,6 +196,24 @@ pub enum AnnotatedSubjectOp {
     Update(SubjectId, subjects::Subject),
 }
 
+/// Teacher annotated operation enumeration
+///
+/// Compared to [TeacherOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedTeacherOp {
+    /// Add a teacher
+    /// First parameter is the teacher id for the new teacher
+    Add(TeacherId, teachers::Teacher),
+    /// Remove an existing teacher
+    Remove(TeacherId),
+    /// Update the parameters of an existing teacher
+    Update(TeacherId, teachers::Teacher),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -196,6 +238,10 @@ impl AnnotatedOp {
             }
             Op::Subject(subject_op) => {
                 let (op, id) = AnnotatedSubjectOp::annotate(subject_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Teacher(teacher_op) => {
+                let (op, id) = AnnotatedTeacherOp::annotate(teacher_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
         }
@@ -271,6 +317,27 @@ impl AnnotatedSubjectOp {
             }
             SubjectOp::Remove(id) => (AnnotatedSubjectOp::Remove(id), None),
             SubjectOp::Update(id, new_params) => (AnnotatedSubjectOp::Update(id, new_params), None),
+        }
+    }
+}
+
+impl AnnotatedTeacherOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [TeacherOp].
+    fn annotate(
+        teacher_op: TeacherOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedTeacherOp, Option<TeacherId>) {
+        match teacher_op {
+            TeacherOp::Add(teacher) => {
+                let new_id = id_issuer.get_teacher_id();
+                (AnnotatedTeacherOp::Add(new_id, teacher), Some(new_id))
+            }
+            TeacherOp::Remove(id) => (AnnotatedTeacherOp::Remove(id), None),
+            TeacherOp::Update(id, new_teacher) => {
+                (AnnotatedTeacherOp::Update(id, new_teacher), None)
+            }
         }
     }
 }

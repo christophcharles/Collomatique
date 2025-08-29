@@ -15,7 +15,7 @@ use ids::IdIssuer;
 pub use ids::{PeriodId, StudentId, SubjectId, TeacherId};
 pub mod ops;
 pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp};
-use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp};
+use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp};
 pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
 pub mod periods;
@@ -264,6 +264,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Subject(subject_op) => {
                 Ok(AnnotatedOp::Subject(self.build_rev_subject(subject_op)?))
             }
+            AnnotatedOp::Teacher(teacher_op) => {
+                Ok(AnnotatedOp::Teacher(self.build_rev_teacher(teacher_op)?))
+            }
         }
     }
 
@@ -272,6 +275,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Student(student_op) => self.apply_student(student_op)?,
             AnnotatedOp::Period(period_op) => self.apply_period(period_op)?,
             AnnotatedOp::Subject(subject_op) => self.apply_subject(subject_op)?,
+            AnnotatedOp::Teacher(teacher_op) => self.apply_teacher(teacher_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -778,6 +782,49 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply teacher operations
+    fn apply_teacher(
+        &mut self,
+        teacher_op: &AnnotatedTeacherOp,
+    ) -> std::result::Result<(), TeacherError> {
+        match teacher_op {
+            AnnotatedTeacherOp::Add(new_id, teacher) => {
+                if self.inner_data.teachers.teacher_map.get(new_id).is_some() {
+                    return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
+                }
+                self.validate_teacher(teacher)?;
+
+                self.inner_data
+                    .teachers
+                    .teacher_map
+                    .insert(*new_id, teacher.clone());
+
+                Ok(())
+            }
+            AnnotatedTeacherOp::Remove(id) => {
+                if !self.inner_data.teachers.teacher_map.contains_key(id) {
+                    return Err(TeacherError::InvalidTeacherId(*id));
+                }
+
+                self.inner_data.teachers.teacher_map.remove(id);
+
+                Ok(())
+            }
+            AnnotatedTeacherOp::Update(id, new_teacher) => {
+                self.validate_teacher(new_teacher)?;
+                let Some(current_teacher) = self.inner_data.teachers.teacher_map.get_mut(id) else {
+                    return Err(TeacherError::InvalidTeacherId(*id));
+                };
+
+                *current_teacher = new_teacher.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -952,6 +999,38 @@ impl Data {
                 };
 
                 Ok(AnnotatedSubjectOp::ChangePosition(*subject_id, old_pos))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a teacher operation
+    fn build_rev_teacher(
+        &self,
+        teacher_op: &AnnotatedTeacherOp,
+    ) -> std::result::Result<AnnotatedTeacherOp, TeacherError> {
+        match teacher_op {
+            AnnotatedTeacherOp::Add(new_id, _teacher) => {
+                if self.inner_data.teachers.teacher_map.get(new_id).is_some() {
+                    return Err(TeacherError::TeacherIdAlreadyExists(new_id.clone()));
+                }
+
+                Ok(AnnotatedTeacherOp::Remove(new_id.clone()))
+            }
+            AnnotatedTeacherOp::Remove(teacher_id) => {
+                let Some(old_teacher) = self.inner_data.teachers.teacher_map.get(teacher_id) else {
+                    return Err(TeacherError::InvalidTeacherId(teacher_id.clone()));
+                };
+
+                Ok(AnnotatedTeacherOp::Add(*teacher_id, old_teacher.clone()))
+            }
+            AnnotatedTeacherOp::Update(teacher_id, _new_teacher) => {
+                let Some(old_teacher) = self.inner_data.teachers.teacher_map.get(teacher_id) else {
+                    return Err(TeacherError::InvalidTeacherId(teacher_id.clone()));
+                };
+
+                Ok(AnnotatedTeacherOp::Update(*teacher_id, old_teacher.clone()))
             }
         }
     }
