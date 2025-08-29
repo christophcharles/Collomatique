@@ -517,7 +517,8 @@ impl<V: UsableData> LinExpr<V> {
     /// assert_eq!(expr_transmute, expected_result);
     /// ```
     pub fn transmute<U: UsableData, F: FnMut(&V) -> U>(&self, mut f: F) -> LinExpr<U> {
-        self.try_transmute(|x| Some(f(x))).expect("No undefined transmutation is possible")
+        self.try_transmute(|x| Some(f(x)))
+            .expect("No undefined transmutation is possible")
     }
 
     /// Transmute variables
@@ -591,7 +592,10 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// assert_eq!(expr_transmute, None);
     /// ```
-    pub fn try_transmute<U: UsableData, F: FnMut(&V) -> Option<U>>(&self, mut f: F) -> Option<LinExpr<U>> {
+    pub fn try_transmute<U: UsableData, F: FnMut(&V) -> Option<U>>(
+        &self,
+        mut f: F,
+    ) -> Option<LinExpr<U>> {
         let mut expr = LinExpr::constant(self.get_constant());
 
         for (v, c) in &self.coefs {
@@ -1031,6 +1035,88 @@ impl<V: UsableData> Constraint<V> {
             symbol: self.symbol,
             expr: self.expr.transmute(f),
         }
+    }
+
+    /// Transmute variables
+    ///
+    /// This method is a faillible version of [Constraint::transmute].
+    ///
+    /// For instance, this works :
+    /// ```
+    /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
+    /// let constraint = expr.leq(&LinExpr::constant(4.0));
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let constraint_transmute = constraint.try_transmute(|v| match v {
+    ///     V1::A => Some(V2::A),
+    ///     V1::B => Some(V2::B),
+    ///     V1::C => Some(V2::C),
+    /// }).unwrap();
+    ///
+    /// let expected_result = (LinExpr::var(V2::A) + 2.0*LinExpr::var(V2::B) + 3.0*LinExpr::var(V2::C)).leq(&LinExpr::constant(4.0));
+    /// assert_eq!(constraint_transmute, expected_result);
+    /// ```
+    /// But this transmutation fails:
+    /// ```
+    /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
+    /// let constraint = expr.leq(&LinExpr::constant(4.0));
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V3 {
+    ///     A,
+    ///     B,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let constraint_transmute = constraint.try_transmute(|v| match v {
+    ///     V1::A => Some(V3::A),
+    ///     V1::B => Some(V3::B),
+    ///     V1::C => None,
+    /// });
+    ///
+    /// assert_eq!(constraint_transmute, None);
+    /// ```
+    pub fn try_transmute<U: UsableData, F: FnMut(&V) -> Option<U>>(
+        &self,
+        f: F,
+    ) -> Option<Constraint<U>> {
+        Some(Constraint {
+            symbol: self.symbol,
+            expr: self.expr.try_transmute(f)?,
+        })
     }
 }
 
