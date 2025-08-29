@@ -430,7 +430,7 @@ pub struct Subject<SubjectGroupId: OrdId, IncompatId: OrdId, GroupListId: OrdId>
     pub name: String,
     pub subject_group_id: SubjectGroupId,
     pub incompat_id: Option<IncompatId>,
-    pub group_list_id: GroupListId,
+    pub group_list_id: Option<GroupListId>,
     pub duration: NonZeroU32,
     pub students_per_group: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,

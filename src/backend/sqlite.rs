@@ -164,7 +164,7 @@ CREATE TABLE "subjects" (
 	"max_groups_per_slot"	INTEGER NOT NULL,
 	"balance_teachers"	INTEGER NOT NULL,
 	"balance_timeslots"	INTEGER NOT NULL,
-	"group_list_id"	INTEGER NOT NULL,
+	"group_list_id"	INTEGER,
 	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
 	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
 	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
