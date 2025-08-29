@@ -1,7 +1,4 @@
-pub mod a_star;
-pub mod backtracking;
 pub mod coin_cbc;
-pub mod dijkstra;
 pub mod highs;
 
 use super::{Config, FeasableConfig};
