@@ -377,6 +377,7 @@ async fn solve_command(
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
     use crate::frontend::state::Manager;
+    use crate::frontend::translator::GenColloscopeTranslator;
     use indicatif::MultiProgress;
     use std::time::Duration;
 
@@ -390,7 +391,7 @@ async fn solve_command(
     };
 
     let logic = app_state.get_logic();
-    let gen_colloscope_translator = logic.gen_colloscope_translator();
+    let gen_colloscope_translator = GenColloscopeTranslator::new(&logic);
     let data = gen_colloscope_translator.build_validated_data().await?;
 
     let ilp_translator = data.ilp_translator();
