@@ -233,6 +233,7 @@ impl SubjectsExternalData {
     /// Checks the validity of all [SubjectExternalData] in the ordered list.
     ///
     /// In practice, this means checking that the ids for periods are valid
+    /// and that the ranges are non-empty
     ///
     /// **Beware**, this does not check the validity of the ids for the subjects!
     pub fn validate_all(&self, period_ids: &BTreeSet<u64>) -> bool {
@@ -267,7 +268,12 @@ impl SubjectExternalData {
     /// Checks the validity of a [SubjectExternalData].
     ///
     /// In practice, this means checking that the ids for periods are valid
+    /// and that the ranges are non-empty
     pub fn validate(&self, period_ids: &BTreeSet<u64>) -> bool {
-        self.excluded_periods.iter().all(|x| period_ids.contains(x))
+        if !self.excluded_periods.iter().all(|x| period_ids.contains(x)) {
+            return false;
+        }
+        !self.parameters.students_per_group.is_empty()
+            && !self.parameters.groups_per_interrogation.is_empty()
     }
 }
