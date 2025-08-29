@@ -523,9 +523,7 @@ async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{
-        GeneralOperation, Manager, Operation, UpdateError, WeekPatternsOperation,
-    };
+    use collomatique::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
@@ -562,12 +560,16 @@ async fn week_count_command(
                     }
                 }
 
-                if let Err(e) = session
-                    .apply(Operation::General(GeneralOperation::SetWeekCount(
-                        week_count,
-                    )))
-                    .await
-                {
+                let mut general_data = match session.general_data_get().await {
+                    Ok(data) => data,
+                    Err(e) => {
+                        session.cancel().await;
+                        return Err(e.into());
+                    }
+                };
+                general_data.week_count = week_count;
+
+                if let Err(e) = session.apply(Operation::GeneralData(general_data)).await {
                     session.cancel().await;
 
                     let err = match e {
@@ -584,12 +586,10 @@ async fn week_count_command(
                 return Ok(None);
             }
 
-            if let Err(e) = app_state
-                .apply(Operation::General(GeneralOperation::SetWeekCount(
-                    week_count,
-                )))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.week_count = week_count;
+
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::WeekPatternsNeedTruncating(week_patterns_to_truncate) => {
                         let week_patterns = app_state.week_patterns_get_all().await?;
@@ -625,18 +625,15 @@ async fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError};
 
     match command {
         MaxInterrogationsPerDayCommand::Set {
             max_interrogations_per_day: max_interrogation_per_day,
         } => {
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetMaxInterrogationsPerDay(Some(max_interrogation_per_day)),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.max_interrogations_per_day = Some(max_interrogation_per_day);
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -646,12 +643,10 @@ async fn max_interrogations_per_day_command(
             Ok(None)
         }
         MaxInterrogationsPerDayCommand::Disable => {
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetMaxInterrogationsPerDay(None),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.max_interrogations_per_day = None;
+
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -676,7 +671,7 @@ async fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{Manager, Operation, UpdateError};
 
     match command {
         InterrogationsPerWeekRangeCommand::SetMax {
@@ -690,12 +685,11 @@ async fn interrogations_per_week_range_command(
             if interrogations_per_week.is_empty() {
                 return Err(anyhow!("The maximum number of interrogations per week must be greater than the minimum number"));
             }
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetInterrogationsPerWeekRange(Some(interrogations_per_week)),
-                ))
-                .await
-            {
+
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.interrogations_per_week = Some(interrogations_per_week);
+
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -715,12 +709,9 @@ async fn interrogations_per_week_range_command(
             if interrogations_per_week.is_empty() {
                 return Err(anyhow!("The minimum number of interrogations per week must be less than the maximum number"));
             }
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetInterrogationsPerWeekRange(Some(interrogations_per_week)),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.interrogations_per_week = Some(interrogations_per_week);
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -730,12 +721,9 @@ async fn interrogations_per_week_range_command(
             Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Disable => {
-            if let Err(e) = app_state
-                .apply(Operation::General(
-                    GeneralOperation::SetInterrogationsPerWeekRange(None),
-                ))
-                .await
-            {
+            let mut general_data = app_state.general_data_get().await?;
+            general_data.interrogations_per_week = None;
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
