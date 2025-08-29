@@ -312,8 +312,10 @@ use super::*;
 mod group_lists;
 mod grouping_incompats;
 mod groupings;
+mod incompat_for_student;
 mod incompats;
 mod students;
+mod subject_group_for_student;
 mod subject_groups;
 mod subjects;
 mod teachers;
@@ -913,5 +915,57 @@ impl Storage for Store {
         >,
     > + Send {
         grouping_incompats::update(&self.pool, index, grouping_incompat)
+    }
+
+    fn subject_group_for_student_set(
+        &self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+        subject_id: Option<Self::SubjectId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            Id3Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId, Self::SubjectId>,
+        >,
+    > + Send {
+        subject_group_for_student::set(&self.pool, student_id, subject_group_id, subject_id)
+    }
+    fn subject_group_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Option<Self::SubjectId>,
+            Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
+        >,
+    > + Send {
+        subject_group_for_student::get(&self.pool, student_id, subject_group_id)
+    }
+
+    fn incompat_for_student_set(
+        &self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+        enabled: bool,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>,
+        >,
+    > + Send {
+        incompat_for_student::set(&self.pool, student_id, incompat_id, enabled)
+    }
+    fn incompat_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            bool,
+            Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>,
+        >,
+    > + Send {
+        incompat_for_student::get(&self.pool, student_id, incompat_id)
     }
 }
