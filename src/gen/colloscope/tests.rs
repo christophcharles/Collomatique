@@ -13,7 +13,7 @@ fn trivial_validated_data() {
     let students = StudentList::new();
 
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let expected_result = ValidatedData {
         general: general.clone(),
@@ -155,9 +155,7 @@ fn simple_validated_data() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
-        groupings: BTreeSet::from([0, 1]),
-    }]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
 
     let expected_result = ValidatedData {
         general: general.clone(),
@@ -210,7 +208,7 @@ fn invalid_students_per_interrogation() {
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -257,7 +255,7 @@ fn subject_slot_overlaps_next_day() {
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -292,7 +290,7 @@ fn incompatibility_slot_overlaps_next_day() {
     }];
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
     assert_eq!(
         ValidatedData::new(
             general,
@@ -335,7 +333,7 @@ fn invalid_teacher_number() {
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -373,7 +371,7 @@ fn invalid_incompatibility_number() {
         incompatibilities: BTreeSet::from([1]),
     }];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -448,7 +446,7 @@ fn slot_ref_has_invalid_subject() {
             },
         ]),
     }];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -529,7 +527,7 @@ fn slot_ref_has_invalid_slot() {
             },
         ]),
     }];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -542,6 +540,112 @@ fn slot_ref_has_invalid_slot() {
         ),
         Err(Error::SlotGroupingWithInvalidSlot(
             0,
+            SlotRef {
+                subject: 0,
+                slot: 1,
+            }
+        ))
+    );
+}
+
+#[test]
+fn slot_grouping_overlap() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            }],
+            groups: GroupsDesc {
+                prefilled_groups: vec![],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+    ];
+    let incompatibilities = IncompatibilityList::new();
+    let students = StudentList::new();
+    let slot_groupings = vec![
+        SlotGrouping {
+            slots: BTreeSet::from([
+                SlotRef {
+                    subject: 1,
+                    slot: 0,
+                },
+                SlotRef {
+                    subject: 0,
+                    slot: 1,
+                },
+            ]),
+        },
+        SlotGrouping {
+            slots: BTreeSet::from([
+                SlotRef {
+                    subject: 0,
+                    slot: 0,
+                },
+                SlotRef {
+                    subject: 0,
+                    slot: 1,
+                },
+            ]),
+        },
+    ];
+    let grouping_incompats = SlotGroupingIncompatSet::new();
+
+    assert_eq!(
+        ValidatedData::new(
+            general,
+            subjects,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats
+        ),
+        Err(Error::SlotGroupingOverlap(
+            0,
+            1,
             SlotRef {
                 subject: 0,
                 slot: 1,
@@ -612,9 +716,7 @@ fn grouping_incompact_invalid_ref() {
             }]),
         },
     ];
-    let grouping_incompats = vec![SlotGroupingIncompat {
-        groupings: BTreeSet::from([0, 2]),
-    }];
+    let grouping_incompats = BTreeSet::from([SlotGroupingIncompat::new(0, 2)]);
 
     assert_eq!(
         ValidatedData::new(
@@ -642,7 +744,7 @@ fn invalid_interrogations_per_week() {
     let students = StudentList::new();
 
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -747,7 +849,7 @@ fn duplicated_groups() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -859,7 +961,7 @@ fn duplicated_student() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -967,7 +1069,7 @@ fn duplicated_student_not_assigned() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1068,7 +1170,7 @@ fn invalid_student_in_group() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1161,7 +1263,7 @@ fn invalid_student_not_assigned() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1273,7 +1375,7 @@ fn empty_group() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1389,7 +1491,7 @@ fn extensible_empty_group() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1497,7 +1599,7 @@ fn group_too_large() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1613,7 +1715,7 @@ fn non_extensible_too_small_group() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1725,7 +1827,7 @@ fn too_few_groups() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1848,7 +1950,7 @@ fn too_many_groups() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1934,7 +2036,7 @@ fn no_full_period() {
         },
     ];
     let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     assert_eq!(
         ValidatedData::new(
@@ -1947,125 +2049,6 @@ fn no_full_period() {
         )
         .err(),
         Some(Error::SubjectWithPeriodicityTooBig(2, 1))
-    );
-}
-
-#[test]
-fn less_than_two_groupings_in_incompat() {
-    let general = GeneralData {
-        teacher_count: 1,
-        week_count: NonZeroU32::new(2).unwrap(),
-        interrogations_per_week: None,
-    };
-
-    let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
-        period: NonZeroU32::new(2).unwrap(),
-        period_is_strict: true,
-        duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
-                },
-            },
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
-                },
-            },
-        ],
-        groups: GroupsDesc {
-            prefilled_groups: vec![
-                GroupDesc {
-                    students: BTreeSet::from([0, 1, 2]),
-                    can_be_extended: false,
-                },
-                GroupDesc {
-                    students: BTreeSet::new(),
-                    can_be_extended: true,
-                },
-            ],
-            not_assigned: BTreeSet::from([3, 4, 5]),
-        },
-    }];
-    let incompatibilities = IncompatibilityList::new();
-    let students = vec![
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-        Student {
-            incompatibilities: BTreeSet::new(),
-        },
-    ];
-    let slot_groupings = SlotGroupingList::from([
-        SlotGrouping {
-            slots: BTreeSet::from([SlotRef {
-                subject: 0,
-                slot: 0,
-            }]),
-        },
-        SlotGrouping {
-            slots: BTreeSet::from([SlotRef {
-                subject: 0,
-                slot: 1,
-            }]),
-        },
-    ]);
-    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
-        groupings: BTreeSet::from([0]),
-    }]);
-
-    assert_eq!(
-        ValidatedData::new(
-            general.clone(),
-            subjects.clone(),
-            incompatibilities.clone(),
-            students.clone(),
-            slot_groupings.clone(),
-            grouping_incompats
-        )
-        .err(),
-        Some(Error::SlotGroupingIncompatWithLessThanTwoSlotGroupings(
-            0, 1
-        ))
-    );
-
-    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
-        groupings: BTreeSet::new(),
-    }]);
-
-    assert_eq!(
-        ValidatedData::new(
-            general,
-            subjects,
-            incompatibilities,
-            students,
-            slot_groupings,
-            grouping_incompats
-        )
-        .err(),
-        Some(Error::SlotGroupingIncompatWithLessThanTwoSlotGroupings(
-            0, 0
-        ))
     );
 }
 
@@ -2210,7 +2193,7 @@ fn group_in_slot_variables() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -2405,7 +2388,7 @@ fn dynamic_group_assignment_variables() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -2680,7 +2663,7 @@ fn student_in_group_variables() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -2887,7 +2870,7 @@ fn with_student_not_in_last_period_variables() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -3106,7 +3089,7 @@ fn without_student_not_in_last_period_variables() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -3299,7 +3282,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -3475,7 +3458,7 @@ fn periodicity_variables_for_strict_period() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -3662,7 +3645,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -3849,7 +3832,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -3965,9 +3948,7 @@ fn use_grouping() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
-        groupings: BTreeSet::from([0, 1]),
-    }]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
 
     let data = ValidatedData::new(
         general,
@@ -4128,7 +4109,7 @@ fn at_most_one_group_per_slot_constraints() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -4339,7 +4320,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -4555,7 +4536,7 @@ fn one_interrogation_per_period() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -4788,7 +4769,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -5022,7 +5003,7 @@ fn students_per_group_count() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -5202,7 +5183,7 @@ fn student_in_single_group() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -5339,7 +5320,7 @@ fn dynamic_groups_student_in_group_inequalities() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -5459,7 +5440,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -5576,7 +5557,7 @@ fn group_in_slot_needs_student() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -5788,7 +5769,7 @@ fn one_periodicity_choice_per_student() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -6061,7 +6042,7 @@ fn periodicity_inequalities() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -6373,7 +6354,7 @@ fn interrogations_per_week() {
         },
     ];
     let slot_groupings = vec![];
-    let grouping_incompats = SlotGroupingIncompatList::new();
+    let grouping_incompats = SlotGroupingIncompatSet::new();
 
     let data = ValidatedData::new(
         general,
@@ -6562,9 +6543,7 @@ fn grouping_inequalities() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
-        groupings: BTreeSet::from([0, 1]),
-    }]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
 
     let data = ValidatedData::new(
         general,
@@ -6714,9 +6693,7 @@ fn grouping_incompats() {
             }]),
         },
     ];
-    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
-        groupings: BTreeSet::from([0, 1]),
-    }]);
+    let grouping_incompats = SlotGroupingIncompatSet::from([SlotGroupingIncompat::new(0, 1)]);
 
     let data = ValidatedData::new(
         general,
