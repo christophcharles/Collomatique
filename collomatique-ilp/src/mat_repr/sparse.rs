@@ -18,9 +18,7 @@
 //! it fits on most modern smartphones).
 
 use super::{ConfigRepr, ProblemRepr};
-use crate::{
-    f64_is_non_negative, f64_is_zero, linexpr::EqSymbol, Constraint, UsableData, Variable,
-};
+use crate::{f64_is_positive, f64_is_zero, linexpr::EqSymbol, Constraint, UsableData, Variable};
 
 use sprs::{CsMat, CsVec, TriMat};
 use std::collections::{BTreeMap, BTreeSet};
@@ -218,7 +216,7 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for SprsConfig<'a, V> {
                     }
                 }
                 EqSymbol::LessThan => {
-                    if f64_is_non_negative(*v) {
+                    if f64_is_positive(*v) {
                         result.insert(i);
                     }
                 }
