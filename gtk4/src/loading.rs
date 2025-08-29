@@ -22,7 +22,7 @@ pub enum LoadingOutput {
 
 pub struct LoadingPanel {
     path: Option<PathBuf>,
-    worker: WorkerController<file_loader::FileLoader>,
+    worker: Option<WorkerController<file_loader::FileLoader>>,
 }
 
 impl LoadingPanel {
@@ -87,19 +87,12 @@ impl SimpleComponent for LoadingPanel {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let worker = file_loader::FileLoader::builder()
-            .detach_worker(())
-            .forward(sender.input_sender(), |x| match x {
-                file_loader::FileLoadingOutput::Failed(path, error) => {
-                    LoadingInput::Failed(path, error)
-                }
-                file_loader::FileLoadingOutput::Loaded(path, data) => {
-                    LoadingInput::Loaded(path, data)
-                }
-            });
-        let model = LoadingPanel { path: None, worker };
+        let model = LoadingPanel {
+            path: None,
+            worker: None,
+        };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -109,10 +102,21 @@ impl SimpleComponent for LoadingPanel {
         match message {
             LoadingInput::Load(path) => {
                 self.path = Some(path.clone());
-                self.worker
+                let worker = file_loader::FileLoader::builder()
+                    .detach_worker(())
+                    .forward(sender.input_sender(), |x| match x {
+                        file_loader::FileLoadingOutput::Failed(path, error) => {
+                            LoadingInput::Failed(path, error)
+                        }
+                        file_loader::FileLoadingOutput::Loaded(path, data) => {
+                            LoadingInput::Loaded(path, data)
+                        }
+                    });
+                worker
                     .sender()
                     .send(file_loader::FileLoadingInput::Load(path))
                     .unwrap();
+                self.worker = Some(worker);
             }
             LoadingInput::Failed(path, error) => {
                 sender.output(LoadingOutput::Failed(path, error)).unwrap();
