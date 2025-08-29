@@ -150,6 +150,24 @@ impl GroupListId {
     }
 }
 
+/// This type represents an ID for a rule
+///
+/// Every rule gets a unique ID. IDs then identify rules
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuleId(u64);
+
+impl RuleId {
+    /// Returns the value for the ID
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+
+    pub(crate) unsafe fn new(value: u64) -> RuleId {
+        RuleId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -168,6 +186,7 @@ impl IdIssuer {
         slot_ids: impl Iterator<Item = u64>,
         incompat_ids: impl Iterator<Item = u64>,
         group_list_ids: impl Iterator<Item = u64>,
+        rule_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
         let existing_ids = student_ids
             .chain(period_ids)
@@ -176,7 +195,8 @@ impl IdIssuer {
             .chain(week_patterns_ids)
             .chain(slot_ids)
             .chain(incompat_ids)
-            .chain(group_list_ids);
+            .chain(group_list_ids)
+            .chain(rule_ids);
         Ok(IdIssuer {
             helper: tools::IdIssuerHelper::new(existing_ids)?,
         })
@@ -220,5 +240,10 @@ impl IdIssuer {
     /// Get a new unused ID for a group list
     pub fn get_group_list_id(&mut self) -> GroupListId {
         GroupListId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a rule
+    pub fn get_rule_id(&mut self) -> RuleId {
+        RuleId(self.helper.get_new_id().inner())
     }
 }
