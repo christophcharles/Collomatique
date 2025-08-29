@@ -768,7 +768,7 @@ where
         expr
     }
 
-    fn add_constraints<U: UsableData, C: UsableData>(
+    fn add_constraints_internal<U: UsableData, C: UsableData>(
         &mut self,
         constraints: Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
         rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
@@ -791,7 +791,7 @@ where
         c_map
     }
 
-    pub fn add_hard_constraints<E: ExtraConstraints<T>>(
+    pub fn add_constraints<E: ExtraConstraints<T>>(
         &mut self,
         extra: E,
     ) -> Option<ConstraintsTranslator<T, E>> {
@@ -808,93 +808,10 @@ where
         }
 
         self.add_variables(v_map);
-        let general_c_map = self.add_constraints(extra_general_constraints, &rev_v_map);
-        let structure_c_map = self.add_constraints(extra_structure_constraints, &rev_v_map);
+        let general_c_map = self.add_constraints_internal(extra_general_constraints, &rev_v_map);
+        let structure_c_map =
+            self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
-        Some(ConstraintsTranslator {
-            extra,
-            general_c_map,
-            structure_c_map,
-        })
-    }
-
-    fn convert_constraints_to_soft<U: UsableData, C: UsableData>(
-        &mut self,
-        constraints: Vec<(Constraint<ExtraVariable<M, S, U>>, C)>,
-        rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
-    ) -> LinExpr<ExtraVariable<M, S, IdVariable>> {
-        let mut obj = LinExpr::constant(0.);
-
-        for (c, c_desc) in constraints {
-            let expr = self.update_var_in_expr(c.get_lhs(), rev_v_map);
-
-            let soft_variable_id = self.id_issuer.get_id();
-            let soft_variable = ExtraVariable::Extra(IdVariable {
-                id: soft_variable_id,
-                desc: format!("soft_{} ({:?})", soft_variable_id, c_desc),
-            });
-
-            self.variables
-                .insert(soft_variable.clone(), Variable::non_negative());
-
-            match c.get_symbol() {
-                collomatique_ilp::linexpr::EqSymbol::Equals => {
-                    let soft_constraint1 = expr.leq(&LinExpr::var(soft_variable.clone()));
-                    let soft_constraint1_id = self.id_issuer.get_id(); // We'll loose this as this constraint always has a solution
-
-                    let soft_constraint2 = expr.geq(&(-LinExpr::var(soft_variable.clone())));
-                    let soft_constraint2_id = self.id_issuer.get_id(); // We'll loose this as this constraint always has a solution
-
-                    self.constraints
-                        .push((soft_constraint1, soft_constraint1_id));
-                    self.constraints
-                        .push((soft_constraint2, soft_constraint2_id));
-                }
-                collomatique_ilp::linexpr::EqSymbol::LessThan => {
-                    let soft_constraint = expr.leq(&LinExpr::var(soft_variable.clone()));
-                    let soft_constraint_id = self.id_issuer.get_id(); // We'll loose this as this constraint always has a solution
-
-                    self.constraints.push((soft_constraint, soft_constraint_id));
-                }
-            }
-
-            obj = obj + LinExpr::var(soft_variable);
-        }
-
-        obj
-    }
-
-    pub fn add_soft_constraints<E: ExtraConstraints<T>>(
-        &mut self,
-        extra: E,
-        obj_coef: f64,
-    ) -> Option<ConstraintsTranslator<T, E>> {
-        let extra_variables = extra.extra_structure_variables(&self.base);
-        let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
-        let extra_general_constraints = extra.extra_general_constraints(&self.base);
-
-        let (rev_v_map, v_map) = self.scan_variables(extra_variables);
-
-        if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
-            || !self.check_variables_in_constraints(&extra_general_constraints, &rev_v_map)
-        {
-            return None;
-        }
-
-        self.add_variables(v_map);
-        let structure_c_map = self.add_constraints(extra_structure_constraints, &rev_v_map);
-
-        let obj_func = self.convert_constraints_to_soft(extra_general_constraints, &rev_v_map);
-        match self.objective_sense {
-            ObjectiveSense::Minimize => {
-                self.objective_func = &self.objective_func + obj_coef * obj_func;
-            }
-            ObjectiveSense::Maximize => {
-                self.objective_func = &self.objective_func - obj_coef * obj_func;
-            }
-        }
-
-        let general_c_map = BTreeMap::new();
         Some(ConstraintsTranslator {
             extra,
             general_c_map,
@@ -920,7 +837,8 @@ where
         }
 
         self.add_variables(v_map);
-        let structure_c_map = self.add_constraints(extra_structure_constraints, &rev_v_map);
+        let structure_c_map =
+            self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
         let obj_func = self.update_var_in_expr(&objective_func, &rev_v_map);
         if self.objective_sense == extra.objective_sense(&self.base) {
