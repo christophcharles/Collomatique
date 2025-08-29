@@ -81,6 +81,7 @@ impl From<UpdatePeriodStatusError> for SubjectsError {
 pub enum AddNewSubjectError {
     StudentsPerGroupRangeIsEmpty,
     GroupsPerInterrogationRangeIsEmpty,
+    InterrogationCountRangeIsEmpty,
 }
 
 impl std::fmt::Display for AddNewSubjectError {
@@ -98,6 +99,9 @@ impl std::fmt::Display for AddNewSubjectError {
                     "Aucune valeur autorisée pour le nombre de groupes par colle"
                 )
             }
+            AddNewSubjectError::InterrogationCountRangeIsEmpty => {
+                write!(f, "Aucune valeur autorisée pour le nombre de colles")
+            }
         }
     }
 }
@@ -111,6 +115,9 @@ impl From<crate::ops::AddNewSubjectError> for AddNewSubjectError {
             crate::ops::AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => {
                 AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty
             }
+            crate::ops::AddNewSubjectError::InterrogationCountRangeIsEmpty => {
+                AddNewSubjectError::InterrogationCountRangeIsEmpty
+            }
         }
     }
 }
@@ -120,6 +127,7 @@ pub enum UpdateSubjectError {
     InvalidSubjectId(MsgSubjectId),
     StudentsPerGroupRangeIsEmpty,
     GroupsPerInterrogationRangeIsEmpty,
+    InterrogationCountRangeIsEmpty,
 }
 
 impl std::fmt::Display for UpdateSubjectError {
@@ -140,6 +148,9 @@ impl std::fmt::Display for UpdateSubjectError {
                     "Aucune valeur autorisée pour le nombre de groupes par colle"
                 )
             }
+            UpdateSubjectError::InterrogationCountRangeIsEmpty => {
+                write!(f, "Aucune valeur autorisée pour le nombre de colles")
+            }
         }
     }
 }
@@ -155,6 +166,9 @@ impl From<crate::ops::UpdateSubjectError> for UpdateSubjectError {
             }
             crate::ops::UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => {
                 UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty
+            }
+            crate::ops::UpdateSubjectError::InterrogationCountRangeIsEmpty => {
+                UpdateSubjectError::InterrogationCountRangeIsEmpty
             }
         }
     }
