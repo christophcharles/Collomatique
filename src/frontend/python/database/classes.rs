@@ -1509,7 +1509,7 @@ impl Grouping {
         let slots_strings: Vec<_> = self_.slots.iter().map(|x| format!("{:?}", x)).collect();
 
         let output = format!(
-            "{{ name = {}, slots = [{}] }}",
+            "{{ name = {}, slots = {{ {} }} }}",
             self_.name,
             slots_strings.join(","),
         );
@@ -1548,7 +1548,7 @@ impl From<Grouping> for backend::Grouping<state::TimeSlotHandle> {
     }
 }
 
-/*#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupingIncompatHandle {
     pub handle: state::GroupingIncompatHandle,
@@ -1557,9 +1557,7 @@ pub struct GroupingIncompatHandle {
 #[pymethods]
 impl GroupingIncompatHandle {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!(
-            "{:?}", *self_
-        );
+        let output = format!("{:?}", *self_);
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
@@ -1594,55 +1592,61 @@ impl From<GroupingIncompatHandle> for state::GroupingIncompatHandle {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupingIncompat {
     #[pyo3(set, get)]
-    name: String,
+    max_count: NonZeroUsize,
     #[pyo3(set, get)]
-    optional: bool,
+    groupings: BTreeSet<GroupingHandle>,
 }
 
 #[pymethods]
 impl GroupingIncompat {
     #[new]
-    fn new(name: String) -> Self {
+    fn new(max_count: NonZeroUsize) -> Self {
         GroupingIncompat {
-            name,
-            optional: false,
+            max_count,
+            groupings: BTreeSet::new(),
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{{ name = {}, optional = {} }}", self_.name, self_.optional,);
+        let groupings_strings: Vec<_> =
+            self_.groupings.iter().map(|x| format!("{:?}", x)).collect();
+
+        let output = format!(
+            "{{ max_count = {}, groupings = {{ {} }} }}",
+            self_.max_count.get(),
+            groupings_strings.join(","),
+        );
 
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
 
-impl From<&backend::GroupingIncompat> for GroupingIncompat {
-    fn from(value: &backend::GroupingIncompat) -> Self {
+impl From<&backend::GroupingIncompat<state::GroupingHandle>> for GroupingIncompat {
+    fn from(value: &backend::GroupingIncompat<state::GroupingHandle>) -> Self {
         GroupingIncompat {
-            name: value.name.clone(),
-            optional: value.optional,
+            max_count: value.max_count,
+            groupings: value.groupings.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<backend::GroupingIncompat> for GroupingIncompat {
-    fn from(value: backend::GroupingIncompat) -> Self {
+impl From<backend::GroupingIncompat<state::GroupingHandle>> for GroupingIncompat {
+    fn from(value: backend::GroupingIncompat<state::GroupingHandle>) -> Self {
         GroupingIncompat::from(&value)
     }
 }
 
-impl From<&GroupingIncompat> for backend::GroupingIncompat {
+impl From<&GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle> {
     fn from(value: &GroupingIncompat) -> Self {
         backend::GroupingIncompat {
-            name: value.name.clone(),
-            optional: value.optional,
+            max_count: value.max_count,
+            groupings: value.groupings.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<GroupingIncompat> for backend::GroupingIncompat {
+impl From<GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle> {
     fn from(value: GroupingIncompat) -> Self {
         backend::GroupingIncompat::from(&value)
     }
 }
-*/

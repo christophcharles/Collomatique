@@ -26,6 +26,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Subject>()?;
     m.add_class::<TimeSlot>()?;
     m.add_class::<Grouping>()?;
+    m.add_class::<GroupingIncompat>()?;
 
     m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
 
