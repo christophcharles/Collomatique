@@ -320,7 +320,7 @@ impl Storage for Store {
 
     type InternalError = Error;
 
-    fn week_pattern_get(
+    fn week_patterns_get(
         &self,
         index: Self::WeekPatternId,
     ) -> impl core::future::Future<
@@ -331,7 +331,7 @@ impl Storage for Store {
     > + Send {
         week_patterns::get(&self.pool, index)
     }
-    fn week_pattern_get_all(
+    fn week_patterns_get_all(
         &self,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -341,7 +341,7 @@ impl Storage for Store {
     > + Send {
         week_patterns::get_all(&self.pool)
     }
-    fn week_pattern_add(
+    fn week_patterns_add(
         &self,
         pattern: WeekPattern,
     ) -> impl core::future::Future<
@@ -349,7 +349,7 @@ impl Storage for Store {
     > + Send {
         week_patterns::add(&self.pool, pattern)
     }
-    fn week_pattern_remove(
+    fn week_patterns_remove(
         &self,
         index: Self::WeekPatternId,
     ) -> impl core::future::Future<
