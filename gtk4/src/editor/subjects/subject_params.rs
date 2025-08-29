@@ -185,6 +185,7 @@ impl SimpleComponent for Dialog {
                         connect_clicked => DialogInput::Accept,
                     },
                 },
+                #[name(scrolled_window)]
                 #[wrap(Some)]
                 set_content = &gtk::ScrolledWindow {
                     set_hexpand: true,
@@ -771,6 +772,13 @@ impl SimpleComponent for Dialog {
                     },
                 );
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.should_redraw {
+            let adj = widgets.scrolled_window.vadjustment();
+            adj.set_value(0.);
         }
     }
 }
