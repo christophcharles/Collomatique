@@ -16,6 +16,7 @@ use crate::tools;
 mod check_script;
 mod general_planning;
 mod run_script;
+mod subjects;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -84,6 +85,7 @@ pub struct EditorPanel {
     show_particular_panel: Option<PanelNumbers>,
 
     general_planning: Controller<general_planning::GeneralPlanning>,
+    subjects: Controller<subjects::Subjects>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
 }
@@ -331,6 +333,10 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::GeneralPlanning(op))
             });
 
+        let subjects = subjects::Subjects::builder()
+            .launch(())
+            .forward(sender.input_sender(), |_| EditorInput::Ignore);
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -349,10 +355,10 @@ impl Component for EditorPanel {
                 }
             });
 
-        let pages_names = vec!["general_planning", "test2", "test3"];
+        let pages_names = vec!["general_planning", "subjects", "test3"];
         let pages_titles_map = BTreeMap::from([
             ("general_planning", "Planning général"),
-            ("test2", "Test2"),
+            ("subjects", "Matières"),
             ("test3", "Test3"),
         ]);
 
@@ -365,6 +371,7 @@ impl Component for EditorPanel {
             pages_titles_map,
             show_particular_panel: None,
             general_planning,
+            subjects,
             check_script_dialog,
             run_script_dialog,
         };
@@ -376,7 +383,7 @@ impl Component for EditorPanel {
             model.pages_titles_map.get(model.pages_names[0]).unwrap(),
         );
         widgets.main_stack.add_titled(
-            &gtk::Label::new(Some("Test2 - content")),
+            model.subjects.widget(),
             Some(model.pages_names[1]),
             model.pages_titles_map.get(model.pages_names[1]).unwrap(),
         );
