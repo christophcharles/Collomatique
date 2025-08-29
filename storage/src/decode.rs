@@ -49,6 +49,8 @@ pub enum DecodeError {
     WeekPatternsAlreadyDecoded,
     #[error("Interrogation slots data is inconsistent")]
     InconsistentSlotsData,
+    #[error("Slots were decoded before subjects")]
+    SlotsDecodedBeforeSubjects,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
