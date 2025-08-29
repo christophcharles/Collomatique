@@ -7,6 +7,7 @@ pub use general_planning::*;
 pub mod subjects;
 pub use subjects::*;
 pub mod teachers;
+pub use teachers::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
