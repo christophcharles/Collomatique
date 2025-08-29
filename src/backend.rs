@@ -550,6 +550,16 @@ pub trait Storage: Send + Sync {
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> std::result::Result<(), Self::InternalError>;
+    async fn incompats_check_id(
+        &self,
+        index: Self::IncompatId,
+    ) -> std::result::Result<bool, Self::InternalError> {
+        async move {
+            let incompats = self.incompats_get_all().await?;
+
+            Ok(incompats.contains_key(&index))
+        }
+    }
     async fn incompats_check(
         &self,
         incompat: &Incompat<Self::WeekPatternId>,
@@ -568,6 +578,45 @@ pub trait Storage: Send + Sync {
             Ok(DataStatusWithId::Ok)
         }
     }
+    async fn incompats_add(
+        &mut self,
+        incompat: &Incompat<Self::WeekPatternId>,
+    ) -> std::result::Result<Self::IncompatId, CrossError<Self::InternalError, Self::WeekPatternId>>
+    {
+        async move {
+            let data_status = self.incompats_check(incompat).await?;
+            match data_status {
+                DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
+                DataStatusWithId::Ok => {
+                    let id = unsafe { self.incompats_add_unchecked(incompat) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
+    async fn incompats_update(
+        &mut self,
+        index: Self::IncompatId,
+        incompat: &Incompat<Self::WeekPatternId>,
+    ) -> std::result::Result<
+        Self::IncompatId,
+        CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,
+    > {
+        async move {
+            if !self.incompats_check_id(index).await? {
+                return Err(CrossIdError::InvalidId(index));
+            }
+
+            let data_status = self.incompats_check(incompat).await?;
+            match data_status {
+                DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
+                DataStatusWithId::Ok => {
+                    let id = unsafe { self.incompats_add_unchecked(incompat) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
     async fn incompats_can_remove(
         &mut self,
         index: Self::IncompatId,
@@ -576,9 +625,7 @@ pub trait Storage: Send + Sync {
         IdError<Self::InternalError, Self::IncompatId>,
     > {
         async move {
-            let incompats = self.incompats_get_all().await?;
-
-            if !incompats.contains_key(&index) {
+            if !self.incompats_check_id(index).await? {
                 return Err(IdError::InvalidId(index));
             }
 
