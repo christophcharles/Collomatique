@@ -280,7 +280,7 @@ impl Component for Dialog {
                         Ok(new_id) => {
                             self.add_command(
                                 sender,
-                                msg_display::EntryData::Success(op.get_desc()),
+                                msg_display::EntryData::Success(op.get_desc().1),
                             );
                             self.rpc_logger
                                 .sender()
@@ -316,10 +316,14 @@ impl Component for Dialog {
                     .app_session
                     .take()
                     .expect("there should be some current state to accept");
+                let last_op_cat = match app_session.get_undo_name() {
+                    Some((cat, _desc)) => cat.clone(),
+                    None => collomatique_core::ops::OpCategory::GeneralPlanning,
+                };
                 sender
-                    .output(DialogOutput::NewData(app_session.commit(format!(
-                        "Exécution de {}",
-                        self.path.to_string_lossy()
+                    .output(DialogOutput::NewData(app_session.commit((
+                        last_op_cat,
+                        format!("Exécution de {}", self.path.to_string_lossy()),
                     ))))
                     .unwrap();
             }

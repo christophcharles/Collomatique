@@ -131,7 +131,7 @@ impl TeachersUpdateOp {
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Add(teacher.clone()),
                         ),
-                        self.get_desc(),
+                        (OpCategory::Teachers, self.get_desc()),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Teacher(te) = e {
@@ -207,7 +207,7 @@ impl TeachersUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Teachers, self.get_desc()));
 
                 Ok(None)
             }
@@ -256,7 +256,7 @@ impl TeachersUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Teachers, self.get_desc()));
 
                 Ok(None)
             }

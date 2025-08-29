@@ -313,7 +313,7 @@ impl GeneralPlanningUpdateOp {
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
                         ),
-                        self.get_desc(),
+                        (OpCategory::GeneralPlanning, self.get_desc()),
                     )
                     .expect("Deleting first week should always work");
                 if result.is_some() {
@@ -329,7 +329,7 @@ impl GeneralPlanningUpdateOp {
                                 date.clone(),
                             )),
                         ),
-                        self.get_desc(),
+                        (OpCategory::GeneralPlanning, self.get_desc()),
                     )
                     .expect("Updating first week should always work");
                 if result.is_some() {
@@ -353,7 +353,7 @@ impl GeneralPlanningUpdateOp {
                                 }
                             },
                         ),
-                        self.get_desc(),
+                        (OpCategory::GeneralPlanning, self.get_desc()),
                     )
                     .expect("Adding a period should never fail");
                 match result {
@@ -377,7 +377,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::Op::Period(
                         collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                     ),
-                    self.get_desc(),
+                    (OpCategory::GeneralPlanning, self.get_desc()),
                 ) {
                     Ok(r) => r,
                     Err(collomatique_state_colloscopes::Error::Period(
@@ -483,7 +483,7 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::GeneralPlanning, self.get_desc()));
                 Ok(None)
             }
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
@@ -603,7 +603,7 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::GeneralPlanning, self.get_desc()));
                 Ok(Some(new_id))
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -724,7 +724,7 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::GeneralPlanning, self.get_desc()));
                 Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
@@ -751,7 +751,7 @@ impl GeneralPlanningUpdateOp {
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
                         ),
-                        self.get_desc(),
+                        (OpCategory::GeneralPlanning, self.get_desc()),
                     )
                     .expect("At this point, parameters should be valid");
                 if result.is_some() {

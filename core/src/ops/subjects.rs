@@ -314,7 +314,7 @@ impl SubjectsUpdateOp {
                                 }
                             )
                         ),
-                        self.get_desc()
+                        (OpCategory::Subjects, self.get_desc())
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
                         match se {
                             collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
@@ -419,7 +419,7 @@ impl SubjectsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Subjects, self.get_desc()));
 
                 Ok(None)
             }
@@ -511,7 +511,7 @@ impl SubjectsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Subjects, self.get_desc()));
 
                 Ok(None)
             }
@@ -534,7 +534,7 @@ impl SubjectsUpdateOp {
                                 current_position - 1,
                             ),
                         ),
-                        self.get_desc(),
+                        (OpCategory::Subjects, self.get_desc()),
                     )
                     .expect("No error should be possible at this point");
 
@@ -562,7 +562,7 @@ impl SubjectsUpdateOp {
                                 current_position + 1,
                             ),
                         ),
-                        self.get_desc(),
+                        (OpCategory::Subjects, self.get_desc()),
                     )
                     .expect("No error should be possible at this point");
 
@@ -637,7 +637,7 @@ impl SubjectsUpdateOp {
                     .expect("No error should be possible at this point");
                 assert!(result.is_none());
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Subjects, self.get_desc()));
 
                 Ok(None)
             }
