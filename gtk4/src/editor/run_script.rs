@@ -6,20 +6,24 @@ use crate::widgets::rpc_server;
 use std::path::PathBuf;
 
 mod error_dialog;
+mod warning_running;
+
 pub struct Dialog {
     hidden: bool,
     path: PathBuf,
     is_running: bool,
     error_dialog: Controller<error_dialog::Dialog>,
+    warning_running: Controller<warning_running::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
     Run(PathBuf, String),
-    Cancel,
+    CancelRequest,
     Accept,
 
+    Cancel,
     ProcessFinished,
     Cmd(Result<collomatique_rpc::CmdMsg, String>),
     Error(String),
@@ -51,7 +55,7 @@ impl Component for Dialog {
                     pack_start = &gtk::Button {
                         set_label: "Annuler",
                         set_sensitive: true,
-                        connect_clicked => DialogInput::Cancel,
+                        connect_clicked => DialogInput::CancelRequest,
                     },
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
@@ -169,6 +173,13 @@ impl Component for Dialog {
             .launch(())
             .detach();
 
+        let warning_running = warning_running::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_running::DialogOutput::Accept => DialogInput::Cancel,
+            });
+
         use rpc_server::{RpcLogger, RpcLoggerOutput};
         let rpc_logger = RpcLogger::builder()
             .launch(())
@@ -182,6 +193,7 @@ impl Component for Dialog {
             hidden: true,
             path: PathBuf::new(),
             error_dialog,
+            warning_running,
             rpc_logger,
             is_running: false,
         };
@@ -191,7 +203,7 @@ impl Component for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             DialogInput::Run(path, _script) => {
                 self.hidden = false;
@@ -203,6 +215,16 @@ impl Component for Dialog {
                         collomatique_rpc::InitMsg::Greetings,
                     ))
                     .unwrap();
+            }
+            DialogInput::CancelRequest => {
+                if self.is_running {
+                    self.warning_running
+                        .sender()
+                        .send(warning_running::DialogInput::Show)
+                        .unwrap();
+                } else {
+                    sender.input(DialogInput::Cancel);
+                }
             }
             DialogInput::Cancel => {
                 self.hidden = true;
