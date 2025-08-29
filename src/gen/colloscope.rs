@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
@@ -95,7 +96,7 @@ pub type IncompatibilityList = Vec<Incompatibility>;
 
 use std::collections::BTreeSet;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Student {
     pub subjects: BTreeSet<usize>,
     pub incompatibilities: BTreeSet<usize>,
@@ -220,5 +221,26 @@ impl ValidatedData {
             slot_groupings,
             grouping_incompats,
         })
+    }
+}
+
+impl ValidatedData {
+    fn count_student_specializations(&self) -> BTreeMap<Student, NonZeroU32> {
+        let mut output: BTreeMap<Student, NonZeroU32> = BTreeMap::new();
+
+        for student in &self.students {
+            match output.get_mut(student) {
+                Some(counter) => {
+                    *counter = counter
+                        .checked_add(1)
+                        .expect("There should be less than 2^32 student");
+                }
+                None => {
+                    output.insert(student.clone(), NonZeroU32::new(1).unwrap());
+                }
+            }
+        }
+
+        output
     }
 }
