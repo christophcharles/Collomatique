@@ -18,6 +18,8 @@ use thiserror::Error;
 
 pub mod general_planning;
 pub use general_planning::*;
+pub mod subjects;
+pub use subjects::*;
 
 #[derive(Debug)]
 pub enum UpdateOp {
