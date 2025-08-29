@@ -280,6 +280,11 @@ impl SimpleComponent for AppModel {
                 self.send_but_check_dirty(sender, AppInput::NewColloscope(None));
             }
             AppInput::NewColloscope(path) => {
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::StopLoading)
+                    .unwrap();
                 self.state = GlobalState::EditorScreen;
                 self.controllers
                     .editor
@@ -292,6 +297,11 @@ impl SimpleComponent for AppModel {
                     .unwrap();
             }
             AppInput::LoadColloscope(path) => {
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::StopLoading)
+                    .unwrap();
                 self.controllers
                     .editor
                     .sender()
