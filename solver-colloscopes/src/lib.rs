@@ -1,4 +1,4 @@
-//! Collomatique-core
+//! Collomatique-solver-colloscopes
 //! ---
 //!
 //! This crate contains the main logic of Collomatique for solving colloscopes related problems.

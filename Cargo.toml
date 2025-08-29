@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["collomatique" , "core", "ilp", "solver", "time"]
+members = ["collomatique" , "ilp", "solver", "solver-colloscopes", "time"]
