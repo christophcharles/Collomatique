@@ -105,7 +105,7 @@ impl<'a, 'b: 'a> ConfigRepr<'a,'b> {
             }
         }
         for v in &eq_column {
-            if *v == 0 {
+            if *v != 0 {
                 return false;
             }
         }
