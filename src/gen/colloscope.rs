@@ -1073,19 +1073,29 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn generate_period_list(&self, subject: &Subject, strict: bool) -> Vec<std::ops::Range<u32>> {
-        let week_count = self.data.general.week_count.get();
+    fn generate_period_list_for_range(
+        &self,
+        subject: &Subject,
+        strict: bool,
+        range: std::ops::Range<u32>,
+    ) -> Vec<std::ops::Range<u32>> {
+        let week_count = range.end - range.start;
+
+        if week_count < subject.period.get() {
+            return vec![range];
+        }
+
         if strict {
-            (0..(week_count - subject.period.get() + 1))
+            (range.start..(range.end - subject.period.get() + 1))
                 .into_iter()
                 .map(|start| start..(start + subject.period.get()))
                 .collect()
         } else {
-            let whole_period_count = self.data.general.week_count.get() / subject.period.get();
+            let whole_period_count = week_count / subject.period.get();
             let mut period_list: Vec<_> = (0..whole_period_count)
                 .into_iter()
                 .map(|p| {
-                    let start = p * subject.period.get();
+                    let start = range.start + p * subject.period.get();
                     let period = start..(start + subject.period.get());
                     period
                 })
@@ -1094,7 +1104,7 @@ impl<'a> IlpTranslator<'a> {
             let week_remainder = week_count % subject.period.get();
             let there_is_an_incomplete_period = week_remainder != 0;
             if there_is_an_incomplete_period {
-                let first_week_to_add = week_count - week_remainder - subject.period.get() + 1;
+                let first_week_to_add = range.end - week_remainder - subject.period.get() + 1;
                 for i in 0..week_remainder {
                     let start = first_week_to_add + i;
                     period_list.push(start..(start + subject.period.get()));
@@ -1103,6 +1113,25 @@ impl<'a> IlpTranslator<'a> {
 
             period_list
         }
+    }
+
+    fn generate_period_list(&self, subject: &Subject, strict: bool) -> Vec<std::ops::Range<u32>> {
+        let mut output = Vec::new();
+
+        let mut start = 0;
+        for cut in &self.data.general.periodicity_cuts {
+            let range = start..cut.get();
+
+            output.extend(self.generate_period_list_for_range(subject, strict, range));
+
+            start = cut.get();
+        }
+
+        let week_count = self.data.general.week_count.get();
+        let range = start..week_count;
+        output.extend(self.generate_period_list_for_range(subject, strict, range));
+
+        output
     }
 
     fn build_one_interrogation_per_period_constraints_for_subject(
@@ -2201,6 +2230,7 @@ impl<'a> IlpTranslator<'a> {
                     let soft_config = soft_problem
                         .config_from(&vars)
                         .expect("Variables should match");
+                    // If some constraints are inequalities, this will still measure the difference to equality
                     let sq2_cost = soft_config.compute_lhs_sq_norm2();
 
                     let mut manual_costs = 0.;
