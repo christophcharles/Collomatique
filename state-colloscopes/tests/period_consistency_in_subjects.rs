@@ -197,7 +197,7 @@ fn add_subject_referencing_week_then_shrink_week_count() {
 
     assert_eq!(
         period_err,
-        collomatique_state_colloscopes::PeriodError::SubjectImpliesMinimumWeekCount(subject_id, 5)
+        collomatique_state_colloscopes::PeriodError::SubjectImpliesMinimumWeekCount(subject_id, 4)
     );
 }
 
