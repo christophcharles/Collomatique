@@ -1125,6 +1125,142 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn is_periodicity_inequality_needed(&self, subject: &Subject, slot: &SlotWithTeacher) -> bool {
+        if subject.period_is_strict {
+            return true;
+        }
+        if !self.is_last_period_incomplete(subject) {
+            return false;
+        }
+
+        let full_period_count = self.data.general.week_count.get() / subject.period.get();
+        let period_number = slot.start.week / subject.period.get();
+
+        period_number + 1 >= full_period_count
+    }
+
+    fn build_periodicity_constraint_for_assigned_student(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        slot: &SlotWithTeacher,
+        k: usize,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let week_modulo = slot.start.week % subject.period.get();
+
+        let lhs = Expr::var(Variable::GroupInSlot {
+            subject: i,
+            slot: j,
+            group: k,
+        });
+        let rhs = Expr::var(Variable::Periodicity {
+            subject: i,
+            student,
+            week_modulo,
+        });
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_periodicity_constraint_for_not_assigned_student(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        slot: &SlotWithTeacher,
+        k: usize,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let week_modulo = slot.start.week % subject.period.get();
+
+        let lhs = Expr::var(Variable::DynamicGroupAssignment {
+            subject: i,
+            slot: j,
+            group: k,
+            student,
+        });
+        let rhs = Expr::var(Variable::Periodicity {
+            subject: i,
+            student,
+            week_modulo,
+        });
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_periodicity_constraint_for_incomplete_period(
+        &self,
+        i: usize,
+        subject: &Subject,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::StudentNotInLastPeriod {
+            subject: i,
+            student,
+        });
+
+        let mut rhs = Expr::constant(0);
+        let start = self.data.general.week_count.get() % subject.period.get();
+        let end = subject.period.get();
+        for week_modulo in start..end {
+            rhs = rhs
+                + Expr::var(Variable::Periodicity {
+                    subject: i,
+                    student,
+                    week_modulo,
+                });
+        }
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_periodicity_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if !self.is_periodicity_inequality_needed(subject, slot) {
+                    continue;
+                }
+
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    for student in group.students.iter().copied() {
+                        constraints.insert(self.build_periodicity_constraint_for_assigned_student(
+                            i, subject, j, slot, k, student,
+                        ));
+                    }
+                }
+
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    if Self::is_group_fixed(group, subject) {
+                        continue;
+                    }
+                    for student in subject.groups.not_assigned.iter().copied() {
+                        constraints.insert(
+                            self.build_periodicity_constraint_for_not_assigned_student(
+                                i, subject, j, slot, k, student,
+                            ),
+                        );
+                    }
+                }
+            }
+
+            if self.is_last_period_incomplete(subject) {
+                for student in subject.groups.students_iterator().copied() {
+                    constraints.insert(
+                        self.build_periodicity_constraint_for_incomplete_period(
+                            i, subject, student,
+                        ),
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -1139,6 +1275,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_student_in_single_group_constraints())
             .add_constraints(self.build_dynamic_groups_constraints())
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
+            .add_constraints(self.build_periodicity_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
