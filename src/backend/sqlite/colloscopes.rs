@@ -183,7 +183,7 @@ pub async fn get(
                             week.collo_week_id,
                         )))
                     })
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<Result<BTreeSet<_>>>()?;
 
                 let week_num = u32::try_from(week.week).map_err(|_| {
                     Error::CorruptedDatabase(format!(
