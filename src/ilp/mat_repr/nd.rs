@@ -2,9 +2,9 @@
 mod tests;
 
 use crate::ilp::{linexpr, random};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use ndarray::{Array, Array1, Array2, ArrayView};
+use ndarray::{Array1, Array2};
 
 use linexpr::VariableName;
 #[derive(Debug, Clone, Default)]
@@ -25,45 +25,58 @@ enum ConstraintRef {
 impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
     type Config = NdConfig<V>;
 
-    fn new<'a, I: IntoIterator<Item = &'a linexpr::Constraint<V>>>(
-        variables_vec: &'a Vec<V>,
-        constraints: I,
-    ) -> NdProblem<V> {
+    fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> NdProblem<V> {
         let p = variables_vec.len();
 
-        let mut leq_mat = Array2::zeros((0, p));
-        let mut eq_mat = Array2::zeros((0, p));
-
-        let mut leq_constants_vec = vec![];
-        let mut eq_constants_vec = vec![];
-
-        let mut constraints_map = BTreeMap::new();
+        let mut leq_count = 0usize;
+        let mut eq_count = 0usize;
 
         for c in constraints {
-            let mut current_row = Array::zeros(p);
-            for (j, var) in variables_vec.iter().enumerate() {
-                if let Some(val) = c.get_var(var.clone()) {
-                    current_row[j] = val;
-                }
-            }
-
-            let cst = c.get_constant();
             match c.get_sign() {
                 linexpr::Sign::Equals => {
-                    eq_mat.push_row(ArrayView::from(&current_row)).unwrap();
-                    constraints_map.insert(c.clone(), ConstraintRef::Eq(eq_constants_vec.len()));
-                    eq_constants_vec.push(cst);
+                    eq_count += 1;
                 }
                 linexpr::Sign::LessThan => {
-                    leq_mat.push_row(ArrayView::from(&current_row)).unwrap();
-                    constraints_map.insert(c.clone(), ConstraintRef::Leq(leq_constants_vec.len()));
-                    leq_constants_vec.push(cst);
+                    leq_count += 1;
                 }
             }
         }
 
-        let leq_constants = Array::from_vec(leq_constants_vec);
-        let eq_constants = Array::from_vec(eq_constants_vec);
+        let mut leq_mat = Array2::zeros((leq_count, p));
+        let mut eq_mat = Array2::zeros((eq_count, p));
+
+        let mut leq_constants = Array1::zeros(leq_count);
+        let mut eq_constants = Array1::zeros(eq_count);
+
+        let mut constraints_map = BTreeMap::new();
+
+        let mut leq_index = 0usize;
+        let mut eq_index = 0usize;
+
+        for c in constraints {
+            match c.get_sign() {
+                linexpr::Sign::Equals => {
+                    for (j, var) in variables_vec.iter().enumerate() {
+                        if let Some(val) = c.get_var(var.clone()) {
+                            eq_mat[(eq_index, j)] = val;
+                        }
+                    }
+                    constraints_map.insert(c.clone(), ConstraintRef::Eq(eq_index));
+                    eq_constants[eq_index] = c.get_constant();
+                    eq_index += 1;
+                }
+                linexpr::Sign::LessThan => {
+                    for (j, var) in variables_vec.iter().enumerate() {
+                        if let Some(val) = c.get_var(var.clone()) {
+                            leq_mat[(leq_index, j)] = val;
+                        }
+                    }
+                    constraints_map.insert(c.clone(), ConstraintRef::Leq(leq_index));
+                    leq_constants[leq_index] = c.get_constant();
+                    leq_index += 1;
+                }
+            }
+        }
 
         NdProblem {
             leq_mat,

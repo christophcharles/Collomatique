@@ -2,15 +2,12 @@ pub mod nd;
 
 use super::linexpr::{self, VariableName};
 use super::random;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug {
     type Config: ConfigRepr<V, Problem = Self>;
 
-    fn new<'a, I: IntoIterator<Item = &'a linexpr::Constraint<V>>>(
-        variables_vec: &'a Vec<V>,
-        constraints: I,
-    ) -> Self;
+    fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> Self;
 
     fn default_nd_config(&self) -> Self::Config;
 
