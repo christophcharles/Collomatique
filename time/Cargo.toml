@@ -1,8 +1,9 @@
 [package]
 name = "collomatique-time"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 
 [dependencies]
-serde = "1.0"
-chrono = { version = "0.4", features = [ "serde" ] }
+serde.workspace = true
+chrono = { workspace = true, features = [ "serde" ] }

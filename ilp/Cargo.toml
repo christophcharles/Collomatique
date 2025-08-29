@@ -1,11 +1,12 @@
 [package]
 name = "collomatique-ilp"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 
 [dependencies]
-ordered-float = "4.2.0"
-thiserror = "1.0"
+ordered-float.workspace = true
+thiserror.workspace = true
 ndarray = { version = "0.15.6" }
 sprs = "0.11"
 coin_cbc = { version = "0.1.8", optional = true }
