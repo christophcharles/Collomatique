@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SubjectsUpdateWarning {
     LooseInterrogationDataForTeacher(
         collomatique_state_colloscopes::TeacherId,
@@ -116,7 +116,7 @@ impl SubjectsUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SubjectsUpdateOp {
     AddNewSubject(collomatique_state_colloscopes::subjects::SubjectParameters),
     UpdateSubject(
@@ -202,6 +202,15 @@ pub enum UpdatePeriodStatusError {
 }
 
 impl SubjectsUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<SubjectsUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             SubjectsUpdateOp::AddNewSubject(_desc) => "Ajouter une matière".into(),

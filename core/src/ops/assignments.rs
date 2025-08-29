@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssignmentsUpdateWarning {}
 
 impl AssignmentsUpdateWarning {
@@ -97,6 +97,17 @@ pub enum DuplicatePreviousPeriodError {
 }
 
 impl AssignmentsUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        _data: &T,
+    ) -> CleaningOps<AssignmentsUpdateWarning> {
+        CleaningOps {
+            cleaning_ops: vec![],
+        }
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             AssignmentsUpdateOp::Assign(_, _, _, status) => {

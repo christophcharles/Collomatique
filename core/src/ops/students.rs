@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StudentsUpdateWarning {
     LooseStudentAssignmentForPeriod(
         collomatique_state_colloscopes::StudentId,
@@ -81,7 +81,7 @@ impl StudentsUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StudentsUpdateOp {
     AddNewStudent(collomatique_state_colloscopes::students::Student),
     UpdateStudent(
@@ -122,6 +122,15 @@ pub enum DeleteStudentError {
 }
 
 impl StudentsUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<StudentsUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             StudentsUpdateOp::AddNewStudent(_desc) => "Ajouter un élève".into(),

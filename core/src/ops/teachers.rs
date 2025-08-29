@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TeachersUpdateWarning {
     LooseInterrogationSlots(collomatique_state_colloscopes::TeacherId),
 }
@@ -25,7 +25,7 @@ impl TeachersUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TeachersUpdateOp {
     AddNewTeacher(collomatique_state_colloscopes::teachers::Teacher),
     UpdateTeacher(
@@ -66,6 +66,15 @@ pub enum DeleteTeacherError {
 }
 
 impl TeachersUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<TeachersUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             TeachersUpdateOp::AddNewTeacher(_desc) => "Ajouter un colleur".into(),
