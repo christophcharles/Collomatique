@@ -96,7 +96,7 @@ impl AggregatedOperations {
     }
 
     pub fn rev(&self) -> Self {
-        AggregatedOperations(self.0.iter().map(|x| x.rev()).collect())
+        AggregatedOperations(self.0.iter().rev().map(|x| x.rev()).collect())
     }
 
     pub fn inner(&self) -> &Vec<ReversibleOperation> {
