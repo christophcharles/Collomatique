@@ -1,5 +1,5 @@
 use adw::prelude::{ActionRowExt, PreferencesRowExt};
-use gtk::prelude::{AdjustmentExt, ButtonExt, EditableExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, WidgetExt};
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
@@ -84,7 +84,7 @@ impl SimpleComponent for Dialog {
                             set_numeric: true,
                             #[track(model.should_redraw)]
                             set_value: model.week_count as f64,
-                            connect_changed[sender] => move |widget| {
+                            connect_value_notify[sender] => move |widget| {
                                 let week_count = widget.value() as usize;
                                 sender.input(DialogInput::Select(week_count));
                             },
