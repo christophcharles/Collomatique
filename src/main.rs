@@ -122,6 +122,8 @@ CREATE TABLE "subjects" (
 	"period_is_strict"	INTEGER NOT NULL,
 	"is_tutorial"	INTEGER NOT NULL,
 	"max_groups_per_slot"	INTEGER NOT NULL,
+    "balance_teachers"	INTEGER NOT NULL,
+	"balance_timeslots"	INTEGER NOT NULL,
 	FOREIGN KEY("course_incompat_id") REFERENCES "course_incompats"("course_incompat_id"),
 	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
 	PRIMARY KEY("subject_id" AUTOINCREMENT)
@@ -443,6 +445,8 @@ struct SubjectRecord {
     period_is_strict: i64,
     is_tutorial: i64,
     max_groups_per_slot: i64,
+    balance_teachers: i64,
+    balance_timeslots: i64,
 }
 
 fn generate_bare_subjects(
@@ -488,8 +492,10 @@ fn generate_bare_subjects(
                 .expect("Valid non-zero period for subject"),
                 period_is_strict: x.period_is_strict != 0,
                 is_tutorial: x.is_tutorial != 0,
-                balancing_requirements:
-                    collomatique::gen::colloscope::BalancingRequirements::default(),
+                balancing_requirements: collomatique::gen::colloscope::BalancingRequirements {
+                    teachers: x.balance_teachers != 0,
+                    timeslots: x.balance_timeslots != 0,
+                },
                 duration: NonZeroU32::new(
                     u32::try_from(x.duration).expect("Valid u32 for subject duration"),
                 )
@@ -782,7 +788,7 @@ async fn generate_subjects(
     collo_id: i64,
 ) -> Result<SubjectsData> {
     let subject_data = sqlx::query_as!(SubjectRecord, "
-SELECT subject_id AS id, duration, min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot
+SELECT subject_id AS id, duration, min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots
 FROM subjects
         ")
         .fetch_all(db_conn)
@@ -1115,29 +1121,22 @@ async fn main() -> Result<()> {
     let variable_count = problem.get_variables().len();
     let p = 2. / (variable_count as f64);
 
-    for i in 1.. {
-        println!("Attempt n°{}...", i);
+    use collomatique::ilp::initializers::ConfigInitializer;
+    let init_config = incremental_initializer.build_init_config(&problem);
+    let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
 
-        use collomatique::ilp::initializers::ConfigInitializer;
-        let init_config = match incremental_initializer.build_init_config(&problem) {
-            Some(config) => config,
-            None => continue,
-        };
-        let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let mutation_policy =
+        collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), p);
+    let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
 
-        let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-        let mutation_policy =
-            collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), p);
-        let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
-
-        for (i, (sol, cost)) in iterator.enumerate() {
-            eprintln!(
-                "{}: {} - {:?}",
-                i,
-                cost,
-                ilp_translator.read_solution(sol.as_ref())
-            );
-        }
+    for (i, (sol, cost)) in iterator.enumerate() {
+        eprintln!(
+            "{}: {} - {:?}",
+            i,
+            cost,
+            ilp_translator.read_solution(sol.as_ref())
+        );
     }
 
     Ok(())
