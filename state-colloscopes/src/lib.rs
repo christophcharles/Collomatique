@@ -548,15 +548,6 @@ impl Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
-                for (subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
-                    if subject.excluded_periods.contains(period_id) {
-                        return Err(PeriodError::PeriodIsReferencedBySubject(
-                            *period_id,
-                            *subject_id,
-                        ));
-                    }
-                }
-
                 self.inner_data.periods.ordered_period_list[position].1 = desc.clone();
 
                 Ok(())
