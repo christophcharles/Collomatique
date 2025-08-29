@@ -15,11 +15,13 @@ use std::collections::BTreeMap;
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DecodeError {
     #[error("Unknown file type - this might be from a more recent version of Collomatique")]
-    UnknownFileType,
+    UnknownFileType(Version),
     #[error("An unknown entry requires a newer version of Collomatique")]
-    UnknownNeededEntry,
+    UnknownNeededEntry(Version),
     #[error("An entry has the wrong spec requirements")]
     MismatchedSpecRequirementInEntry,
+    #[error("An entry is probably ill-formed (and thus not recognized)")]
+    ProbablyIllformedEntry,
     #[error("An entry of type {0:?} is duplicated")]
     DuplicatedEntry(EntryTag),
     #[error("Duplicated ID found in file")]
@@ -61,7 +63,9 @@ pub enum Caveat {
 
 fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), DecodeError> {
     if let FileContent::UnknownFileContent(_value) = &header.file_content {
-        return Err(DecodeError::UnknownFileType);
+        return Err(DecodeError::UnknownFileType(
+            header.produced_with_version.clone(),
+        ));
     }
     if header.produced_with_version > Version::current() {
         caveats.insert(Caveat::CreatedWithNewerVersion(
@@ -74,6 +78,7 @@ fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), D
 fn check_entries_consistency(
     entries: &[Entry],
     caveats: &mut BTreeSet<Caveat>,
+    version: &Version,
 ) -> Result<(), DecodeError> {
     let mut entries_found_so_far = BTreeSet::new();
 
@@ -81,10 +86,10 @@ fn check_entries_consistency(
         match &entry.content {
             EntryContent::UnknownEntry => {
                 if entry.minimum_spec_version <= CURRENT_SPEC_VERSION {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
+                    return Err(DecodeError::ProbablyIllformedEntry);
                 }
                 if entry.needed_entry {
-                    return Err(DecodeError::UnknownNeededEntry);
+                    return Err(DecodeError::UnknownNeededEntry(version.clone()));
                 }
                 caveats.insert(Caveat::UnknownEntries);
             }
@@ -109,7 +114,11 @@ pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeErr
     let mut caveats = BTreeSet::new();
 
     check_header(&json_data.header, &mut caveats)?;
-    check_entries_consistency(&json_data.entries, &mut caveats)?;
+    check_entries_consistency(
+        &json_data.entries,
+        &mut caveats,
+        &json_data.header.produced_with_version,
+    )?;
 
     let data = decode_entries(json_data.entries)?;
     Ok((data, caveats))

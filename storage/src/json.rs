@@ -36,6 +36,12 @@ pub struct Version {
     pub patch: u32,
 }
 
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
 impl Version {
     /// Returns the version number of the compiled Collomatique package
     pub fn current() -> Version {

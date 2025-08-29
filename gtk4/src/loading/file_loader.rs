@@ -1,3 +1,4 @@
+use collomatique_storage::{DecodeError, DeserializationError, LoadError};
 use relm4::{Component, ComponentParts, ComponentSender};
 use std::path::PathBuf;
 
@@ -15,7 +16,7 @@ pub enum FileLoadingOutput {
 #[derive(Debug)]
 pub enum FileLoadingCmdOutput {
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
-    Failed(PathBuf, String),
+    Failed(PathBuf, LoadError),
 }
 
 pub struct FileLoader;
@@ -49,7 +50,7 @@ impl Component for FileLoader {
                     out.send(
                         match collomatique_storage::load_data_from_file(&path).await {
                             Ok((data, _caveats)) => FileLoadingCmdOutput::Loaded(path, data),
-                            Err(e) => FileLoadingCmdOutput::Failed(path, e.to_string()),
+                            Err(e) => FileLoadingCmdOutput::Failed(path, e),
                         },
                     )
                     .unwrap();
@@ -71,10 +72,47 @@ impl Component for FileLoader {
                     .unwrap();
             }
             FileLoadingCmdOutput::Failed(path, error) => {
+                let error_msg = Self::generate_error_message(error);
                 sender
-                    .output(FileLoadingOutput::Failed(path, error))
+                    .output(FileLoadingOutput::Failed(path, error_msg))
                     .unwrap();
             }
+        }
+    }
+}
+
+impl FileLoader {
+    fn generate_error_message(error: LoadError) -> String {
+        match error {
+            LoadError::IO(io_error) => format!(
+                "Erreur lors de l'accès au fichier ({}).",
+                io_error.to_string()
+            ),
+            LoadError::Deserialization(deserialization_error) => match deserialization_error {
+                DeserializationError::InvalidJson(json_error) => format!(
+                    "Le format de fichier semble incorrect ({}).\nVérifier s'il s'agit du bon fichier.",
+                    json_error.to_string()
+                ),
+                DeserializationError::Decode(decode_error) => Self::generate_decode_error_message(decode_error),
+            }
+        }
+    }
+
+    fn generate_decode_error_message(decode_error: DecodeError) -> String {
+        match decode_error {
+            DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
+            DecodeError::DuplicatedEntry(_) => "Le fichier est mal formé et est probablement corrompu.\n(Entrée en double)".into(),
+            DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
+            DecodeError::MismatchedSpecRequirementInEntry => "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans une entrée)".into(),
+            DecodeError::ProbablyIllformedEntry => "Le fichier est mal formé et est probablement corrompu.\n(Entrée dans les spécifications mais non reconnue)".into(),
+            DecodeError::UnknownNeededEntry(version) => format!(
+                "Le fichier a été produit avec une version plus récente de Collomatique et ne peut être ouvert.\nUtiliser la version {} pour ouvrir ce fichier.",
+                version
+            ),
+            DecodeError::UnknownFileType(version) => format!(
+                "Type de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
+                version
+            ),
         }
     }
 }
