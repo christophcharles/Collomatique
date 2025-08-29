@@ -12,3 +12,4 @@ serde_json = { workspace = true, features = [ "raw_value"] }
 serde_with.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true , features = [ "fs" ] }
+non-empty-string = { workspace = true, features = ["serde"] }

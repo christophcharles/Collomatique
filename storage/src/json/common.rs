@@ -9,6 +9,6 @@ use super::*;
 pub struct PersonWithContact {
     pub firstname: String,
     pub surname: String,
-    pub telephone: Option<String>,
-    pub email: Option<String>,
+    pub telephone: Option<non_empty_string::NonEmptyString>,
+    pub email: Option<non_empty_string::NonEmptyString>,
 }
