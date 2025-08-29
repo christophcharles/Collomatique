@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 ordered-float = "4.2.0"
-thiserror = "1.0.58"
+thiserror = "1.0"
 ndarray = { version = "0.15.6" }
 sprs = "0.11"
 coin_cbc = { version = "0.1.8", optional = true }
