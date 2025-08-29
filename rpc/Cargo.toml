@@ -5,3 +5,5 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
