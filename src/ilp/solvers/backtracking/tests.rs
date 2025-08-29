@@ -187,3 +187,38 @@ fn test_backtracking_2() {
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
 }
+
+#[test]
+fn impossible_backtracking() {
+    use crate::ilp::linexpr::Expr;
+    use crate::ilp::ProblemBuilder;
+
+    let x11 = Expr::<String>::var("x11");
+    let x12 = Expr::<String>::var("x12");
+    let x21 = Expr::<String>::var("x21");
+    let x22 = Expr::<String>::var("x22");
+
+    let one = Expr::<String>::constant(1);
+
+    let pb = ProblemBuilder::new()
+        .add_variables(["x11", "x12", "x21", "x22"])
+        .unwrap()
+        .add_constraints([
+            (&x11 + &x12).eq(&one),
+            (&x21 + &x22).eq(&one),
+            (&x11 + &x21).eq(&one),
+            (&x12 + &x22).eq(&one),
+            (&x11 + &x22).eq(&one),
+        ])
+        .unwrap()
+        .build();
+    let config = pb.config_from(["x11"]).unwrap();
+
+    let solver = super::Solver::new(super::heuristics::Connolly1992::default());
+
+    use crate::ilp::solvers::FeasabilitySolver;
+
+    let solution = solver.restore_feasability(&config);
+
+    assert!(solution.is_none());
+}
