@@ -77,6 +77,11 @@ impl std::fmt::Display for IdVariable {
 /// One starts by calling [ProblemBuilder::new] and providing a [BaseProblem].
 /// Constraints to the problem can be added with [ProblemBuilder::add_constraints].
 /// Once the problem is entirely described, it can be built using [ProblemBuilder::build].
+///
+/// It does not follow exactly a builder pattern. This is because [ProblemBuilder::add_constraints]
+/// needs to return extra information (a struct called a translator, see [ExtraTranslator]).
+/// This breaks the flow a bit. See module [crate::examples::simple_schedule] for an example usage.
+
 pub struct ProblemBuilder<
     M,
     S,
@@ -106,8 +111,7 @@ pub struct ProblemBuilder<
     /// Descriptions of the structure constraints of the original [BaseProblem] problem.
     structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
     /// Constraints that are gradually built for the full ILP problem.
-    /// It includes general constraints from the original problem but also the structure constraints
-    /// of the base problem.
+    /// It includes structure constraints of the base problem.
     /// It will also include possible structure and general constraints from problem extensions.
     constraints: Vec<(Constraint<ExtraVariable<M, S, IdVariable>>, InternalId)>,
 
@@ -343,12 +347,13 @@ where
 
     /// Add a problem extension defined by an [ProblemConstraints] to the problem.
     ///
-    /// The first parameter is a struct `extra` describing the extension and must implement [ProblemConstraints]
+    /// The first parameter is a struct `constraints` describing the extension and must implement [ProblemConstraints]
     /// for the specific [BaseProblem] of the problem.
     /// The extension can provide further constraints and an additional (linear) objective.
     ///
     /// The second parameter is the weight that should be given to the additional objective.
-    /// The sign of this parameter is basicaly ignored.
+    /// The sign of this parameter is basicaly ignored (see [collomatique_ilp::Objective] for a discussion
+    /// of this problem).
     ///
     /// This function can fail and in this case returns `None`. This happens if there is a mismatch
     /// between the variables that appear in the constraints or the objective and the declared variables.
