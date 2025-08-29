@@ -184,7 +184,7 @@ fn solve_thread<'a>(
 
     let width = step_count.to_string().len();
     let template = format!(
-        "[{{elapsed_precise:.dim}}] {{spinner:.blue}} {{prefix}}Optimizing colloscope... [{{bar:25.green}}] {{pos:>{width}}}/{{len}} - {{wide_msg:!}}"
+        "[{{elapsed_precise:.dim}}] {{spinner:.blue}} {{prefix}}Optimizing colloscope... [{{bar:25.green}}] {{pos:>{width}}}/{{len}} - {{wide_msg:!}} {{eta:.dim}}"
     );
     let style = ProgressStyle::with_template(&template)
         .unwrap()
@@ -193,6 +193,7 @@ fn solve_thread<'a>(
     pb.set_position(0);
     pb.set_length(step_count.try_into().unwrap());
     pb.set_style(style);
+    pb.reset_eta();
     pb.set_message(format!(
         "Cost (current/best): {}/{}",
         first_cost, first_cost
