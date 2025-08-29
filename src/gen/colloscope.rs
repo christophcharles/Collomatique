@@ -2862,6 +2862,16 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
+    fn build_not_consecutive_for_students_optimizer(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut output = BTreeSet::new();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            output.extend(self.build_not_consecutive_constraints_for_student(student_num));
+        }
+
+        output
+    }
+
     fn build_interrogations_per_day_objective_terms_for_student_week_and_day(
         &self,
         student_num: usize,
@@ -3065,6 +3075,35 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
+    fn constraints_to_objective_terms(
+        &self,
+        constraints: BTreeSet<Constraint<Variable>>,
+        cost: f64,
+    ) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let mut output = Vec::new();
+
+        for constraint in constraints.into_iter() {
+            let exprs = match constraint.get_sign() {
+                crate::ilp::linexpr::Sign::Equals => {
+                    let expr = constraint.get_lhs().clone();
+
+                    BTreeSet::from([expr.clone(), -expr])
+                }
+                crate::ilp::linexpr::Sign::LessThan => {
+                    let expr = constraint.get_lhs().clone();
+
+                    BTreeSet::from([expr, Expr::constant(0)])
+                }
+            };
+
+            let obj_term = crate::ilp::ObjectiveTerm { coef: cost, exprs };
+
+            output.push(obj_term);
+        }
+
+        output
+    }
+
     fn build_objective_terms(&self) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
         let student_per_day_cost = f64::from(
             self.data
@@ -3091,6 +3130,7 @@ impl<'a> IlpTranslator<'a> {
                 .interrogations_per_week_range_for_all_students,
         );
         let balancing_cost = f64::from(self.data.general.costs_adjustments.balancing);
+        let consecutive_cost = 1.0;
 
         let student_count_f64 = self.data.students.len() as f64;
 
@@ -3144,28 +3184,14 @@ impl<'a> IlpTranslator<'a> {
 
         // Soft constraints
         let balancing_optimizer_constraints = self.build_balancing_optimizer();
+        output.extend(
+            self.constraints_to_objective_terms(balancing_optimizer_constraints, balancing_cost),
+        );
 
-        for constraint in balancing_optimizer_constraints.into_iter() {
-            let exprs = match constraint.get_sign() {
-                crate::ilp::linexpr::Sign::Equals => {
-                    let expr = constraint.get_lhs().clone();
-
-                    BTreeSet::from([expr.clone(), -expr])
-                }
-                crate::ilp::linexpr::Sign::LessThan => {
-                    let expr = constraint.get_lhs().clone();
-
-                    BTreeSet::from([expr, Expr::constant(0)])
-                }
-            };
-
-            let obj_term = crate::ilp::ObjectiveTerm {
-                coef: balancing_cost,
-                exprs,
-            };
-
-            output.push(obj_term);
-        }
+        let not_consecutive_constraints = self.build_not_consecutive_for_students_optimizer();
+        output.extend(
+            self.constraints_to_objective_terms(not_consecutive_constraints, consecutive_cost),
+        );
 
         output
     }
