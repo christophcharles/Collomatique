@@ -240,8 +240,18 @@ impl SimpleComponent for EditorPanel {
                     .unwrap();
             }
             EditorInput::SaveCurrentFileAs(_path) => {}
-            EditorInput::UndoClicked => {}
-            EditorInput::RedoClicked => {}
+            EditorInput::UndoClicked => {
+                if self.data.can_undo() {
+                    self.data.undo().expect("Should be able to undo");
+                    sender.output(EditorOutput::UpdateActions).unwrap();
+                }
+            }
+            EditorInput::RedoClicked => {
+                if self.data.can_redo() {
+                    self.data.redo().expect("Should be able to undo");
+                    sender.output(EditorOutput::UpdateActions).unwrap();
+                }
+            }
         }
     }
 }
