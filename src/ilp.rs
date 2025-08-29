@@ -261,6 +261,10 @@ impl<V: VariableName> Problem<V> {
             nd_config: self.nd_problem.random_nd_config(random_gen),
         }
     }
+
+    pub fn get_constraints(&self) -> &BTreeSet<linexpr::Constraint<V>> {
+        &self.constraints
+    }
 }
 
 use std::collections::BTreeMap;
