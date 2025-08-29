@@ -19,6 +19,12 @@ pub enum UpdateError<IntError: std::error::Error> {
     WeekPatternRemoved(WeekPatternHandle),
 }
 
+#[derive(Debug, Clone)]
+pub enum ReturnHandle {
+    NoHandle,
+    WeekPattern(WeekPatternHandle),
+}
+
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
 
 #[trait_variant::make(Send)]
@@ -56,7 +62,7 @@ pub trait Manager: ManagerInternal {
     async fn apply(
         &mut self,
         op: Operation,
-    ) -> Result<(), UpdateError<<Self::Storage as backend::Storage>::InternalError>>;
+    ) -> Result<ReturnHandle, UpdateError<<Self::Storage as backend::Storage>::InternalError>>;
     fn can_undo(&self) -> bool;
     fn can_redo(&self) -> bool;
     async fn undo(
@@ -203,17 +209,20 @@ impl<T: ManagerInternal> Manager for T {
         &mut self,
         op: Operation,
     ) -> impl core::future::Future<
-        Output = Result<(), UpdateError<<Self::Storage as backend::Storage>::InternalError>>,
+        Output = Result<
+            ReturnHandle,
+            UpdateError<<Self::Storage as backend::Storage>::InternalError>,
+        >,
     > + Send {
         async {
             let rev_op = private::build_rev_op(self, op).await?;
 
-            private::update_internal_state(self, &rev_op.forward).await?;
+            let output = private::update_internal_state(self, &rev_op.forward).await?;
 
             let aggregated_ops = AggregatedOperations::new(vec![rev_op]);
             self.get_history_mut().apply(aggregated_ops);
 
-            Ok(())
+            Ok(output)
         }
     }
 
@@ -290,7 +299,7 @@ pub(super) mod private {
     pub async fn update_general_data_state<T: ManagerInternal>(
         manager: &mut T,
         general_data: &backend::GeneralData,
-    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         if let Some(range) = &general_data.interrogations_per_week {
             if range.is_empty() {
                 return Err(UpdateError::InterrogationsPerWeekRangeIsEmpty);
@@ -316,13 +325,13 @@ pub(super) mod private {
                 }
                 backend::CheckedError::InternalError(int_error) => UpdateError::Internal(int_error),
             })?;
-        Ok(())
+        Ok(ReturnHandle::NoHandle)
     }
 
     pub async fn update_week_patterns_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedWeekPatternsOperation,
-    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
             AnnotatedWeekPatternsOperation::Create(week_pattern_handle, pattern) => {
                 let new_id = manager
@@ -341,7 +350,7 @@ pub(super) mod private {
                     .get_handle_managers_mut()
                     .week_patterns
                     .update_handle(*week_pattern_handle, Some(new_id));
-                Ok(())
+                Ok(ReturnHandle::WeekPattern(*week_pattern_handle))
             }
             AnnotatedWeekPatternsOperation::Remove(week_pattern_handle) => {
                 let week_pattern_id = manager
@@ -389,7 +398,7 @@ pub(super) mod private {
                     .get_handle_managers_mut()
                     .week_patterns
                     .update_handle(*week_pattern_handle, None);
-                Ok(())
+                Ok(ReturnHandle::NoHandle)
             }
             AnnotatedWeekPatternsOperation::Update(week_pattern_handle, pattern) => {
                 let week_pattern_id = manager
@@ -412,7 +421,7 @@ pub(super) mod private {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
                     })?;
-                Ok(())
+                Ok(ReturnHandle::NoHandle)
             }
         }
     }
@@ -420,14 +429,11 @@ pub(super) mod private {
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
-    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
-            AnnotatedOperation::GeneralData(data) => {
-                update_general_data_state(manager, data).await?
-            }
-            AnnotatedOperation::WeekPatterns(op) => update_week_patterns_state(manager, op).await?,
+            AnnotatedOperation::GeneralData(data) => update_general_data_state(manager, data).await,
+            AnnotatedOperation::WeekPatterns(op) => update_week_patterns_state(manager, op).await,
         }
-        Ok(())
     }
 
     pub async fn update_internal_state_with_aggregated<T: ManagerInternal>(
