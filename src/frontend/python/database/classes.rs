@@ -1301,7 +1301,7 @@ impl From<Subject>
     }
 }
 
-/*#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TimeSlotHandle {
     pub handle: state::TimeSlotHandle,
@@ -1310,9 +1310,7 @@ pub struct TimeSlotHandle {
 #[pymethods]
 impl TimeSlotHandle {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!(
-            "{:?}", *self_
-        );
+        let output = format!("{:?}", *self_);
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
@@ -1347,59 +1345,108 @@ impl From<TimeSlotHandle> for state::TimeSlotHandle {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimeSlot {
     #[pyo3(set, get)]
-    name: String,
+    subject_handle: SubjectHandle,
     #[pyo3(set, get)]
-    optional: bool,
+    teacher_handle: TeacherHandle,
+    #[pyo3(set, get)]
+    start: SlotStart,
+    #[pyo3(set, get)]
+    week_pattern_handle: WeekPatternHandle,
+    #[pyo3(set, get)]
+    room: String,
 }
 
 #[pymethods]
 impl TimeSlot {
     #[new]
-    fn new(name: String) -> Self {
+    fn new(
+        subject_handle: SubjectHandle,
+        teacher_handle: TeacherHandle,
+        week_pattern_handle: WeekPatternHandle,
+    ) -> Self {
         TimeSlot {
-            name,
-            optional: false,
+            subject_handle,
+            teacher_handle,
+            start: SlotStart {
+                day: Weekday::Monday,
+                time: Time { hour: 8, minute: 0 },
+            },
+            week_pattern_handle,
+            room: String::new(),
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{{ name = {}, optional = {} }}", self_.name, self_.optional,);
+        let output = format!(
+            "{{ subject_handle = {:?}, teacher_handle = {:?}, start = {}, week_pattern_handle = {:?}, room = {} }}",
+            self_.subject_handle,
+            self_.teacher_handle,
+            self_.start,
+            self_.week_pattern_handle,
+            self_.room,
+        );
 
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
 
-impl From<&backend::TimeSlot> for TimeSlot {
-    fn from(value: &backend::TimeSlot) -> Self {
+impl From<&backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>>
+    for TimeSlot
+{
+    fn from(
+        value: &backend::TimeSlot<
+            state::SubjectHandle,
+            state::TeacherHandle,
+            state::WeekPatternHandle,
+        >,
+    ) -> Self {
         TimeSlot {
-            name: value.name.clone(),
-            optional: value.optional,
+            subject_handle: value.subject_id.clone().into(),
+            teacher_handle: value.teacher_id.clone().into(),
+            start: value.start.clone().into(),
+            week_pattern_handle: value.week_pattern_id.clone().into(),
+            room: value.room.clone(),
         }
     }
 }
 
-impl From<backend::TimeSlot> for TimeSlot {
-    fn from(value: backend::TimeSlot) -> Self {
+impl From<backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>>
+    for TimeSlot
+{
+    fn from(
+        value: backend::TimeSlot<
+            state::SubjectHandle,
+            state::TeacherHandle,
+            state::WeekPatternHandle,
+        >,
+    ) -> Self {
         TimeSlot::from(&value)
     }
 }
 
-impl From<&TimeSlot> for backend::TimeSlot {
+impl From<&TimeSlot>
+    for backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>
+{
     fn from(value: &TimeSlot) -> Self {
         backend::TimeSlot {
-            name: value.name.clone(),
-            optional: value.optional,
+            subject_id: value.subject_handle.clone().into(),
+            teacher_id: value.teacher_handle.clone().into(),
+            start: value.start.clone().into(),
+            week_pattern_id: value.week_pattern_handle.clone().into(),
+            room: value.room.clone(),
         }
     }
 }
 
-impl From<TimeSlot> for backend::TimeSlot {
+impl From<TimeSlot>
+    for backend::TimeSlot<state::SubjectHandle, state::TeacherHandle, state::WeekPatternHandle>
+{
     fn from(value: TimeSlot) -> Self {
         backend::TimeSlot::from(&value)
     }
 }
 
-#[pyclass(eq, hash, frozen)]
+/*#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupingHandle {
     pub handle: state::GroupingHandle,
