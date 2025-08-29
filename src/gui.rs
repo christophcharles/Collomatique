@@ -16,11 +16,17 @@ enum GuiState {
 }
 
 #[derive(Debug, Clone)]
+struct FileSelection {
+    path: std::path::PathBuf,
+    create_policy: editor::CreatePolicy,
+}
+
+#[derive(Debug, Clone)]
 enum GuiMessage {
     WelcomeMessage(welcome::Message),
     EditorMessage(editor::Message),
     DialogMessage(dialogs::Message),
-    FileSelected(Option<dialogs::FileDesc>),
+    FileSelected(Option<FileSelection>),
     FileLoaded(editor::ConnectDbResult<editor::State>),
     OpenExistingFile,
     OpenNewFile,
@@ -53,7 +59,7 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
         GuiMessage::DialogMessage(msg) => dialogs::update(state, msg),
         GuiMessage::FileSelected(result) => match result {
             Some(file_desc) => Task::perform(
-                editor::State::new(file_desc.create, file_desc.path),
+                editor::State::new(file_desc.create_policy, file_desc.path),
                 GuiMessage::FileLoaded,
             ),
             None => Task::none(),
@@ -75,7 +81,12 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
             dialogs::Message::FileChooserDialog(
                 "Ouvrir un colloscope".into(),
                 false,
-                std::sync::Arc::new(|file_desc| GuiMessage::FileSelected(file_desc)),
+                std::sync::Arc::new(|path| {
+                    GuiMessage::FileSelected(path.map(|path| FileSelection {
+                        path: path,
+                        create_policy: editor::CreatePolicy::Open,
+                    }))
+                }),
             )
             .into(),
         ),
@@ -83,7 +94,12 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
             dialogs::Message::FileChooserDialog(
                 "Créer un colloscope".into(),
                 true,
-                std::sync::Arc::new(|file_desc| GuiMessage::FileSelected(file_desc)),
+                std::sync::Arc::new(|path| {
+                    GuiMessage::FileSelected(path.map(|path| FileSelection {
+                        path: path,
+                        create_policy: editor::CreatePolicy::CreateAndOverride,
+                    }))
+                }),
             )
             .into(),
         ),
@@ -128,9 +144,13 @@ pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
             (
                 GuiState::Welcome,
                 if let Some(file) = &db {
-                    iced::Task::done(GuiMessage::FileSelected(Some(dialogs::FileDesc {
+                    iced::Task::done(GuiMessage::FileSelected(Some(FileSelection {
                         path: file.clone(),
-                        create,
+                        create_policy: if create {
+                            editor::CreatePolicy::Create
+                        } else {
+                            editor::CreatePolicy::Open
+                        },
                     })))
                 } else {
                     if create {

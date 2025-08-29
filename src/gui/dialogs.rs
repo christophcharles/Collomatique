@@ -14,9 +14,9 @@ pub enum Message {
     FileChooserDialog(
         String,
         bool,
-        std::sync::Arc<dyn Fn(Option<FileDesc>) -> GuiMessage + Send + Sync>,
+        std::sync::Arc<dyn Fn(Option<std::path::PathBuf>) -> GuiMessage + Send + Sync>,
     ),
-    FileChooserDialogClosed(Option<FileDesc>),
+    FileChooserDialogClosed(Option<std::path::PathBuf>),
     YesNoAlertDialog(
         String,
         String,
@@ -56,7 +56,7 @@ impl std::fmt::Debug for Message {
 
 #[derive(Clone)]
 pub enum DialogShown {
-    FileChooser(std::sync::Arc<dyn Fn(Option<FileDesc>) -> GuiMessage + Send + Sync>),
+    FileChooser(std::sync::Arc<dyn Fn(Option<std::path::PathBuf>) -> GuiMessage + Send + Sync>),
     YesNoAlert(
         String,
         String,
@@ -96,7 +96,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
                 Message::FileChooserDialogClosed(x).into()
             })
         }
-        Message::FileChooserDialogClosed(file_desc) => {
+        Message::FileChooserDialogClosed(path) => {
             let GuiState::DialogShown(dialog_state) = state else {
                 panic!("Dialog message but not in dialog state");
             };
@@ -105,7 +105,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             };
 
             *state = dialog_state.previous_state.as_ref().clone();
-            Task::done(msg(file_desc))
+            Task::done(msg(path))
         }
         Message::YesNoAlertDialog(title, txt, msg) => {
             *state = GuiState::DialogShown(State {
@@ -147,7 +147,7 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     }
 }
 
-async fn file_chooser_dialog(title: String, create: bool) -> Option<FileDesc> {
+async fn file_chooser_dialog(title: String, create: bool) -> Option<std::path::PathBuf> {
     let dialog = rfd::AsyncFileDialog::new().set_title(title);
 
     let file = if create {
@@ -156,10 +156,7 @@ async fn file_chooser_dialog(title: String, create: bool) -> Option<FileDesc> {
         dialog.pick_file().await
     };
 
-    file.map(|handle| FileDesc {
-        path: handle.path().to_owned(),
-        create,
-    })
+    file.map(|handle| handle.path().to_owned())
 }
 
 pub fn view(state: &State) -> Element<GuiMessage> {
