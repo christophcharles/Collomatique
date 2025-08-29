@@ -88,21 +88,15 @@ where
             )
             .collect::<BTreeMap<_, _>>();
 
-        let original_objective = base.objective();
-        let original_objective_func = original_objective.get_function();
-        let mut objective_func = LinExpr::constant(original_objective_func.get_constant());
-        for (v, value) in original_objective_func.coefficients() {
-            let new_v = match v {
-                BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
-                BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
-            };
-
-            if !variables.contains_key(&new_v) {
+        let objective = base.objective().transmute(|v| match v {
+            BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+            BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+        });
+        for v in objective.get_function().variables() {
+            if !variables.contains_key(&v) {
                 return None;
             }
-            objective_func = objective_func + value * LinExpr::var(new_v);
         }
-        let objective = Objective::new(objective_func, original_objective.get_sense());
 
         let mut id_issuer = IdIssuer::new();
 
@@ -232,25 +226,23 @@ where
         true
     }
 
-    fn update_var_in_expr<U: UsableData>(
+    fn update_var<U: UsableData>(
         &self,
-        e: &LinExpr<ExtraVariable<M, S, U>>,
+        v: &ExtraVariable<M, S, U>,
         rev_v_map: &BTreeMap<U, ExtraVariable<M, S, IdVariable>>,
-    ) -> LinExpr<ExtraVariable<M, S, IdVariable>> {
-        let mut expr = LinExpr::constant(e.get_constant());
-
-        for (v, value) in e.coefficients() {
-            let var = match v {
-                ExtraVariable::BaseMain(v_main) => ExtraVariable::BaseMain(v_main.clone()),
-                ExtraVariable::BaseStructure(v_struct) => ExtraVariable::BaseStructure(v_struct.clone()),
-                ExtraVariable::Extra(v_extra) => rev_v_map.get(v_extra)
-                    .expect("consistency between variables and constraints should be checked beforehand")
-                    .clone(),
-            };
-            expr = expr + value * LinExpr::var(var);
+    ) -> ExtraVariable<M, S, IdVariable> {
+        match v {
+            ExtraVariable::BaseMain(v_main) => ExtraVariable::BaseMain(v_main.clone()),
+            ExtraVariable::BaseStructure(v_struct) => {
+                ExtraVariable::BaseStructure(v_struct.clone())
+            }
+            ExtraVariable::Extra(v_extra) => rev_v_map
+                .get(v_extra)
+                .expect(
+                    "consistency between variables and constraints should be checked beforehand",
+                )
+                .clone(),
         }
-
-        expr
     }
 
     fn add_constraints_internal<U: UsableData, C: UsableData>(
@@ -261,7 +253,7 @@ where
         let mut c_map = BTreeMap::new();
 
         for (c, c_desc) in constraints {
-            let expr = self.update_var_in_expr(c.get_lhs(), rev_v_map);
+            let expr = c.get_lhs().transmute(|x| self.update_var(x, rev_v_map));
 
             let constraint = match c.get_symbol() {
                 collomatique_ilp::linexpr::EqSymbol::Equals => expr.eq(&LinExpr::constant(0.)),
@@ -325,9 +317,8 @@ where
         let structure_c_map =
             self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
-        let obj_func = self.update_var_in_expr(objective.get_function(), &rev_v_map);
-        self.objective =
-            &self.objective + obj_coef * Objective::new(obj_func, objective.get_sense());
+        let new_obj = objective.transmute(|x| self.update_var(x, &rev_v_map));
+        self.objective = &self.objective + obj_coef * new_obj;
 
         Some(ObjectiveTranslator {
             extra,
