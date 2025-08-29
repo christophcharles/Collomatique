@@ -49,11 +49,28 @@ fn simple_validated_data() {
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
-            slots: vec![SlotStart {
-                week: 0,
-                weekday: time::Weekday::Monday,
-                start_time: time::Time::from_hm(23, 0).unwrap(),
-            }],
+            slots: vec![
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+                SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            ],
         }],
     }];
     let incompatibilities = vec![Incompatibility {
@@ -62,7 +79,7 @@ fn simple_validated_data() {
             start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
-                start_time: time::Time::from_hm(23, 0).unwrap(),
+                start_time: time::Time::from_hm(8, 0).unwrap(),
             },
         }],
     }];
@@ -70,8 +87,25 @@ fn simple_validated_data() {
         subjects: BTreeSet::from([0]),
         incompatibilities: BTreeSet::from([0]),
     }];
-    let slot_groupings = SlotGroupingList::new();
-    let grouping_incompats = GroupingIncompatSet::new();
+    let slot_groupings = vec![
+        SlotGrouping {
+            slots: BTreeSet::from([SlotRef {
+                subject: 0,
+                interrogation: 0,
+                slot: 2,
+            }]),
+        },
+        SlotGrouping {
+            slots: BTreeSet::from([SlotRef {
+                subject: 0,
+                interrogation: 0,
+                slot: 3,
+            }]),
+        },
+    ];
+    let grouping_incompats = GroupingIncompatSet::from([GroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
 
     let expected_result = ValidatedData {
         general: general.clone(),
