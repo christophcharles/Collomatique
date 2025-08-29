@@ -242,3 +242,37 @@ fn nd_repr_checks_is_feasable_with_no_constraints() {
     assert_eq!(config_2.is_feasable(), true);
     assert_eq!(config_3.is_feasable(), true);
 }
+
+#[test]
+fn nd_repr_checks_unsatisfied_constraints_on_simple_example() {
+    use crate::LinExpr;
+
+    let variables = BTreeMap::from([
+        (String::from("a"), Variable::binary()),
+        (String::from("b"), Variable::binary()),
+        (String::from("c"), Variable::binary()),
+        (String::from("d"), Variable::binary()),
+    ]);
+
+    let a = LinExpr::<String>::var("a");
+    let b = LinExpr::<String>::var("b");
+    let c = LinExpr::<String>::var("c");
+    let d = LinExpr::<String>::var("d");
+
+    let one = LinExpr::<String>::constant(1.0);
+
+    let constraints = vec![(&a + &b).leq(&one), (&c + &d).leq(&one), (&a + &d).eq(&one)];
+
+    let pb = NdProblem::new(&variables, constraints.iter());
+
+    let config_vars = BTreeMap::from([
+        (String::from("a"), ordered_float::OrderedFloat(1.0)),
+        (String::from("b"), ordered_float::OrderedFloat(0.0)),
+        (String::from("c"), ordered_float::OrderedFloat(1.0)),
+        (String::from("d"), ordered_float::OrderedFloat(1.0)),
+    ]);
+    
+    let config = pb.config_from(&config_vars);
+    
+    assert_eq!(config.unsatisfied_constraints(), BTreeSet::from([1usize,2usize]));
+}
