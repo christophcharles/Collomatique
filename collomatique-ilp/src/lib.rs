@@ -797,14 +797,14 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
     }
 
     /// Returns the objective function of the problem.
-    /// 
+    ///
     /// The objective function is a simple linear expression described a struct of type [linexpr::LinExpr].
     pub fn get_objective_function(&self) -> &LinExpr<V> {
         &self.objective_func
     }
 
     /// Returns the sense of the obejctive function (is it maximized or minimized).
-    /// 
+    ///
     /// See [ObjectiveSense].
     pub fn get_objective_sense(&self) -> ObjectiveSense {
         self.objective_sense
