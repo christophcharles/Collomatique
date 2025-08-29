@@ -293,6 +293,15 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
+    pub fn into_builder(self) -> ProblemBuilder<V, P> {
+        ProblemBuilder {
+            constraints: self.constraints,
+            eval_fn: self.eval_fn,
+            variables: self.variables,
+            constants: self.constants,
+        }
+    }
+
     pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
         Config {
             problem: self,
