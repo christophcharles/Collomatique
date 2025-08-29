@@ -183,9 +183,9 @@ impl<V: UsableData> Objective<V> {
     /// Returns the reversed objective.
     ///
     /// This keeps the same expression but reverses the sense of optimization.
-    /// 
+    ///
     /// It is similar to [Objective::reverse] but builds a new objective.
-    /// 
+    ///
     /// **Beware !** This is almost always *not* what you want to do.
     ///
     /// ```
@@ -205,11 +205,11 @@ impl<V: UsableData> Objective<V> {
     }
 
     /// Returns the reversed objective.
-    /// 
+    ///
     /// This keeps the same expression but reverses the sense of optimization.
-    /// 
+    ///
     /// It is similar to [Objective::reversed] but consumes the objective.
-    /// 
+    ///
     /// **Beware !** This is almost always *not* what you want to do.
     ///
     /// ```
