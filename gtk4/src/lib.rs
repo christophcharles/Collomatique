@@ -45,8 +45,15 @@ impl GlobalState {
     }
 }
 
+pub struct AppActions {
+    save_action: RelmAction<SaveAction>,
+    undo_action: RelmAction<UndoAction>,
+    redo_action: RelmAction<RedoAction>,
+}
+
 pub struct AppModel {
     controllers: AppControllers,
+    actions: AppActions,
     state: GlobalState,
     next_warn_msg: Option<AppInput>,
 }
@@ -80,6 +87,7 @@ pub enum AppInput {
     CloseFile,
     RequestSave,
     RequestSaveAs,
+    UpdateDirty,
 }
 
 relm4::new_action_group!(AppActionGroup, "app");
@@ -128,9 +136,12 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let editor = editor::EditorPanel::builder()
-            .launch(())
-            .forward(sender.input_sender(), |_msg| AppInput::Ignore);
+        let editor = editor::EditorPanel::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                editor::EditorOutput::UpdateDirty => AppInput::UpdateDirty,
+            },
+        );
 
         let loading =
             loading::LoadingPanel::builder()
@@ -186,13 +197,6 @@ impl SimpleComponent for AppModel {
         };
 
         let state = GlobalState::WelcomeScreen;
-
-        let model = AppModel {
-            controllers,
-            state,
-            next_warn_msg: None,
-        };
-        let widgets = view_output!();
 
         let app = relm4::main_application();
         app.set_accelerators_for_action::<NewAction>(&["<primary>N"]);
@@ -262,6 +266,20 @@ impl SimpleComponent for AppModel {
         save_action.set_enabled(false);
         undo_action.set_enabled(false);
         redo_action.set_enabled(false);
+
+        let actions = AppActions {
+            save_action,
+            undo_action,
+            redo_action,
+        };
+
+        let model = AppModel {
+            controllers,
+            state,
+            next_warn_msg: None,
+            actions,
+        };
+        let widgets = view_output!();
 
         sender.input(if params.new {
             AppInput::NewColloscope(params.file_name.clone())
@@ -421,6 +439,11 @@ impl SimpleComponent for AppModel {
                     .sender()
                     .send(editor::EditorInput::SaveAsClicked)
                     .unwrap();
+            }
+            AppInput::UpdateDirty => {
+                self.actions
+                    .save_action
+                    .set_enabled(self.controllers.editor.model().is_dirty());
             }
         }
     }
