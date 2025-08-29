@@ -147,3 +147,32 @@ fn slot_overlaps_next_day() {
         Err(Error::SlotOverlapsNextDay)
     );
 }
+
+#[test]
+fn invalid_teacher_number() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(1).unwrap(),
+    };
+
+    let subjects = vec![Subject {
+        students_per_interrogation: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        duration: NonZeroU32::new(60).unwrap(),
+        interrogations: vec![Interrogation {
+            teacher: 1,
+            slots: vec![SlotStart {
+                week: 0,
+                weekday: time::Weekday::Monday,
+                start_time: time::Time::from_hm(23, 0).unwrap(),
+            }],
+        }],
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = StudentList::new();
+
+    assert_eq!(
+        ValidatedData::new(general, subjects, incompatibilities, students),
+        Err(Error::InvalidTeacherNumber)
+    );
+}
