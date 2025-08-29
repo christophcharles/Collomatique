@@ -46,11 +46,11 @@ pub enum DeserializationError {
 /// represented as a UTF8-string and deserialize it into a valid
 /// in-memory [Data] representation.
 ///
-/// This can fail for numerous reasons, described by [DeserializeError].
+/// This can fail for numerous reasons, described by [DeserializationError].
 ///
 /// Even in case of success, the deserialization might only be partial. This
 /// can happen for instance if we try to open a file from a newer version
-/// of Collomatique. The type [Caveats] list possible issues in this situation.
+/// of Collomatique. The type [Caveat] list possible issues in this situation.
 pub fn deserialize_data(
     file_content: &str,
 ) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
@@ -92,7 +92,7 @@ pub enum LoadError {
 ///
 /// Even in case of success, the deserialization might only be partial. This
 /// can happen for instance if we try to open a file from a newer version
-/// of Collomatique. The type [Caveats] list possible issues in this situation.
+/// of Collomatique. The type [Caveat] list possible issues in this situation.
 pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, BTreeSet<Caveat>), LoadError> {
     use tokio::fs;
     let content = fs::read_to_string(file_path).await?;
