@@ -844,17 +844,8 @@ impl Storage for Store {
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
         subject_id: Option<Self::SubjectId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            CrossId2Error<
-                Self::InternalError,
-                Self::StudentId,
-                Self::SubjectGroupId,
-                Self::SubjectId,
-            >,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         subject_group_for_student::set(&self.pool, student_id, subject_group_id, subject_id)
     }
     fn subject_group_for_student_get(
