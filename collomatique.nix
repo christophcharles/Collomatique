@@ -2,6 +2,7 @@
     rustPlatform,
     lib,
     sqlite,
+    cbc,
 }:
 rustPlatform.buildRustPackage {
     pname = "collomatique";
@@ -15,6 +16,7 @@ rustPlatform.buildRustPackage {
 
     buildInputs = [
         sqlite
+        cbc
     ];
 
     meta = {

@@ -993,6 +993,61 @@ async fn generate_colloscope_data(
     )?)
 }
 
+fn cbc_solve<T: collomatique::ilp::linexpr::VariableName>(
+    problem: &collomatique::ilp::Problem<T>,
+) -> Option<collomatique::ilp::FeasableConfig<T>> {
+    use coin_cbc::{raw::Status, Model};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut m = Model::default();
+
+    let cols: BTreeMap<_, _> = problem
+        .get_variables()
+        .iter()
+        .map(|v| (v, m.add_binary()))
+        .collect();
+
+    for constraint in problem.get_constraints() {
+        let row = m.add_row();
+        for v in constraint.variables() {
+            let col = cols[&v];
+            let weight = constraint.get_var(v).unwrap();
+            m.set_weight(row, col, weight.into());
+        }
+        match constraint.get_sign() {
+            collomatique::ilp::linexpr::Sign::Equals => {
+                m.set_row_equal(row, (-constraint.get_constant()).into());
+            }
+            collomatique::ilp::linexpr::Sign::LessThan => {
+                m.set_row_upper(row, (-constraint.get_constant()).into());
+            }
+        }
+    }
+
+    m.set_parameter("log", "0");
+
+    let sol = m.solve();
+
+    assert_eq!(Status::Finished, sol.raw().status());
+    use coin_cbc::raw::SecondaryStatus;
+    if sol.raw().secondary_status() != SecondaryStatus::HasSolution {
+        return None;
+    }
+
+    let vars: BTreeSet<_> = cols
+        .iter()
+        .filter_map(|(&v, col)| {
+            if sol.col(*col) == 1. {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Some(problem.config_from(&vars).unwrap().into_feasable().unwrap())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -1006,7 +1061,11 @@ async fn main() -> Result<()> {
 
     println!("{}", problem);
 
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
+    let sol = cbc_solve(&problem).expect("There should be a solution");
+
+    println!("{}", sol);
+
+    /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
     let random_gen = collomatique::ilp::random::DefaultRndGen::new();
     let general_initializer =
@@ -1044,7 +1103,7 @@ async fn main() -> Result<()> {
                 ilp_translator.read_solution(sol.as_ref())
             );
         }
-    }
+    }*/
 
     Ok(())
 }
