@@ -59,6 +59,7 @@ struct CostsAdjustmentsDb {
     interrogations_per_week_range_for_single_student: i32,
     interrogations_per_week_range_for_all_students: i32,
     balancing: i32,
+    consecutive_slots: i32,
 }
 
 impl Default for CostsAdjustmentsDb {
@@ -69,6 +70,7 @@ impl Default for CostsAdjustmentsDb {
             interrogations_per_week_range_for_single_student: 1,
             interrogations_per_week_range_for_all_students: 1,
             balancing: 1,
+            consecutive_slots: 1,
         }
     }
 }
@@ -461,6 +463,7 @@ impl Storage for Store {
                     .costs_adjustments
                     .interrogations_per_week_range_for_all_students,
                 balancing: general_data.costs_adjustments.balancing,
+                consecutive_slots: general_data.costs_adjustments.consecutive_slots,
             },
         };
 
@@ -527,6 +530,7 @@ impl Storage for Store {
                     .costs_adjustments
                     .interrogations_per_week_range_for_all_students,
                 balancing: general_data_json.costs_adjustments.balancing,
+                consecutive_slots: general_data_json.costs_adjustments.consecutive_slots,
             },
         };
 
