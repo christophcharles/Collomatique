@@ -6,4 +6,5 @@
 //! list is valid.
 
 pub mod group_count;
+pub mod group_diversity;
 pub mod main;
