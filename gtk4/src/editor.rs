@@ -653,7 +653,7 @@ fn generate_period_title(
     week_count: usize,
 ) -> String {
     if week_count == 0 {
-        return format!("Période {} (vide)", index);
+        return format!("Période {} (vide)", index + 1);
     }
 
     let start_week = first_week_num + 1;
@@ -671,7 +671,7 @@ fn generate_period_title(
             if start_week != end_week {
                 format!(
                     "Période {} du {} au {} (semaines {} à {})",
-                    index,
+                    index + 1,
                     start_date.format("%d/%m/%Y").to_string(),
                     end_date.format("%d/%m/%Y").to_string(),
                     start_week,
@@ -680,7 +680,7 @@ fn generate_period_title(
             } else {
                 format!(
                     "Période {} du {} au {} (semaine {})",
-                    index,
+                    index + 1,
                     start_date.format("%d/%m/%Y").to_string(),
                     end_date.format("%d/%m/%Y").to_string(),
                     start_week,
@@ -689,9 +689,14 @@ fn generate_period_title(
         }
         None => {
             if start_week != end_week {
-                format!("Période {} (semaines {} à {})", index, start_week, end_week,)
+                format!(
+                    "Période {} (semaines {} à {})",
+                    index + 1,
+                    start_week,
+                    end_week,
+                )
             } else {
-                format!("Période {} (semaine {})", index, start_week,)
+                format!("Période {} (semaine {})", index + 1, start_week,)
             }
         }
     }
