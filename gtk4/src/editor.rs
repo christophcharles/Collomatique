@@ -23,6 +23,7 @@ mod run_script;
 mod students;
 mod subjects;
 mod teachers;
+mod week_patterns;
 
 mod warning_op;
 
@@ -144,6 +145,7 @@ pub struct EditorPanel {
     teachers: Controller<teachers::Teachers>,
     students: Controller<students::Students>,
     assignments: Controller<assignments::Assignments>,
+    week_patterns: Controller<week_patterns::WeekPatterns>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
@@ -223,6 +225,13 @@ impl EditorPanel {
                 self.data.get_data().get_subjects().clone(),
                 self.data.get_data().get_students().clone(),
                 self.data.get_data().get_assignments().clone(),
+            ))
+            .unwrap();
+        self.week_patterns
+            .sender()
+            .send(week_patterns::WeekPatternsInput::Update(
+                self.data.get_data().get_periods().clone(),
+                self.data.get_data().get_week_patterns().clone(),
             ))
             .unwrap();
     }
@@ -454,6 +463,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Assignments(op))
             });
 
+        let week_patterns = week_patterns::WeekPatterns::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::WeekPatterns(op))
+            });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -504,6 +519,7 @@ impl Component for EditorPanel {
             teachers,
             students,
             assignments,
+            week_patterns,
             check_script_dialog,
             run_script_dialog,
             warning_op_dialog,
@@ -513,7 +529,7 @@ impl Component for EditorPanel {
         for panel in PanelNumbers::iter() {
             let widget: gtk::Widget = match panel {
                 PanelNumbers::GeneralPlanning => model.general_planning.widget().clone().upcast(),
-                PanelNumbers::WeekPatterns => gtk::Label::new(Some("Placeholder")).clone().upcast(),
+                PanelNumbers::WeekPatterns => model.week_patterns.widget().clone().upcast(),
                 PanelNumbers::Subjects => model.subjects.widget().clone().upcast(),
                 PanelNumbers::Teachers => model.teachers.widget().clone().upcast(),
                 PanelNumbers::Students => model.students.widget().clone().upcast(),
