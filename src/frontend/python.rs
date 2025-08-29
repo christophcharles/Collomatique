@@ -53,18 +53,3 @@ impl PythonCode {
         })
     }
 }
-
-#[pyfunction]
-fn test_function() -> String {
-    "test from rust code".into()
-}
-
-#[pymodule]
-fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(test_function, m)?)
-}
-
-pub fn initialize() {
-    pyo3::append_to_inittab!(collomatique);
-    pyo3::prepare_freethreaded_python();
-}

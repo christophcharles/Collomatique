@@ -1348,8 +1348,6 @@ async fn main() -> Result<()> {
     let logic = Logic::new(connect_db(args.create, args.db.as_path()).await?);
     let mut app_state = AppState::new(logic);
 
-    collomatique::frontend::python::initialize();
-
     let Some(command) = args.command else {
         interactive_shell(&mut app_state).await?;
         return Ok(());
