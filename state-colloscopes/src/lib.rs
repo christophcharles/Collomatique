@@ -6,6 +6,8 @@
 
 use assignments::{Assignments, AssignmentsExternalData};
 use collomatique_state::{tools, InMemoryData, Operation};
+use group_lists::GroupLists;
+use group_lists::GroupListsExternalData;
 use incompats::Incompats;
 use incompats::IncompatsExternalData;
 use periods::{Periods, PeriodsExternalData};
@@ -19,7 +21,9 @@ use week_patterns::WeekPatternsExternalData;
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::{IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId};
+pub use ids::{
+    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
+};
 pub mod ops;
 use ops::{
     AnnotatedAssignmentOp, AnnotatedIncompatOp, AnnotatedPeriodOp, AnnotatedSlotOp,
@@ -34,6 +38,7 @@ pub use subjects::{
 };
 
 pub mod assignments;
+pub mod group_lists;
 pub mod incompats;
 pub mod periods;
 pub mod slots;
@@ -97,6 +102,7 @@ struct InnerData {
     week_patterns: week_patterns::WeekPatterns,
     slots: slots::Slots,
     incompats: incompats::Incompats,
+    group_lists: group_lists::GroupLists,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -410,6 +416,8 @@ pub enum FromDataError {
     InconsistentAssignments,
     #[error("Error in slots data")]
     InconsistentSlots,
+    #[error("Inconsistent group lists")]
+    InconsistentGroupLists,
 }
 
 /// Potential new id returned by annotation
@@ -1156,6 +1164,7 @@ impl Data {
             WeekPatternsExternalData::default(),
             SlotsExternalData::default(),
             IncompatsExternalData::default(),
+            GroupListsExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -1173,6 +1182,7 @@ impl Data {
         week_patterns: week_patterns::WeekPatternsExternalData,
         slots: slots::SlotsExternalData,
         incompats: incompats::IncompatsExternalData,
+        group_lists: group_lists::GroupListsExternalData,
     ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
@@ -1186,6 +1196,7 @@ impl Data {
                 subject_slots.ordered_slots.iter().map(|(id, _d)| *id)
             });
         let incompat_ids = incompats.incompat_map.keys().copied();
+        let group_list_ids = group_lists.group_list_map.keys().copied();
         let id_issuer = IdIssuer::new(
             student_ids,
             period_ids,
@@ -1194,6 +1205,7 @@ impl Data {
             week_patterns_ids,
             slot_ids,
             incompat_ids,
+            group_list_ids,
         )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
@@ -1208,6 +1220,7 @@ impl Data {
             .iter()
             .map(|(id, _)| *id)
             .collect();
+        let student_ids = students.student_map.keys().copied().collect();
         if !subjects.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
@@ -1226,6 +1239,9 @@ impl Data {
         if !incompats.validate_all(&subject_ids, &week_pattern_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
+        if !group_lists.validate_all(&subject_ids, &student_ids) {
+            return Err(FromDataError::InconsistentGroupLists);
+        }
 
         // Ids have been validated
         let students = unsafe { Students::from_external_data(students) };
@@ -1236,6 +1252,7 @@ impl Data {
         let week_patterns = unsafe { WeekPatterns::from_external_data(week_patterns) };
         let slots = unsafe { Slots::from_external_data(slots) };
         let incompats = unsafe { Incompats::from_external_data(incompats) };
+        let group_lists = unsafe { GroupLists::from_external_data(group_lists) };
 
         let data = Data {
             id_issuer,
@@ -1248,6 +1265,7 @@ impl Data {
                 week_patterns,
                 slots,
                 incompats,
+                group_lists,
             },
         };
 

@@ -53,6 +53,8 @@ pub enum DecodeError {
     SlotsDecodedBeforeSubjects,
     #[error("A slot is ill-formed in subject incompatibilities")]
     IllformedSlotInSubjectIncompatibilities,
+    #[error("A group list is ill-formed")]
+    IllformedGroupList,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
@@ -67,6 +69,7 @@ impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
             },
             FromDataError::InconsistentAssignments => DecodeError::InconsistentAssignmentData,
             FromDataError::InconsistentSlots => DecodeError::InconsistentSlotsData,
+            FromDataError::InconsistentGroupLists => DecodeError::IllformedGroupList,
         }
     }
 }
@@ -166,6 +169,7 @@ struct PreData {
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatternsExternalData,
     slots: collomatique_state_colloscopes::slots::SlotsExternalData,
     incompats: collomatique_state_colloscopes::incompats::IncompatsExternalData,
+    group_lists: collomatique_state_colloscopes::group_lists::GroupListsExternalData,
 }
 
 mod assignment_map;
@@ -222,6 +226,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         pre_data.week_patterns,
         pre_data.slots,
         pre_data.incompats,
+        pre_data.group_lists,
     )?;
     Ok(data)
 }
