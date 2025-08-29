@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::IntoPyDict};
 
 mod csv_file;
 
@@ -53,15 +53,48 @@ impl PythonCode {
         Ok(python_code)
     }
 
-    pub fn run(&self, func: &str) -> PyResult<()> {
-        self.run_internal(func, None)
+    pub fn run(&self) -> PyResult<()> {
+        self.run_internal(None)
     }
 
-    pub fn run_with_csv_file(&self, func: &str, csv_extract: super::csv::Extract) -> PyResult<()> {
-        self.run_internal(func, Some(csv_extract))
+    pub fn run_with_csv_file(&self, csv_extract: super::csv::Extract) -> PyResult<()> {
+        self.run_internal(Some(csv_extract))
     }
 
-    fn run_internal(&self, func: &str, csv_extract: Option<super::csv::Extract>) -> PyResult<()> {
+    pub fn run_func(&self, func: &str) -> PyResult<()> {
+        self.run_func_internal(func, None)
+    }
+
+    pub fn run_func_with_csv_file(
+        &self,
+        func: &str,
+        csv_extract: super::csv::Extract,
+    ) -> PyResult<()> {
+        self.run_func_internal(func, Some(csv_extract))
+    }
+
+    fn run_internal(&self, csv_extract: Option<super::csv::Extract>) -> PyResult<()> {
+        Python::with_gil(|py| {
+            let mut vars = vec![];
+
+            if let Some(extract) = csv_extract {
+                let csv_file = Py::new(py, csv_file::CsvFile::from_extract(extract))?.into_any();
+                vars.push(("csv", csv_file));
+            }
+
+            let locals = vars.into_py_dict_bound(py);
+
+            py.run_bound(&self.code, None, Some(&locals))?;
+
+            Ok(())
+        })
+    }
+
+    fn run_func_internal(
+        &self,
+        func: &str,
+        csv_extract: Option<super::csv::Extract>,
+    ) -> PyResult<()> {
         Python::with_gil(|py| {
             let python_code = PyModule::from_code_bound(
                 py,
