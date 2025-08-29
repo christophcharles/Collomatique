@@ -61,6 +61,8 @@ pub trait InMemoryData: Send + Sync + std::fmt::Debug {
 
 use thiserror::Error;
 
+use crate::history::AggregatedOp;
+
 /// Error for [Manager::redo] and [Manager::undo]
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum HistoryError {
@@ -131,14 +133,16 @@ pub trait Manager: private::ManagerInternal {
     ///
     /// Panics if there is an error in applying the previous operation
     /// (this means there is a logic error as the previous operation was applied and must be reversible).
-    fn undo(&mut self) -> Result<(), HistoryError> {
+    fn undo(
+        &mut self,
+    ) -> Result<AggregatedOp<<Self::Data as InMemoryData>::AnnotatedOperation>, HistoryError> {
         match self.get_modification_history_mut().undo() {
             Some(aggregated_op) => {
                 if let Err(e) = private::update_internal_state_with_aggregated(self, &aggregated_op)
                 {
                     panic!("Data should be consistent as it was automatically build from previous state.\n{}", e);
                 }
-                Ok(())
+                Ok(aggregated_op)
             }
             None => Err(HistoryError::HistoryDepleted),
         }
@@ -150,14 +154,16 @@ pub trait Manager: private::ManagerInternal {
     ///
     /// Panics if there is an error in applying the last operation
     /// (this means there is a logic error as the operation was already previously applied).
-    fn redo(&mut self) -> Result<(), HistoryError> {
+    fn redo(
+        &mut self,
+    ) -> Result<AggregatedOp<<Self::Data as InMemoryData>::AnnotatedOperation>, HistoryError> {
         match self.get_modification_history_mut().redo() {
             Some(aggregated_op) => {
                 if let Err(e) = private::update_internal_state_with_aggregated(self, &aggregated_op)
                 {
                     panic!("Data should be consistent as it was automatically build from previous state.\n{}", e);
                 }
-                Ok(())
+                Ok(aggregated_op)
             }
             None => Err(HistoryError::HistoryDepleted),
         }
