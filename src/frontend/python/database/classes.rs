@@ -1206,6 +1206,10 @@ pub enum BalancingConstraints {
     StrictWithCuts,
     StrictWithCutsAndOverall,
     Strict,
+    OptimizeAndNonConsecutive,
+    OverallAndNonConsecutive,
+    StrictWithCutsAndNonConsecutive,
+    StrictWithCutsAndOverallAndNonConsecutive,
 }
 
 impl std::fmt::Display for BalancingConstraints {
@@ -1219,6 +1223,12 @@ impl std::fmt::Display for BalancingConstraints {
                 BalancingConstraints::StrictWithCuts => "StrictWithCuts",
                 BalancingConstraints::StrictWithCutsAndOverall => "StrictWithCutsAndOverall",
                 BalancingConstraints::Strict => "Strict",
+                BalancingConstraints::OptimizeAndNonConsecutive => "OptimizeAndNonConsecutive",
+                BalancingConstraints::OverallAndNonConsecutive => "OverallAndNonConsecutive",
+                BalancingConstraints::StrictWithCutsAndNonConsecutive =>
+                    "StrictWithCutsAndNonConsecutive",
+                BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive =>
+                    "StrictWithCutsAndOverallAndNonConsecutive",
             }
         )
     }
@@ -1242,6 +1252,14 @@ impl From<&crate::backend::BalancingConstraints> for BalancingConstraints {
             BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
             BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
             BC::Strict => BalancingConstraints::Strict,
+            BC::OptimizeAndNonConsecutive => BalancingConstraints::OptimizeAndNonConsecutive,
+            BC::OverallAndNonConsecutive => BalancingConstraints::OverallAndNonConsecutive,
+            BC::StrictWithCutsAndNonConsecutive => {
+                BalancingConstraints::StrictWithCutsAndNonConsecutive
+            }
+            BC::StrictWithCutsAndOverallAndNonConsecutive => {
+                BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive
+            }
         }
     }
 }
@@ -1261,6 +1279,14 @@ impl From<&BalancingConstraints> for crate::backend::BalancingConstraints {
             BalancingConstraints::StrictWithCuts => BC::StrictWithCuts,
             BalancingConstraints::StrictWithCutsAndOverall => BC::StrictWithCutsAndOverall,
             BalancingConstraints::Strict => BC::Strict,
+            BalancingConstraints::OptimizeAndNonConsecutive => BC::OptimizeAndNonConsecutive,
+            BalancingConstraints::OverallAndNonConsecutive => BC::OverallAndNonConsecutive,
+            BalancingConstraints::StrictWithCutsAndNonConsecutive => {
+                BC::StrictWithCutsAndNonConsecutive
+            }
+            BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive => {
+                BC::StrictWithCutsAndOverallAndNonConsecutive
+            }
         }
     }
 }

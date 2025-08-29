@@ -520,6 +520,14 @@ impl GenColloscopeTranslator {
                 BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
                 BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
                 BC::Strict => BalancingConstraints::Strict,
+                BC::OptimizeAndNonConsecutive => BalancingConstraints::OptimizeAndNonConsecutive,
+                BC::OverallAndNonConsecutive => BalancingConstraints::OverallAndNonConsecutive,
+                BC::StrictWithCutsAndNonConsecutive => {
+                    BalancingConstraints::StrictWithCutsAndNonConsecutive
+                }
+                BC::StrictWithCutsAndOverallAndNonConsecutive => {
+                    BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive
+                }
             };
 
             let balancing_requirements = BalancingRequirements {

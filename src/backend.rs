@@ -750,6 +750,10 @@ pub enum BalancingConstraints {
     StrictWithCuts,
     StrictWithCutsAndOverall,
     Strict,
+    OptimizeAndNonConsecutive,
+    OverallAndNonConsecutive,
+    StrictWithCutsAndNonConsecutive,
+    StrictWithCutsAndOverallAndNonConsecutive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

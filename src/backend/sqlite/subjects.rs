@@ -85,6 +85,10 @@ FROM subjects
             2 => Ok(BalancingConstraints::StrictWithCuts),
             3 => Ok(BalancingConstraints::StrictWithCutsAndOverall),
             4 => Ok(BalancingConstraints::Strict),
+            5 => Ok(BalancingConstraints::OptimizeAndNonConsecutive),
+            6 => Ok(BalancingConstraints::OverallAndNonConsecutive),
+            7 => Ok(BalancingConstraints::StrictWithCutsAndNonConsecutive),
+            8 => Ok(BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive),
             _ => Err(Error::CorruptedDatabase(format!(
                 "invalid balancing_constraints ({}) stored in database",
                 record.balancing_constraints
@@ -209,6 +213,10 @@ FROM subjects WHERE subject_id = ?
         2 => Ok(BalancingConstraints::StrictWithCuts),
         3 => Ok(BalancingConstraints::StrictWithCutsAndOverall),
         4 => Ok(BalancingConstraints::Strict),
+        5 => Ok(BalancingConstraints::OptimizeAndNonConsecutive),
+        6 => Ok(BalancingConstraints::OverallAndNonConsecutive),
+        7 => Ok(BalancingConstraints::StrictWithCutsAndNonConsecutive),
+        8 => Ok(BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive),
         _ => Err(Error::CorruptedDatabase(format!(
             "invalid balancing_constraints ({}) stored in database",
             record.balancing_constraints
@@ -286,6 +294,10 @@ pub async fn add(
         BalancingConstraints::StrictWithCuts => 2,
         BalancingConstraints::StrictWithCutsAndOverall => 3,
         BalancingConstraints::Strict => 4,
+        BalancingConstraints::OptimizeAndNonConsecutive => 5,
+        BalancingConstraints::OverallAndNonConsecutive => 6,
+        BalancingConstraints::StrictWithCutsAndNonConsecutive => 7,
+        BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive => 8,
     };
     let balancing_slot_selections = match subject.balancing_requirements.slot_selections {
         BalancingSlotSelections::TeachersAndTimeSlots => 0,
@@ -388,6 +400,10 @@ pub async fn update(
         BalancingConstraints::StrictWithCuts => 2,
         BalancingConstraints::StrictWithCutsAndOverall => 3,
         BalancingConstraints::Strict => 4,
+        BalancingConstraints::OptimizeAndNonConsecutive => 5,
+        BalancingConstraints::OverallAndNonConsecutive => 6,
+        BalancingConstraints::StrictWithCutsAndNonConsecutive => 7,
+        BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive => 8,
     };
     let balancing_slot_selections = match subject.balancing_requirements.slot_selections {
         BalancingSlotSelections::TeachersAndTimeSlots => 0,
