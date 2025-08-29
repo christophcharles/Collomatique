@@ -7,15 +7,24 @@ use std::collections::BTreeSet;
 
 use crate::base::Identifier;
 
-pub struct GroupDiversityMinimizer<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
-{
+pub struct GroupDiversityMinimizer<
+    PeriodId: Identifier + 'static,
+    SubjectId: Identifier + 'static,
+    StudentId: Identifier + 'static,
+> {
+    _phantom0: std::marker::PhantomData<PeriodId>,
     _phantom1: std::marker::PhantomData<SubjectId>,
     _phantom2: std::marker::PhantomData<StudentId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum StructureVariable<SubjectId: Identifier + 'static, StudentId: Identifier + 'static> {
+pub enum StructureVariable<
+    PeriodId: Identifier + 'static,
+    SubjectId: Identifier + 'static,
+    StudentId: Identifier + 'static,
+> {
     BothStudentInGroup {
+        period: PeriodId,
         subject: SubjectId,
         group: u32,
         student1: StudentId,
@@ -27,13 +36,16 @@ pub enum StructureVariable<SubjectId: Identifier + 'static, StudentId: Identifie
     },
 }
 
-impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
-    collomatique_solver::SimpleProblemConstraints
-    for GroupDiversityMinimizer<SubjectId, StudentId>
+impl<
+        PeriodId: Identifier + 'static,
+        SubjectId: Identifier + 'static,
+        StudentId: Identifier + 'static,
+    > collomatique_solver::SimpleProblemConstraints
+    for GroupDiversityMinimizer<PeriodId, SubjectId, StudentId>
 {
-    type Problem = crate::base::GroupListProblem<SubjectId, StudentId>;
+    type Problem = crate::base::GroupListProblem<PeriodId, SubjectId, StudentId>;
     type GeneralConstraintDesc = ();
-    type StructureVariable = StructureVariable<SubjectId, StudentId>;
+    type StructureVariable = StructureVariable<PeriodId, SubjectId, StudentId>;
 
     fn is_fit_for_problem(&self, _desc: &Self::Problem) -> bool {
         true
@@ -57,42 +69,47 @@ impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
 
         let mut students = BTreeSet::new();
 
-        for (subject_id, subject_desc) in &desc.subject_descriptions {
-            let max_group = subject_desc.group_count.end().get() - 1;
-            for student1 in &subject_desc.students {
-                students.insert(student1.clone());
-                for student2 in &subject_desc.students {
-                    if student2 <= student1 {
-                        continue;
-                    }
-                    for group in 0..=max_group {
-                        output.push(Box::new(collomatique_solver::tools::AndVariable {
-                            variable_name: collomatique_solver::generics::ExtraVariable::Extra(
-                                StructureVariable::BothStudentInGroup {
-                                    subject: subject_id.clone(),
-                                    group,
-                                    student1: student1.clone(),
-                                    student2: student2.clone(),
-                                },
-                            ),
-                            original_variables: BTreeSet::from([
-                                collomatique_solver::generics::ExtraVariable::BaseStructure(
-                                    crate::base::variables::StructureVariable::StudentInGroup {
+        for (period_id, period_desc) in &desc.period_descriptions {
+            for (subject_id, subject_desc) in &period_desc.subject_descriptions {
+                let max_group = subject_desc.group_count.end().get() - 1;
+                for student1 in &subject_desc.students {
+                    students.insert(student1.clone());
+                    for student2 in &subject_desc.students {
+                        if student2 <= student1 {
+                            continue;
+                        }
+                        for group in 0..=max_group {
+                            output.push(Box::new(collomatique_solver::tools::AndVariable {
+                                variable_name: collomatique_solver::generics::ExtraVariable::Extra(
+                                    StructureVariable::BothStudentInGroup {
+                                        period: period_id.clone(),
                                         subject: subject_id.clone(),
-                                        student: student1.clone(),
                                         group,
+                                        student1: student1.clone(),
+                                        student2: student2.clone(),
                                     },
                                 ),
-                                collomatique_solver::generics::ExtraVariable::BaseStructure(
-                                    crate::base::variables::StructureVariable::StudentInGroup {
-                                        subject: subject_id.clone(),
-                                        student: student2.clone(),
-                                        group,
-                                    },
-                                ),
-                            ]),
-                        })
-                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                                original_variables: BTreeSet::from([
+                                    collomatique_solver::generics::ExtraVariable::BaseStructure(
+                                        crate::base::variables::StructureVariable::StudentInGroup {
+                                            period: period_id.clone(),
+                                            subject: subject_id.clone(),
+                                            student: student1.clone(),
+                                            group,
+                                        },
+                                    ),
+                                    collomatique_solver::generics::ExtraVariable::BaseStructure(
+                                        crate::base::variables::StructureVariable::StudentInGroup {
+                                            period: period_id.clone(),
+                                            subject: subject_id.clone(),
+                                            student: student2.clone(),
+                                            group,
+                                        },
+                                    ),
+                                ]),
+                            })
+                                as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                        }
                     }
                 }
             }
@@ -106,25 +123,28 @@ impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
 
                 let mut original_variables = BTreeSet::new();
 
-                for (subject_id, subject_desc) in &desc.subject_descriptions {
-                    if !subject_desc.students.contains(student1)
-                        || !subject_desc.students.contains(student2)
-                    {
-                        continue;
-                    }
+                for (period_id, period_desc) in &desc.period_descriptions {
+                    for (subject_id, subject_desc) in &period_desc.subject_descriptions {
+                        if !subject_desc.students.contains(student1)
+                            || !subject_desc.students.contains(student2)
+                        {
+                            continue;
+                        }
 
-                    let max_group = subject_desc.group_count.end().get() - 1;
-                    for group in 0..=max_group {
-                        original_variables.insert(
-                            collomatique_solver::generics::ExtraVariable::Extra(
-                                StructureVariable::BothStudentInGroup {
-                                    subject: subject_id.clone(),
-                                    group,
-                                    student1: student1.clone(),
-                                    student2: student2.clone(),
-                                },
-                            ),
-                        );
+                        let max_group = subject_desc.group_count.end().get() - 1;
+                        for group in 0..=max_group {
+                            original_variables.insert(
+                                collomatique_solver::generics::ExtraVariable::Extra(
+                                    StructureVariable::BothStudentInGroup {
+                                        period: period_id.clone(),
+                                        subject: subject_id.clone(),
+                                        group,
+                                        student1: student1.clone(),
+                                        student2: student2.clone(),
+                                    },
+                                ),
+                            );
+                        }
                     }
                 }
 
@@ -174,8 +194,10 @@ impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
 
         let mut students = BTreeSet::new();
 
-        for (_subject_id, subject_desc) in &desc.subject_descriptions {
-            students.extend(subject_desc.students.iter().cloned());
+        for (_period_id, period_desc) in &desc.period_descriptions {
+            for (_subject_id, subject_desc) in &period_desc.subject_descriptions {
+                students.extend(subject_desc.students.iter().cloned());
+            }
         }
 
         for student1 in &students {
