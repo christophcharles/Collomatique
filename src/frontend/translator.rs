@@ -494,7 +494,7 @@ impl GenColloscopeTranslator {
 
             let balancing_requirements =
                 slot_selections.map(|slot_selections| BalancingRequirements {
-                    constraints: BalancingConstraints::OverallOnly,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
                     slot_selections,
                 });
 
