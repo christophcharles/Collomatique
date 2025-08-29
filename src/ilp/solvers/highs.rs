@@ -123,7 +123,14 @@ impl Solver {
                         // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
                         1. - 2. * value
                     }
-                    Objective::MinimumObjectiveFn => 0.,
+                    Objective::MinimumObjectiveFn => {
+                        let coef = problem
+                            .get_objective_contribs()
+                            .get(var)
+                            .copied()
+                            .unwrap_or(0.);
+                        coef
+                    }
                     Objective::None => 0.,
                 };
 

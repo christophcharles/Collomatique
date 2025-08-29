@@ -26,8 +26,8 @@ pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 #[derive(Debug, Clone)]
 pub struct ObjectiveTerm<V: VariableName> {
-    coef: f64,
-    exprs: BTreeSet<linexpr::Expr<V>>,
+    pub coef: f64,
+    pub exprs: BTreeSet<linexpr::Expr<V>>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +35,7 @@ pub struct ProblemBuilder<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     variables: BTreeSet<V>,
     objective_terms: Vec<ObjectiveTerm<V>>,
+    objective_contribs: BTreeMap<V, f64>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -59,6 +60,7 @@ impl<V: VariableName> Default for ProblemBuilder<V> {
             constraints: BTreeSet::new(),
             variables: BTreeSet::new(),
             objective_terms: Vec::new(),
+            objective_contribs: BTreeMap::new(),
         }
     }
 }
@@ -93,7 +95,7 @@ impl<V: VariableName> ProblemBuilder<V> {
         Ok(self)
     }
 
-    pub fn add_objective_term<U, I>(mut self, coef: f64, exprs: I) -> ConstraintResult<Self, V>
+    pub fn add_objective_term<I>(mut self, coef: f64, exprs: I) -> ConstraintResult<Self, V>
     where
         I: IntoIterator<Item = linexpr::Expr<V>>,
     {
@@ -107,6 +109,44 @@ impl<V: VariableName> ProblemBuilder<V> {
         }
 
         self.objective_terms.push(ObjectiveTerm { coef, exprs });
+        Ok(self)
+    }
+
+    pub fn add_objective_terms<I>(mut self, obj_terms: I) -> ConstraintResult<Self, V>
+    where
+        I: IntoIterator<Item = ObjectiveTerm<V>>,
+    {
+        for obj_term in obj_terms {
+            self = self.add_objective_term(obj_term.coef, obj_term.exprs)?;
+        }
+        Ok(self)
+    }
+
+    pub fn set_objective_contrib<T>(mut self, var: T, coef: f64) -> ConstraintResult<Self, V>
+    where
+        T: Into<V>,
+    {
+        let v = var.into();
+        match self.objective_contribs.get_mut(&v) {
+            Some(val) => *val = coef,
+            None => {
+                if !self.variables.contains(&v) {
+                    return Err(ConstraintError::UndeclaredVariable(v));
+                }
+                self.objective_contribs.insert(v, coef);
+            }
+        }
+
+        Ok(self)
+    }
+
+    pub fn set_objective_contribs<I>(mut self, coefs: I) -> ConstraintResult<Self, V>
+    where
+        I: IntoIterator<Item = (V, f64)>,
+    {
+        for (v, coef) in coefs {
+            self = self.set_objective_contrib(v, coef)?;
+        }
         Ok(self)
     }
 
@@ -149,6 +189,7 @@ impl<V: VariableName> ProblemBuilder<V> {
             constraints: self.constraints,
             pb_repr,
             objective_terms: self.objective_terms,
+            objective_contribs: self.objective_contribs,
         }
     }
 
@@ -183,11 +224,17 @@ impl<V: VariableName> ProblemBuilder<V> {
                 })
             })
             .collect();
+        let objective_contribs = self
+            .objective_contribs
+            .into_iter()
+            .filter(|(v, _c)| predicate(v))
+            .collect();
 
         ProblemBuilder {
             constraints,
             variables,
             objective_terms,
+            objective_contribs,
         }
     }
 }
@@ -202,6 +249,7 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     pb_repr: P,
     objective_terms: Vec<ObjectiveTerm<V>>,
+    objective_contribs: BTreeMap<V, f64>,
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
@@ -239,6 +287,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
             constraints: self.constraints,
             variables: self.variables,
             objective_terms: self.objective_terms,
+            objective_contribs: self.objective_contribs,
         }
     }
 
@@ -283,6 +332,10 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
 
     pub fn get_objective_terms(&self) -> &Vec<ObjectiveTerm<V>> {
         &self.objective_terms
+    }
+
+    pub fn get_objective_contribs(&self) -> &BTreeMap<V, f64> {
+        &self.objective_contribs
     }
 }
 

@@ -181,6 +181,7 @@ impl Solver {
     ) {
         use coin_cbc::Sense;
         cbc_model.model.set_obj_sense(Sense::Minimize);
+
         for objective_term in problem.get_objective_terms() {
             let new_col = cbc_model.model.add_col();
             cbc_model.model.set_col_lower(new_col, 0.);
@@ -204,6 +205,11 @@ impl Solver {
                     .model
                     .set_row_upper(row, (-expr.get_constant()).into());
             }
+        }
+
+        for (v, coef) in problem.get_objective_contribs() {
+            let col = cbc_model.cols[&v];
+            cbc_model.model.set_obj_coeff(col, *coef);
         }
     }
 
