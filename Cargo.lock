@@ -818,11 +818,10 @@ dependencies = [
 name = "collomatique-core"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "collomatique-ilp",
  "collomatique-solver",
+ "collomatique-time",
  "ordered-float",
- "serde",
  "thiserror",
 ]
 
@@ -846,6 +845,14 @@ dependencies = [
  "collomatique-ilp",
  "ordered-float",
  "thiserror",
+]
+
+[[package]]
+name = "collomatique-time"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
 ]
 
 [[package]]

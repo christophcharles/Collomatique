@@ -1,6 +1,6 @@
 //! Time related types
 //!
-//! This modules defines a few useful types for handling time in
+//! This crate defines a few useful types for handling time in
 //! the context of colloscopes.
 
 #[cfg(test)]

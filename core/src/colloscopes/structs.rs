@@ -22,7 +22,7 @@ pub struct TeacherInterrogations {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectInterrogations<TeacherId: Identifier, GroupListId: Identifier> {
-    duration: crate::time::NonZeroDurationInMinutes,
+    duration: collomatique_time::NonZeroDurationInMinutes,
     period: NonZeroUsize,
     group_list_id: GroupListId,
     teacher_map: HashMap<TeacherId, TeacherInterrogations>
