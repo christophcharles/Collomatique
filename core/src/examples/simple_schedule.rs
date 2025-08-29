@@ -1,7 +1,7 @@
 //! Simple schedule example
 //!
 //! This module implements a *very* simple example of scheduling problem to illustrate
-//! the usage of [crate::BaseConstraints] and [crate::ExtraConstraints].
+//! the usage of [crate::BaseProblem] and [crate::ProblemConstraints].
 //!
 //! The problem being implemented here is a very simple scheduling problem where
 //! we have a few courses (let's n of them) and a few groups of students (let's
@@ -25,7 +25,7 @@
 //! };
 //! let constraints = SimpleScheduleConstraints {};
 //!
-//! let mut problem_builder = ProblemBuilder::<_,_,_>::new(problem_desc, 1.0)
+//! let mut problem_builder = ProblemBuilder::<_,_,_>::new(problem_desc)
 //!     .expect("Consistent ILP description");
 //! let translator = problem_builder.add_constraints(constraints, 1.0)
 //!     .expect("Consistent ILP description");
@@ -97,7 +97,7 @@ mod tests;
 /// These are given by [Self::course_count], [Self::group_count] and
 /// [Self::week_count] respectively.
 ///
-/// This struct will implement [BaseConstraints]. Because the problem
+/// This struct will implement [BaseProblem]. Because the problem
 /// is so simple, there is no structure constraints, no structure variables
 /// and thus no reconstruction.
 ///
@@ -222,10 +222,9 @@ impl SimpleSchedulePartialSolution {
     }
 }
 
-impl BaseConstraints for SimpleScheduleDesc {
+impl BaseProblem for SimpleScheduleDesc {
     type MainVariable = SimpleScheduleVariable;
     type StructureVariable = ();
-    type GeneralConstraintDesc = ();
     type StructureConstraintDesc = ();
     type PartialSolution = SimpleSchedulePartialSolution;
 
@@ -259,15 +258,6 @@ impl BaseConstraints for SimpleScheduleDesc {
     ) -> Vec<(
         Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
         Self::StructureConstraintDesc,
-    )> {
-        vec![]
-    }
-
-    fn general_constraints(
-        &self,
-    ) -> Vec<(
-        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
-        Self::GeneralConstraintDesc,
     )> {
         vec![]
     }
@@ -540,7 +530,7 @@ impl SimpleScheduleConstraints {
     }
 }
 
-impl ExtraConstraints<SimpleScheduleDesc> for SimpleScheduleConstraints {
+impl ProblemConstraints<SimpleScheduleDesc> for SimpleScheduleConstraints {
     type GeneralConstraintDesc = SimpleScheduleConstraint;
     type StructureConstraintDesc = ();
     type StructureVariable = ();
@@ -574,7 +564,7 @@ impl ExtraConstraints<SimpleScheduleDesc> for SimpleScheduleConstraints {
         ConfigData::new()
     }
 
-    fn extra_general_constraints(
+    fn general_constraints(
         &self,
         desc: &SimpleScheduleDesc,
     ) -> Vec<(

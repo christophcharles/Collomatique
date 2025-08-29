@@ -27,8 +27,8 @@
 //! The main struct is [ProblemBuilder] and you should start from there to see how this crate
 //! works.
 //!
-//! If you want to implement a problem, you should implement [BaseConstraints] on some structure
-//! and possibly [ExtraConstraints] on a few others.
+//! If you want to implement a problem, you should implement [BaseProblem] on some structure
+//! and possibly [ProblemConstraints] on a few others.
 
 pub mod colloscopes;
 pub mod time;
@@ -37,9 +37,7 @@ pub mod examples;
 pub mod generics;
 pub mod solver;
 
-pub use generics::{
-    BaseConstraints, BaseVariable, ExtraConstraints, ExtraVariable, SoftConstraints,
-};
+pub use generics::{BaseProblem, BaseVariable, ExtraVariable, ProblemConstraints, SoftConstraints};
 pub use solver::{
     DecoratedCompleteSolution, ExtraTranslator, Problem, ProblemBuilder, TimeLimitSolution,
 };

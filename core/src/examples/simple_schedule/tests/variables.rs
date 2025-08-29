@@ -8,7 +8,7 @@ fn test_main_variables() {
         group_count: 2,
     };
 
-    use BaseConstraints;
+    use BaseProblem;
 
     let variables = example_problem.main_variables();
 
