@@ -21,6 +21,8 @@ use mat_repr::{ConfigRepr, ProblemRepr};
 pub enum Error<V: VariableName> {
     #[error("Variable {0} is not valid for this problem")]
     InvalidVariable(V),
+    #[error("Constant {0} is set to the wrong value")]
+    ConstantWrongValue(V),
     #[error("Variable {0} is actually a constant and cannot be set")]
     ConstantNotVariable(V),
 }
@@ -355,9 +357,16 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
                 Some(num) => {
                     vars_repr.insert(*num);
                 }
-                None => {
-                    return Err(Error::InvalidVariable(v.into()));
-                }
+                None => match self.constants.get(v) {
+                    Some(val) => {
+                        if !*val {
+                            return Err(Error::ConstantWrongValue(v.into()));
+                        }
+                    }
+                    None => {
+                        return Err(Error::InvalidVariable(v.into()));
+                    }
+                },
             }
         }
 
@@ -435,6 +444,22 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         Ok(unsafe { self.cfg_repr.get_unchecked(*i) == 1 })
     }
 
+    pub fn get_vars(&self) -> BTreeSet<V> {
+        let mut output = BTreeSet::new();
+        for (var, i) in &self.problem.variables_lookup {
+            let is_true = unsafe { self.cfg_repr.get_unchecked(*i) == 1 };
+            if is_true {
+                output.insert(var.clone());
+            }
+        }
+        for (constant, value) in &self.problem.constants {
+            if *value {
+                output.insert(constant.clone());
+            }
+        }
+        output
+    }
+
     pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
     where
         V: std::borrow::Borrow<T>,
@@ -501,6 +526,15 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
         let precomputation = self.get_precomputation();
         self.cfg_repr
             .compute_lhs(&self.problem.pb_repr, &*precomputation)
+    }
+
+    pub fn compute_lhs_sq_norm2(&self) -> f64 {
+        let lhs = self.compute_lhs();
+        let mut tot = 0.;
+        for (_constraint, val) in lhs {
+            tot += f64::from(val * val);
+        }
+        tot
     }
 
     pub fn is_feasable(&self) -> bool {

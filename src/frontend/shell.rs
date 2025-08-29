@@ -513,23 +513,7 @@ async fn solve_command(
     pb.set_message("Generating ILP problem...");
     pb.enable_steady_tick(Duration::from_millis(20));
     //let problem = ilp_translator.problem();
-    let problem = ilp_translator
-        .problem_builder()
-        .eval_fn(crate::debuggable!(|x| {
-            if !x
-                .get(&crate::gen::colloscope::Variable::GroupInSlot {
-                    subject: 0,
-                    slot: 0,
-                    group: 0,
-                })
-                .unwrap()
-            {
-                100.
-            } else {
-                0.
-            }
-        }))
-        .build();
+    let problem = ilp_translator.problem();
     pb.finish();
 
     let multi_pb = MultiProgress::new();
