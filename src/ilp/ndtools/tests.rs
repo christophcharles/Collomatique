@@ -4,6 +4,7 @@ fn test_mat_repr() {
     use crate::ilp::linexpr::Expr;
 
     let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["a", "b", "c", "d", "e"])
         .add(
             (2 * Expr::var("a") - 3 * Expr::var("b") + 4 * Expr::var("c") - 3)
                 .leq(&(2 * Expr::var("a") - 5 * Expr::var("d"))),
@@ -43,6 +44,7 @@ fn test_is_feasable() {
     let d = Expr::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["a", "b", "c", "d"])
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
@@ -135,6 +137,7 @@ fn test_nd_feasable_agrees_with_pb_feasable() {
     let d = Expr::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["a", "b", "c", "d"])
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
@@ -205,6 +208,7 @@ fn test_neighbours() {
     let d = Expr::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["a", "b", "c", "d"])
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &d).leq(&Expr::constant(1)))
         .add((&a + &d).eq(&Expr::constant(1)))
@@ -246,6 +250,7 @@ fn test_cfg_repr_ord() {
     let c = Expr::var("c");
 
     let pb = crate::ilp::ProblemBuilder::new()
+        .add_variables(["a", "b", "c"])
         .add((&a + &b).leq(&Expr::constant(1)))
         .add((&c + &b).leq(&Expr::constant(1)))
         .build()
