@@ -109,10 +109,6 @@ impl Problem {
     }
 
     fn into_linexpr_config(&self, config: &Config) -> Option<linexpr::Config> {
-        if !config.variables.is_subset(&self.variables) {
-            return None;
-        }
-
         let mut cfg = linexpr::Config::new();
 
         for v in &self.variables {
