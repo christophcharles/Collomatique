@@ -11,58 +11,70 @@ mod tests;
 
 use thiserror::Error;
 
+use linexpr::VariableName;
+
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum Error {
+pub enum Error<V: VariableName> {
     #[error("Variable {1} is used in constraint {0} but not explicitly declared")]
-    UndeclaredVariable(usize, String),
+    UndeclaredVariable(usize, V),
     #[error("Variable {0} is not valid for this problem")]
-    InvalidVariable(String),
+    InvalidVariable(V),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, V> = std::result::Result<T, Error<V>>;
 
-pub type EvalFn = dbg::Debuggable<dyn Fn(&FeasableConfig) -> f64>;
+pub type EvalFn<V> = dbg::Debuggable<dyn Fn(&FeasableConfig<V>) -> f64>;
 
-impl Default for EvalFn {
+impl<V: VariableName> Default for EvalFn<V> {
     fn default() -> Self {
         crate::debuggable!(|_x| 0.)
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct ProblemBuilder {
-    constraints: Vec<linexpr::Constraint<String>>,
-    eval_fn: EvalFn,
-    variables: BTreeSet<String>,
+#[derive(Debug, Clone)]
+pub struct ProblemBuilder<V: VariableName> {
+    constraints: Vec<linexpr::Constraint<V>>,
+    eval_fn: EvalFn<V>,
+    variables: BTreeSet<V>,
 }
 
-impl ProblemBuilder {
+impl<V: VariableName> Default for ProblemBuilder<V> {
+    fn default() -> Self {
+        ProblemBuilder {
+            constraints: Vec::new(),
+            eval_fn: EvalFn::default(),
+            variables: BTreeSet::new(),
+        }
+    }
+}
+
+impl<V: VariableName> ProblemBuilder<V> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn add(mut self, constraint: linexpr::Constraint<String>) -> Self {
+    pub fn add(mut self, constraint: linexpr::Constraint<V>) -> Self {
         self.constraints.push(constraint);
         self
     }
 
-    pub fn eval_fn(mut self, func: EvalFn) -> Self {
+    pub fn eval_fn(mut self, func: EvalFn<V>) -> Self {
         self.eval_fn = func;
         self
     }
 
-    pub fn add_variable<T: Into<String>>(mut self, var: T) -> Self {
+    pub fn add_variable<T: Into<V>>(mut self, var: T) -> Self {
         self.variables.insert(var.into());
         self
     }
 
-    pub fn add_variables<U: Into<String>, T: IntoIterator<Item = U>>(mut self, vars: T) -> Self {
+    pub fn add_variables<U: Into<V>, T: IntoIterator<Item = U>>(mut self, vars: T) -> Self {
         let mut temp = vars.into_iter().map(|x| x.into()).collect();
         self.variables.append(&mut temp);
         self
     }
 
-    pub fn build(mut self) -> Result<Problem> {
+    pub fn build(mut self) -> Result<Problem<V>, V> {
         for c in self.constraints.iter_mut() {
             c.clean();
         }
@@ -99,17 +111,17 @@ impl ProblemBuilder {
 
 use std::collections::BTreeSet;
 
-#[derive(Debug, Default, Clone)]
-pub struct Problem {
-    variables: BTreeSet<String>,
-    variables_vec: Vec<String>,
-    variables_lookup: BTreeMap<String, usize>,
-    constraints: Vec<linexpr::Constraint<String>>,
-    eval_fn: EvalFn,
+#[derive(Debug, Clone)]
+pub struct Problem<V: VariableName> {
+    variables: BTreeSet<V>,
+    variables_vec: Vec<V>,
+    variables_lookup: BTreeMap<V, usize>,
+    constraints: Vec<linexpr::Constraint<V>>,
+    eval_fn: EvalFn<V>,
     nd_problem: ndtools::NdProblem,
 }
 
-impl std::fmt::Display for Problem {
+impl<V: VariableName> std::fmt::Display for Problem<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "variables : [")?;
         for v in &self.variables {
@@ -128,18 +140,18 @@ impl std::fmt::Display for Problem {
     }
 }
 
-impl Problem {
-    pub fn default_config<'a>(&'a self) -> Config<'a> {
+impl<V: VariableName> Problem<V> {
+    pub fn default_config<'a>(&'a self) -> Config<'a, V> {
         Config {
             problem: self,
             nd_config: self.nd_problem.default_nd_config(),
         }
     }
 
-    pub fn config_from<'a, U: Into<String>, T: IntoIterator<Item = U>>(
+    pub fn config_from<'a, U: Into<V>, T: IntoIterator<Item = U>>(
         &'a self,
         vars: T,
-    ) -> Result<Config<'a>> {
+    ) -> Result<Config<'a, V>, V> {
         let mut config = self.default_config();
 
         for v in vars.into_iter() {
@@ -149,7 +161,7 @@ impl Problem {
         Ok(config)
     }
 
-    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config {
+    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'_, V> {
         Config {
             problem: self,
             nd_config: self.nd_problem.random_nd_config(random_gen),
@@ -160,13 +172,13 @@ impl Problem {
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
-pub struct Config<'a> {
-    problem: &'a Problem,
+pub struct Config<'a, V: VariableName> {
+    problem: &'a Problem<V>,
     nd_config: ndtools::NdConfig,
 }
 
-impl<'a> Config<'a> {
-    pub fn get<T: Into<String>>(&self, var: T) -> Result<bool> {
+impl<'a, V: VariableName> Config<'a, V> {
+    pub fn get<T: Into<V>>(&self, var: T) -> Result<bool, V> {
         let name = var.into();
         let i = match self.problem.variables_lookup.get(&name) {
             Some(i) => i,
@@ -175,7 +187,7 @@ impl<'a> Config<'a> {
         Ok(unsafe { self.nd_config.get_unchecked(*i) == 1 })
     }
 
-    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) -> Result<()> {
+    pub fn set<T: Into<V>>(&mut self, var: T, val: bool) -> Result<(), V> {
         let name = var.into();
         let i = match self.problem.variables_lookup.get(&name) {
             Some(i) => i,
@@ -187,14 +199,14 @@ impl<'a> Config<'a> {
         Ok(())
     }
 
-    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'a> {
+    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'a, V> {
         Config {
             problem: self.problem,
             nd_config: self.nd_config.random_neighbour(random_gen),
         }
     }
 
-    pub fn neighbours(&self) -> Vec<Config<'a>> {
+    pub fn neighbours(&self) -> Vec<Config<'a, V>> {
         self.nd_config
             .neighbours()
             .into_iter()
@@ -214,7 +226,7 @@ impl<'a> Config<'a> {
         self.nd_config.is_feasable(&self.problem.nd_problem)
     }
 
-    pub fn into_feasable(self) -> Option<FeasableConfig<'a>> {
+    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V>> {
         if !self.is_feasable() {
             return None;
         }
@@ -222,12 +234,12 @@ impl<'a> Config<'a> {
         Some(unsafe { self.into_feasable_unchecked() })
     }
 
-    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a> {
+    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V> {
         FeasableConfig(self)
     }
 }
 
-impl<'a> std::fmt::Display for Config<'a> {
+impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[ ")?;
         let slice: Vec<_> = self
@@ -244,18 +256,18 @@ impl<'a> std::fmt::Display for Config<'a> {
     }
 }
 
-impl<'a> PartialEq for Config<'a> {
+impl<'a, V: VariableName> PartialEq for Config<'a, V> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a> Eq for Config<'a> {}
+impl<'a, V: VariableName> Eq for Config<'a, V> {}
 
-impl<'a> Ord for Config<'a> {
+impl<'a, V: VariableName> Ord for Config<'a, V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let p1: *const Problem = &*self.problem;
-        let p2: *const Problem = &*other.problem;
+        let p1: *const Problem<V> = &*self.problem;
+        let p2: *const Problem<V> = &*other.problem;
 
         let problem_ord = p1.cmp(&p2);
         if problem_ord != std::cmp::Ordering::Equal {
@@ -266,29 +278,29 @@ impl<'a> Ord for Config<'a> {
     }
 }
 
-impl<'a> PartialOrd for Config<'a> {
+impl<'a, V: VariableName> PartialOrd for Config<'a, V> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FeasableConfig<'a>(Config<'a>);
+pub struct FeasableConfig<'a, V: VariableName>(Config<'a, V>);
 
-impl<'a> FeasableConfig<'a> {
-    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) -> Result<()> {
+impl<'a, V: VariableName> FeasableConfig<'a, V> {
+    pub fn set<T: Into<V>>(&mut self, var: T, val: bool) -> Result<(), V> {
         self.0.set(var, val)
     }
 
-    pub fn get<T: Into<String>>(&self, var: T) -> Result<bool> {
+    pub fn get<T: Into<V>>(&self, var: T) -> Result<bool, V> {
         self.0.get(var)
     }
 
-    pub fn into_inner(self) -> Config<'a> {
+    pub fn into_inner(self) -> Config<'a, V> {
         self.0
     }
 
-    pub fn inner(&self) -> &Config<'a> {
+    pub fn inner(&self) -> &Config<'a, V> {
         &self.0
     }
 }

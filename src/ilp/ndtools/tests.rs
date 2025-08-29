@@ -3,7 +3,7 @@ use super::*;
 fn nd_problem_definition() {
     use crate::ilp::linexpr::Expr;
 
-    let pb = crate::ilp::ProblemBuilder::new()
+    let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_variables(["a", "b", "c", "d", "e"])
         .add(
             (2 * Expr::var("a") - 3 * Expr::var("b") + 4 * Expr::var("c") - 3)
@@ -36,10 +36,10 @@ fn nd_problem_definition() {
 fn test_is_feasable() {
     use crate::ilp::linexpr::Expr;
 
-    let a = Expr::var("a");
-    let b = Expr::var("b");
-    let c = Expr::var("c");
-    let d = Expr::var("d");
+    let a = Expr::<String>::var("a");
+    let b = Expr::<String>::var("b");
+    let c = Expr::<String>::var("c");
+    let d = Expr::<String>::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c", "d"])
@@ -88,7 +88,7 @@ fn test_is_feasable() {
 
 #[test]
 fn test_is_feasable_no_constraint() {
-    let pb = crate::ilp::ProblemBuilder::new()
+    let pb: Problem<String> = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b"])
         .build()
         .unwrap();
@@ -108,10 +108,10 @@ fn test_is_feasable_no_constraint() {
 fn test_neighbours() {
     use crate::ilp::linexpr::Expr;
 
-    let a = Expr::var("a");
-    let b = Expr::var("b");
-    let c = Expr::var("c");
-    let d = Expr::var("d");
+    let a = Expr::<String>::var("a");
+    let b = Expr::<String>::var("b");
+    let c = Expr::<String>::var("c");
+    let d = Expr::<String>::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c", "d"])
@@ -150,9 +150,9 @@ fn test_neighbours() {
 fn nd_config_ord() {
     use crate::ilp::linexpr::Expr;
 
-    let a = Expr::var("a");
-    let b = Expr::var("b");
-    let c = Expr::var("c");
+    let a = Expr::<String>::var("a");
+    let b = Expr::<String>::var("b");
+    let c = Expr::<String>::var("c");
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c"])

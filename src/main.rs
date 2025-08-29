@@ -30,15 +30,15 @@ fn main() {
     // The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
     // The same pattern is used for yij.
 
-    let x11 = Expr::var("x11");
-    let x12 = Expr::var("x12");
-    let x21 = Expr::var("x21");
-    let x22 = Expr::var("x22");
+    let x11 = Expr::<String>::var("x11");
+    let x12 = Expr::<String>::var("x12");
+    let x21 = Expr::<String>::var("x21");
+    let x22 = Expr::<String>::var("x22");
 
-    let y11 = Expr::var("y11");
-    let y12 = Expr::var("y12");
-    let y21 = Expr::var("y21");
-    let y22 = Expr::var("y22");
+    let y11 = Expr::<String>::var("y11");
+    let y12 = Expr::<String>::var("y12");
+    let y21 = Expr::<String>::var("y21");
+    let y22 = Expr::<String>::var("y22");
 
     let one = Expr::constant(1);
 

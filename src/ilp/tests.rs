@@ -39,10 +39,10 @@ fn invalid_variable_in_config() {
 fn test_is_feasable() {
     use crate::ilp::linexpr::Expr;
 
-    let a = Expr::var("a");
-    let b = Expr::var("b");
-    let c = Expr::var("c");
-    let d = Expr::var("d");
+    let a = Expr::<String>::var("a");
+    let b = Expr::<String>::var("b");
+    let c = Expr::<String>::var("c");
+    let d = Expr::<String>::var("d");
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variable("a")
@@ -92,7 +92,7 @@ fn test_is_feasable() {
 
 #[test]
 fn test_is_feasable_no_constraint() {
-    let pb = crate::ilp::ProblemBuilder::new()
+    let pb: Problem<String> = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b"])
         .build()
         .unwrap();
