@@ -4,6 +4,8 @@ use thiserror::Error;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
     GeneralSetWeekCount(NonZeroU32),
+    GeneralSetMaxInterrogationPerDay(Option<NonZeroU32>),
+    GeneralSetInterrogationPerWeekRange(Option<std::ops::Range<u32>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -237,6 +239,30 @@ impl<T: backend::Storage> AppState<T> {
 
                 Ok(rev_op)
             }
+            Operation::GeneralSetMaxInterrogationPerDay(_max_interrogation_per_day) => {
+                let general_data = self.backend_logic.general_data_get().await?;
+
+                let rev_op = ReversibleOperation {
+                    forward: op,
+                    backward: Operation::GeneralSetMaxInterrogationPerDay(
+                        general_data.max_interrogations_per_day,
+                    ),
+                };
+
+                Ok(rev_op)
+            }
+            Operation::GeneralSetInterrogationPerWeekRange(ref _max_interrogation_per_day) => {
+                let general_data = self.backend_logic.general_data_get().await?;
+
+                let rev_op = ReversibleOperation {
+                    forward: op,
+                    backward: Operation::GeneralSetInterrogationPerWeekRange(
+                        general_data.interrogations_per_week,
+                    ),
+                };
+
+                Ok(rev_op)
+            }
         }
     }
 
@@ -251,6 +277,38 @@ impl<T: backend::Storage> AppState<T> {
                     .map_err(|e| match e {
                         backend::CheckedError::CheckFailed(data) => {
                             UpdateError::CannotSetWeekCountWeekPatternsNeedTruncating(data)
+                        }
+                        backend::CheckedError::InternalError(int_error) => {
+                            UpdateError::InternalError(int_error)
+                        }
+                    })?;
+                Ok(())
+            }
+            Operation::GeneralSetMaxInterrogationPerDay(new_max_interrogation_per_day) => {
+                let mut general_data = self.backend_logic.general_data_get().await?;
+                general_data.max_interrogations_per_day = *new_max_interrogation_per_day;
+                self.backend_logic
+                    .general_data_set(&general_data)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedError::CheckFailed(_data) => {
+                            panic!("General data should be valid as modifying max_interrogations_per_day has no dependancy")
+                        }
+                        backend::CheckedError::InternalError(int_error) => {
+                            UpdateError::InternalError(int_error)
+                        }
+                    })?;
+                Ok(())
+            }
+            Operation::GeneralSetInterrogationPerWeekRange(new_max_interrogation_per_week) => {
+                let mut general_data = self.backend_logic.general_data_get().await?;
+                general_data.interrogations_per_week = new_max_interrogation_per_week.clone();
+                self.backend_logic
+                    .general_data_set(&general_data)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedError::CheckFailed(_data) => {
+                            panic!("General data should be valid as modifying interrogations_per_week has no dependancy")
                         }
                         backend::CheckedError::InternalError(int_error) => {
                             UpdateError::InternalError(int_error)
