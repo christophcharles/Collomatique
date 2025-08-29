@@ -91,6 +91,12 @@ pub trait Storage {
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
+    async fn general_data_set(
+        &self,
+        general_data: &GeneralData,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn general_data_get(&self) -> std::result::Result<GeneralData, Self::InternalError>;
+
     async fn week_patterns_get_all(
         &self,
     ) -> std::result::Result<BTreeMap<Self::WeekPatternId, WeekPattern>, Self::InternalError>;
@@ -242,6 +248,12 @@ pub trait Storage {
             Self::StudentId,
         >,
     >;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneralData {
+    interrogations_per_week: Option<std::ops::Range<u32>>,
+    max_interrogations_per_day: Option<NonZeroU32>,
 }
 
 use std::collections::BTreeSet;

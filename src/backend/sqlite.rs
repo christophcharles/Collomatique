@@ -11,6 +11,8 @@ pub enum Error {
     CorruptedDatabase(String),
     #[error("Cannot represent some data in database: {0}")]
     RepresentationError(String),
+    #[error("json error")]
+    JsonError(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -323,6 +325,67 @@ impl Storage for Store {
     type GroupListId = group_lists::Id;
 
     type InternalError = Error;
+
+    async fn general_data_set(
+        &self,
+        general_data: &GeneralData,
+    ) -> std::result::Result<(), Self::InternalError> {
+        let general_data_json = GeneralDataDb {
+            interrogations_per_week: general_data.interrogations_per_week.clone(),
+            max_interrogations_per_day: general_data.max_interrogations_per_day.clone(),
+        };
+
+        let mut conn = self.pool.acquire().await.map_err(Error::from)?;
+
+        let general_data_id = 1;
+        let general_data_string = serde_json::to_string(&general_data_json)?;
+        let rows_affected = sqlx::query!(
+            "UPDATE general_data SET value = ?1 WHERE id = ?2",
+            general_data_string,
+            general_data_id,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .rows_affected();
+
+        if rows_affected > 1 {
+            return Err(Error::CorruptedDatabase(format!(
+                "Multiple general_data with id {:?}",
+                1
+            )));
+        } else if rows_affected == 0 {
+            return Err(Error::CorruptedDatabase(format!(
+                "No general_data with id {:?}",
+                1
+            )));
+        }
+
+        Ok(())
+    }
+    async fn general_data_get(&self) -> std::result::Result<GeneralData, Self::InternalError> {
+        let general_data_id = 1;
+        let record_opt = sqlx::query!(
+            "SELECT value FROM general_data WHERE id = ?",
+            general_data_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let record = record_opt.ok_or(Error::CorruptedDatabase(format!(
+            "No general_data with id {:?}",
+            1
+        )))?;
+
+        let general_data_json: GeneralDataDb = serde_json::from_str(&record.value)?;
+
+        let general_data = GeneralData {
+            interrogations_per_week: general_data_json.interrogations_per_week,
+            max_interrogations_per_day: general_data_json.max_interrogations_per_day,
+        };
+
+        Ok(general_data)
+    }
 
     fn week_patterns_get(
         &self,
