@@ -587,3 +587,86 @@ impl JsonStore {
         Ok(())
     }
 }
+
+#[derive(Debug, Error)]
+pub enum FromJsonError {
+    #[error("Error while reading json")]
+    JsonError(#[from] serde_json::Error),
+}
+
+pub type FromJsonResult<T> = std::result::Result<T, FromJsonError>;
+
+#[derive(Debug, Error)]
+pub enum OpenError {
+    #[error("Error while decoding data")]
+    FromJsonError(#[from] FromJsonError),
+    #[error("Error while reading file")]
+    IO(#[from] std::io::Error),
+}
+
+pub type OpenResult<T> = std::result::Result<T, OpenError>;
+
+impl JsonStore {
+    pub fn from_json_file(path: &std::path::Path) -> OpenResult<Self> {
+        let mut file = std::fs::File::open(path)?;
+        let mut content = String::new();
+
+        use std::io::Read;
+        file.read_to_string(&mut content)?;
+        Ok(Self::from_json(&content)?)
+    }
+
+    pub fn from_json(content: &str) -> FromJsonResult<Self> {
+        let data = serde_json::from_str::<JsonData>(content)?;
+
+        let next_id = match data.find_last_id() {
+            Some(last) => last + 1,
+            None => 0,
+        };
+
+        Ok(JsonStore { next_id, data })
+    }
+}
+
+impl JsonData {
+    fn find_last_id(&self) -> Option<u64> {
+        let mut ids = BTreeSet::new();
+        for (id, _) in &self.week_patterns {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.teachers {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.students {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.subject_groups {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.incompats {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.group_lists {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.subjects {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.time_slots {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.groupings {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.grouping_incompats {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.colloscopes {
+            ids.insert(id.0);
+        }
+        for (id, _) in &self.slot_selections {
+            ids.insert(id.0);
+        }
+        ids.last().copied()
+    }
+}
