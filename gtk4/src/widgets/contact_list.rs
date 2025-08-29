@@ -22,6 +22,38 @@ pub struct ContactInfo<Id: Identifier> {
     pub extra: String,
 }
 
+impl<Id: Identifier> std::cmp::PartialOrd for ContactInfo<Id> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Id: Identifier> std::cmp::Ord for ContactInfo<Id> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let surname_cmp = self.contact.surname.cmp(&other.contact.surname);
+
+        if surname_cmp != std::cmp::Ordering::Equal {
+            return surname_cmp;
+        }
+
+        let firstname_cmp = self.contact.firstname.cmp(&other.contact.firstname);
+
+        if firstname_cmp != std::cmp::Ordering::Equal {
+            return firstname_cmp;
+        }
+
+        self.id.cmp(&other.id)
+    }
+}
+
+impl<Id: Identifier> std::cmp::PartialEq for ContactInfo<Id> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
+    }
+}
+
+impl<Id: Identifier> std::cmp::Eq for ContactInfo<Id> {}
+
 #[derive(Debug)]
 pub enum WidgetInput<Id: Identifier> {
     UpdateList(Vec<ContactInfo<Id>>),
