@@ -64,13 +64,28 @@ pub use linexpr::{Constraint, LinExpr};
 
 use mat_repr::{ConfigRepr, ProblemRepr};
 
+pub fn f64_is_non_negative(v: f64) -> bool {
+    v > 0.
+}
+
+pub fn f64_is_zero(v: f64) -> bool {
+    v == 0.
+}
+
+pub fn f64_equals(v1: f64, v2: f64) -> bool {
+    f64_is_zero(v1 - v2)
+}
+
 /// Default matrix representation for [Problem].
 ///
 /// In most cases, the default representation is just fine
 /// and there is no reason to change it.
 ///
+/// By default, we use a sparse matrix representation (based on [sprs] as a backend).
+/// This is well-suited to typical scheduling problems, and in particular to
+/// the problems we try to solve in Collomatique.
 /// See [mat_repr] for more information.
-pub type DefaultRepr<V> = mat_repr::nd::NdProblem<V>;
+pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 /// Trait for displayable, ordonnable, comparable, clonable, sendable data
 ///
@@ -726,6 +741,9 @@ pub enum BuildError<V: UsableData, C: UsableData> {
     UndeclaredVariableInObjFunc(V, LinExpr<V>),
 }
 
+/// Result type associated with [BuildError].
+/// 
+/// It is returned by [ProblemBuilder::build].
 pub type BuildResult<T, V, C> = std::result::Result<T, BuildError<V, C>>;
 
 impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
@@ -990,7 +1008,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
         match var_constraint.get_type() {
             VariableType::Continuous => true,
             VariableType::Integer => value == value.floor(),
-            VariableType::Binary => value == 0.0 || value == 1.0,
+            VariableType::Binary => f64_equals(value, 0.) || f64_equals(value, 1.0),
         }
     }
 

@@ -13,6 +13,7 @@
 //! implemented.
 
 pub mod nd;
+pub mod sparse;
 
 use super::{Constraint, UsableData, Variable};
 
