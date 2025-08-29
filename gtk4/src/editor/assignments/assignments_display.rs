@@ -97,14 +97,12 @@ impl FactoryComponent for PeriodEntry {
             gtk::Box {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
                 gtk::Label {
                     set_halign: gtk::Align::Start,
                     #[watch]
                     set_label: &self.generate_title_text(),
                     set_use_markup: true,
-                },
-                gtk::Box {
-                    set_hexpand: true,
                 },
                 gtk::Button {
                     set_icon_name: "edit-copy-symbolic",
@@ -114,6 +112,42 @@ impl FactoryComponent for PeriodEntry {
                     set_tooltip_text: Some("Dupliquer les inscriptions de la période précédente"),
                     connect_clicked => PeriodEntryInput::CopyPreviousPeriod,
                 },
+                gtk::Box {
+                    set_hexpand: true,
+                },
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_spacing: 5,
+                    #[watch]
+                    set_visible: !self.data.filtered_students.is_empty() && !self.data.filtered_subjects.is_empty(),
+                    append = &gtk::Box {
+                        set_hexpand: true,
+                    },
+                    append = &gtk::Button {
+                        connect_clicked => PeriodEntryInput::AssignAll,
+                        gtk::Label {
+                            set_label: "Inscrire",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.8").unwrap()),
+                        }
+                    },
+                    append = &gtk::Label {
+                        set_label: "<small>/</small>",
+                        set_use_markup: true,
+
+                    },
+                    append = &gtk::Button {
+                        connect_clicked => PeriodEntryInput::UnassignAll,
+                        gtk::Label {
+                            set_label: "désinscrire",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("scale 0.8").unwrap()),
+                        }
+                    },
+                    append = &gtk::Label {
+                        set_label: "<small>tous les élèves en</small>",
+                        set_use_markup: true,
+                    },
+                    append: self.subjects_dropdown.widget(),
+                },
             },
             gtk::Label {
                 #[watch]
@@ -121,28 +155,6 @@ impl FactoryComponent for PeriodEntry {
                 set_halign: gtk::Align::Start,
                 set_label: "<i>Pas d'élèves inscrits sur la période</i>",
                 set_use_markup: true,
-            },
-            gtk::Box {
-                set_hexpand: true,
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 5,
-                #[watch]
-                set_visible: !self.data.filtered_students.is_empty() && !self.data.filtered_subjects.is_empty(),
-                append = &gtk::Button {
-                    set_label: "Inscrire",
-                    connect_clicked => PeriodEntryInput::AssignAll,
-                },
-                append = &gtk::Label {
-                    set_label: "ou",
-                },
-                append = &gtk::Button {
-                    set_label: "désinscrire",
-                    connect_clicked => PeriodEntryInput::UnassignAll,
-                },
-                append = &gtk::Label {
-                    set_label: "tous les élèves en :",
-                },
-                append: self.subjects_dropdown.widget(),
             },
             gtk::ScrolledWindow {
                 set_hexpand: true,
