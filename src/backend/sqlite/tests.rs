@@ -5,6 +5,7 @@ async fn prepare_empty_db(pool: sqlx::SqlitePool) -> Store {
     Store { pool }
 }
 
+mod incompats;
 mod students;
 mod subject_groups;
 mod teachers;

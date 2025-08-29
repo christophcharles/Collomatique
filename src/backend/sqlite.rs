@@ -311,6 +311,7 @@ impl Store {
 
 use super::*;
 
+mod incompats;
 mod students;
 mod subject_groups;
 mod teachers;
@@ -321,6 +322,7 @@ impl Storage for Store {
     type TeacherId = teachers::Id;
     type StudentId = students::Id;
     type SubjectGroupId = subject_groups::Id;
+    type IncompatId = incompats::Id;
 
     type InternalError = Error;
 
@@ -496,5 +498,58 @@ impl Storage for Store {
         Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>,
     > + Send {
         subject_groups::update(&self.pool, index, subject_group)
+    }
+
+    fn incompats_get(
+        &self,
+        index: Self::IncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Incompat<Self::WeekPatternId>,
+            IdError<Self::InternalError, Self::IncompatId>,
+        >,
+    > + Send {
+        incompats::get(&self.pool, index)
+    }
+    fn incompats_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::IncompatId, Incompat<Self::WeekPatternId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        incompats::get_all(&self.pool)
+    }
+    fn incompats_add(
+        &self,
+        incompat: Incompat<Self::WeekPatternId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Self::IncompatId,
+            CrossError<Self::InternalError, Self::WeekPatternId>,
+        >,
+    > + Send {
+        incompats::add(&self.pool, incompat)
+    }
+    fn incompats_remove(
+        &self,
+        index: Self::IncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::IncompatId>>,
+    > + Send {
+        incompats::remove(&self.pool, index)
+    }
+    fn incompats_update(
+        &self,
+        index: Self::IncompatId,
+        incompat: Incompat<Self::WeekPatternId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,
+        >,
+    > + Send {
+        incompats::update(&self.pool, index, incompat)
     }
 }
