@@ -133,30 +133,39 @@ fn simple_validated_data() {
     }];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
     ];
@@ -441,6 +450,7 @@ fn invalid_incompatibility_number() {
         max_count: 0,
     }];
     let students = vec![Student {
+        non_consecutive_interrogations: false,
         incompatibilities: BTreeSet::from([1]),
     }];
     let slot_groupings = SlotGroupingList::new();
@@ -962,21 +972,27 @@ fn duplicated_groups() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1076,30 +1092,39 @@ fn duplicated_student() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1195,30 +1220,39 @@ fn duplicated_student_not_assigned() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1316,21 +1350,27 @@ fn invalid_student_in_group() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1420,21 +1460,27 @@ fn invalid_student_not_assigned() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1534,30 +1580,39 @@ fn empty_group() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1661,30 +1716,39 @@ fn extensible_empty_group() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1780,30 +1844,39 @@ fn group_too_large() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -1907,30 +1980,39 @@ fn non_extensible_too_small_group() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2030,30 +2112,39 @@ fn too_few_groups() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2164,30 +2255,39 @@ fn too_many_groups() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2268,21 +2368,27 @@ fn no_full_period() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2422,39 +2528,51 @@ fn group_in_slot_variables() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2655,21 +2773,27 @@ fn group_on_slot_selection_variables() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2812,21 +2936,27 @@ fn default_group_on_slot_selection_variables() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -2975,39 +3105,51 @@ fn dynamic_group_assignment_variables() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -3265,39 +3407,51 @@ fn student_in_group_variables() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -3411,21 +3565,27 @@ fn use_grouping() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -3763,21 +3923,27 @@ fn incomapt_group_for_student_variables() {
     ]);
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([1]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([2]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0, 1]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0, 1, 2]),
         },
     ];
@@ -4013,39 +4179,51 @@ fn at_most_max_groups_per_slot_constraints() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -4266,21 +4444,27 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -4499,21 +4683,27 @@ fn one_interrogation_per_period() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -4787,21 +4977,27 @@ fn one_interrogation_per_period_with_incomplete_period() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -5031,39 +5227,51 @@ fn students_per_group_count() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -5222,39 +5430,51 @@ fn student_in_single_group() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -5386,21 +5606,27 @@ fn dynamic_groups_student_in_group_inequalities() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -5515,21 +5741,27 @@ fn dynamic_groups_group_in_slot_inequalities() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -5726,21 +5958,27 @@ fn interrogations_per_week() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -5907,21 +6145,27 @@ fn grouping_inequalities() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -6071,21 +6315,27 @@ fn grouping_incompats() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -6311,21 +6561,27 @@ fn simple_colloscope() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -6531,21 +6787,27 @@ fn colloscope_with_dynamic_groups() {
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -6850,21 +7112,27 @@ fn at_most_one_interrogation_per_empty_group() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -7045,21 +7313,27 @@ fn max_interrogations_per_day() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -7239,30 +7513,39 @@ fn balancing_teachers() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -7452,30 +7735,39 @@ fn balancing_timeslots() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -7674,30 +7966,39 @@ fn balancing_timeslots_2() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -7887,30 +8188,39 @@ fn balancing_teachers_and_timeslots() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -8106,30 +8416,39 @@ fn no_balancing() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -8344,30 +8663,39 @@ fn balancing_timeslots_with_ghost_group() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -8659,30 +8987,39 @@ fn balancing_timeslots_with_ghost_group_2() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -8906,30 +9243,39 @@ fn balancing_timeslots_with_partial_last_period() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
@@ -9314,21 +9660,27 @@ fn student_incompat_max_count_constraints() {
     ]);
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([1]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([2]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0, 1]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0, 1, 2]),
         },
     ];
@@ -9724,21 +10076,27 @@ fn incompat_group_for_student_constraints() {
     ]);
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([1]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([2]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0, 1]),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::from([0, 1, 2]),
         },
     ];
@@ -10000,21 +10358,27 @@ fn group_on_slot_selection_constraints() {
     let incompatibilities = vec![];
     let students = vec![
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
         Student {
+            non_consecutive_interrogations: false,
             incompatibilities: BTreeSet::new(),
         },
     ];
