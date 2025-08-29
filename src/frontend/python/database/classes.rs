@@ -1802,3 +1802,171 @@ impl From<GroupingIncompat> for backend::GroupingIncompat<state::GroupingHandle>
         backend::GroupingIncompat::from(&value)
     }
 }
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotGroup {
+    #[pyo3(set, get)]
+    count: usize,
+    #[pyo3(set, get)]
+    slots: BTreeSet<TimeSlotHandle>,
+}
+
+#[pymethods]
+impl SlotGroup {
+    #[new]
+    fn new(count: usize) -> Self {
+        SlotGroup {
+            count,
+            slots: BTreeSet::new(),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let slots_strings: Vec<_> = self_.slots.iter().map(|x| format!("{:?}", x)).collect();
+
+        let output = format!(
+            "{{ count = {}, slots = {{ {} }} }}",
+            self_.count,
+            slots_strings.join(","),
+        );
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
+    fn from(value: &backend::SlotGroup<state::TimeSlotHandle>) -> Self {
+        SlotGroup {
+            count: value.count,
+            slots: value.slots.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<backend::SlotGroup<state::TimeSlotHandle>> for SlotGroup {
+    fn from(value: backend::SlotGroup<state::TimeSlotHandle>) -> Self {
+        SlotGroup::from(&value)
+    }
+}
+
+impl From<&SlotGroup> for backend::SlotGroup<state::TimeSlotHandle> {
+    fn from(value: &SlotGroup) -> Self {
+        backend::SlotGroup {
+            count: value.count,
+            slots: value.slots.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<SlotGroup> for backend::SlotGroup<state::TimeSlotHandle> {
+    fn from(value: SlotGroup) -> Self {
+        backend::SlotGroup::from(&value)
+    }
+}
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SlotSelectionHandle {
+    pub handle: state::SlotSelectionHandle,
+}
+
+#[pymethods]
+impl SlotSelectionHandle {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&state::SlotSelectionHandle> for SlotSelectionHandle {
+    fn from(value: &state::SlotSelectionHandle) -> Self {
+        SlotSelectionHandle {
+            handle: value.clone(),
+        }
+    }
+}
+
+impl From<state::SlotSelectionHandle> for SlotSelectionHandle {
+    fn from(value: state::SlotSelectionHandle) -> Self {
+        SlotSelectionHandle::from(&value)
+    }
+}
+
+impl From<&SlotSelectionHandle> for state::SlotSelectionHandle {
+    fn from(value: &SlotSelectionHandle) -> Self {
+        value.handle.clone()
+    }
+}
+
+impl From<SlotSelectionHandle> for state::SlotSelectionHandle {
+    fn from(value: SlotSelectionHandle) -> Self {
+        state::SlotSelectionHandle::from(&value)
+    }
+}
+
+#[pyclass(eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlotSelection {
+    #[pyo3(set, get)]
+    subject_handle: SubjectHandle,
+    #[pyo3(set, get)]
+    slot_groups: Vec<SlotGroup>,
+}
+
+#[pymethods]
+impl SlotSelection {
+    #[new]
+    fn new(subject_handle: SubjectHandle) -> Self {
+        SlotSelection {
+            subject_handle,
+            slot_groups: Vec::new(),
+        }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let slot_groups_strings: Vec<_> = self_
+            .slot_groups
+            .iter()
+            .map(|x| format!("{:?}", x))
+            .collect();
+
+        let output = format!(
+            "{{ subject_handle = {:?}, slot_groups = {{ {} }} }}",
+            self_.subject_handle,
+            slot_groups_strings.join(","),
+        );
+
+        PyString::new_bound(self_.py(), output.as_str())
+    }
+}
+
+impl From<&backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
+    fn from(value: &backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
+        SlotSelection {
+            subject_handle: value.subject_id.into(),
+            slot_groups: value.slot_groups.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>> for SlotSelection {
+    fn from(value: backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle>) -> Self {
+        SlotSelection::from(&value)
+    }
+}
+
+impl From<&SlotSelection> for backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
+    fn from(value: &SlotSelection) -> Self {
+        backend::SlotSelection {
+            subject_id: (&value.subject_handle).into(),
+            slot_groups: value.slot_groups.iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<SlotSelection> for backend::SlotSelection<state::SubjectHandle, state::TimeSlotHandle> {
+    fn from(value: SlotSelection) -> Self {
+        backend::SlotSelection::from(&value)
+    }
+}

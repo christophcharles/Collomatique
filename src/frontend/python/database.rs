@@ -27,6 +27,8 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TimeSlot>()?;
     m.add_class::<Grouping>()?;
     m.add_class::<GroupingIncompat>()?;
+    m.add_class::<SlotGroup>()?;
+    m.add_class::<SlotSelection>()?;
 
     m.add_function(wrap_pyfunction!(extract_name_parts, m)?)?;
     m.add_function(wrap_pyfunction!(load_csv, m)?)?;
@@ -909,6 +911,86 @@ impl Database {
 
         Ok(())
     }
+
+    fn slot_selections_get_all(
+        self_: PyRef<'_, Self>,
+    ) -> PyResult<BTreeMap<SlotSelectionHandle, SlotSelection>> {
+        let Answer::SlotSelections(SlotSelectionsAnswer::GetAll(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::SlotSelections(SlotSelectionsCommand::GetAll),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn slot_selections_get(
+        self_: PyRef<'_, Self>,
+        handle: SlotSelectionHandle,
+    ) -> PyResult<SlotSelection> {
+        let Answer::SlotSelections(SlotSelectionsAnswer::Get(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::SlotSelections(SlotSelectionsCommand::Get(handle)),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn slot_selections_create(
+        self_: PyRef<'_, Self>,
+        slot_selection: SlotSelection,
+    ) -> PyResult<SlotSelectionHandle> {
+        let Answer::SlotSelections(SlotSelectionsAnswer::Create(handle)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::SlotSelections(SlotSelectionsCommand::Create(slot_selection)),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn slot_selections_update(
+        self_: PyRef<'_, Self>,
+        handle: SlotSelectionHandle,
+        grouping_incompat: SlotSelection,
+    ) -> PyResult<()> {
+        let Answer::SlotSelections(SlotSelectionsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::SlotSelections(SlotSelectionsCommand::Update(handle, grouping_incompat)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn slot_selections_remove(self_: PyRef<'_, Self>, handle: SlotSelectionHandle) -> PyResult<()> {
+        let Answer::SlotSelections(SlotSelectionsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::SlotSelections(SlotSelectionsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -931,6 +1013,7 @@ pub enum Command {
     Groupings(GroupingsCommand),
     GroupingIncompats(GroupingIncompatsCommand),
     RegisterStudent(RegisterStudentCommand),
+    SlotSelections(SlotSelectionsCommand),
     Undo,
     Redo,
     Exit,
@@ -1040,6 +1123,15 @@ pub enum RegisterStudentCommand {
     InIncompatSet(StudentHandle, IncompatHandle, bool),
 }
 
+#[derive(Debug, Clone)]
+pub enum SlotSelectionsCommand {
+    GetAll,
+    Get(SlotSelectionHandle),
+    Create(SlotSelection),
+    Update(SlotSelectionHandle, SlotSelection),
+    Remove(SlotSelectionHandle),
+}
+
 #[derive(Debug)]
 struct PythonError {
     int_err: Box<dyn std::error::Error + Send>,
@@ -1067,6 +1159,7 @@ pub enum Answer {
     Groupings(GroupingsAnswer),
     GroupingIncompats(GroupingIncompatsAnswer),
     RegisterStudent(RegisterStudentAnswer),
+    SlotSelections(SlotSelectionsAnswer),
     Undo,
     Redo,
 }
@@ -1173,6 +1266,15 @@ pub enum RegisterStudentAnswer {
     InSubjectGroupSet,
     InIncompatGet(bool),
     InIncompatSet,
+}
+
+#[derive(Debug)]
+pub enum SlotSelectionsAnswer {
+    GetAll(BTreeMap<SlotSelectionHandle, SlotSelection>),
+    Get(SlotSelection),
+    Create(SlotSelectionHandle),
+    Update,
+    Remove,
 }
 
 #[derive(Debug)]
@@ -2371,6 +2473,114 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
+    async fn execute_slot_selections_job<T: state::Manager>(
+        slot_selections_command: &SlotSelectionsCommand,
+        manager: &mut T,
+    ) -> PyResult<SlotSelectionsAnswer> {
+        match slot_selections_command {
+            SlotSelectionsCommand::GetAll => {
+                let result = manager
+                    .slot_selections_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, slot_selection)| {
+                        (handle.into(), SlotSelection::from(slot_selection))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(SlotSelectionsAnswer::GetAll(result))
+            }
+            SlotSelectionsCommand::Get(handle) => {
+                let result =
+                    manager
+                        .slot_selections_get(handle.handle)
+                        .await
+                        .map_err(|e| match e {
+                            IdError::InternalError(int_err) => {
+                                PyException::new_err(int_err.to_string())
+                            }
+                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                        })?;
+
+                Ok(SlotSelectionsAnswer::Get(result.into()))
+            }
+            SlotSelectionsCommand::Create(slot_selection) => {
+                let output = manager
+                    .apply(Operation::SlotSelections(
+                        state::SlotSelectionsOperation::Create(slot_selection.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SlotSelectionBadSubject(subject_handle) => {
+                            PyValueError::new_err(format!(
+                                "Slot Selection references a bad subject handle {:?}",
+                                subject_handle
+                            ))
+                        }
+                        UpdateError::SlotSelectionBadTimeSlot(time_slot_handle) => {
+                            PyValueError::new_err(format!(
+                                "Slot Selection references a bad time slot handle {:?} (it might be valid but refer to another subject)",
+                                time_slot_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::SlotSelection(handle) = output else {
+                    panic!("No slot selection handle returned on SlotSelectionsCommand::Create");
+                };
+
+                Ok(SlotSelectionsAnswer::Create(handle.into()))
+            }
+            SlotSelectionsCommand::Update(handle, slot_selection) => {
+                manager
+                    .apply(Operation::SlotSelections(
+                        state::SlotSelectionsOperation::Update(handle.handle, slot_selection.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SlotSelectionRemoved(_) => {
+                            PyValueError::new_err("Slot selection was previously removed")
+                        }
+                        UpdateError::SlotSelectionBadSubject(subject_handle) => {
+                            PyValueError::new_err(format!(
+                                "Slot Selection references a bad subject handle {:?}",
+                                subject_handle
+                            ))
+                        }
+                        UpdateError::SlotSelectionBadTimeSlot(time_slot_handle) => {
+                            PyValueError::new_err(format!(
+                                "Slot Selection references a bad time slot handle {:?} (it might be valid but refer to another subject)",
+                                time_slot_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(SlotSelectionsAnswer::Update)
+            }
+            SlotSelectionsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::SlotSelections(
+                        state::SlotSelectionsOperation::Remove(handle.handle),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SlotSelectionRemoved(_) => {
+                            PyValueError::new_err("Slot selection was previously removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(SlotSelectionsAnswer::Remove)
+            }
+        }
+    }
+
     async fn execute_job<T: state::Manager>(
         command: &Command,
         manager: &mut T,
@@ -2428,6 +2638,11 @@ impl<'scope> SessionConnection<'scope> {
                 let answer =
                     Self::execute_register_student_job(register_student_command, manager).await?;
                 Ok(Answer::RegisterStudent(answer))
+            }
+            Command::SlotSelections(slot_selections_command) => {
+                let answer =
+                    Self::execute_slot_selections_job(slot_selections_command, manager).await?;
+                Ok(Answer::SlotSelections(answer))
             }
             Command::Undo => {
                 manager.undo().await.map_err(|e| match e {
