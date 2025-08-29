@@ -85,7 +85,7 @@ fn simple_validated_data() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -203,7 +203,7 @@ fn invalid_students_per_interrogation() {
             },
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![],
+            prefilled_groups: vec![],
             not_assigned: BTreeSet::new(),
         },
     }];
@@ -250,7 +250,7 @@ fn subject_slot_overlaps_next_day() {
             },
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![],
+            prefilled_groups: vec![],
             not_assigned: BTreeSet::new(),
         },
     }];
@@ -328,7 +328,7 @@ fn invalid_teacher_number() {
             },
         }],
         groups: GroupsDesc {
-            assigned_to_group: vec![],
+            prefilled_groups: vec![],
             not_assigned: BTreeSet::new(),
         },
     }];
@@ -411,7 +411,7 @@ fn slot_ref_has_invalid_subject() {
                 },
             }],
             groups: GroupsDesc {
-                assigned_to_group: vec![],
+                prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
         },
@@ -429,7 +429,7 @@ fn slot_ref_has_invalid_subject() {
                 },
             }],
             groups: GroupsDesc {
-                assigned_to_group: vec![],
+                prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
         },
@@ -492,7 +492,7 @@ fn slot_ref_has_invalid_slot() {
                 },
             }],
             groups: GroupsDesc {
-                assigned_to_group: vec![],
+                prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
         },
@@ -510,7 +510,7 @@ fn slot_ref_has_invalid_slot() {
                 },
             }],
             groups: GroupsDesc {
-                assigned_to_group: vec![],
+                prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
         },
@@ -573,7 +573,7 @@ fn grouping_incompact_invalid_ref() {
                 },
             }],
             groups: GroupsDesc {
-                assigned_to_group: vec![],
+                prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
         },
@@ -591,7 +591,7 @@ fn grouping_incompact_invalid_ref() {
                 },
             }],
             groups: GroupsDesc {
-                assigned_to_group: vec![],
+                prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
         },
@@ -708,7 +708,7 @@ fn duplicated_groups() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -811,7 +811,7 @@ fn duplicated_student() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -923,7 +923,7 @@ fn duplicated_student_not_assigned() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1]),
                     can_be_extended: true,
@@ -1033,7 +1033,7 @@ fn invalid_student_in_group() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([1, 2, 3]),
                     can_be_extended: false,
@@ -1132,7 +1132,7 @@ fn invalid_student_not_assigned() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![GroupDesc {
+            prefilled_groups: vec![GroupDesc {
                 students: BTreeSet::from([0, 1, 2]),
                 can_be_extended: false,
             }],
@@ -1225,7 +1225,7 @@ fn empty_group() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -1341,7 +1341,7 @@ fn extensible_empty_group() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -1453,7 +1453,7 @@ fn group_too_large() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1]),
                     can_be_extended: false,
@@ -1565,7 +1565,7 @@ fn non_extensible_too_small_group() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -1681,7 +1681,7 @@ fn too_few_groups() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -1792,7 +1792,7 @@ fn too_many_groups() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -1899,7 +1899,7 @@ fn no_full_period() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -2030,7 +2030,7 @@ fn group_in_slot_variables() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -2225,7 +2225,7 @@ fn dynamic_group_assignment_variables() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -2500,7 +2500,7 @@ fn student_in_group_variables() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -2645,7 +2645,7 @@ fn with_student_not_in_last_period_variables() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -2706,7 +2706,7 @@ fn with_student_not_in_last_period_variables() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([6, 7, 8]),
                         can_be_extended: false,
@@ -2864,7 +2864,7 @@ fn without_student_not_in_last_period_variables() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -2925,7 +2925,7 @@ fn without_student_not_in_last_period_variables() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([6, 7, 8]),
                         can_be_extended: false,
@@ -3057,7 +3057,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -3118,7 +3118,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([6, 7, 8]),
                         can_be_extended: false,
@@ -3295,7 +3295,7 @@ fn periodicity_variables_for_strict_period() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -3482,7 +3482,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -3669,7 +3669,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -3798,7 +3798,7 @@ fn use_grouping() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -3948,7 +3948,7 @@ fn at_most_one_group_per_slot_constraints() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -4147,7 +4147,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -4184,7 +4184,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([3, 4, 5]),
                         can_be_extended: false,
@@ -4347,7 +4347,7 @@ fn one_interrogation_per_period() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -4400,7 +4400,7 @@ fn one_interrogation_per_period() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([3, 4, 5]),
                         can_be_extended: false,
@@ -4588,7 +4588,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -4633,7 +4633,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([3, 4, 5]),
                         can_be_extended: false,
@@ -4842,7 +4842,7 @@ fn students_per_group_count() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -5022,7 +5022,7 @@ fn student_in_single_group() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -5185,7 +5185,7 @@ fn dynamic_groups_student_in_group_inequalities() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -5305,7 +5305,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -5422,7 +5422,7 @@ fn group_in_slot_needs_student() {
             },
         ],
         groups: GroupsDesc {
-            assigned_to_group: vec![
+            prefilled_groups: vec![
                 GroupDesc {
                     students: BTreeSet::from([0, 1, 2]),
                     can_be_extended: false,
@@ -5543,7 +5543,7 @@ fn one_periodicity_choice_per_student() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -5588,7 +5588,7 @@ fn one_periodicity_choice_per_student() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -5633,7 +5633,7 @@ fn one_periodicity_choice_per_student() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -5816,7 +5816,7 @@ fn periodicity_inequalities() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -5861,7 +5861,7 @@ fn periodicity_inequalities() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -5906,7 +5906,7 @@ fn periodicity_inequalities() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -6181,7 +6181,7 @@ fn interrogations_per_week() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([0, 1, 2]),
                         can_be_extended: false,
@@ -6218,7 +6218,7 @@ fn interrogations_per_week() {
                 },
             ],
             groups: GroupsDesc {
-                assigned_to_group: vec![
+                prefilled_groups: vec![
                     GroupDesc {
                         students: BTreeSet::from([3, 4, 5]),
                         can_be_extended: false,
@@ -6339,4 +6339,156 @@ fn interrogations_per_week() {
     ]);
 
     assert_eq!(interrogations_per_week_constraints, expected_result);
+}
+
+#[test]
+fn grouping_inequalities() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            prefilled_groups: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![
+        SlotGrouping {
+            slots: BTreeSet::from([
+                SlotRef {
+                    subject: 0,
+                    slot: 1,
+                },
+                SlotRef {
+                    subject: 0,
+                    slot: 2,
+                },
+            ]),
+        },
+        SlotGrouping {
+            slots: BTreeSet::from([SlotRef {
+                subject: 0,
+                slot: 3,
+            }]),
+        },
+    ];
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let grouping_constraints = ilp_translator.build_grouping_constraints();
+
+    #[rustfmt::skip]
+    let gis_0_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_2_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 2, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_3_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 3, group: 0 });
+
+    #[rustfmt::skip]
+    let gis_0_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_2_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 2, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_3_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 3, group: 1 });
+
+    #[rustfmt::skip]
+    let ug_0 = Expr::<Variable>::var(Variable::UseGrouping(0));
+    #[rustfmt::skip]
+    let ug_1 = Expr::<Variable>::var(Variable::UseGrouping(1));
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        gis_0_1_0.leq(&ug_0),
+        gis_0_1_1.leq(&ug_0),
+        gis_0_2_0.leq(&ug_0),
+        gis_0_2_1.leq(&ug_0),
+
+        gis_0_3_0.leq(&ug_1),
+        gis_0_3_1.leq(&ug_1),
+    ]);
+
+    assert_eq!(grouping_constraints, expected_result);
 }

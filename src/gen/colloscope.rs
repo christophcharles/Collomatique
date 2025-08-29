@@ -88,13 +88,13 @@ pub struct GroupDesc {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupsDesc {
-    assigned_to_group: Vec<GroupDesc>,
+    prefilled_groups: Vec<GroupDesc>,
     not_assigned: BTreeSet<usize>,
 }
 
 impl GroupsDesc {
     fn students_iterator(&self) -> impl Iterator<Item = &usize> {
-        self.assigned_to_group
+        self.prefilled_groups
             .iter()
             .flat_map(|group| group.students.iter())
             .chain(self.not_assigned.iter())
@@ -214,7 +214,7 @@ impl ValidatedData {
                 }
             }
 
-            for (j, group) in subject.groups.assigned_to_group.iter().enumerate() {
+            for (j, group) in subject.groups.prefilled_groups.iter().enumerate() {
                 for k in &group.students {
                     if *k >= students.len() {
                         return Err(Error::SubjectWithInvalidAssignedStudent(i, j, *k));
@@ -229,7 +229,7 @@ impl ValidatedData {
             }
 
             let mut remaining_seats = 0usize;
-            for group in &subject.groups.assigned_to_group {
+            for group in &subject.groups.prefilled_groups {
                 if !group.can_be_extended {
                     continue;
                 }
@@ -246,7 +246,7 @@ impl ValidatedData {
             }
 
             let mut min_seats = 0usize;
-            for group in &subject.groups.assigned_to_group {
+            for group in &subject.groups.prefilled_groups {
                 if !group.can_be_extended {
                     continue;
                 }
@@ -264,7 +264,7 @@ impl ValidatedData {
 
             let mut students_no_duplicate = BTreeMap::new();
 
-            for (j, group) in subject.groups.assigned_to_group.iter().enumerate() {
+            for (j, group) in subject.groups.prefilled_groups.iter().enumerate() {
                 for k in &group.students {
                     if let Some(first_j) = students_no_duplicate.get(k) {
                         return Err(Error::SubjectWithDuplicatedStudentInGroups(
@@ -492,7 +492,7 @@ impl<'a> IlpTranslator<'a> {
                     .iter()
                     .enumerate()
                     .flat_map(move |(j, _slot)| {
-                        subject.groups.assigned_to_group.iter().enumerate().map(
+                        subject.groups.prefilled_groups.iter().enumerate().map(
                             move |(k, _group)| Variable::GroupInSlot {
                                 subject: i,
                                 slot: j,
@@ -518,7 +518,7 @@ impl<'a> IlpTranslator<'a> {
                         .flat_map(move |(j, _slot)| {
                             subject
                                 .groups
-                                .assigned_to_group
+                                .prefilled_groups
                                 .iter()
                                 .enumerate()
                                 .filter_map(move |(k, group)| {
@@ -548,7 +548,7 @@ impl<'a> IlpTranslator<'a> {
                 subject.groups.not_assigned.iter().flat_map(move |j| {
                     subject
                         .groups
-                        .assigned_to_group
+                        .prefilled_groups
                         .iter()
                         .enumerate()
                         .filter_map(move |(k, group)| {
@@ -633,7 +633,7 @@ impl<'a> IlpTranslator<'a> {
                 subject.slots.iter().enumerate().map(move |(j, _slot)| {
                     let mut expr = Expr::constant(0);
 
-                    for (k, _group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                         expr = expr
                             + Expr::var(Variable::GroupInSlot {
                                 subject: i,
@@ -669,7 +669,7 @@ impl<'a> IlpTranslator<'a> {
         if subject.groups.not_assigned.contains(&student) {
             let list = subject
                 .groups
-                .assigned_to_group
+                .prefilled_groups
                 .iter()
                 .enumerate()
                 .filter_map(|(k, g)| {
@@ -681,7 +681,7 @@ impl<'a> IlpTranslator<'a> {
                 .collect();
             return StudentStatus::ToBeAssigned(list);
         }
-        for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+        for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
             if group.students.contains(&student) {
                 return StudentStatus::Assigned(k);
             }
@@ -802,7 +802,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot) in subject.slots.iter().enumerate() {
             if period.contains(&slot.start.week) {
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         expr = expr
                             + Expr::var(Variable::DynamicGroupAssignment {
@@ -886,7 +886,7 @@ impl<'a> IlpTranslator<'a> {
                     );
                 }
 
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     for student in group.students.iter().copied() {
                         constraints.insert(
                             self.build_one_interrogation_per_period_contraint_for_assigned_student(
@@ -920,7 +920,7 @@ impl<'a> IlpTranslator<'a> {
                     );
                 }
 
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     for student in group.students.iter().copied() {
                         constraints.insert(
                             self.build_one_interrogation_per_period_contraint_for_assigned_student(
@@ -998,7 +998,7 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                 if !Self::is_group_fixed(group, subject) {
                     constraints.extend(
                         self.build_students_per_group_lower_bound_constraint_for_group(
@@ -1025,7 +1025,7 @@ impl<'a> IlpTranslator<'a> {
     ) -> Constraint<Variable> {
         let mut expr = Expr::constant(0);
 
-        for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+        for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
             if !Self::is_group_fixed(group, subject) {
                 expr = expr
                     + Expr::var(Variable::StudentInGroup {
@@ -1080,7 +1080,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
             for (j, _slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
                             constraints.insert(
@@ -1124,7 +1124,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
             for (j, _slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
                             constraints.insert(
@@ -1174,7 +1174,7 @@ impl<'a> IlpTranslator<'a> {
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
             for (j, _slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if !Self::is_group_fixed(group, subject) {
                         constraints.insert(
                             self.build_group_in_slot_needs_student_constraint_for_case(
@@ -1330,7 +1330,7 @@ impl<'a> IlpTranslator<'a> {
                     continue;
                 }
 
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     for student in group.students.iter().copied() {
                         constraints.insert(self.build_periodicity_constraint_for_assigned_student(
                             i, subject, j, slot, k, student,
@@ -1338,7 +1338,7 @@ impl<'a> IlpTranslator<'a> {
                     }
                 }
 
-                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                     if Self::is_group_fixed(group, subject) {
                         continue;
                     }
@@ -1381,7 +1381,7 @@ impl<'a> IlpTranslator<'a> {
                 }
 
                 if subject.groups.not_assigned.contains(&student) {
-                    for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                         if Self::is_group_fixed(group, subject) {
                             continue;
                         }
@@ -1394,7 +1394,7 @@ impl<'a> IlpTranslator<'a> {
                             });
                     }
                 } else {
-                    for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
                         if group.students.contains(&student) {
                             expr = expr
                                 + Expr::var(Variable::GroupInSlot {
@@ -1438,6 +1438,38 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_grouping_constraint_for_group_in_slot(
+        &self,
+        i: usize,
+        slot: &SlotRef,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let lhs = Expr::var(Variable::GroupInSlot {
+            subject: slot.subject,
+            slot: slot.slot,
+            group: k,
+        });
+        let rhs = Expr::var(Variable::UseGrouping(i));
+
+        lhs.leq(&rhs)
+    }
+
+    fn build_grouping_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, slot_grouping) in self.data.slot_groupings.iter().enumerate() {
+            for slot in &slot_grouping.slots {
+                let subject = &self.data.subjects[slot.subject];
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    constraints
+                        .insert(self.build_grouping_constraint_for_group_in_slot(i, slot, k));
+                }
+            }
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -1457,6 +1489,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
             .add_constraints(self.build_periodicity_constraints())
             .add_constraints(self.build_interrogations_per_week_constraints())
+            .add_constraints(self.build_grouping_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
