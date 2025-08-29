@@ -708,6 +708,19 @@ impl<V: UsableData> LinExpr<V> {
     }
 
     /// Transmute variables
+    /// 
+    /// Works like [Self::transmute] but consumes the expression
+    pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, mut f: F) -> LinExpr<U> {
+        let mut expr = LinExpr::constant(self.get_constant());
+
+        for (v, c) in self.coefs {
+            expr = expr + c.into_inner() * LinExpr::var(f(v));
+        }
+
+        expr
+    }
+
+    /// Transmute variables
     ///
     /// This method is a faillible version of [LinExpr::transmute].
     ///
@@ -1299,6 +1312,52 @@ impl<V: UsableData> Constraint<V> {
         Constraint {
             symbol: self.symbol,
             expr: self.expr.transmute(f),
+        }
+    }
+
+    /// Transmute variables
+    /// 
+    /// Works like [Self::transmute] but consumes the constraint.
+    /// 
+    /// For instance :
+    /// ```
+    /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
+    /// let constraint = expr.leq(&LinExpr::constant(4.0));
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let constraint_transmute = constraint.into_transmuted(|v| match v {
+    ///     V1::A => V2::A,
+    ///     V1::B => V2::B,
+    ///     V1::C => V2::C,
+    /// });
+    ///
+    /// let expected_result = (LinExpr::var(V2::A) + 2.0*LinExpr::var(V2::B) + 3.0*LinExpr::var(V2::C)).leq(&LinExpr::constant(4.0));
+    /// assert_eq!(constraint_transmute, expected_result);
+    /// ```
+    pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, f: F) -> Constraint<U> {
+        Constraint {
+            symbol: self.symbol,
+            expr: self.expr.into_transmuted(f),
         }
     }
 
