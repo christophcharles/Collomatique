@@ -98,6 +98,7 @@ pub struct GroupsDesc {
 pub struct Subject {
     pub students_per_interrogation: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,
+    pub period_is_strict: bool,
     pub duration: NonZeroU32,
     pub interrogations: Vec<Interrogation>,
     pub groups: GroupsDesc,
