@@ -95,6 +95,7 @@ pub struct Entry {
 }
 
 pub mod common;
+pub mod period_list;
 pub mod student_list;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -122,20 +123,23 @@ impl<'de> Deserialize<'de> for EntryContent {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValidEntry {
     StudentList(student_list::List),
+    PeriodList(period_list::List),
 }
 
-pub const CURRENT_SPEC_VERSION: u32 = 1;
+pub const CURRENT_SPEC_VERSION: u32 = 2;
 
 impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {
         match self {
             ValidEntry::StudentList(_) => 1,
+            ValidEntry::PeriodList(_) => 2,
         }
     }
 
     pub fn needed_entry(&self) -> bool {
         match self {
             ValidEntry::StudentList(_) => true,
+            ValidEntry::PeriodList(_) => true,
         }
     }
 }

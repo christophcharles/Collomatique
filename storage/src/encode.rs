@@ -37,16 +37,33 @@ fn generate_student_list(data: &Data) -> student_list::List {
     }
 }
 
+fn generate_period_list(data: &Data) -> period_list::List {
+    let orig_periods = data.get_periods();
+
+    period_list::List {
+        first_week: orig_periods.first_week.as_ref().map(|x| x.inner().clone()),
+        ordered_period_list: orig_periods
+            .ordered_period_list
+            .iter()
+            .map(|(id, desc)| (id.inner(), desc.clone()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
+    let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
 
     JsonData {
         header,
-        entries: vec![Entry {
-            minimum_spec_version: student_list_entry.minimum_spec_version(),
-            needed_entry: student_list_entry.needed_entry(),
-            content: EntryContent::ValidEntry(student_list_entry),
-        }],
+        entries: vec![student_list_entry, period_list_entry]
+            .into_iter()
+            .map(|x| Entry {
+                minimum_spec_version: x.minimum_spec_version(),
+                needed_entry: x.needed_entry(),
+                content: EntryContent::ValidEntry(x),
+            })
+            .collect(),
     }
 }

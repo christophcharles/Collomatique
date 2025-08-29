@@ -27,7 +27,7 @@ pub struct Periods {
 
 impl Periods {
     /// Builds a period from external data
-    /// 
+    ///
     /// No checks is done for consistency so this is unsafe.
     /// However the only check is needed is that there are no duplicate ids
     pub(crate) unsafe fn from_external_data(external_data: PeriodsExternalData) -> Periods {

@@ -28,6 +28,8 @@ pub enum DecodeError {
     DuplicatedID,
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
+    #[error("start date for periods is invalid (should be a monday)")]
+    InvalidStartDate,
 }
 
 impl From<collomatique_state::tools::IdError> for DecodeError {
@@ -130,6 +132,7 @@ struct PreData {
     periods: collomatique_state_colloscopes::periods::PeriodsExternalData,
 }
 
+mod period_list;
 mod student_list;
 
 fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
@@ -144,6 +147,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::StudentList(student_list) => {
                 student_list::decode_entry(student_list, &mut pre_data)?;
             }
+            ValidEntry::PeriodList(period_list) => {
+                period_list::decode_entry(period_list, &mut pre_data)?;
+            }
         }
     }
 
@@ -155,12 +161,14 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum EntryTag {
     StudentList,
+    PeriodList,
 }
 
 impl From<&ValidEntry> for EntryTag {
     fn from(value: &ValidEntry) -> Self {
         match value {
             ValidEntry::StudentList(_) => EntryTag::StudentList,
+            ValidEntry::PeriodList(_) => EntryTag::PeriodList,
         }
     }
 }
