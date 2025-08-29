@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::{adw, gtk};
 use relm4::{
@@ -316,21 +314,7 @@ impl Teachers {
             }
         }
 
-        self.current_list.sort_by(|a, b| {
-            let surname_cmp = a.contact.surname.cmp(&b.contact.surname);
-
-            if surname_cmp != Ordering::Equal {
-                return surname_cmp;
-            }
-
-            let firstname_cmp = a.contact.firstname.cmp(&b.contact.firstname);
-
-            if firstname_cmp != Ordering::Equal {
-                return firstname_cmp;
-            }
-
-            a.id.cmp(&b.id)
-        });
+        self.current_list.sort();
 
         self.contact_list
             .sender()
