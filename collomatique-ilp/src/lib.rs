@@ -333,7 +333,7 @@ pub enum ObjectiveSense {
 ///
 /// Once the problem is fully specified, you can call [ProblemBuilder::build]. This will return a [Problem] struct
 /// that you can use with a solver.
-/// 
+///
 /// Here is an example usage defining a very simple schedule problem :
 ///
 /// We have two student groups x and y.
@@ -364,14 +364,14 @@ pub enum ObjectiveSense {
 /// let x12 = LinExpr::<String>::var("x12"); // Group x has course 1 on week 2
 /// let x21 = LinExpr::<String>::var("x21"); // Group x has course 2 on week 1
 /// let x22 = LinExpr::<String>::var("x22"); // Group x has course 2 on week 2
-/// 
+///
 /// let y11 = LinExpr::<String>::var("y11"); // Group y has course 1 on week 1
 /// let y12 = LinExpr::<String>::var("y12"); // Group y has course 1 on week 2
 /// let y21 = LinExpr::<String>::var("y21"); // Group y has course 2 on week 1
 /// let y22 = LinExpr::<String>::var("y22"); // Group y has course 2 on week 2
-/// 
+///
 /// let one = LinExpr::<String>::constant(1.0); // Constant for easier writing of constraints
-/// 
+///
 /// let pb = ProblemBuilder::<String, String>::new()
 ///     .set_variables([
 ///         ("x11", Variable::binary()),
