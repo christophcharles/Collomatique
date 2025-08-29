@@ -1189,6 +1189,71 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
 
     /// Returns true if the configuration is feasable
     pub fn is_feasable(&self) -> bool {
+        for (var, value) in &self.values {
+            let desc = &self.problem.variables[var];
+            let v = value.into_inner();
+
+            if let Some(m) = desc.get_min() {
+                if v < m {
+                    return false;
+                }
+            }
+            if let Some(m) = desc.get_max() {
+                if v > m {
+                    return false;
+                }
+            }
+        }
+
         self.repr.is_feasable()
+    }
+
+    /// Turns a configuration into a feasable configuration
+    /// 
+    /// If the configuration is feasable, it is turned into a [FeasableConfig].
+    /// Otherwise, this returns `None`.
+    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V, C, P>> {
+        if !self.is_feasable() {
+            return None;
+        }
+
+        Some(unsafe { self.into_feasable_unchecked() })
+    }
+
+    /// Turns a configuration into a feasable configuration
+    /// 
+    /// This is the unchecked (and therefore unsafe) version of [Config::into_feasable].
+    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, C, P> {
+        FeasableConfig(self)
+    }
+}
+
+/// A feasable configuration
+/// 
+/// A feasable configuration is a configuration that satisfies all
+/// the *hard* constraints (all the inequalities and equalities).
+/// 
+/// This type represents a configuration that is known to be feasable.
+/// It is constructed by [Config::into_feasable].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FeasableConfig<'a, V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>>(
+    Config<'a, V, C, P>,
+);
+
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> FeasableConfig<'a, V, C, P> {
+    pub fn into_inner(self) -> Config<'a, V, C, P> {
+        self.0
+    }
+
+    pub fn inner(&self) -> &Config<'a, V, C, P> {
+        &self.0
+    }
+}
+
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::ops::Deref for FeasableConfig<'a, V, C, P> {
+    type Target = Config<'a, V, C, P>;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
     }
 }
