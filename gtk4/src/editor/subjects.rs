@@ -162,6 +162,7 @@ impl Component for Subjects {
                 self.subject_params_dialog
                     .sender()
                     .send(subject_params::DialogInput::Show(
+                        self.periods.first_week.clone(),
                         collomatique_state_colloscopes::SubjectParameters::default(),
                     ))
                     .unwrap();
@@ -172,6 +173,7 @@ impl Component for Subjects {
                 self.subject_params_dialog
                     .sender()
                     .send(subject_params::DialogInput::Show(
+                        self.periods.first_week.clone(),
                         current_subject.parameters.clone(),
                     ))
                     .unwrap();

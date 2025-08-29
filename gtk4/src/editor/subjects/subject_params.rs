@@ -7,11 +7,15 @@ pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     params: collomatique_state_colloscopes::SubjectParameters,
+    global_first_week: Option<collomatique_time::NaiveMondayDate>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(collomatique_state_colloscopes::SubjectParameters),
+    Show(
+        Option<collomatique_time::NaiveMondayDate>,
+        collomatique_state_colloscopes::SubjectParameters,
+    ),
     Cancel,
     Accept,
 }
@@ -36,7 +40,7 @@ impl SimpleComponent for Dialog {
             #[watch]
             set_visible: !model.hidden,
             set_title: Some("Configuration de la matière"),
-            set_size_request: (-1, 500),
+            set_size_request: (500, 600),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -253,6 +257,106 @@ impl SimpleComponent for Dialog {
                                 // connect_value_notify[sender] => move |widget| {},
                             },
                         },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            adw::PreferencesGroup {
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::ActionRow {
+                                    set_hexpand: true,
+                                    set_title: "Bloc 1 du 01/09/2025 au 14/09/2025 (semaines 1 à 2)",
+                                    add_suffix = &gtk::Button {
+                                        add_css_class: "flat",
+                                        set_icon_name: "edit-delete",
+                                    },
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Semaines vides qui précèdent",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 0.,
+                                        set_upper: 255.,
+                                        set_step_increment: 1.,
+                                        set_page_increment: 5.,
+                                    },
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    set_value: 0.,
+                                    // connect_value_notify[sender] => move |widget| {},
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Durée du bloc (en semaines)",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 1.,
+                                        set_upper: 255.,
+                                        set_step_increment: 1.,
+                                        set_page_increment: 5.,
+                                    },
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    set_value: 2.,
+                                    // connect_value_notify[sender] => move |widget| {},
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::ActionRow {
+                                    set_hexpand: true,
+                                    set_title: "Bloc 2 du 21/09/2025 au 27/09/2025 (semaine 4)",
+                                    add_suffix = &gtk::Button {
+                                        add_css_class: "flat",
+                                        set_icon_name: "edit-delete",
+                                    },
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Semaines vides qui précèdent",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 0.,
+                                        set_upper: 255.,
+                                        set_step_increment: 1.,
+                                        set_page_increment: 5.,
+                                    },
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    set_value: 1.,
+                                    // connect_value_notify[sender] => move |widget| {},
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Durée du bloc (en semaines)",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 1.,
+                                        set_upper: 255.,
+                                        set_step_increment: 1.,
+                                        set_page_increment: 5.,
+                                    },
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    set_value: 1.,
+                                    // connect_value_notify[sender] => move |widget| {},
+                                },
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::ButtonRow {
+                                set_hexpand: true,
+                                set_title: "Ajouter un bloc",
+                                set_start_icon_name: Some("edit-add"),
+                            },
+                        },
                     },
                 },
             }
@@ -268,6 +372,7 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             params: collomatique_state_colloscopes::SubjectParameters::default(),
+            global_first_week: None,
         };
 
         let widgets = view_output!();
@@ -278,10 +383,11 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(params) => {
+            DialogInput::Show(global_first_week, params) => {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.params = params;
+                self.global_first_week = global_first_week;
             }
             DialogInput::Cancel => {
                 self.hidden = true;
