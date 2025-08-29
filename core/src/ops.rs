@@ -31,7 +31,18 @@ pub use week_patterns::*;
 pub mod slots;
 pub use slots::*;
 
-pub type Desc = String;
+pub type Desc = (OpCategory, String);
+
+#[derive(Debug, Clone)]
+pub enum OpCategory {
+    GeneralPlanning,
+    Subjects,
+    Teachers,
+    Students,
+    Assignments,
+    WeekPatterns,
+    Slots,
+}
 
 #[derive(Debug)]
 pub enum UpdateOp {
@@ -116,7 +127,7 @@ impl From<SlotsUpdateWarning> for UpdateWarning {
 }
 
 impl UpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = String>>(
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> String {
@@ -137,19 +148,25 @@ impl UpdateWarning {
 }
 
 impl UpdateOp {
-    pub fn get_desc(&self) -> String {
+    pub fn get_desc(&self) -> (OpCategory, String) {
         match self {
-            UpdateOp::GeneralPlanning(period_op) => period_op.get_desc(),
-            UpdateOp::Subjects(subject_op) => subject_op.get_desc(),
-            UpdateOp::Teachers(teacher_op) => teacher_op.get_desc(),
-            UpdateOp::Students(student_op) => student_op.get_desc(),
-            UpdateOp::Assignments(assignment_op) => assignment_op.get_desc(),
-            UpdateOp::WeekPatterns(week_pattern_op) => week_pattern_op.get_desc(),
-            UpdateOp::Slots(slot_op) => slot_op.get_desc(),
+            UpdateOp::GeneralPlanning(period_op) => {
+                (OpCategory::GeneralPlanning, period_op.get_desc())
+            }
+            UpdateOp::Subjects(subject_op) => (OpCategory::Subjects, subject_op.get_desc()),
+            UpdateOp::Teachers(teacher_op) => (OpCategory::Teachers, teacher_op.get_desc()),
+            UpdateOp::Students(student_op) => (OpCategory::Students, student_op.get_desc()),
+            UpdateOp::Assignments(assignment_op) => {
+                (OpCategory::Assignments, assignment_op.get_desc())
+            }
+            UpdateOp::WeekPatterns(week_pattern_op) => {
+                (OpCategory::WeekPatterns, week_pattern_op.get_desc())
+            }
+            UpdateOp::Slots(slot_op) => (OpCategory::Slots, slot_op.get_desc()),
         }
     }
 
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = String>>(
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Vec<UpdateWarning> {
@@ -176,7 +193,7 @@ impl UpdateOp {
         }
     }
 
-    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = String>>(
+    pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {

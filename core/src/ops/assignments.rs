@@ -12,7 +12,7 @@ impl AssignmentsUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssignmentsUpdateOp {
     Assign(
         collomatique_state_colloscopes::PeriodId,
@@ -142,7 +142,7 @@ impl AssignmentsUpdateOp {
                                 *status,
                             ),
                         ),
-                        self.get_desc(),
+                        (OpCategory::Assignments, self.get_desc()),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Assignment(ae) = e {
@@ -242,7 +242,7 @@ impl AssignmentsUpdateOp {
                     }
                 }
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Assignments, self.get_desc()));
 
                 Ok(())
             }
@@ -294,7 +294,7 @@ impl AssignmentsUpdateOp {
                     assert!(result.is_none());
                 }
 
-                *data = session.commit(self.get_desc());
+                *data = session.commit((OpCategory::Assignments, self.get_desc()));
 
                 Ok(())
             }

@@ -259,14 +259,14 @@ impl EditorPanel {
 
     fn generate_undo_tooltip(&self) -> String {
         match self.data.get_undo_name() {
-            Some(x) => format!("Annuler \"{}\"", x),
+            Some((_cat, desc)) => format!("Annuler \"{}\"", desc),
             None => "Rien à annuler".into(),
         }
     }
 
     fn generate_redo_tooltip(&self) -> String {
         match self.data.get_redo_name() {
-            Some(x) => format!("Rétablir \"{}\"", x),
+            Some((_cat, desc)) => format!("Rétablir \"{}\"", desc),
             None => "Rien à rétablir".into(),
         }
     }
