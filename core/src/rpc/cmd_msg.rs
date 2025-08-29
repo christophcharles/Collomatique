@@ -12,11 +12,19 @@ pub mod students;
 pub use students::*;
 pub mod assignments;
 pub use assignments::*;
+pub mod open_file_dialog;
+pub use open_file_dialog::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
     Update(UpdateMsg),
+    GuiRequest(GuiMsg),
     GetData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GuiMsg {
+    OpenFileDialog(OpenFileDialogMsg),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
