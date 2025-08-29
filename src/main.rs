@@ -25,11 +25,11 @@ struct GeneralDataDb {
     max_interrogations_per_day: Option<NonZeroU32>,
 }
 
-async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Storage> {
+async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Store> {
     if create {
-        Ok(sqlite::Storage::new_db(path).await?)
+        Ok(sqlite::Store::new_db(path).await?)
     } else {
-        Ok(sqlite::Storage::open_db(path).await?)
+        Ok(sqlite::Store::open_db(path).await?)
     }
 }
 
@@ -915,7 +915,11 @@ async fn main() -> Result<()> {
 
     println!("Opening database...");
     let storage = connect_db(args.create, args.db.as_path()).await?;
-    let pool = storage.get_pool();
+
+    use collomatique::backend::Storage;
+    println!("{:?}", storage.week_pattern_get_all().await?);
+
+    /*let pool = storage.get_pool();
 
     let data = generate_colloscope_data(pool).await?;
 
@@ -940,7 +944,7 @@ async fn main() -> Result<()> {
         }))
         .build();
 
-    println!("{}", problem);
+    println!("{}", problem);*/
 
     /*let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
 
@@ -974,7 +978,7 @@ async fn main() -> Result<()> {
         );
     }*/
 
-    let general_initializer = collomatique::ilp::initializers::Random::with_p(
+    /*let general_initializer = collomatique::ilp::initializers::Random::with_p(
         collomatique::ilp::random::DefaultRndGen::new(),
         0.01,
     )
@@ -1005,7 +1009,7 @@ async fn main() -> Result<()> {
             cost,
             ilp_translator.read_solution(sol.as_ref())
         );
-    }
+    }*/
 
     Ok(())
 }
