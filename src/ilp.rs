@@ -194,6 +194,31 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             constants,
         }
     }
+
+    pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V, P>
+    where
+        F: FnMut(&V) -> bool,
+    {
+        use linexpr::Constraint;
+        let constraints = self
+            .constraints
+            .into_iter()
+            .filter(|c: &Constraint<V>| c.variables().iter().all(&mut predicate))
+            .collect();
+        let variables = self.variables.into_iter().filter(&mut predicate).collect();
+        let constants = self
+            .constants
+            .into_iter()
+            .filter(|(v, _val)| predicate(v))
+            .collect();
+
+        ProblemBuilder {
+            constraints,
+            eval_fn: self.eval_fn,
+            variables,
+            constants,
+        }
+    }
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
