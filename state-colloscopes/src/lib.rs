@@ -461,6 +461,20 @@ pub enum GroupListError {
     DuplicatedStudentInPrefilledGroups,
 }
 
+/// Errors for rules operations
+///
+/// These errors can be returned when trying to modify [Data] with a rule op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum RuleError {
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// slot id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -968,6 +982,10 @@ impl Data {
         for (id, _) in &self.inner_data.group_lists.group_list_map {
             assert!(ids_so_far.insert(id.inner()));
         }
+
+        for (id, _) in &self.inner_data.rules.rule_map {
+            assert!(ids_so_far.insert(id.inner()));
+        }
     }
 
     /// USED INTERNALLY
@@ -1381,6 +1399,75 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks that a rule is valid
+    fn validate_logic_rule_internal(
+        logic_rule: &rules::LogicRule,
+        slot_ids: &BTreeSet<SlotId>,
+    ) -> Result<(), RuleError> {
+        match logic_rule {
+            rules::LogicRule::And(l1, l2) => {
+                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
+                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
+            }
+            rules::LogicRule::Or(l1, l2) => {
+                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
+                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
+            }
+            rules::LogicRule::Not(l) => {
+                Self::validate_logic_rule_internal(l.as_ref(), slot_ids)?;
+            }
+            rules::LogicRule::Variable(slot_id) => {
+                if !slot_ids.contains(slot_id) {
+                    return Err(RuleError::InvalidSlotId(*slot_id));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a rule is valid
+    fn validate_rule_internal(
+        rule: &rules::Rule,
+        period_ids: &BTreeSet<PeriodId>,
+        slot_ids: &BTreeSet<SlotId>,
+    ) -> Result<(), RuleError> {
+        for period_id in &rule.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(RuleError::InvalidPeriodId(*period_id));
+            }
+        }
+
+        Self::validate_logic_rule_internal(&rule.desc, slot_ids)?;
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a rule before commiting a rule op
+    fn validate_rule(&self, rule: &rules::Rule) -> Result<(), RuleError> {
+        let period_ids = self.build_period_ids();
+        let slot_ids = self.build_slot_ids();
+        Self::validate_rule_internal(rule, &period_ids, &slot_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in rules data
+    fn check_rules_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+        slot_ids: &BTreeSet<SlotId>,
+    ) {
+        for (_rule_id, rule) in &self.inner_data.rules.rule_map {
+            Self::validate_rule_internal(rule, period_ids, slot_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -1422,6 +1509,22 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Build the set of SlotId
+    ///
+    /// This is useful to check that references are valid
+    fn build_slot_ids(&self) -> BTreeSet<SlotId> {
+        self.inner_data
+            .slots
+            .subject_map
+            .iter()
+            .flat_map(|(_subject_id, subject_slots)| {
+                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
+            })
+            .collect()
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
@@ -1429,6 +1532,7 @@ impl Data {
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
+        let slot_ids = self.build_slot_ids();
 
         self.check_subjects_data_consistency(&period_ids);
         self.check_teachers_data_consistency();
@@ -1437,6 +1541,7 @@ impl Data {
         self.check_slots_data_consistency(&week_pattern_ids);
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
         self.check_group_lists_data_consistency();
+        self.check_rules_data_consistency(&period_ids, &slot_ids);
     }
 }
 
