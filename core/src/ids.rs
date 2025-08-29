@@ -6,6 +6,7 @@
 //!
 
 use super::*;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// This type represents an ID for a student
 ///
@@ -20,7 +21,7 @@ pub struct StudentId(u64);
 /// new, unique ids every time we need one.
 #[derive(Debug)]
 pub struct IdIssuer {
-    next_available_id: u64,
+    next_available_id: AtomicU64,
 }
 
 impl IdIssuer {
@@ -42,7 +43,7 @@ impl IdIssuer {
             }
         }
 
-        let next_available_id = match max_so_far {
+        let next_available_id = AtomicU64::new(match max_so_far {
             None => 0,
             Some(val) => {
                 if val > (u64::MAX >> 1) {
@@ -51,7 +52,7 @@ impl IdIssuer {
                     val + 1
                 }
             }
-        };
+        });
 
         Ok(IdIssuer { next_available_id })
     }
@@ -61,14 +62,12 @@ impl IdIssuer {
     /// This function generates a new ID.
     /// This code is factored out as we need
     /// it for the generation of every ID type.
-    fn get_new_id(&mut self) -> u64 {
-        let new_id = self.next_available_id;
-        self.next_available_id += 1;
-        new_id
+    fn get_new_id(&self) -> u64 {
+        self.next_available_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Get a new unused ID for a student
-    pub fn get_student_id(&mut self) -> StudentId {
+    pub fn get_student_id(&self) -> StudentId {
         StudentId(self.get_new_id())
     }
 }
