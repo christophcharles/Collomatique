@@ -54,6 +54,7 @@
 pub mod linexpr;
 
 use std::collections::BTreeMap;
+use thiserror::Error;
 
 pub use linexpr::{LinExpr, Constraint};
 
@@ -306,7 +307,7 @@ impl Variable {
 /// 
 /// This enum represents the sense in which
 /// we try to optimize the objective function
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum ObjectiveSense {
     /// Minimize the objective function (default)
     #[default]
@@ -315,6 +316,23 @@ pub enum ObjectiveSense {
     Maximize,
 }
 
+/// Problem builder
+/// 
+/// This is the builder for [Problem].
+/// To build a problem, start with [ProblemBuilder::new].
+/// 
+/// Then, add the various constraints with [ProblemBuilder::set_constraint]
+/// or [ProblemBuilder::set_constraints].
+/// 
+/// Don't forget to declare the variables with [ProblemBuilder::set_variable] or [ProblemBuilder::set_variables].
+/// 
+/// Each variable used either by a constraint or by the objective function must be declared. This is necessary
+/// as each variable type and range must be specified. This is also used as a consistency check.
+/// 
+/// You can optionnaly specify an objective function with [ProblemBuilder::set_objective_function].
+/// 
+/// Once the problem is fully specified, you can call [ProblemBuilder::build]. This will return a [Problem] struct
+/// that you can use with a solver.
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: UsableData, C: UsableData> {
     constraints: BTreeMap<Constraint<V>, C>,
@@ -335,6 +353,24 @@ impl<V: UsableData, C: UsableData> Default for ProblemBuilder<V, C> {
 }
 
 impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
+    /// Returns a new ProblemBuilder corresponding to an empty ILP problem.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::ProblemBuilder;
+    /// let problem_builder = ProblemBuilder::<String,String>::new();
+    /// 
+    /// let problem = problem_builder.build().unwrap();
+    /// assert!(problem.get_constraints().is_empty());
+    /// assert!(problem.get_variables().is_empty());
+    /// ```
+    /// 
+    /// This is only a starting point. You can add variables by using [ProblemBuilder::set_variable]
+    /// or [ProblemBuilder::set_variables]. You can similarly add constraints with [ProblemBuilder::set_constraint]
+    /// or [ProblemBuilder::set_constraints].
+    /// 
+    /// An objective function can also be set with [ProblemBuilder::set_objective_function].
+    /// 
+    /// Finally, the problem is generated using [ProblemBuilder::build].
     pub fn new() -> Self {
         Self::default()
     }
@@ -363,13 +399,87 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
         self
     }
 
-    pub fn set_objective_func(mut self, obj_fn: LinExpr<V>) -> Self {
+    pub fn set_objective_function(mut self, obj_fn: LinExpr<V>, obj_sense: ObjectiveSense) -> Self {
         self.objective_func = obj_fn;
-        self
-    }
-
-    pub fn set_objective_sense(mut self, obj_sense: ObjectiveSense) -> Self {
         self.objective_sense = obj_sense;
         self
+    }
+}
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum BuildError<V: UsableData, C: UsableData> {
+    #[error("Variable {0} is used in constraint {2} ({1}) but not explicitly declared")]
+    UndeclaredVariableInConstraint(V, Constraint<V>, C),
+    #[error("Variable {0} is used in objective function ({1}) but not explicitly declared")]
+    UndeclaredVariableInObjFunc(V, LinExpr<V>),
+}
+
+pub type BuildResult<T, V, C> = std::result::Result<T, BuildError<V, C>>;
+
+impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
+    pub fn build(self) -> BuildResult<Problem<V,C>, V, C> {
+        // Check that all the variables are declared in constraints
+        for (constraint, desc) in &self.constraints {
+            if let Some(var) = self.check_variables_in_constraint(constraint) {
+                return Err(BuildError::UndeclaredVariableInConstraint(var, constraint.clone(), desc.clone()))
+            }
+        }
+
+        // And now in the objective function
+        if let Some(var) = self.check_variables_in_expr(&self.objective_func) {
+            return Err(BuildError::UndeclaredVariableInObjFunc(var, self.objective_func.clone()))
+        }
+
+        Ok(Problem {
+            constraints: self.constraints,
+            variables: self.variables,
+            objective_func: self.objective_func,
+            objective_sense: self.objective_sense,
+        })
+    }
+
+    /// Helper function to check if a constraint has undeclared variables.
+    /// 
+    /// Returns None if no problem is detected, otherwise returns the undeclared variable.
+    fn check_variables_in_constraint(&self, constraint: &Constraint<V>) -> Option<V> {
+        self.check_variables_in_expr(constraint.get_lhs())
+    }
+
+    /// Helper function to check if an expression has undeclared variables.
+    /// 
+    /// Returns None if no problem is detected, otherwise returns the undeclared variable.
+    fn check_variables_in_expr(&self, expr: &LinExpr<V>) -> Option<V> {
+        for var in expr.variables() {
+            if !self.variables.contains_key(&var) {
+                return Some(var);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Problem<V: UsableData, C: UsableData> {
+    constraints: BTreeMap<Constraint<V>, C>,
+    variables: BTreeMap<V, Variable>,
+    objective_func: LinExpr<V>,
+    objective_sense: ObjectiveSense,
+}
+
+impl<V: UsableData, C: UsableData> Problem<V, C> {
+    pub fn get_constraints(&self) -> &BTreeMap<Constraint<V>, C> {
+        &self.constraints
+    }
+
+    pub fn get_variables(&self) -> &BTreeMap<V, Variable> {
+        &self.variables
+    }
+
+    pub fn get_objective_func(&self) -> &LinExpr<V> {
+        &self.objective_func
+    }
+
+    pub fn get_objective_sense(&self) -> ObjectiveSense {
+        self.objective_sense
     }
 }
