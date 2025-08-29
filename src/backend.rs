@@ -1215,7 +1215,7 @@ pub trait Storage: Send + Sync {
     async unsafe fn groupings_remove_unchecked(
         &mut self,
         index: Self::GroupingId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn groupings_update_unchecked(
         &mut self,
         index: Self::GroupingId,
@@ -1283,6 +1283,49 @@ pub trait Storage: Send + Sync {
                     Ok(())
                 }
             }
+        }
+    }
+    async fn groupings_can_remove(
+        &mut self,
+        index: Self::GroupingId,
+    ) -> std::result::Result<
+        Vec<Self::GroupingIncompatId>,
+        IdError<Self::InternalError, Self::GroupingId>,
+    > {
+        async move {
+            if !self.groupings_check_id(index).await? {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let grouping_incompats = self.grouping_incompats_get_all().await?;
+            for (grouping_incompat_id, grouping_incompat) in grouping_incompats {
+                if grouping_incompat.references_grouping(index) {
+                    dependancies.push(grouping_incompat_id);
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn groupings_remove(
+        &mut self,
+        index: Self::GroupingId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<Self::InternalError, Self::GroupingId, Vec<Self::GroupingIncompatId>>,
+    > {
+        async move {
+            let dependancies = self
+                .groupings_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.groupings_remove_unchecked(index) }.await?;
+            Ok(())
         }
     }
 
@@ -1500,4 +1543,10 @@ impl<TimeSlotId: OrdId> Grouping<TimeSlotId> {
 pub struct GroupingIncompat<GroupingId: OrdId> {
     pub max_count: NonZeroUsize,
     pub groupings: BTreeSet<GroupingId>,
+}
+
+impl<GroupingId: OrdId> GroupingIncompat<GroupingId> {
+    pub fn references_grouping(&self, grouping_id: GroupingId) -> bool {
+        self.groupings.contains(&grouping_id)
+    }
 }

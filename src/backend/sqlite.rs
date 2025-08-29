@@ -781,9 +781,8 @@ impl Storage for Store {
     unsafe fn groupings_remove_unchecked(
         &mut self,
         index: Self::GroupingId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         groupings::remove(&self.pool, index)
     }
     unsafe fn groupings_update_unchecked(
