@@ -15,5 +15,5 @@ relm4 = { version = "0.9", features = [ "libadwaita" ] }
 rustix = { version = "1.0", features = [ "pty" ] }
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
 clap = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time"] }
 chrono.workspace = true
