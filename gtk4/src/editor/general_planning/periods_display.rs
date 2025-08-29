@@ -28,6 +28,7 @@ pub enum EntryInput {
     EditClicked,
     DeleteClicked,
     CutClicked,
+    MergeClicked,
 
     WeekStatusUpdated(usize, bool),
 }
@@ -37,6 +38,7 @@ pub enum EntryOutput {
     EditClicked(collomatique_state_colloscopes::PeriodId),
     DeleteClicked(collomatique_state_colloscopes::PeriodId),
     CutClicked(collomatique_state_colloscopes::PeriodId),
+    MergeClicked(collomatique_state_colloscopes::PeriodId),
     WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
@@ -133,6 +135,14 @@ impl FactoryComponent for Entry {
                     set_hexpand: true,
                 },
                 gtk::Button {
+                    set_icon_name: "go-up",
+                    add_css_class: "flat",
+                    #[watch]
+                    set_visible: self.index.current_index() != 0,
+                    set_tooltip_text: Some("Fusionner avec la période précédente"),
+                    connect_clicked => EntryInput::MergeClicked,
+                },
+                gtk::Button {
                     set_icon_name: "edit-delete",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Supprimer la période"),
@@ -221,6 +231,11 @@ impl FactoryComponent for Entry {
             EntryInput::CutClicked => {
                 sender
                     .output(EntryOutput::CutClicked(self.period_id))
+                    .unwrap();
+            }
+            EntryInput::MergeClicked => {
+                sender
+                    .output(EntryOutput::MergeClicked(self.period_id))
                     .unwrap();
             }
             EntryInput::DeleteClicked => {
