@@ -263,6 +263,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "collomatique-state",
+ "collomatique-state-colloscopes",
  "libadwaita",
  "relm4",
  "tokio",
@@ -305,8 +306,14 @@ dependencies = [
 name = "collomatique-state"
 version = "0.1.0"
 dependencies = [
- "collomatique-solver",
- "collomatique-solver-colloscopes",
+ "thiserror",
+]
+
+[[package]]
+name = "collomatique-state-colloscopes"
+version = "0.1.0"
+dependencies = [
+ "collomatique-state",
  "thiserror",
 ]
 

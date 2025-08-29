@@ -4,7 +4,7 @@
 //! handling unique IDs for colloscopes
 //!
 
-use super::*;
+use collomatique_state::tools;
 
 /// This type represents an ID for a student
 ///

@@ -1,10 +1,10 @@
-//! Colloscopes module
+//! Colloscopes state crate
 //!
-//! This module implements the various concepts of this crate
+//! This crate implements the various concepts of [collomatique-state]
 //! and the various traits for the specific case of colloscope representation.
 //!
 
-use super::*;
+use collomatique_state::{tools, InMemoryData, Operation};
 use std::collections::BTreeMap;
 
 pub mod ids;
