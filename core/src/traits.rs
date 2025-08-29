@@ -175,6 +175,8 @@ pub trait Manager: private::ManagerInternal {
     }
 }
 
+impl<T: private::ManagerInternal> Manager for T {}
+
 pub(crate) mod private {
     use super::*;
 
