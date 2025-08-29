@@ -21,6 +21,9 @@ pub enum IdError {
     /// Duplicated ID found
     #[error("duplicated ID found")]
     DuplicatedId,
+    /// Invalid ID found
+    #[error("invalid ID found")]
+    InvalidId,
 }
 
 /// Id issuer
