@@ -1346,10 +1346,10 @@ pub trait Storage: Send + Sync {
         &mut self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> std::result::Result<Self::GroupingIncompatId, Self::InternalError>;
-    async fn grouping_incompats_remove(
+    async unsafe fn grouping_incompats_remove_unchecked(
         &mut self,
         index: Self::GroupingIncompatId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn grouping_incompats_update_unchecked(
         &mut self,
         index: Self::GroupingIncompatId,
@@ -1426,6 +1426,29 @@ pub trait Storage: Send + Sync {
                     Ok(())
                 }
             }
+        }
+    }
+    async fn grouping_incompats_can_remove(
+        &mut self,
+        index: Self::GroupingIncompatId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>> {
+        async move {
+            if !self.grouping_incompats_check_id(index).await? {
+                return Err(IdError::InvalidId(index));
+            }
+
+            Ok(())
+        }
+    }
+    async fn grouping_incompats_remove(
+        &mut self,
+        index: Self::GroupingIncompatId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>> {
+        async move {
+            self.grouping_incompats_can_remove(index).await?;
+
+            unsafe { self.grouping_incompats_remove_unchecked(index) }.await?;
+            Ok(())
         }
     }
 
