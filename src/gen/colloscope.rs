@@ -2145,6 +2145,7 @@ impl<'a> IlpTranslator<'a> {
         &self,
         initial_ranges: Vec<std::ops::Range<u32>>,
         window_size: u32,
+        period: u32,
         start_end_inequalities: bool,
     ) -> Vec<std::ops::Range<u32>> {
         let mut output = Vec::new();
@@ -2155,7 +2156,7 @@ impl<'a> IlpTranslator<'a> {
             // start (smaller than window size) ranges
             if start_end_inequalities {
                 let max_size = range_size.min(window_size);
-                for i in 1..max_size {
+                for i in (period..max_size).step_by(period.try_into().unwrap()) {
                     let start = range.start;
                     let end = start + i;
                     output.push(start..end);
@@ -2168,7 +2169,7 @@ impl<'a> IlpTranslator<'a> {
             } else {
                 let start = range.start;
                 let end = range.end - window_size + 1;
-                for i in start..end {
+                for i in (start..end).step_by(period.try_into().unwrap()) {
                     output.push(i..(i + window_size));
                 }
             }
@@ -2176,7 +2177,7 @@ impl<'a> IlpTranslator<'a> {
             // end (smaller than window size) ranges
             if start_end_inequalities {
                 let max_size = range_size.min(window_size);
-                for i in 1..max_size {
+                for i in (period..max_size).step_by(period.try_into().unwrap()) {
                     let start = range.end - max_size + i;
                     let end = range.end;
                     output.push(start..end);
@@ -2210,8 +2211,12 @@ impl<'a> IlpTranslator<'a> {
             vec![0..self.data.general.week_count.get()]
         };
 
-        let rolling_ranges =
-            self.generate_rolling_ranges(initial_ranges, window_size, start_end_inequalities);
+        let rolling_ranges = self.generate_rolling_ranges(
+            initial_ranges,
+            window_size,
+            subject.period.get(),
+            start_end_inequalities,
+        );
 
         let weeks = slot_selection
             .extract_weeks(&subject.slots_information.slots)
