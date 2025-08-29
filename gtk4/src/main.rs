@@ -29,5 +29,6 @@ fn main() {
     };
 
     let app = RelmApp::new("fr.collomatique.gtk4").with_args(vec![]);
+    app.allow_multiple_instances(true);
     app.run::<AppModel>(payload);
 }
