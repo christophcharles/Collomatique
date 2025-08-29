@@ -192,7 +192,7 @@ use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
 #[trait_variant::make(Send)]
-pub trait Storage: Send + Sync {
+pub trait Storage: Send + Sync + std::fmt::Debug {
     type WeekPatternId: OrdId;
     type TeacherId: OrdId;
     type StudentId: OrdId;
@@ -693,6 +693,7 @@ pub enum DataStatusWithIdAndInvalidState<Id: OrdId> {
     BadCrossId(Id),
 }
 
+#[derive(Debug)]
 pub struct Logic<T: Storage> {
     storage: T,
 }
@@ -701,7 +702,9 @@ impl<T: Storage> Logic<T> {
     pub fn new(storage: T) -> Self {
         Logic { storage }
     }
+}
 
+impl<T: Storage> Logic<T> {
     pub async fn general_data_set(
         &mut self,
         general_data: &GeneralData,
@@ -1834,5 +1837,138 @@ impl<T: Storage> Logic<T> {
         }
         .await?;
         Ok(())
+    }
+}
+
+impl<T: Storage> Logic<T> {
+    pub fn gen_colloscope_translator<'a>(&'a self) -> GenColloscopeTranslator<'a, T> {
+        GenColloscopeTranslator { data_storage: self }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GenColloscopeTranslator<'a, T: Storage> {
+    data_storage: &'a Logic<T>,
+}
+
+#[derive(Debug, Error)]
+pub enum GenColloscopeError<StorageError: std::fmt::Debug + std::error::Error> {
+    #[error("Error in the storage backend: {0:?}")]
+    StorageError(#[from] StorageError),
+    #[error("Error while validating data: {0:?}")]
+    ValidationError(crate::gen::colloscope::Error),
+    #[error("No weeks in storage")]
+    NoWeeks,
+}
+
+impl<StorageError: std::fmt::Debug + std::error::Error> GenColloscopeError<StorageError> {
+    fn from_validation(validation_error: crate::gen::colloscope::Error) -> Self {
+        GenColloscopeError::ValidationError(validation_error)
+    }
+}
+
+type GenColloscopeResult<R, T> = Result<R, GenColloscopeError<<T as Storage>::InternalError>>;
+
+struct GenColloscopeData<T: Storage> {
+    general_data: GeneralData,
+    week_patterns: BTreeMap<T::WeekPatternId, WeekPattern>,
+    teachers: BTreeMap<T::TeacherId, Teacher>,
+}
+
+impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
+    async fn extract_data(&self) -> GenColloscopeResult<GenColloscopeData<T>, T> {
+        Ok(GenColloscopeData {
+            general_data: self.data_storage.general_data_get().await?,
+            week_patterns: self.data_storage.week_patterns_get_all().await?,
+            teachers: self.data_storage.teachers_get_all().await?,
+        })
+    }
+
+    fn build_general_data(
+        &self,
+        data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::GeneralData, T> {
+        let week_count_u32 = data
+            .week_patterns
+            .iter()
+            .filter_map(|(_pattern_id, pattern)| pattern.weeks.last().map(|w| w.0 + 1))
+            .max()
+            .unwrap_or(0);
+
+        let week_count = NonZeroU32::new(week_count_u32).ok_or(GenColloscopeError::NoWeeks)?;
+
+        Ok(crate::gen::colloscope::GeneralData {
+            teacher_count: data.teachers.len(),
+            week_count,
+            interrogations_per_week: data.general_data.interrogations_per_week.clone(),
+            max_interrogations_per_day: data.general_data.max_interrogations_per_day,
+        })
+    }
+
+    fn build_incompatibility_groups(
+        &self,
+        _data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::IncompatibilityGroupList, T> {
+        todo!()
+    }
+
+    fn build_incompatibilities(
+        &self,
+        _data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::IncompatibilityList, T> {
+        todo!()
+    }
+
+    fn build_students(
+        &self,
+        _data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::StudentList, T> {
+        todo!()
+    }
+
+    fn build_subjects(
+        &self,
+        _data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::SubjectList, T> {
+        todo!()
+    }
+
+    fn build_slot_groupings(
+        &self,
+        _data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::SlotGroupingList, T> {
+        todo!()
+    }
+
+    fn build_grouping_incompats(
+        &self,
+        _data: &GenColloscopeData<T>,
+    ) -> GenColloscopeResult<crate::gen::colloscope::SlotGroupingIncompatSet, T> {
+        todo!()
+    }
+
+    pub async fn build_validated_data(
+        &self,
+    ) -> GenColloscopeResult<crate::gen::colloscope::ValidatedData, T> {
+        let data = self.extract_data().await?;
+
+        let general = self.build_general_data(&data)?;
+        let incompatibility_groups = self.build_incompatibility_groups(&data)?;
+        let incompatibilities = self.build_incompatibilities(&data)?;
+        let students = self.build_students(&data)?;
+        let subjects = self.build_subjects(&data)?;
+        let slot_groupings = self.build_slot_groupings(&data)?;
+        let grouping_incompats = self.build_grouping_incompats(&data)?;
+
+        crate::gen::colloscope::ValidatedData::new(
+            general,
+            subjects,
+            incompatibility_groups,
+            incompatibilities,
+            students,
+            slot_groupings,
+            grouping_incompats,
+        )
+        .map_err(GenColloscopeError::from_validation)
     }
 }
