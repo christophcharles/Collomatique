@@ -60,6 +60,14 @@ impl Version {
             patch,
         }
     }
+
+    pub fn new(major: u32, minor: u32, patch: u32) -> Version {
+        Version {
+            major,
+            minor,
+            patch,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

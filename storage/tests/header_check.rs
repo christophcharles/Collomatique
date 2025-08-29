@@ -47,7 +47,7 @@ fn decode_invalid_file_content() {
         panic!("The error should be in the decode process")
     };
 
-    let expected_error = DecodeError::UnknownFileType;
+    let expected_error = DecodeError::UnknownFileType(Version::new(0, 1, 0));
     assert_eq!(decode_error, expected_error);
 }
 

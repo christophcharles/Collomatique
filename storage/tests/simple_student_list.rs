@@ -1,3 +1,4 @@
+use collomatique_state_colloscopes::periods::PeriodsExternalData;
 use collomatique_storage::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -84,7 +85,10 @@ fn decode_simple_student_list() {
                 firstname: "Mathieu".to_string(),
                 surname: "DURAND".to_string(),
                 tel: None,
-                email: Some("mathieu.durand@monfai.fr".to_string()),
+                email: Some(
+                    non_empty_string::NonEmptyString::new("mathieu.durand@monfai.fr".to_string())
+                        .unwrap(),
+                ),
             },
         ),
         (
@@ -92,13 +96,18 @@ fn decode_simple_student_list() {
             collomatique_state_colloscopes::PersonWithContact {
                 firstname: "Christelle".to_string(),
                 surname: "DUPONT".to_string(),
-                tel: Some("06 06 06 06 06".to_string()),
+                tel: Some(
+                    non_empty_string::NonEmptyString::new("06 06 06 06 06".to_string()).unwrap(),
+                ),
                 email: None,
             },
         ),
     ]);
-    let expected_data = collomatique_state_colloscopes::Data::from_data(expected_student_list)
-        .expect("Expected data should not have ID errors");
+    let expected_data = collomatique_state_colloscopes::Data::from_data(
+        expected_student_list,
+        PeriodsExternalData::default(),
+    )
+    .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::new();
 
     assert_eq!(data, expected_data);
@@ -114,7 +123,10 @@ fn encode_and_redecode_simple_student_list() {
                 firstname: "Mathieu".to_string(),
                 surname: "DURAND".to_string(),
                 tel: None,
-                email: Some("mathieu.durand@monfai.fr".to_string()),
+                email: Some(
+                    non_empty_string::NonEmptyString::new("mathieu.durand@monfai.fr".to_string())
+                        .unwrap(),
+                ),
             },
         ),
         (
@@ -122,13 +134,18 @@ fn encode_and_redecode_simple_student_list() {
             collomatique_state_colloscopes::PersonWithContact {
                 firstname: "Christelle".to_string(),
                 surname: "DUPONT".to_string(),
-                tel: Some("06 06 06 06 06".to_string()),
+                tel: Some(
+                    non_empty_string::NonEmptyString::new("06 06 06 06 06".to_string()).unwrap(),
+                ),
                 email: None,
             },
         ),
     ]);
-    let orig_data = collomatique_state_colloscopes::Data::from_data(student_list)
-        .expect("Expected data should not have ID errors");
+    let orig_data = collomatique_state_colloscopes::Data::from_data(
+        student_list,
+        PeriodsExternalData::default(),
+    )
+    .expect("Expected data should not have ID errors");
 
     let content = serialize_data(&orig_data);
     let (data, caveats) = deserialize_data(&content).expect("Should be valid input");

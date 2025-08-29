@@ -1,3 +1,4 @@
+use collomatique_state_colloscopes::periods::PeriodsExternalData;
 use collomatique_storage::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -99,7 +100,10 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
                 firstname: "Mathieu".to_string(),
                 surname: "DURAND".to_string(),
                 tel: None,
-                email: Some("mathieu.durand@monfai.fr".to_string()),
+                email: Some(
+                    non_empty_string::NonEmptyString::new("mathieu.durand@monfai.fr".to_string())
+                        .unwrap(),
+                ),
             },
         ),
         (
@@ -107,13 +111,18 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
             collomatique_state_colloscopes::PersonWithContact {
                 firstname: "Christelle".to_string(),
                 surname: "DUPONT".to_string(),
-                tel: Some("06 06 06 06 06".to_string()),
+                tel: Some(
+                    non_empty_string::NonEmptyString::new("06 06 06 06 06".to_string()).unwrap(),
+                ),
                 email: None,
             },
         ),
     ]);
-    let expected_data = collomatique_state_colloscopes::Data::from_data(expected_student_list)
-        .expect("Expected data should not have ID errors");
+    let expected_data = collomatique_state_colloscopes::Data::from_data(
+        expected_student_list,
+        PeriodsExternalData::default(),
+    )
+    .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);
 
     assert_eq!(data, expected_data);
@@ -155,7 +164,10 @@ fn decode_fails_with_unknown_needed_entry() {
         panic!("Error should be in the decode process");
     };
 
-    assert_eq!(decode_error, DecodeError::UnknownNeededEntry);
+    assert_eq!(
+        decode_error,
+        DecodeError::UnknownNeededEntry(Version::new(0, 1, 0))
+    );
 }
 
 #[test]
@@ -190,7 +202,7 @@ fn decode_fails_with_unknown_entry_with_wrong_minimum_spec() {
         panic!("Error should be in the decode process");
     };
 
-    assert_eq!(decode_error, DecodeError::MismatchedSpecRequirementInEntry);
+    assert_eq!(decode_error, DecodeError::ProbablyIllformedEntry);
 }
 
 #[test]
