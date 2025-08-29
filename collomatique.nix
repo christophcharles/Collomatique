@@ -3,6 +3,7 @@
     lib,
     sqlite,
     cbc,
+    cmake,
 }:
 rustPlatform.buildRustPackage {
     pname = "collomatique";
@@ -13,6 +14,11 @@ rustPlatform.buildRustPackage {
     cargoLock = {
         lockFile = ./Cargo.lock;
     };
+
+    nativeBuildInputs = [
+        cmake
+        rustPlatform.bindgenHook
+    ];
 
     buildInputs = [
         sqlite

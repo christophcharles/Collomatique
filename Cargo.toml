@@ -20,5 +20,6 @@ serde_json = "1"
 sprs = "0.11"
 rayon = "1.10"
 coin_cbc = { version = "0.1.8", default-features = false }
+highs = "1.6"
 
 [features]
