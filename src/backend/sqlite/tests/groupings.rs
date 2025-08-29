@@ -341,3 +341,66 @@ async fn groupings_add_multiple(pool: SqlitePool) {
     assert_eq!(groupings, groupings_expected);
     assert_eq!(grouping_items, grouping_items_expected);
 }
+
+#[sqlx::test]
+async fn groupings_remove_one(pool: SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .groupings_remove(super::super::groupings::Id(1))
+        .await
+        .unwrap();
+
+    let groupings = store.groupings_get_all().await.unwrap();
+
+    let groupings_expected = BTreeMap::from([(
+        super::super::groupings::Id(2),
+        Grouping {
+            name: String::from("G2"),
+            slots: BTreeSet::from([super::super::time_slots::Id(4)]),
+        },
+    )]);
+
+    assert_eq!(groupings, groupings_expected);
+}
+
+#[sqlx::test]
+async fn groupings_remove_then_add(pool: SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .groupings_remove(super::super::groupings::Id(1))
+        .await
+        .unwrap();
+
+    let id = store
+        .groupings_add(&Grouping {
+            name: String::from("G1"),
+            slots: BTreeSet::from([super::super::time_slots::Id(3)]),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, super::super::groupings::Id(3));
+
+    let groupings = store.groupings_get_all().await.unwrap();
+
+    let groupings_expected = BTreeMap::from([
+        (
+            super::super::groupings::Id(2),
+            Grouping {
+                name: String::from("G2"),
+                slots: BTreeSet::from([super::super::time_slots::Id(4)]),
+            },
+        ),
+        (
+            super::super::groupings::Id(3),
+            Grouping {
+                name: String::from("G1"),
+                slots: BTreeSet::from([super::super::time_slots::Id(3)]),
+            },
+        ),
+    ]);
+
+    assert_eq!(groupings, groupings_expected);
+}
