@@ -1358,7 +1358,6 @@ impl<'scope> SessionConnection<'scope> {
             GeneralDataCommand::Get => {
                 let general_data = manager
                     .general_data_get()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?;
 
                 Ok(GeneralDataAnswer::Get(general_data.into()))
@@ -1366,7 +1365,6 @@ impl<'scope> SessionConnection<'scope> {
             GeneralDataCommand::Set(general_data) => {
                 manager
                     .apply(Operation::GeneralData(general_data.into()))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::InterrogationsPerWeekRangeIsEmpty => {
@@ -1391,7 +1389,6 @@ impl<'scope> SessionConnection<'scope> {
             WeekPatternsCommand::GetAll => {
                 let result = manager
                     .week_patterns_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, pattern)| (handle.into(), WeekPattern::from(pattern)))
@@ -1400,16 +1397,14 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(WeekPatternsAnswer::GetAll(result))
             }
             WeekPatternsCommand::Get(handle) => {
-                let result =
-                    manager
-                        .week_patterns_get(handle.handle)
-                        .await
-                        .map_err(|e| match e {
-                            IdError::InternalError(int_err) => {
-                                PyException::new_err(int_err.to_string())
-                            }
-                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                        })?;
+                let result = manager
+                    .week_patterns_get(handle.handle)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
 
                 Ok(WeekPatternsAnswer::Get(result.into()))
             }
@@ -1418,7 +1413,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Create(pattern.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::WeekNumberTooBig(_) => {
@@ -1438,7 +1432,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Update(handle.handle, pattern.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::WeekNumberTooBig(_) => {
@@ -1457,7 +1450,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Remove(handle.handle),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::WeekPatternRemoved(_) => {
@@ -1482,7 +1474,6 @@ impl<'scope> SessionConnection<'scope> {
             TeachersCommand::GetAll => {
                 let result = manager
                     .teachers_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, teacher)| (handle.into(), Teacher::from(teacher)))
@@ -1491,15 +1482,10 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(TeachersAnswer::GetAll(result))
             }
             TeachersCommand::Get(handle) => {
-                let result = manager
-                    .teachers_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result = manager.teachers_get(handle.handle).map_err(|e| match e {
+                    IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                    IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                })?;
 
                 Ok(TeachersAnswer::Get(result.into()))
             }
@@ -1508,7 +1494,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Teachers(state::TeachersOperation::Create(
                         teacher.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         _ => panic!("Unexpected error!"),
@@ -1526,7 +1511,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         teacher.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::TeacherRemoved(_) => {
@@ -1542,7 +1526,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Teachers(state::TeachersOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::TeacherRemoved(_) => {
@@ -1567,7 +1550,6 @@ impl<'scope> SessionConnection<'scope> {
             StudentsCommand::GetAll => {
                 let result = manager
                     .students_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, student)| (handle.into(), Student::from(student)))
@@ -1576,15 +1558,10 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(StudentsAnswer::GetAll(result))
             }
             StudentsCommand::Get(handle) => {
-                let result = manager
-                    .students_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result = manager.students_get(handle.handle).map_err(|e| match e {
+                    IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                    IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                })?;
 
                 Ok(StudentsAnswer::Get(result.into()))
             }
@@ -1593,7 +1570,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Students(state::StudentsOperation::Create(
                         student.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         _ => panic!("Unexpected error!"),
@@ -1611,7 +1587,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         student.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::StudentRemoved(_) => {
@@ -1627,7 +1602,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Students(state::StudentsOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::StudentRemoved(_) => {
@@ -1652,7 +1626,6 @@ impl<'scope> SessionConnection<'scope> {
             SubjectGroupsCommand::GetAll => {
                 let result = manager
                     .subject_groups_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, subject_group)| {
@@ -1663,16 +1636,14 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(SubjectGroupsAnswer::GetAll(result))
             }
             SubjectGroupsCommand::Get(handle) => {
-                let result =
-                    manager
-                        .subject_groups_get(handle.handle)
-                        .await
-                        .map_err(|e| match e {
-                            IdError::InternalError(int_err) => {
-                                PyException::new_err(int_err.to_string())
-                            }
-                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                        })?;
+                let result = manager
+                    .subject_groups_get(handle.handle)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
 
                 Ok(SubjectGroupsAnswer::Get(result.into()))
             }
@@ -1681,7 +1652,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::SubjectGroups(
                         state::SubjectGroupsOperation::Create(subject_group.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         _ => panic!("Unexpected error!"),
@@ -1698,7 +1668,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::SubjectGroups(
                         state::SubjectGroupsOperation::Update(handle.handle, subject_group.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SubjectGroupRemoved(_) => {
@@ -1714,7 +1683,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::SubjectGroups(
                         state::SubjectGroupsOperation::Remove(handle.handle),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SubjectGroupRemoved(_) => {
@@ -1739,7 +1707,6 @@ impl<'scope> SessionConnection<'scope> {
             IncompatsCommand::GetAll => {
                 let result = manager
                     .incompats_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, incompat)| (handle.into(), Incompat::from(incompat)))
@@ -1748,15 +1715,10 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(IncompatsAnswer::GetAll(result))
             }
             IncompatsCommand::Get(handle) => {
-                let result = manager
-                    .incompats_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result = manager.incompats_get(handle.handle).map_err(|e| match e {
+                    IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                    IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                })?;
 
                 Ok(IncompatsAnswer::Get(result.into()))
             }
@@ -1765,7 +1727,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Incompats(state::IncompatsOperation::Create(
                         incompat.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::IncompatBadWeekPattern(week_pattern) => {
@@ -1789,7 +1750,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         incompat.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::IncompatRemoved(_) => {
@@ -1811,7 +1771,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Incompats(state::IncompatsOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::IncompatRemoved(_) => {
@@ -1836,7 +1795,6 @@ impl<'scope> SessionConnection<'scope> {
             GroupListsCommand::GetAll => {
                 let result = manager
                     .group_lists_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, group_list)| (handle.into(), GroupList::from(group_list)))
@@ -1847,7 +1805,6 @@ impl<'scope> SessionConnection<'scope> {
             GroupListsCommand::Get(handle) => {
                 let result = manager
                     .group_lists_get(handle.handle)
-                    .await
                     .map_err(|e| match e {
                         IdError::InternalError(int_err) => {
                             PyException::new_err(int_err.to_string())
@@ -1862,7 +1819,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::GroupLists(state::GroupListsOperation::Create(
                         group_list.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupListBadStudent(student_handle) => {
@@ -1889,7 +1845,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         group_list.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupListRemoved(_) => {
@@ -1914,7 +1869,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::GroupLists(state::GroupListsOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupListRemoved(_) => {
@@ -1939,7 +1893,6 @@ impl<'scope> SessionConnection<'scope> {
             SubjectsCommand::GetAll => {
                 let result = manager
                     .subjects_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, subject)| (handle.into(), Subject::from(subject)))
@@ -1948,15 +1901,10 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(SubjectsAnswer::GetAll(result))
             }
             SubjectsCommand::Get(handle) => {
-                let result = manager
-                    .subjects_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result = manager.subjects_get(handle.handle).map_err(|e| match e {
+                    IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                    IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                })?;
 
                 Ok(SubjectsAnswer::Get(result.into()))
             }
@@ -1965,7 +1913,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Subjects(state::SubjectsOperation::Create(
                         group_list.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SubjectBadSubjectGroup(subject_group_handle) => {
@@ -2001,7 +1948,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         subject.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SubjectRemoved(_) => {
@@ -2041,7 +1987,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Subjects(state::SubjectsOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SubjectRemoved(_) => {
@@ -2066,7 +2011,6 @@ impl<'scope> SessionConnection<'scope> {
             TimeSlotsCommand::GetAll => {
                 let result = manager
                     .time_slots_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, time_slot)| (handle.into(), TimeSlot::from(time_slot)))
@@ -2075,15 +2019,10 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(TimeSlotsAnswer::GetAll(result))
             }
             TimeSlotsCommand::Get(handle) => {
-                let result = manager
-                    .time_slots_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result = manager.time_slots_get(handle.handle).map_err(|e| match e {
+                    IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                    IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                })?;
 
                 Ok(TimeSlotsAnswer::Get(result.into()))
             }
@@ -2092,7 +2031,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::TimeSlots(state::TimeSlotsOperation::Create(
                         time_slot.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::TimeSlotBadSubject(subject_group_handle) => {
@@ -2128,7 +2066,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         time_slot.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::TimeSlotRemoved(_) => {
@@ -2162,7 +2099,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::TimeSlots(state::TimeSlotsOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::TimeSlotRemoved(_) => {
@@ -2187,7 +2123,6 @@ impl<'scope> SessionConnection<'scope> {
             GroupingsCommand::GetAll => {
                 let result = manager
                     .groupings_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, grouping)| (handle.into(), Grouping::from(grouping)))
@@ -2196,15 +2131,10 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(GroupingsAnswer::GetAll(result))
             }
             GroupingsCommand::Get(handle) => {
-                let result = manager
-                    .groupings_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result = manager.groupings_get(handle.handle).map_err(|e| match e {
+                    IdError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                    IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                })?;
 
                 Ok(GroupingsAnswer::Get(result.into()))
             }
@@ -2213,7 +2143,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Groupings(state::GroupingsOperation::Create(
                         grouping.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupingBadTimeSlot(time_slot_handle) => {
@@ -2237,7 +2166,6 @@ impl<'scope> SessionConnection<'scope> {
                         handle.handle,
                         grouping.into(),
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupingRemoved(_) => {
@@ -2259,7 +2187,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::Groupings(state::GroupingsOperation::Remove(
                         handle.handle,
                     )))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupingRemoved(_) => {
@@ -2284,7 +2211,6 @@ impl<'scope> SessionConnection<'scope> {
             GroupingIncompatsCommand::GetAll => {
                 let result = manager
                     .grouping_incompats_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, grouping_incompat)| {
@@ -2295,15 +2221,15 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(GroupingIncompatsAnswer::GetAll(result))
             }
             GroupingIncompatsCommand::Get(handle) => {
-                let result = manager
-                    .grouping_incompats_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })?;
+                let result =
+                    manager
+                        .grouping_incompats_get(handle.handle)
+                        .map_err(|e| match e {
+                            IdError::InternalError(int_err) => {
+                                PyException::new_err(int_err.to_string())
+                            }
+                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                        })?;
 
                 Ok(GroupingIncompatsAnswer::Get(result.into()))
             }
@@ -2312,7 +2238,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::GroupingIncompats(
                         state::GroupingIncompatsOperation::Create(grouping_incompat.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupingIncompatBadGrouping(grouping_handle) => {
@@ -2335,7 +2260,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::GroupingIncompats(
                         state::GroupingIncompatsOperation::Update(handle.handle, grouping.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupingIncompatRemoved(_) => {
@@ -2357,7 +2281,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::GroupingIncompats(
                         state::GroupingIncompatsOperation::Remove(handle.handle),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::GroupingIncompatRemoved(_) => {
@@ -2382,7 +2305,6 @@ impl<'scope> SessionConnection<'scope> {
                         student_handle.handle,
                         subject_group_handle.handle,
                     )
-                    .await
                     .map_err(|e| match e {
                         Id2Error::InternalError(int_err) => {
                             PyException::new_err(int_err.to_string())
@@ -2412,7 +2334,6 @@ impl<'scope> SessionConnection<'scope> {
                             subject_handle.clone().map(|x| x.handle),
                         ),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::StudentRemoved(_) => {
@@ -2435,7 +2356,6 @@ impl<'scope> SessionConnection<'scope> {
             RegisterStudentCommand::InIncompatGet(student_handle, incompat_handle) => {
                 let result = manager
                     .incompat_for_student_get(student_handle.handle, incompat_handle.handle)
-                    .await
                     .map_err(|e| match e {
                         Id2Error::InternalError(int_err) => {
                             PyException::new_err(int_err.to_string())
@@ -2459,7 +2379,6 @@ impl<'scope> SessionConnection<'scope> {
                             *enabled,
                         ),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::StudentRemoved(_) => {
@@ -2484,7 +2403,6 @@ impl<'scope> SessionConnection<'scope> {
             SlotSelectionsCommand::GetAll => {
                 let result = manager
                     .slot_selections_get_all()
-                    .await
                     .map_err(|e| PyException::new_err(e.to_string()))?
                     .into_iter()
                     .map(|(handle, slot_selection)| {
@@ -2495,16 +2413,14 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(SlotSelectionsAnswer::GetAll(result))
             }
             SlotSelectionsCommand::Get(handle) => {
-                let result =
-                    manager
-                        .slot_selections_get(handle.handle)
-                        .await
-                        .map_err(|e| match e {
-                            IdError::InternalError(int_err) => {
-                                PyException::new_err(int_err.to_string())
-                            }
-                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                        })?;
+                let result = manager
+                    .slot_selections_get(handle.handle)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
 
                 Ok(SlotSelectionsAnswer::Get(result.into()))
             }
@@ -2513,7 +2429,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::SlotSelections(
                         state::SlotSelectionsOperation::Create(slot_selection.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SlotSelectionBadSubject(subject_handle) => {
@@ -2542,7 +2457,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::SlotSelections(
                         state::SlotSelectionsOperation::Update(handle.handle, slot_selection.into()),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SlotSelectionRemoved(_) => {
@@ -2570,7 +2484,6 @@ impl<'scope> SessionConnection<'scope> {
                     .apply(Operation::SlotSelections(
                         state::SlotSelectionsOperation::Remove(handle.handle),
                     ))
-                    .await
                     .map_err(|e| match e {
                         UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
                         UpdateError::SlotSelectionRemoved(_) => {
@@ -2648,7 +2561,7 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(Answer::SlotSelections(answer))
             }
             Command::Undo => {
-                manager.undo().await.map_err(|e| match e {
+                manager.undo().map_err(|e| match e {
                     UndoError::HistoryDepleted => PyException::new_err("History depleted"),
                     UndoError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
                 })?;
@@ -2656,7 +2569,7 @@ impl<'scope> SessionConnection<'scope> {
                 Ok(Answer::Undo)
             }
             Command::Redo => {
-                manager.redo().await.map_err(|e| match e {
+                manager.redo().map_err(|e| match e {
                     RedoError::HistoryFullyRewounded => {
                         PyException::new_err("History fully rewounded")
                     }

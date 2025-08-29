@@ -392,7 +392,7 @@ async fn solve_command(
     use indicatif::{ProgressBar, ProgressStyle};
     use std::time::Duration;
 
-    let colloscopes = app_state.colloscopes_get_all().await?;
+    let colloscopes = app_state.colloscopes_get_all()?;
 
     let colloscope_name = match name {
         Some(value) => {
@@ -476,11 +476,9 @@ async fn solve_command(
     pb.set_message("Saving colloscope in database...");
     pb.enable_steady_tick(Duration::from_millis(20));
 
-    let _ = app_state
-        .apply(crate::frontend::state::Operation::Colloscopes(
-            crate::frontend::state::ColloscopesOperation::Create(backend_config),
-        ))
-        .await?;
+    let _ = app_state.apply(crate::frontend::state::Operation::Colloscopes(
+        crate::frontend::state::ColloscopesOperation::Create(backend_config),
+    ))?;
 
     pb.finish();
 
@@ -501,7 +499,7 @@ async fn week_count_command(
             if force {
                 let mut session = AppSession::new(app_state);
 
-                let week_patterns = session.week_patterns_get_all().await?;
+                let week_patterns = session.week_patterns_get_all()?;
 
                 for (handle, mut wp) in week_patterns {
                     wp.weeks = wp
@@ -510,13 +508,10 @@ async fn week_count_command(
                         .filter(|w| w.get() < week_count.get())
                         .collect();
 
-                    if let Err(e) = session
-                        .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                            handle, wp,
-                        )))
-                        .await
-                    {
-                        session.cancel().await;
+                    if let Err(e) = session.apply(Operation::WeekPatterns(
+                        WeekPatternsOperation::Update(handle, wp),
+                    )) {
+                        session.cancel();
 
                         let err = match e {
                             UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
@@ -531,17 +526,17 @@ async fn week_count_command(
                     }
                 }
 
-                let mut general_data = match session.general_data_get().await {
+                let mut general_data = match session.general_data_get() {
                     Ok(data) => data,
                     Err(e) => {
-                        session.cancel().await;
+                        session.cancel();
                         return Err(e.into());
                     }
                 };
                 general_data.week_count = week_count;
 
-                if let Err(e) = session.apply(Operation::GeneralData(general_data)).await {
-                    session.cancel().await;
+                if let Err(e) = session.apply(Operation::GeneralData(general_data)) {
+                    session.cancel();
 
                     let err = match e {
                         UpdateError::WeekPatternsNeedTruncating(_week_patterns_to_truncate) => {
@@ -557,13 +552,13 @@ async fn week_count_command(
                 return Ok(None);
             }
 
-            let mut general_data = app_state.general_data_get().await?;
+            let mut general_data = app_state.general_data_get()?;
             general_data.week_count = week_count;
 
-            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)) {
                 let err = match e {
                     UpdateError::WeekPatternsNeedTruncating(week_patterns_to_truncate) => {
-                        let week_patterns = app_state.week_patterns_get_all().await?;
+                        let week_patterns = app_state.week_patterns_get_all()?;
 
                         let week_pattern_list = week_patterns_to_truncate.into_iter().map(
                             |week_pattern| week_patterns.get(&week_pattern).expect("Week pattern id should be valid as it is taken from a dependancy")
@@ -585,7 +580,7 @@ async fn week_count_command(
             Ok(None)
         }
         WeekCountCommand::Print => {
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             let week_count = general_data.week_count.get();
             Ok(Some(week_count.to_string()))
         }
@@ -602,9 +597,9 @@ async fn max_interrogations_per_day_command(
         MaxInterrogationsPerDayCommand::Set {
             max_interrogations_per_day: max_interrogation_per_day,
         } => {
-            let mut general_data = app_state.general_data_get().await?;
+            let mut general_data = app_state.general_data_get()?;
             general_data.max_interrogations_per_day = Some(max_interrogation_per_day);
-            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -614,10 +609,10 @@ async fn max_interrogations_per_day_command(
             Ok(None)
         }
         MaxInterrogationsPerDayCommand::Disable => {
-            let mut general_data = app_state.general_data_get().await?;
+            let mut general_data = app_state.general_data_get()?;
             general_data.max_interrogations_per_day = None;
 
-            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -627,7 +622,7 @@ async fn max_interrogations_per_day_command(
             Ok(None)
         }
         MaxInterrogationsPerDayCommand::Print => {
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             let max_interrogations_per_day = general_data.max_interrogations_per_day;
             let output = match max_interrogations_per_day {
                 Some(value) => value.get().to_string(),
@@ -648,7 +643,7 @@ async fn interrogations_per_week_range_command(
         InterrogationsPerWeekRangeCommand::SetMax {
             max_interrogations_per_week,
         } => {
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             let interrogations_per_week = match general_data.interrogations_per_week {
                 Some(value) => value.start..(max_interrogations_per_week + 1),
                 None => 0..(max_interrogations_per_week + 1),
@@ -657,10 +652,10 @@ async fn interrogations_per_week_range_command(
                 return Err(anyhow!("The maximum number of interrogations per week must be greater than the minimum number"));
             }
 
-            let mut general_data = app_state.general_data_get().await?;
+            let mut general_data = app_state.general_data_get()?;
             general_data.interrogations_per_week = Some(interrogations_per_week);
 
-            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -672,7 +667,7 @@ async fn interrogations_per_week_range_command(
         InterrogationsPerWeekRangeCommand::SetMin {
             min_interrogations_per_week,
         } => {
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             let interrogations_per_week = match general_data.interrogations_per_week {
                 Some(value) => min_interrogations_per_week..value.end,
                 None => min_interrogations_per_week..(min_interrogations_per_week + 1),
@@ -680,9 +675,9 @@ async fn interrogations_per_week_range_command(
             if interrogations_per_week.is_empty() {
                 return Err(anyhow!("The minimum number of interrogations per week must be less than the maximum number"));
             }
-            let mut general_data = app_state.general_data_get().await?;
+            let mut general_data = app_state.general_data_get()?;
             general_data.interrogations_per_week = Some(interrogations_per_week);
-            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -692,9 +687,9 @@ async fn interrogations_per_week_range_command(
             Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Disable => {
-            let mut general_data = app_state.general_data_get().await?;
+            let mut general_data = app_state.general_data_get()?;
             general_data.interrogations_per_week = None;
-            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)).await {
+            if let Err(e) = app_state.apply(Operation::GeneralData(general_data)) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
@@ -704,7 +699,7 @@ async fn interrogations_per_week_range_command(
             Ok(None)
         }
         InterrogationsPerWeekRangeCommand::Print => {
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             let interrogations_per_week = general_data.interrogations_per_week;
             let output = match interrogations_per_week {
                 Some(value) => format!("{}..={}", value.start, value.end - 1),
@@ -749,7 +744,7 @@ async fn get_week_pattern(
 )> {
     use crate::frontend::state::Manager;
 
-    let week_patterns = app_state.week_patterns_get_all().await?;
+    let week_patterns = app_state.week_patterns_get_all()?;
 
     let relevant_week_patterns: Vec<_> = week_patterns
         .into_iter()
@@ -800,7 +795,7 @@ async fn week_patterns_check_existing_names(
 ) -> Result<()> {
     use crate::frontend::state::Manager;
 
-    let week_patterns = app_state.week_patterns_get_all().await?;
+    let week_patterns = app_state.week_patterns_get_all()?;
     for (_, week_pattern) in &week_patterns {
         if week_pattern.name == name {
             return Err(anyhow!(format!(
@@ -828,7 +823,7 @@ async fn week_pattern_command(
             if !force {
                 week_patterns_check_existing_names(app_state, &name).await?;
             }
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
 
             let pattern = WeekPattern {
                 name,
@@ -840,12 +835,9 @@ async fn week_pattern_command(
                 },
             };
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Create(
-                    pattern,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Create(
+                pattern,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekNumberTooBig(_week) => panic!(
@@ -867,16 +859,16 @@ async fn week_pattern_command(
 
             let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
-            let dependancies = app_state
-                .week_patterns_check_can_remove(handle)
-                .await
-                .map_err(|e| match e {
-                    IdError::InternalError(int_err) => anyhow::Error::from(int_err),
-                    IdError::InvalidId(id) => panic!(
-                        "Id {:?} should be valid as it was obtained from the backend",
-                        id
-                    ),
-                })?;
+            let dependancies =
+                app_state
+                    .week_patterns_check_can_remove(handle)
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => anyhow::Error::from(int_err),
+                        IdError::InvalidId(id) => panic!(
+                            "Id {:?} should be valid as it was obtained from the backend",
+                            id
+                        ),
+                    })?;
             if !dependancies.is_empty() {
                 if !force {
                     return Err(anyhow!(
@@ -888,12 +880,9 @@ async fn week_pattern_command(
                 ));
             }
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Remove(
-                    handle,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Remove(
+                handle,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekPatternDependanciesRemaining(_dep) => {
@@ -923,13 +912,10 @@ async fn week_pattern_command(
                 weeks: week_pattern.weeks,
             };
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                    handle,
-                    new_week_pattern,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                handle,
+                new_week_pattern,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekNumberTooBig(_week) => {
@@ -942,7 +928,7 @@ async fn week_pattern_command(
             Ok(None)
         }
         WeekPatternCommand::PrintAll => {
-            let week_patterns = app_state.week_patterns_get_all().await?;
+            let week_patterns = app_state.week_patterns_get_all()?;
 
             let count = week_patterns.len();
             let width = count.to_string().len();
@@ -974,19 +960,16 @@ async fn week_pattern_command(
             let (handle, _week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
 
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             let new_week_pattern = WeekPattern {
                 name,
                 weeks: predefined_week_pattern_weeks(pattern, general_data.week_count),
             };
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                    handle,
-                    new_week_pattern,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                handle,
+                new_week_pattern,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekNumberTooBig(_week) => panic!(
@@ -1010,13 +993,10 @@ async fn week_pattern_command(
                 weeks: BTreeSet::new(),
             };
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                    handle,
-                    new_week_pattern,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                handle,
+                new_week_pattern,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekNumberTooBig(_week) => panic!(
@@ -1035,7 +1015,7 @@ async fn week_pattern_command(
         } => {
             use crate::backend::Week;
 
-            let general_data = app_state.general_data_get().await?;
+            let general_data = app_state.general_data_get()?;
             for week in &weeks {
                 if week.get() > general_data.week_count.get() {
                     return Err(anyhow!("The week number {} is invalid as it is bigger than week_count (which is {})", week.get(), general_data.week_count.get()));
@@ -1049,13 +1029,10 @@ async fn week_pattern_command(
                 .weeks
                 .extend(weeks.into_iter().map(|w| Week::new(w.get() - 1)));
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                    handle,
-                    week_pattern,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                handle,
+                week_pattern,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekNumberTooBig(_week) => {
@@ -1086,13 +1063,10 @@ async fn week_pattern_command(
                 .copied()
                 .collect();
 
-            if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                    handle,
-                    week_pattern,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                handle,
+                week_pattern,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::WeekNumberTooBig(_week) => {
@@ -1121,7 +1095,7 @@ async fn get_colloscope(
 )> {
     use crate::frontend::state::Manager;
 
-    let colloscopes = app_state.colloscopes_get_all().await?;
+    let colloscopes = app_state.colloscopes_get_all()?;
 
     let relevant_colloscopes: Vec<_> = colloscopes
         .into_iter()
@@ -1156,7 +1130,7 @@ async fn colloscopes_check_existing_names(
 ) -> Result<()> {
     use crate::frontend::state::Manager;
 
-    let colloscopes = app_state.colloscopes_get_all().await?;
+    let colloscopes = app_state.colloscopes_get_all()?;
     for (_, colloscope) in &colloscopes {
         if colloscope.name == name {
             return Err(anyhow!(format!(
@@ -1182,9 +1156,8 @@ async fn colloscope_command(
         } => {
             let (handle, _colloscope) = get_colloscope(app_state, &name, colloscope_number).await?;
 
-            if let Err(e) = app_state
-                .apply(Operation::Colloscopes(ColloscopesOperation::Remove(handle)))
-                .await
+            if let Err(e) =
+                app_state.apply(Operation::Colloscopes(ColloscopesOperation::Remove(handle)))
             {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
@@ -1212,13 +1185,10 @@ async fn colloscope_command(
                 subjects: colloscope.subjects,
             };
 
-            if let Err(e) = app_state
-                .apply(Operation::Colloscopes(ColloscopesOperation::Update(
-                    handle,
-                    new_colloscope,
-                )))
-                .await
-            {
+            if let Err(e) = app_state.apply(Operation::Colloscopes(ColloscopesOperation::Update(
+                handle,
+                new_colloscope,
+            ))) {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     UpdateError::ColloscopeBadTeacher(_week) => {
@@ -1237,7 +1207,7 @@ async fn colloscope_command(
             Ok(None)
         }
         ColloscopeCommand::PrintAll => {
-            let colloscopes = app_state.colloscopes_get_all().await?;
+            let colloscopes = app_state.colloscopes_get_all()?;
 
             let count = colloscopes.len();
             let width = count.to_string().len();
@@ -1257,10 +1227,10 @@ async fn colloscope_command(
         } => {
             let (_handle, colloscope) = get_colloscope(app_state, &name, colloscope_number).await?;
 
-            let teachers = app_state.teachers_get_all().await?;
-            let subjects = app_state.subjects_get_all().await?;
-            let subject_groups = app_state.subject_groups_get_all().await?;
-            let students = app_state.students_get_all().await?;
+            let teachers = app_state.teachers_get_all()?;
+            let subjects = app_state.subjects_get_all()?;
+            let subject_groups = app_state.subject_groups_get_all()?;
+            let students = app_state.students_get_all()?;
 
             super::xlsx::export_colloscope_to_xlsx(
                 &colloscope,
@@ -1332,7 +1302,7 @@ async fn python_command(
                                 &f,
                                 csv_extract,
                             ) {
-                                app_session.cancel().await;
+                                app_session.cancel();
                                 return Err(e.into());
                             }
                         }
@@ -1340,7 +1310,7 @@ async fn python_command(
                             if let Err(e) =
                                 python_code.run_with_csv_file(&mut app_session, csv_extract)
                             {
-                                app_session.cancel().await;
+                                app_session.cancel();
                                 return Err(e.into());
                             }
                         }
@@ -1357,13 +1327,13 @@ async fn python_command(
                     match func {
                         Some(f) => {
                             if let Err(e) = python_code.run_func(&mut app_session, &f) {
-                                app_session.cancel().await;
+                                app_session.cancel();
                                 return Err(e.into());
                             }
                         }
                         None => {
                             if let Err(e) = python_code.run(&mut app_session) {
-                                app_session.cancel().await;
+                                app_session.cancel();
                                 return Err(e.into());
                             }
                         }

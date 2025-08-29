@@ -111,15 +111,14 @@ impl GenColloscopeTranslator {
     async fn extract_data<T: Manager>(
         manager: &mut T,
     ) -> GenColloscopeResult<GenColloscopeData, T> {
-        let incompats = manager.incompats_get_all().await?;
-        let students = manager.students_get_all().await?;
+        let incompats = manager.incompats_get_all()?;
+        let students = manager.students_get_all()?;
 
         let mut incompat_for_student_data = BTreeSet::new();
         for (&student_id, _student) in &students {
             for (&incompat_id, _incompat) in &incompats {
                 if manager
                     .incompat_for_student_get(student_id, incompat_id)
-                    .await
                     .map_err(|e| match e {
                         Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid", id1),
                         Id2Error::InvalidId2(id2) => {
@@ -133,15 +132,14 @@ impl GenColloscopeTranslator {
             }
         }
 
-        let subjects = manager.subjects_get_all().await?;
-        let subject_groups = manager.subject_groups_get_all().await?;
+        let subjects = manager.subjects_get_all()?;
+        let subject_groups = manager.subject_groups_get_all()?;
 
         let mut subject_for_student_data = BTreeSet::new();
         for (&student_id, _student) in &students {
             for (&subject_group_id, _subject_group) in &subject_groups {
                 let subject_opt = manager
                     .subject_group_for_student_get(student_id, subject_group_id)
-                    .await
                     .map_err(|e| match e {
                         Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid", id1),
                         Id2Error::InvalidId2(id2) => {
@@ -157,18 +155,18 @@ impl GenColloscopeTranslator {
         }
 
         Ok(GenColloscopeData {
-            general_data: manager.general_data_get().await?,
-            week_patterns: manager.week_patterns_get_all().await?,
-            teachers: manager.teachers_get_all().await?,
+            general_data: manager.general_data_get()?,
+            week_patterns: manager.week_patterns_get_all()?,
+            teachers: manager.teachers_get_all()?,
             incompats,
             students,
             incompat_for_student_data,
             subjects,
             subject_for_student_data,
-            time_slots: manager.time_slots_get_all().await?,
-            group_lists: manager.group_lists_get_all().await?,
-            groupings: manager.groupings_get_all().await?,
-            grouping_incompats: manager.grouping_incompats_get_all().await?,
+            time_slots: manager.time_slots_get_all()?,
+            group_lists: manager.group_lists_get_all()?,
+            groupings: manager.groupings_get_all()?,
+            grouping_incompats: manager.grouping_incompats_get_all()?,
         })
     }
 
