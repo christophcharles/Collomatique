@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 /// Error type when decoding a [json::JsonData]
 ///
 /// This error type describes error that happen when interpreting the file content.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum DecodeError {
     #[error("Unknown file type - this might be from a more recent version of Collomatique")]
     UnknownFileType,
