@@ -12,6 +12,14 @@ pub struct Dialog {
     params: collomatique_state_colloscopes::SubjectParameters,
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     periodicity_panel: PeriodicityPanel,
+    exactly_periodic_params: NonZeroU32,
+    once_for_every_block_of_weeks_params: NonZeroU32,
+    amount_in_year_params: AmountInYearParams,
+}
+
+pub struct AmountInYearParams {
+    interrogation_count_in_year: std::ops::RangeInclusive<u32>,
+    minimum_week_separation: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +47,11 @@ pub enum DialogInput {
     UpdateGroupsPerInterrogationMinimum(NonZeroU32),
     UpdateGroupsPerInterrogationMaximum(NonZeroU32),
     UpdatePeriodicityType(PeriodicityPanel),
+    UpdateExactlyPeriodicParams(NonZeroU32),
+    UpdateOnceEveryBlockOfWeeksParams(NonZeroU32),
+    UpdateAmountInYearCountMinimum(u32),
+    UpdateAmountInYearCountMaximum(u32),
+    UpdateAmountInYearWeekSeparation(u32),
 }
 
 #[derive(Debug)]
@@ -93,6 +106,38 @@ impl Dialog {
             SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks: _ } => {
                 PeriodicityPanel::OnceForEveryArbitraryBlock
             }
+        }
+    }
+
+    fn periodicity_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> NonZeroU32 {
+        use collomatique_state_colloscopes::SubjectPeriodicity;
+        match &params.periodicity {
+            SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            } => *periodicity_in_weeks,
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block } => *weeks_per_block,
+            _ => NonZeroU32::new(2).unwrap(),
+        }
+    }
+
+    fn amount_in_year_params_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> AmountInYearParams {
+        use collomatique_state_colloscopes::SubjectPeriodicity;
+        match &params.periodicity {
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year,
+                minimum_week_separation,
+            } => AmountInYearParams {
+                interrogation_count_in_year: interrogation_count_in_year.clone(),
+                minimum_week_separation: *minimum_week_separation,
+            },
+            _ => AmountInYearParams {
+                interrogation_count_in_year: 2..=2,
+                minimum_week_separation: 1,
+            },
         }
     }
 }
@@ -313,21 +358,27 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             #[watch]
                             set_visible: model.periodicity_panel == PeriodicityPanel::ExactlyPeriodic,
+                            #[name(exactly_periodic_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Périodicité (en semaines)",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 1.,
-                                    set_upper: 255.,
+                                    set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
                                 },
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                set_value: 2.,
-                                // connect_value_notify[sender] => move |widget| {},
+                                #[track(model.exactly_periodic_params.get() as f64 != exactly_periodic_entry.value())]
+                                set_value: model.exactly_periodic_params.get() as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let periodicity_u32 = widget.value() as u32;
+                                    let periodicity = NonZeroU32::new(periodicity_u32).unwrap();
+                                    sender.input(DialogInput::UpdateExactlyPeriodicParams(periodicity));
+                                },
                             },
                         },
                         adw::PreferencesGroup {
@@ -335,21 +386,27 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             #[watch]
                             set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryBlockOfWeeks,
+                            #[name(once_for_every_block_of_weeks_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Taille des blocs (en semaines)",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 1.,
-                                    set_upper: 255.,
+                                    set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
                                 },
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                set_value: 2.,
-                                // connect_value_notify[sender] => move |widget| {},
+                                #[track(model.once_for_every_block_of_weeks_params.get() as f64 != once_for_every_block_of_weeks_entry.value())]
+                                set_value: model.once_for_every_block_of_weeks_params.get() as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let periodicity_u32 = widget.value() as u32;
+                                    let periodicity = NonZeroU32::new(periodicity_u32).unwrap();
+                                    sender.input(DialogInput::UpdateOnceEveryBlockOfWeeksParams(periodicity));
+                                },
                             },
                         },
                         adw::PreferencesGroup {
@@ -357,37 +414,70 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             #[watch]
                             set_visible: model.periodicity_panel == PeriodicityPanel::AmountInYear,
+                            #[name(amount_in_year_minimum_count_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
-                                set_title: "Colles dans l'année",
+                                set_title: "Minimum de colles dans l'année",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 0.,
-                                    set_upper: 255.,
+                                    #[watch]
+                                    set_upper: *model.amount_in_year_params.interrogation_count_in_year.end() as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
                                 },
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                set_value: 2.,
-                                // connect_value_notify[sender] => move |widget| {},
+                                #[track(*model.amount_in_year_params.interrogation_count_in_year.start() as f64 != amount_in_year_minimum_count_entry.value())]
+                                set_value: *model.amount_in_year_params.interrogation_count_in_year.start() as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let value = widget.value() as u32;
+                                    sender.input(DialogInput::UpdateAmountInYearCountMinimum(value));
+                                },
                             },
+                            #[name(amount_in_year_maximum_count_entry)]
+                            adw::SpinRow {
+                                set_hexpand: true,
+                                set_title: "Maximum de colles dans l'année",
+                                #[wrap(Some)]
+                                set_adjustment = &gtk::Adjustment {
+                                    #[watch]
+                                    set_lower: *model.amount_in_year_params.interrogation_count_in_year.start() as f64,
+                                    set_upper: u32::MAX as f64,
+                                    set_step_increment: 1.,
+                                    set_page_increment: 5.,
+                                },
+                                set_wrap: false,
+                                set_snap_to_ticks: true,
+                                set_numeric: true,
+                                #[track(*model.amount_in_year_params.interrogation_count_in_year.end() as f64 != amount_in_year_maximum_count_entry.value())]
+                                set_value: *model.amount_in_year_params.interrogation_count_in_year.end() as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let value = widget.value() as u32;
+                                    sender.input(DialogInput::UpdateAmountInYearCountMaximum(value));
+                                },
+                            },
+                            #[name(amount_in_year_week_separation_entry)]
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Séparation minimale (en semaines)",
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 0.,
-                                    set_upper: 255.,
+                                    set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
                                 },
                                 set_wrap: false,
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
-                                set_value: 0.,
-                                // connect_value_notify[sender] => move |widget| {},
+                                #[track(model.amount_in_year_params.minimum_week_separation as f64 != amount_in_year_week_separation_entry.value())]
+                                set_value: model.amount_in_year_params.minimum_week_separation as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let value = widget.value() as u32;
+                                    sender.input(DialogInput::UpdateAmountInYearWeekSeparation(value));
+                                },
                             },
                         },
                         gtk::Box {
@@ -505,11 +595,15 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let params = collomatique_state_colloscopes::SubjectParameters::default();
         let model = Dialog {
             hidden: true,
-            params: collomatique_state_colloscopes::SubjectParameters::default(),
+            params: params.clone(),
             global_first_week: None,
-            periodicity_panel: PeriodicityPanel::ExactlyPeriodic,
+            periodicity_panel: Self::periodicity_panel_from_params(&params),
+            exactly_periodic_params: Self::periodicity_from_params(&params),
+            once_for_every_block_of_weeks_params: Self::periodicity_from_params(&params),
+            amount_in_year_params: Self::amount_in_year_params_from_params(&params),
         };
 
         let widgets = view_output!();
@@ -522,6 +616,9 @@ impl SimpleComponent for Dialog {
             DialogInput::Show(global_first_week, params) => {
                 self.hidden = false;
                 self.periodicity_panel = Self::periodicity_panel_from_params(&params);
+                self.exactly_periodic_params = Self::periodicity_from_params(&params);
+                self.once_for_every_block_of_weeks_params = Self::periodicity_from_params(&params);
+                self.amount_in_year_params = Self::amount_in_year_params_from_params(&params);
                 self.params = params;
                 self.global_first_week = global_first_week;
             }
@@ -589,6 +686,48 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.periodicity_panel = new_periodicity_type;
+            }
+            DialogInput::UpdateExactlyPeriodicParams(new_periodicity) => {
+                if self.exactly_periodic_params == new_periodicity {
+                    return;
+                }
+                self.exactly_periodic_params = new_periodicity;
+            }
+            DialogInput::UpdateOnceEveryBlockOfWeeksParams(new_periodicity) => {
+                if self.once_for_every_block_of_weeks_params == new_periodicity {
+                    return;
+                }
+                self.once_for_every_block_of_weeks_params = new_periodicity;
+            }
+            DialogInput::UpdateAmountInYearCountMinimum(new_min) => {
+                if *self
+                    .amount_in_year_params
+                    .interrogation_count_in_year
+                    .start()
+                    == new_min
+                {
+                    return;
+                }
+                let old_max = *self.amount_in_year_params.interrogation_count_in_year.end();
+                assert!(new_min <= old_max);
+                self.amount_in_year_params.interrogation_count_in_year = new_min..=old_max;
+            }
+            DialogInput::UpdateAmountInYearCountMaximum(new_max) => {
+                if *self.amount_in_year_params.interrogation_count_in_year.end() == new_max {
+                    return;
+                }
+                let old_min = *self
+                    .amount_in_year_params
+                    .interrogation_count_in_year
+                    .start();
+                assert!(old_min <= new_max);
+                self.amount_in_year_params.interrogation_count_in_year = old_min..=new_max;
+            }
+            DialogInput::UpdateAmountInYearWeekSeparation(new_sep) => {
+                if self.amount_in_year_params.minimum_week_separation == new_sep {
+                    return;
+                }
+                self.amount_in_year_params.minimum_week_separation = new_sep;
             }
         }
     }
