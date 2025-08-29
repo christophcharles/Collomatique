@@ -134,6 +134,7 @@ struct PreData {
     subjects: collomatique_state_colloscopes::subjects::SubjectsExternalData,
     teachers: collomatique_state_colloscopes::teachers::TeachersExternalData,
     students: collomatique_state_colloscopes::students::StudentsExternalData,
+    assignments: collomatique_state_colloscopes::assignments::AssignmentsExternalData,
 }
 
 mod period_list;
@@ -170,6 +171,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         pre_data.subjects,
         pre_data.teachers,
         pre_data.students,
+        pre_data.assignments,
     )?;
     Ok(data)
 }
