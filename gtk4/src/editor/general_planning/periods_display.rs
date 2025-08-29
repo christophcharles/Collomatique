@@ -47,55 +47,15 @@ impl Entry {
         let week_count = self.weeks.len();
         let index = self.index.current_index() + 1;
 
-        if week_count == 0 {
-            return format!("<b><big>Période {} (vide)</big></b>", index,);
-        }
-
-        let start_week = self.first_week_num + 1;
-        let end_week = self.first_week_num + week_count;
-
-        match &self.global_first_week {
-            Some(global_start_date) => {
-                let start_date = global_start_date
-                    .inner()
-                    .checked_add_days(chrono::Days::new(7 * (self.first_week_num as u64)))
-                    .expect("Valid start date");
-                let end_date = start_date
-                    .checked_add_days(chrono::Days::new(7 * (week_count as u64) - 1))
-                    .expect("Valid end date");
-                if start_week != end_week {
-                    format!(
-                        "<b><big>Période {} du {} au {} (semaines {} à {})</big></b>",
-                        index,
-                        start_date.format("%d/%m/%Y").to_string(),
-                        end_date.format("%d/%m/%Y").to_string(),
-                        start_week,
-                        end_week,
-                    )
-                } else {
-                    format!(
-                        "<b><big>Période {} du {} au {} (semaine {})</big></b>",
-                        index,
-                        start_date.format("%d/%m/%Y").to_string(),
-                        end_date.format("%d/%m/%Y").to_string(),
-                        start_week,
-                    )
-                }
-            }
-            None => {
-                if start_week != end_week {
-                    format!(
-                        "<b><big>Période {} (semaines {} à {})</big></b>",
-                        index, start_week, end_week,
-                    )
-                } else {
-                    format!(
-                        "<b><big>Période {} (semaine {})</big></b>",
-                        index, start_week,
-                    )
-                }
-            }
-        }
+        format!(
+            "<b><big>{}</big></b>",
+            super::super::generate_period_title(
+                &self.global_first_week,
+                index,
+                self.first_week_num,
+                week_count
+            )
+        )
     }
 
     fn update_week(
