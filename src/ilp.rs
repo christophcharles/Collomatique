@@ -1,4 +1,5 @@
 pub mod dbg;
+pub mod initializers;
 pub mod linexpr;
 pub mod optimizers;
 pub mod random;
@@ -328,11 +329,8 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     }
 
     pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
-        Config {
-            problem: self,
-            cfg_repr: self.pb_repr.default_config(),
-            precomputation: RefCell::new(None),
-        }
+        self.config_from(&[])
+            .expect("Valid variables as no variables are used")
     }
 
     pub fn config_from<'a, 'b, U, T: IntoIterator<Item = &'b U>>(
@@ -344,21 +342,24 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         U: Ord + ?Sized + 'b,
         &'b U: Into<V>,
     {
-        let mut config = self.default_config();
+        let mut vars_repr = BTreeSet::new();
 
         for v in vars {
-            config.set(v, true)?;
+            match self.variables_lookup.get(v) {
+                Some(num) => {
+                    vars_repr.insert(*num);
+                }
+                None => {
+                    return Err(Error::InvalidVariable(v.into()));
+                }
+            }
         }
 
-        Ok(config)
-    }
-
-    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'_, V, P> {
-        Config {
+        Ok(Config {
             problem: self,
-            cfg_repr: self.pb_repr.random_config(random_gen),
+            cfg_repr: self.pb_repr.config_from(&vars_repr),
             precomputation: RefCell::new(None),
-        }
+        })
     }
 
     pub fn get_constraints(&self) -> &BTreeSet<linexpr::Constraint<V>> {
