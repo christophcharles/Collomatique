@@ -252,7 +252,7 @@ impl SimpleScheduleBase {
     ) -> (Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint) {
         let mut lhs = LinExpr::constant(0.);
 
-        for group in 0..self.course_count {
+        for group in 0..self.group_count {
             lhs = lhs
                 + LinExpr::var(SimpleScheduleVariable {
                     group,
