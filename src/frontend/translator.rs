@@ -361,15 +361,17 @@ impl GenColloscopeTranslator {
         };
 
         for (&subject_id, subject) in &data.subjects {
+            let slots = vec![];
             let new_subject = Subject {
                 students_per_group: subject.students_per_group.clone(),
                 max_groups_per_slot: subject.max_groups_per_slot,
                 period: subject.period,
                 period_is_strict: subject.period_is_strict,
                 is_tutorial: subject.is_tutorial,
-                balancing_requirements: None,
+                balancing_requirements:
+                    crate::gen::colloscope::BalancingRequirements::default_from_slots(&slots),
                 duration: subject.duration,
-                slots: vec![],
+                slots,
                 groups: GroupsDesc::default(),
             };
 
@@ -491,19 +493,17 @@ impl GenColloscopeTranslator {
 
             use crate::backend::BalancingConstraints as BC;
             let constraints = match orig_subject.balancing_requirements.constraints {
-                BC::OptimizeOnly => None,
-                BC::OverallOnly => Some(BalancingConstraints::OverallOnly),
-                BC::StrictWithCuts => Some(BalancingConstraints::StrictWithCuts),
-                BC::StrictWithCutsAndOverall => {
-                    Some(BalancingConstraints::StrictWithCutsAndOverall)
-                }
-                BC::Strict => Some(BalancingConstraints::Strict),
+                BC::OptimizeOnly => BalancingConstraints::OptimizeOnly,
+                BC::OverallOnly => BalancingConstraints::OverallOnly,
+                BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
+                BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
+                BC::Strict => BalancingConstraints::Strict,
             };
 
-            let balancing_requirements = constraints.map(|constraints| BalancingRequirements {
+            let balancing_requirements = BalancingRequirements {
                 constraints,
                 slot_selections,
-            });
+            };
 
             subject.balancing_requirements = balancing_requirements;
         }
