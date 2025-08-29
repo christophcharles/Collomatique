@@ -1,9 +1,9 @@
 pub mod dbg;
 pub mod linexpr;
+mod ndtools;
 pub mod optimizers;
 pub mod random;
 pub mod solvers;
-mod tools;
 
 #[cfg(test)]
 mod tests;
