@@ -8,7 +8,7 @@ fn main() {
     let general = GeneralData {
         teacher_count: 5,
         week_count: NonZeroU32::new(2).unwrap(),
-        interrogations_per_week: None,
+        interrogations_per_week: Some(2..3),
     };
 
     let subjects = vec![
@@ -318,8 +318,8 @@ fn main() {
 
     sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
 
-    use collomatique::ilp::solvers::backtracking::heuristics::Connolly1992;
-    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Connolly1992::default());
+    use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
+    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
     let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
