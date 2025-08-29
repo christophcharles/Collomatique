@@ -53,39 +53,39 @@ fn test_is_feasable() {
 
     let mat_repr = MatRepr::new(&pb);
 
-    let config_0 = Config::from_iter::<[&str; 0]>([]);
-    let config_1 = Config::from_iter(["a"]);
-    let config_2 = Config::from_iter(["b"]);
-    let config_3 = Config::from_iter(["a", "b"]);
-    let config_4 = Config::from_iter(["c"]);
-    let config_5 = Config::from_iter(["a", "c"]);
-    let config_6 = Config::from_iter(["b", "c"]);
-    let config_7 = Config::from_iter(["a", "b", "c"]);
-    let config_8 = Config::from_iter(["d"]);
-    let config_9 = Config::from_iter(["a", "d"]);
-    let config_a = Config::from_iter(["b", "d"]);
-    let config_b = Config::from_iter(["a", "b", "d"]);
-    let config_c = Config::from_iter(["c", "d"]);
-    let config_d = Config::from_iter(["a", "c", "d"]);
-    let config_e = Config::from_iter(["b", "c", "d"]);
-    let config_f = Config::from_iter(["a", "b", "c", "d"]);
+    let config_0 = pb.default_config();
+    let config_1 = pb.config_from(["a"]);
+    let config_2 = pb.config_from(["b"]);
+    let config_3 = pb.config_from(["a", "b"]);
+    let config_4 = pb.config_from(["c"]);
+    let config_5 = pb.config_from(["a", "c"]);
+    let config_6 = pb.config_from(["b", "c"]);
+    let config_7 = pb.config_from(["a", "b", "c"]);
+    let config_8 = pb.config_from(["d"]);
+    let config_9 = pb.config_from(["a", "d"]);
+    let config_a = pb.config_from(["b", "d"]);
+    let config_b = pb.config_from(["a", "b", "d"]);
+    let config_c = pb.config_from(["c", "d"]);
+    let config_d = pb.config_from(["a", "c", "d"]);
+    let config_e = pb.config_from(["b", "c", "d"]);
+    let config_f = pb.config_from(["a", "b", "c", "d"]);
 
-    let cfg_repr_0 = mat_repr.config(&config_0);
-    let cfg_repr_1 = mat_repr.config(&config_1);
-    let cfg_repr_2 = mat_repr.config(&config_2);
-    let cfg_repr_3 = mat_repr.config(&config_3);
-    let cfg_repr_4 = mat_repr.config(&config_4);
-    let cfg_repr_5 = mat_repr.config(&config_5);
-    let cfg_repr_6 = mat_repr.config(&config_6);
-    let cfg_repr_7 = mat_repr.config(&config_7);
-    let cfg_repr_8 = mat_repr.config(&config_8);
-    let cfg_repr_9 = mat_repr.config(&config_9);
-    let cfg_repr_a = mat_repr.config(&config_a);
-    let cfg_repr_b = mat_repr.config(&config_b);
-    let cfg_repr_c = mat_repr.config(&config_c);
-    let cfg_repr_d = mat_repr.config(&config_d);
-    let cfg_repr_e = mat_repr.config(&config_e);
-    let cfg_repr_f = mat_repr.config(&config_f);
+    let cfg_repr_0 = mat_repr.config(&config_0).unwrap();
+    let cfg_repr_1 = mat_repr.config(&config_1).unwrap();
+    let cfg_repr_2 = mat_repr.config(&config_2).unwrap();
+    let cfg_repr_3 = mat_repr.config(&config_3).unwrap();
+    let cfg_repr_4 = mat_repr.config(&config_4).unwrap();
+    let cfg_repr_5 = mat_repr.config(&config_5).unwrap();
+    let cfg_repr_6 = mat_repr.config(&config_6).unwrap();
+    let cfg_repr_7 = mat_repr.config(&config_7).unwrap();
+    let cfg_repr_8 = mat_repr.config(&config_8).unwrap();
+    let cfg_repr_9 = mat_repr.config(&config_9).unwrap();
+    let cfg_repr_a = mat_repr.config(&config_a).unwrap();
+    let cfg_repr_b = mat_repr.config(&config_b).unwrap();
+    let cfg_repr_c = mat_repr.config(&config_c).unwrap();
+    let cfg_repr_d = mat_repr.config(&config_d).unwrap();
+    let cfg_repr_e = mat_repr.config(&config_e).unwrap();
+    let cfg_repr_f = mat_repr.config(&config_f).unwrap();
 
     assert_eq!(cfg_repr_0.is_feasable(), false);
     assert_eq!(cfg_repr_1.is_feasable(), true);
@@ -111,15 +111,15 @@ fn test_is_feasable_no_constraint() {
 
     let mat_repr = MatRepr::new(&pb);
 
-    let config_0 = Config::from_iter::<[&str; 0]>([]);
-    let config_1 = Config::from_iter(["a"]);
-    let config_2 = Config::from_iter(["b"]);
-    let config_3 = Config::from_iter(["a", "b"]);
+    let config_0 = pb.default_config();
+    let config_1 = pb.config_from(["a"]);
+    let config_2 = pb.config_from(["b"]);
+    let config_3 = pb.config_from(["a", "b"]);
 
-    let cfg_repr_0 = mat_repr.config(&config_0);
-    let cfg_repr_1 = mat_repr.config(&config_1);
-    let cfg_repr_2 = mat_repr.config(&config_2);
-    let cfg_repr_3 = mat_repr.config(&config_3);
+    let cfg_repr_0 = mat_repr.config(&config_0).unwrap();
+    let cfg_repr_1 = mat_repr.config(&config_1).unwrap();
+    let cfg_repr_2 = mat_repr.config(&config_2).unwrap();
+    let cfg_repr_3 = mat_repr.config(&config_3).unwrap();
 
     assert_eq!(cfg_repr_0.is_feasable(), true);
     assert_eq!(cfg_repr_1.is_feasable(), true);
@@ -146,56 +146,56 @@ fn test_nd_feasable_agrees_with_pb_feasable() {
 
     let mat_repr = MatRepr::new(&pb);
 
-    let config_0 = Config::from_iter::<[&str; 0]>([]);
-    let config_1 = Config::from_iter(["a"]);
-    let config_2 = Config::from_iter(["b"]);
-    let config_3 = Config::from_iter(["a", "b"]);
-    let config_4 = Config::from_iter(["c"]);
-    let config_5 = Config::from_iter(["a", "c"]);
-    let config_6 = Config::from_iter(["b", "c"]);
-    let config_7 = Config::from_iter(["a", "b", "c"]);
-    let config_8 = Config::from_iter(["d"]);
-    let config_9 = Config::from_iter(["a", "d"]);
-    let config_a = Config::from_iter(["b", "d"]);
-    let config_b = Config::from_iter(["a", "b", "d"]);
-    let config_c = Config::from_iter(["c", "d"]);
-    let config_d = Config::from_iter(["a", "c", "d"]);
-    let config_e = Config::from_iter(["b", "c", "d"]);
-    let config_f = Config::from_iter(["a", "b", "c", "d"]);
+    let config_0 = pb.default_config();
+    let config_1 = pb.config_from(["a"]);
+    let config_2 = pb.config_from(["b"]);
+    let config_3 = pb.config_from(["a", "b"]);
+    let config_4 = pb.config_from(["c"]);
+    let config_5 = pb.config_from(["a", "c"]);
+    let config_6 = pb.config_from(["b", "c"]);
+    let config_7 = pb.config_from(["a", "b", "c"]);
+    let config_8 = pb.config_from(["d"]);
+    let config_9 = pb.config_from(["a", "d"]);
+    let config_a = pb.config_from(["b", "d"]);
+    let config_b = pb.config_from(["a", "b", "d"]);
+    let config_c = pb.config_from(["c", "d"]);
+    let config_d = pb.config_from(["a", "c", "d"]);
+    let config_e = pb.config_from(["b", "c", "d"]);
+    let config_f = pb.config_from(["a", "b", "c", "d"]);
 
-    let cfg_repr_0 = mat_repr.config(&config_0);
-    let cfg_repr_1 = mat_repr.config(&config_1);
-    let cfg_repr_2 = mat_repr.config(&config_2);
-    let cfg_repr_3 = mat_repr.config(&config_3);
-    let cfg_repr_4 = mat_repr.config(&config_4);
-    let cfg_repr_5 = mat_repr.config(&config_5);
-    let cfg_repr_6 = mat_repr.config(&config_6);
-    let cfg_repr_7 = mat_repr.config(&config_7);
-    let cfg_repr_8 = mat_repr.config(&config_8);
-    let cfg_repr_9 = mat_repr.config(&config_9);
-    let cfg_repr_a = mat_repr.config(&config_a);
-    let cfg_repr_b = mat_repr.config(&config_b);
-    let cfg_repr_c = mat_repr.config(&config_c);
-    let cfg_repr_d = mat_repr.config(&config_d);
-    let cfg_repr_e = mat_repr.config(&config_e);
-    let cfg_repr_f = mat_repr.config(&config_f);
+    let cfg_repr_0 = mat_repr.config(&config_0).unwrap();
+    let cfg_repr_1 = mat_repr.config(&config_1).unwrap();
+    let cfg_repr_2 = mat_repr.config(&config_2).unwrap();
+    let cfg_repr_3 = mat_repr.config(&config_3).unwrap();
+    let cfg_repr_4 = mat_repr.config(&config_4).unwrap();
+    let cfg_repr_5 = mat_repr.config(&config_5).unwrap();
+    let cfg_repr_6 = mat_repr.config(&config_6).unwrap();
+    let cfg_repr_7 = mat_repr.config(&config_7).unwrap();
+    let cfg_repr_8 = mat_repr.config(&config_8).unwrap();
+    let cfg_repr_9 = mat_repr.config(&config_9).unwrap();
+    let cfg_repr_a = mat_repr.config(&config_a).unwrap();
+    let cfg_repr_b = mat_repr.config(&config_b).unwrap();
+    let cfg_repr_c = mat_repr.config(&config_c).unwrap();
+    let cfg_repr_d = mat_repr.config(&config_d).unwrap();
+    let cfg_repr_e = mat_repr.config(&config_e).unwrap();
+    let cfg_repr_f = mat_repr.config(&config_f).unwrap();
 
-    assert_eq!(cfg_repr_0.is_feasable(), pb.is_feasable(&config_0));
-    assert_eq!(cfg_repr_1.is_feasable(), pb.is_feasable(&config_1));
-    assert_eq!(cfg_repr_2.is_feasable(), pb.is_feasable(&config_2));
-    assert_eq!(cfg_repr_3.is_feasable(), pb.is_feasable(&config_3));
-    assert_eq!(cfg_repr_4.is_feasable(), pb.is_feasable(&config_4));
-    assert_eq!(cfg_repr_5.is_feasable(), pb.is_feasable(&config_5));
-    assert_eq!(cfg_repr_6.is_feasable(), pb.is_feasable(&config_6));
-    assert_eq!(cfg_repr_7.is_feasable(), pb.is_feasable(&config_7));
-    assert_eq!(cfg_repr_8.is_feasable(), pb.is_feasable(&config_8));
-    assert_eq!(cfg_repr_9.is_feasable(), pb.is_feasable(&config_9));
-    assert_eq!(cfg_repr_a.is_feasable(), pb.is_feasable(&config_a));
-    assert_eq!(cfg_repr_b.is_feasable(), pb.is_feasable(&config_b));
-    assert_eq!(cfg_repr_c.is_feasable(), pb.is_feasable(&config_c));
-    assert_eq!(cfg_repr_d.is_feasable(), pb.is_feasable(&config_d));
-    assert_eq!(cfg_repr_e.is_feasable(), pb.is_feasable(&config_e));
-    assert_eq!(cfg_repr_f.is_feasable(), pb.is_feasable(&config_f));
+    assert_eq!(cfg_repr_0.is_feasable(), config_0.is_feasable());
+    assert_eq!(cfg_repr_1.is_feasable(), config_1.is_feasable());
+    assert_eq!(cfg_repr_2.is_feasable(), config_2.is_feasable());
+    assert_eq!(cfg_repr_3.is_feasable(), config_3.is_feasable());
+    assert_eq!(cfg_repr_4.is_feasable(), config_4.is_feasable());
+    assert_eq!(cfg_repr_5.is_feasable(), config_5.is_feasable());
+    assert_eq!(cfg_repr_6.is_feasable(), config_6.is_feasable());
+    assert_eq!(cfg_repr_7.is_feasable(), config_7.is_feasable());
+    assert_eq!(cfg_repr_8.is_feasable(), config_8.is_feasable());
+    assert_eq!(cfg_repr_9.is_feasable(), config_9.is_feasable());
+    assert_eq!(cfg_repr_a.is_feasable(), config_a.is_feasable());
+    assert_eq!(cfg_repr_b.is_feasable(), config_b.is_feasable());
+    assert_eq!(cfg_repr_c.is_feasable(), config_c.is_feasable());
+    assert_eq!(cfg_repr_d.is_feasable(), config_d.is_feasable());
+    assert_eq!(cfg_repr_e.is_feasable(), config_e.is_feasable());
+    assert_eq!(cfg_repr_f.is_feasable(), config_f.is_feasable());
 }
 
 #[test]
@@ -217,24 +217,24 @@ fn test_neighbours() {
 
     let mat_repr = MatRepr::new(&pb);
 
-    let config = Config::from_iter(["a", "b"]);
+    let config = pb.config_from(["a", "b"]);
 
-    let cfg_repr = mat_repr.config(&config);
+    let cfg_repr = mat_repr.config(&config).unwrap();
 
     let neighbours = cfg_repr
         .neighbours()
         .into_iter()
         .collect::<BTreeSet<ConfigRepr>>();
 
-    let config_0 = Config::from_iter(["b"]);
-    let config_1 = Config::from_iter(["a"]);
-    let config_2 = Config::from_iter(["a", "b", "c"]);
-    let config_3 = Config::from_iter(["a", "b", "d"]);
+    let config_0 = pb.config_from(["b"]);
+    let config_1 = pb.config_from(["a"]);
+    let config_2 = pb.config_from(["a", "b", "c"]);
+    let config_3 = pb.config_from(["a", "b", "d"]);
 
-    let cfg_repr_0 = mat_repr.config(&config_0);
-    let cfg_repr_1 = mat_repr.config(&config_1);
-    let cfg_repr_2 = mat_repr.config(&config_2);
-    let cfg_repr_3 = mat_repr.config(&config_3);
+    let cfg_repr_0 = mat_repr.config(&config_0).unwrap();
+    let cfg_repr_1 = mat_repr.config(&config_1).unwrap();
+    let cfg_repr_2 = mat_repr.config(&config_2).unwrap();
+    let cfg_repr_3 = mat_repr.config(&config_3).unwrap();
 
     let neighbours_expected = BTreeSet::from_iter([cfg_repr_0, cfg_repr_1, cfg_repr_2, cfg_repr_3]);
 
@@ -258,14 +258,14 @@ fn test_cfg_repr_ord() {
 
     let mat_repr = MatRepr::new(&pb);
 
-    let config_0 = Config::from_iter::<[&str; 0]>([]);
-    let config_1 = Config::from_iter(["a"]);
-    let config_2 = Config::from_iter(["b"]);
-    let config_3 = Config::from_iter(["a", "b"]);
-    let config_4 = Config::from_iter(["c"]);
-    let config_5 = Config::from_iter(["a", "c"]);
-    let config_6 = Config::from_iter(["b", "c"]);
-    let config_7 = Config::from_iter(["a", "b", "c"]);
+    let config_0 = pb.default_config();
+    let config_1 = pb.config_from(["a"]);
+    let config_2 = pb.config_from(["b"]);
+    let config_3 = pb.config_from(["a", "b"]);
+    let config_4 = pb.config_from(["c"]);
+    let config_5 = pb.config_from(["a", "c"]);
+    let config_6 = pb.config_from(["b", "c"]);
+    let config_7 = pb.config_from(["a", "b", "c"]);
 
     let cfg_repr_0 = mat_repr.config(&config_0);
     let cfg_repr_1 = mat_repr.config(&config_1);

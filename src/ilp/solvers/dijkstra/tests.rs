@@ -1,7 +1,7 @@
 #[test]
 fn test_dijkstra() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::{Config, ProblemBuilder};
+    use crate::ilp::ProblemBuilder;
 
     // We test on a simple scheduling problem.
     //
@@ -63,7 +63,7 @@ fn test_dijkstra() {
         .add((&y21 + &y22).eq(&one))
         .build()
         .unwrap();
-    let config = Config::from_iter(["x11", "y12", "y21"]);
+    let config = pb.config_from(["x11", "y12", "y21"]);
 
     let dijkstra_solver = super::Solver::new(&pb);
 
@@ -72,7 +72,7 @@ fn test_dijkstra() {
     let solution = dijkstra_solver.restore_feasability(&config);
 
     assert_eq!(
-        Config::from(solution.expect("Solution found")),
-        Config::from_iter(["x11", "y12", "y21", "x22"])
+        solution.expect("Solution found").into_inner(),
+        pb.config_from(["x11", "y12", "y21", "x22"])
     );
 }

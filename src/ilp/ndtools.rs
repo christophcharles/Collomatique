@@ -57,39 +57,46 @@ impl<'a> MatRepr<'a> {
         }
     }
 
-    pub fn config<'b>(&'b self, config: &Config) -> ConfigRepr<'a, 'b> {
+    pub fn config<'b>(&'b self, config: &Config) -> Option<ConfigRepr<'a, 'b>> {
+        let p1 = self.problem as *const Problem;
+        let p2 = config.problem as *const Problem;
+
+        if p1 != p2 {
+            return None;
+        }
+
         let p = self.problem.variables.len();
 
         let mut values = Array1::zeros(p);
 
         for (i, var) in self.problem.variables.iter().enumerate() {
-            if config.get(var) {
+            if config.get(var).expect("Variable declared for config") {
                 values[i] = 1;
             }
         }
 
-        ConfigRepr {
+        Some(ConfigRepr {
             mat_repr: self,
             values,
-        }
+        })
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigRepr<'a, 'b: 'a> {
+pub struct ConfigRepr<'a, 'b> {
     mat_repr: &'b MatRepr<'a>,
     values: Array1<i32>,
 }
 
-impl<'a, 'b: 'a> PartialEq for ConfigRepr<'a, 'b> {
+impl<'a, 'b> PartialEq for ConfigRepr<'a, 'b> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a, 'b: 'a> Eq for ConfigRepr<'a, 'b> {}
+impl<'a, 'b> Eq for ConfigRepr<'a, 'b> {}
 
-impl<'a, 'b: 'a> Ord for ConfigRepr<'a, 'b> {
+impl<'a, 'b> Ord for ConfigRepr<'a, 'b> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let p1: *const MatRepr<'a> = &*self.mat_repr;
         let p2: *const MatRepr<'a> = &*other.mat_repr;
@@ -114,23 +121,23 @@ impl<'a, 'b: 'a> Ord for ConfigRepr<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> PartialOrd for ConfigRepr<'a, 'b> {
+impl<'a, 'b> PartialOrd for ConfigRepr<'a, 'b> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a, 'b: 'a> From<ConfigRepr<'a, 'b>> for Config {
+impl<'a, 'b> From<ConfigRepr<'a, 'b>> for Config<'a> {
     fn from(value: ConfigRepr<'a, 'b>) -> Self {
-        let mut config = Config::new();
+        let mut config = value.mat_repr.problem.default_config();
         for (i, var) in value.mat_repr.problem.variables.iter().enumerate() {
-            config.set(var, value.values[i] == 1);
+            *config.get_mut(var).expect("Variable declared in config") = value.values[i] == 1;
         }
         config
     }
 }
 
-impl<'a, 'b: 'a> ConfigRepr<'a, 'b> {
+impl<'a, 'b> ConfigRepr<'a, 'b> {
     pub fn is_feasable(&self) -> bool {
         let leq_column = self.mat_repr.leq_mat.dot(&self.values) + &self.mat_repr.leq_constants;
         let eq_column = self.mat_repr.eq_mat.dot(&self.values) + &self.mat_repr.eq_constants;

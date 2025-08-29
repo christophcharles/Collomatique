@@ -11,10 +11,12 @@ mod tests;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum ProblemError {
+pub enum Error {
     #[error("Variable {1} is used in constraint {0} but not explicitly declared")]
     UndeclaredVariable(usize, String),
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub type EvalFn = dbg::Debuggable<dyn Fn(&FeasableConfig) -> f64>;
 
@@ -57,7 +59,7 @@ impl ProblemBuilder {
         self
     }
 
-    pub fn build(mut self) -> Result<Problem, ProblemError> {
+    pub fn build(mut self) -> Result<Problem> {
         for c in self.constraints.iter_mut() {
             c.clean();
         }
@@ -67,14 +69,16 @@ impl ProblemBuilder {
             if !self.variables.is_superset(&constraint_vars) {
                 for var in constraint_vars {
                     if !self.variables.contains(&var) {
-                        return Err(ProblemError::UndeclaredVariable(i, var));
+                        return Err(Error::UndeclaredVariable(i, var));
                     }
                 }
             }
         }
 
+        let variables_vec = self.variables.iter().cloned().collect();
         Ok(Problem {
             variables: self.variables,
+            variables_vec,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
         })
@@ -86,6 +90,7 @@ use std::collections::BTreeSet;
 #[derive(Debug, Default, Clone)]
 pub struct Problem {
     variables: BTreeSet<String>,
+    variables_vec: Vec<String>,
     constraints: Vec<linexpr::Constraint>,
     eval_fn: EvalFn,
 }
@@ -110,46 +115,85 @@ impl std::fmt::Display for Problem {
 }
 
 impl Problem {
-    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config {
-        let mut config = Config::new();
-        for v in &self.variables {
-            config.set(v, random_gen.randbool());
+    pub fn default_config<'a>(&'a self) -> Config<'a> {
+        Config {
+            variables: self.variables.iter().map(|x| (x.clone(), false)).collect(),
+            problem: self,
         }
+    }
+
+    pub fn config_from<'a, U: Into<String>, T: IntoIterator<Item = U>>(
+        &'a self,
+        vars: T,
+    ) -> Config<'a> {
+        let mut config = self.default_config();
+
+        for v in vars.into_iter() {
+            *config.get_mut(v).expect("Variable declared for config") = true;
+        }
+
         config
     }
 
-    pub fn random_neighbour<T: random::RandomGen>(
-        &self,
-        config: &Config,
-        random_gen: &mut T,
-    ) -> Config {
-        let mut output = config.clone();
+    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config {
+        let mut config = self.default_config();
+        for v in &self.variables {
+            *config
+                .variables
+                .get_mut(v)
+                .expect("Variable declared for config") = random_gen.randbool();
+        }
+        config
+    }
+}
 
-        let variables_vec: Vec<_> = self.variables.iter().collect();
-        let var = random_gen.rand_elem(&variables_vec[..]);
+use std::collections::BTreeMap;
 
-        output.set(var, !config.get(var));
+#[derive(Debug, Clone)]
+pub struct Config<'a> {
+    variables: BTreeMap<String, bool>,
+    problem: &'a Problem,
+}
+
+impl<'a> Config<'a> {
+    pub fn get_mut<T: Into<String>>(&mut self, var: T) -> Option<&mut bool> {
+        self.variables.get_mut(&var.into())
+    }
+
+    pub fn get<T: Into<String>>(&self, var: T) -> Option<bool> {
+        self.variables.get(&var.into()).copied()
+    }
+
+    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'a> {
+        let mut output = self.clone();
+
+        let var = random_gen.rand_elem(&self.problem.variables_vec[..]);
+        let v = output
+            .variables
+            .get_mut(&var)
+            .expect("Variable declared for config");
+        *v = !(*v);
 
         output
     }
 
-    fn into_linexpr_config(&self, config: &Config) -> Option<linexpr::Config> {
+    fn into_linexpr_config(&self) -> Option<linexpr::Config> {
         let mut cfg = linexpr::Config::new();
 
-        for v in &self.variables {
-            cfg.set(v, config.get(v));
+        for v in &self.problem.variables {
+            cfg.set(v, self.get(v).expect("Variable declared for config"));
         }
 
         Some(cfg)
     }
 
-    pub fn is_feasable(&self, config: &Config) -> bool {
-        let cfg = match self.into_linexpr_config(config) {
+    pub fn is_feasable(&self) -> bool {
+        let cfg = match self.into_linexpr_config() {
             Some(c) => c,
             None => return false,
         };
 
-        for c in &self.constraints {
+        for c in &self.problem.constraints {
             let res = match c.eval(&cfg) {
                 Some(r) => r,
                 None => return false,
@@ -162,103 +206,28 @@ impl Problem {
         true
     }
 
-    pub fn into_feasable<'a, 'b>(&'a self, config: &'b Config) -> Option<FeasableConfig<'a>> {
-        if !self.is_feasable(config) {
+    pub fn into_feasable(self) -> Option<FeasableConfig<'a>> {
+        if !self.is_feasable() {
             return None;
         }
 
-        Some(unsafe { self.into_feasable_unchecked(config) })
+        Some(unsafe { self.into_feasable_unchecked() })
     }
 
-    pub unsafe fn into_feasable_unchecked<'a, 'b>(
-        &'a self,
-        config: &'b Config,
-    ) -> FeasableConfig<'a> {
-        FeasableConfig {
-            variables: config.variables.clone(),
-            problem: self,
-        }
+    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a> {
+        FeasableConfig(self)
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Default, Clone)]
-pub struct Config {
-    variables: BTreeSet<String>,
-}
-
-impl Config {
-    pub fn new() -> Config {
-        Config {
-            variables: BTreeSet::new(),
-        }
-    }
-
-    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) {
-        if val {
-            self.variables.insert(var.into());
-        } else {
-            self.variables.remove(&var.into());
-        }
-    }
-
-    pub fn get<T: Into<String>>(&self, var: T) -> bool {
-        self.variables.contains(&var.into())
-    }
-}
-
-impl<A> FromIterator<A> for Config
-where
-    A: Into<String>,
-{
-    fn from_iter<I>(iterable: I) -> Config
-    where
-        I: IntoIterator<Item = A>,
-    {
-        let mut config = Config::new();
-
-        for v in iterable {
-            config.set(v, true);
-        }
-
-        config
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FeasableConfig<'a> {
-    variables: BTreeSet<String>,
-    problem: &'a Problem,
-}
-
-impl<'a> FeasableConfig<'a> {
-    pub fn get<T: Into<String>>(&self, var: T) -> bool {
-        self.variables.contains(&var.into())
-    }
-}
-
-impl<'a> From<&FeasableConfig<'a>> for Config {
-    fn from(value: &FeasableConfig<'a>) -> Self {
-        Config {
-            variables: value.variables.clone(),
-        }
-    }
-}
-
-impl<'a> From<FeasableConfig<'a>> for Config {
-    fn from(value: FeasableConfig<'a>) -> Self {
-        Config::from(&value)
-    }
-}
-
-impl<'a> PartialEq for FeasableConfig<'a> {
+impl<'a> PartialEq for Config<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a> Eq for FeasableConfig<'a> {}
+impl<'a> Eq for Config<'a> {}
 
-impl<'a> Ord for FeasableConfig<'a> {
+impl<'a> Ord for Config<'a> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let p1: *const Problem = &*self.problem;
         let p2: *const Problem = &*other.problem;
@@ -268,25 +237,33 @@ impl<'a> Ord for FeasableConfig<'a> {
             return mat_repr_ord;
         }
 
-        for v in &self.problem.variables {
-            let v1 = self.get(v);
-            let v2 = other.get(v);
-
-            if v1 != v2 {
-                if v2 {
-                    return std::cmp::Ordering::Less;
-                } else {
-                    return std::cmp::Ordering::Greater;
-                }
-            }
-        }
-
-        return std::cmp::Ordering::Equal;
+        return self.variables.cmp(&other.variables);
     }
 }
 
-impl<'a> PartialOrd for FeasableConfig<'a> {
+impl<'a> PartialOrd for Config<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FeasableConfig<'a>(Config<'a>);
+
+impl<'a> FeasableConfig<'a> {
+    pub fn get_mut<T: Into<String>>(&mut self, var: T) -> Option<&mut bool> {
+        self.0.get_mut(var)
+    }
+
+    pub fn get<T: Into<String>>(&self, var: T) -> Option<bool> {
+        self.0.get(var)
+    }
+
+    pub fn into_inner(self) -> Config<'a> {
+        self.0
+    }
+
+    pub fn inner(&self) -> &Config<'a> {
+        &self.0
     }
 }

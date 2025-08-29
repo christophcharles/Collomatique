@@ -1,7 +1,7 @@
 #[test]
 fn test_sa() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::{Config, ProblemBuilder};
+    use crate::ilp::ProblemBuilder;
 
     // We test on a simple scheduling problem.
     //
@@ -65,7 +65,7 @@ fn test_sa() {
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
         // eval func
-        .eval_fn(crate::debuggable!(|x| if x.get("y12") {
+        .eval_fn(crate::debuggable!(|x| if x.get("y12").unwrap() {
             1000.0
         } else {
             0.0
@@ -75,7 +75,7 @@ fn test_sa() {
 
     let mut sa_optimizer = super::Optimizer::new(&pb);
 
-    let config = Config::from_iter(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
+    let config = pb.config_from(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
     sa_optimizer.set_init_config(config);
 
     let mut random_gen = crate::ilp::random::DefaultRndGen::new();
@@ -86,11 +86,11 @@ fn test_sa() {
     // There are only two solutions so only two iterations should even be enough to find the optimal one
 
     assert_eq!(
-        Config::from(solution.expect("Solution found").0.as_ref().clone()),
-        Config::from_iter(["x12", "y11", "y22", "x21"])
+        solution.expect("Solution found").0.inner().clone(),
+        pb.config_from(["x12", "y11", "y22", "x21"])
     );
 
-    let config = Config::from_iter(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
+    let config = pb.config_from(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
     sa_optimizer.set_init_config(config);
 
     let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
@@ -99,7 +99,7 @@ fn test_sa() {
         .best_in(2);
 
     assert_eq!(
-        Config::from(solution.expect("Solution found").0.as_ref().clone()),
-        Config::from_iter(["x12", "y11", "y22", "x21"])
+        solution.expect("Solution found").0.inner().clone(),
+        pb.config_from(["x12", "y11", "y22", "x21"])
     );
 }
