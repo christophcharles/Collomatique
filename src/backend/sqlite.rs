@@ -310,6 +310,7 @@ impl Store {
 use super::*;
 
 mod group_lists;
+mod groupings;
 mod incompats;
 mod students;
 mod subject_groups;
@@ -327,6 +328,7 @@ impl Storage for Store {
     type GroupListId = group_lists::Id;
     type SubjectId = subjects::Id;
     type TimeSlotId = time_slots::Id;
+    type GroupingsId = groupings::Id;
 
     type InternalError = Error;
 
@@ -803,5 +805,58 @@ impl Storage for Store {
         >,
     > + Send {
         time_slots::update(&self.pool, index, time_slot)
+    }
+
+    fn groupings_get(
+        &self,
+        index: Self::GroupingsId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Grouping<Self::TimeSlotId>,
+            IdError<Self::InternalError, Self::GroupingsId>,
+        >,
+    > + Send {
+        groupings::get(&self.pool, index)
+    }
+    fn groupings_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::GroupingsId, Grouping<Self::TimeSlotId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        groupings::get_all(&self.pool)
+    }
+    fn groupings_add(
+        &self,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Self::GroupingsId,
+            CrossError<Self::InternalError, Self::TimeSlotId>,
+        >,
+    > + Send {
+        groupings::add(&self.pool, grouping)
+    }
+    fn groupings_remove(
+        &self,
+        index: Self::GroupingsId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingsId>>,
+    > + Send {
+        groupings::remove(&self.pool, index)
+    }
+    fn groupings_update(
+        &self,
+        index: Self::GroupingsId,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            CrossIdError<Self::InternalError, Self::GroupingsId, Self::TimeSlotId>,
+        >,
+    > + Send {
+        groupings::update(&self.pool, index, grouping)
     }
 }
