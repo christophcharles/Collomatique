@@ -228,7 +228,7 @@ fn check_non_overlapping() {
     let duration2 = NonZeroDurationInMinutes::new(12).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(!slot1.overlap_with(&slot2));
+    assert!(!slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -249,7 +249,7 @@ fn check_non_overlapping_order_inversed() {
     let duration2 = NonZeroDurationInMinutes::new(12).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(!slot2.overlap_with(&slot1));
+    assert!(!slot2.overlaps_with(&slot1));
 }
 
 #[test]
@@ -270,7 +270,7 @@ fn check_non_overlapping_just_touching() {
     let duration2 = NonZeroDurationInMinutes::new(12).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(!slot1.overlap_with(&slot2));
+    assert!(!slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn check_non_overlapping_just_touching_order_inversed() {
     let duration2 = NonZeroDurationInMinutes::new(68).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(!slot1.overlap_with(&slot2));
+    assert!(!slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn check_overlapping_not_included() {
     let duration2 = NonZeroDurationInMinutes::new(95).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot1.overlap_with(&slot2));
+    assert!(slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -333,7 +333,7 @@ fn check_overlapping_not_included_order_inversed() {
     let duration2 = NonZeroDurationInMinutes::new(95).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot2.overlap_with(&slot1));
+    assert!(slot2.overlaps_with(&slot1));
 }
 
 #[test]
@@ -354,7 +354,7 @@ fn check_overlapping_included() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot1.overlap_with(&slot2));
+    assert!(slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -375,7 +375,7 @@ fn check_overlapping_included_order_inversed() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot2.overlap_with(&slot1));
+    assert!(slot2.overlaps_with(&slot1));
 }
 
 #[test]
@@ -396,7 +396,7 @@ fn check_overlapping_barely() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot1.overlap_with(&slot2));
+    assert!(slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -417,7 +417,7 @@ fn check_overlapping_barely_order_inversed() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot2.overlap_with(&slot1));
+    assert!(slot2.overlaps_with(&slot1));
 }
 
 #[test]
@@ -438,7 +438,7 @@ fn check_overlapping_included_barely_front() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot1.overlap_with(&slot2));
+    assert!(slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -459,7 +459,7 @@ fn check_overlapping_included_barely_front_order_reversed() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot2.overlap_with(&slot1));
+    assert!(slot2.overlaps_with(&slot1));
 }
 
 #[test]
@@ -480,7 +480,7 @@ fn check_overlapping_included_barely_back() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot1.overlap_with(&slot2));
+    assert!(slot1.overlaps_with(&slot2));
 }
 
 #[test]
@@ -501,5 +501,5 @@ fn check_overlapping_included_barely_back_order_reversed() {
     let duration2 = NonZeroDurationInMinutes::new(35).unwrap();
     let slot2 = SlotWithDuration::new(start2, duration2).unwrap();
 
-    assert!(slot2.overlap_with(&slot1));
+    assert!(slot2.overlaps_with(&slot1));
 }

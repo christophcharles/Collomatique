@@ -155,7 +155,7 @@ impl SlotWithDuration {
     }
 
     /// Checks if two slots (with duration) overlap
-    pub fn overlap_with(&self, other: &SlotWithDuration) -> bool {
+    pub fn overlaps_with(&self, other: &SlotWithDuration) -> bool {
         if self.start.week != other.start.week {
             return false;
         }
