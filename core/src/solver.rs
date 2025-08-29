@@ -450,9 +450,9 @@ where
         solver: &Solver,
     ) -> Option<DecoratedSolution<'a, M, S, T, P>> {
         let feasable_config = solver.solve(&self.ilp_problem)?;
-        let internal_solution = self
-            .base
-            .configuration_to_partial_solution(&self.feasable_config_into_config_data(&feasable_config));
+        let internal_solution = self.base.configuration_to_partial_solution(
+            &self.feasable_config_into_config_data(&feasable_config),
+        );
 
         Some(DecoratedSolution {
             problem: self,

@@ -26,7 +26,7 @@
 //!
 //! The main struct is [ProblemBuilder] and you should start from there to see how this crate
 //! works.
-//! 
+//!
 //! If you want to implement a problem, you should implement [BaseConstraints] on some structure
 //! and possibly [ExtraConstraints] on a few others.
 
@@ -36,11 +36,5 @@ pub mod time;
 pub mod solver;
 pub mod traits;
 
-pub use solver::{
-    ExtraTranslator, DecoratedSolution, Problem, ProblemBuilder,
-    TimeLimitSolution,
-};
-pub use traits::{
-    BaseConstraints, BaseVariable, ExtraConstraints,
-    ExtraVariable, SoftConstraints,
-};
+pub use solver::{DecoratedSolution, ExtraTranslator, Problem, ProblemBuilder, TimeLimitSolution};
+pub use traits::{BaseConstraints, BaseVariable, ExtraConstraints, ExtraVariable, SoftConstraints};
