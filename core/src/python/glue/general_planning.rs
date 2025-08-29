@@ -51,16 +51,37 @@ impl From<PeriodId> for crate::rpc::cmd_msg::MsgPeriodId {
 #[pyclass]
 pub struct SessionPeriods {}
 
-#[pymethods]
 impl SessionPeriods {
-    fn get(_self: PyRef<'_, Self>) -> Periods {
+    fn get_data() -> collomatique_state_colloscopes::Data {
         let result =
             crate::rpc::send_rpc(crate::rpc::CmdMsg::GetData).expect("No error for getting data");
         let ResultMsg::Data(serialized_data) = result else {
             panic!("Unexpected response to GetData");
         };
-        let data = collomatique_state_colloscopes::Data::from(serialized_data);
-        data.get_periods().into()
+        collomatique_state_colloscopes::Data::from(serialized_data)
+    }
+}
+
+#[pymethods]
+impl SessionPeriods {
+    fn get_first_week(_self: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
+        Self::get_data()
+            .get_periods()
+            .first_week
+            .as_ref()
+            .map(|x| x.clone().into())
+    }
+
+    fn get_periods(_self: PyRef<'_, Self>) -> Vec<Period> {
+        Self::get_data()
+            .get_periods()
+            .ordered_period_list
+            .iter()
+            .map(|(id, data)| Period {
+                id: MsgPeriodId::from(*id).into(),
+                weeks_status: data.clone(),
+            })
+            .collect()
     }
 
     fn set_first_week(_self: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
@@ -221,31 +242,16 @@ impl SessionPeriods {
 }
 
 #[pyclass]
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Periods {
-    #[pyo3(get)]
-    first_week: Option<time::NaiveMondayDate>,
-    #[pyo3(get)]
-    ordered_period_list: Vec<(PeriodId, Vec<bool>)>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Period {
+    id: PeriodId,
+    weeks_status: Vec<bool>,
 }
 
 #[pymethods]
-impl Periods {
+impl Period {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())
-    }
-}
-
-impl From<&collomatique_state_colloscopes::periods::Periods> for Periods {
-    fn from(value: &collomatique_state_colloscopes::periods::Periods) -> Self {
-        Periods {
-            first_week: value.first_week.clone().map(|x| x.into()),
-            ordered_period_list: value
-                .ordered_period_list
-                .iter()
-                .map(|(id, week_status)| (MsgPeriodId::from(*id).into(), week_status.clone()))
-                .collect(),
-        }
     }
 }
