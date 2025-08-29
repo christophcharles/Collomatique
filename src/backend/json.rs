@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use super::*;
 
 fn get_next_id<T: OrdId, U: OrdId + From<u64>>(
@@ -315,12 +317,44 @@ impl JsonData {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ValidatedJson {
+    validated: JsonData,
+}
+
+#[derive(Debug, Error)]
+pub enum ValidationError {}
+
+pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
+
+impl JsonData {
+    fn validate(self) -> ValidationResult<ValidatedJson> {
+        Ok(ValidatedJson { validated: self })
+    }
+}
+
+impl Default for ValidatedJson {
+    fn default() -> Self {
+        JsonData::default()
+            .validate()
+            .expect("Default JsonData should be valid")
+    }
+}
+
+impl ValidatedJson {
+    fn new() -> Self {
+        ValidatedJson::default()
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum FromLogicError<T: std::fmt::Debug + std::error::Error> {
     #[error("Error while retrieving data from backend")]
     InternalError(#[from] T),
     #[error("Data has inconstent ids")]
     InconsistentId,
+    #[error("Data is not valid: {0}")]
+    UnvalidData(ValidationError),
 }
 
 pub type FromLogicResult<T, E> = std::result::Result<T, FromLogicError<E>>;
@@ -328,7 +362,7 @@ pub type FromLogicResult<T, E> = std::result::Result<T, FromLogicError<E>>;
 #[derive(Debug, Clone)]
 pub struct JsonStore {
     next_id: u64,
-    data: JsonData,
+    data: ValidatedJson,
 }
 
 impl JsonStore {
@@ -565,7 +599,9 @@ impl JsonStore {
                 grouping_incompats,
                 colloscopes,
                 slot_selections,
-            },
+            }
+            .validate()
+            .map_err(FromLogicError::UnvalidData)?,
         })
     }
 }
@@ -574,7 +610,7 @@ impl Default for JsonStore {
     fn default() -> Self {
         JsonStore {
             next_id: 0,
-            data: JsonData::new(),
+            data: ValidatedJson::new(),
         }
     }
 }
@@ -597,7 +633,7 @@ pub type SaveResult<T> = std::result::Result<T, SaveError>;
 
 impl JsonStore {
     pub fn to_json(&self) -> serde_json::Result<String> {
-        Ok(serde_json::to_string_pretty(&self.data)?)
+        Ok(serde_json::to_string_pretty(&self.data.validated)?)
     }
 
     pub fn to_json_file(&self, path: &std::path::Path) -> SaveResult<()> {
@@ -616,6 +652,8 @@ pub enum FromJsonError {
     JsonError(#[from] serde_json::Error),
     #[error("Possible malicious (or corrupted) file: last id exceeds 2^63")]
     EndOfTheUniverseReached,
+    #[error("Data is not valid: {0}")]
+    UnvalidData(#[from] ValidationError),
 }
 
 pub type FromJsonResult<T> = std::result::Result<T, FromJsonError>;
@@ -641,7 +679,7 @@ impl JsonStore {
     }
 
     pub fn from_json(content: &str) -> FromJsonResult<Self> {
-        let data = serde_json::from_str::<JsonData>(content)?;
+        let data = serde_json::from_str::<JsonData>(content)?.validate()?;
 
         let next_id = match data.find_last_id() {
             Some(last) => {
@@ -698,5 +736,13 @@ impl JsonData {
             ids.insert(id.0);
         }
         ids.last().copied()
+    }
+}
+
+impl Deref for ValidatedJson {
+    type Target = JsonData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.validated
     }
 }
