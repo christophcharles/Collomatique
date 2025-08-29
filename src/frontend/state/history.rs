@@ -4,7 +4,6 @@ use super::*;
 pub enum AnnotatedOperation {
     General(AnnotatedGeneralOperation),
     WeekPatterns(AnnotatedWeekPatternsOperation),
-    Aggregated(Vec<AnnotatedOperation>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,11 +66,6 @@ impl AnnotatedOperation {
             Operation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 AnnotatedWeekPatternsOperation::annotate(op, handle_managers),
             ),
-            Operation::Aggregated(ops) => AnnotatedOperation::Aggregated(
-                ops.into_iter()
-                    .map(|op| AnnotatedOperation::annotate(op, handle_managers))
-                    .collect(),
-            ),
         }
     }
 }
@@ -82,9 +76,35 @@ pub struct ReversibleOperation {
     pub backward: AnnotatedOperation,
 }
 
+impl ReversibleOperation {
+    pub fn rev(&self) -> Self {
+        ReversibleOperation {
+            forward: self.backward.clone(),
+            backward: self.forward.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AggregatedOperations(Vec<ReversibleOperation>);
+
+impl AggregatedOperations {
+    pub fn new(ops: Vec<ReversibleOperation>) -> Self {
+        AggregatedOperations(ops)
+    }
+
+    pub fn rev(&self) -> Self {
+        AggregatedOperations(self.0.iter().map(|x| x.rev()).collect())
+    }
+
+    pub fn inner(&self) -> &Vec<ReversibleOperation> {
+        &self.0
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ModificationHistory {
-    history: std::collections::VecDeque<ReversibleOperation>,
+    history: std::collections::VecDeque<AggregatedOperations>,
     history_pointer: usize,
     max_history_size: Option<usize>,
 }
@@ -138,11 +158,11 @@ impl ModificationHistory {
         self.truncate_history_as_needed();
     }
 
-    pub fn apply(&mut self, reversible_op: ReversibleOperation) {
+    pub fn apply(&mut self, aggregated_ops: AggregatedOperations) {
         self.history.truncate(self.history_pointer);
 
         self.history_pointer += 1;
-        self.history.push_back(reversible_op);
+        self.history.push_back(aggregated_ops);
 
         self.truncate_history_as_needed();
     }
@@ -155,7 +175,7 @@ impl ModificationHistory {
         self.history_pointer < self.history.len()
     }
 
-    pub fn undo(&mut self) -> Option<AnnotatedOperation> {
+    pub fn undo(&mut self) -> Option<AggregatedOperations> {
         if !self.can_undo() {
             return None;
         }
@@ -164,19 +184,19 @@ impl ModificationHistory {
 
         assert!(self.history_pointer < self.history.len());
 
-        let last_op = self.history[self.history_pointer].clone();
+        let last_ops = self.history[self.history_pointer].clone();
 
-        Some(last_op.backward)
+        Some(last_ops.rev())
     }
 
-    pub fn redo(&mut self) -> Option<AnnotatedOperation> {
+    pub fn redo(&mut self) -> Option<AggregatedOperations> {
         if !self.can_redo() {
             return None;
         }
 
-        let new_op = self.history[self.history_pointer].clone();
+        let new_ops = self.history[self.history_pointer].clone();
         self.history_pointer += 1;
 
-        Some(new_op.forward)
+        Some(new_ops)
     }
 }
