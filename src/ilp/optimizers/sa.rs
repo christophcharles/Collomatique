@@ -1,15 +1,24 @@
 #[cfg(test)]
 mod tests;
 
+use crate::ilp::dbg::Debuggable;
 use crate::ilp::random::RandomGen;
 use crate::ilp::solvers::FeasabilitySolver;
 use crate::ilp::{Config, FeasableConfig, Problem};
+
+pub type TemperatureFn = Debuggable<dyn Fn(usize) -> f64>;
+
+impl Default for TemperatureFn {
+    fn default() -> Self {
+        crate::debuggable!(|k: usize| 1000000. / (k as f64))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Optimizer<'a> {
     problem: &'a Problem,
     init_config: Config,
-    temp_profile: fn(usize) -> f64,
+    temp_profile: TemperatureFn,
 }
 
 impl<'a> Optimizer<'a> {
@@ -19,7 +28,7 @@ impl<'a> Optimizer<'a> {
         Optimizer {
             problem,
             init_config,
-            temp_profile: Self::default_temp_profile,
+            temp_profile: TemperatureFn::default(),
         }
     }
 
@@ -27,7 +36,7 @@ impl<'a> Optimizer<'a> {
         self.init_config = init_config;
     }
 
-    pub fn set_temp_profile(&mut self, temp_profile: fn(usize) -> f64) {
+    pub fn set_temp_profile(&mut self, temp_profile: TemperatureFn) {
         self.temp_profile = temp_profile;
     }
 
@@ -43,12 +52,8 @@ impl<'a> Optimizer<'a> {
             previous_config: None,
             current_config: self.init_config.clone(),
             k: 0,
-            temp_profile: self.temp_profile,
+            temp_profile: self.temp_profile.clone(),
         }
-    }
-
-    fn default_temp_profile(k: usize) -> f64 {
-        1000000. / (k as f64)
     }
 }
 
@@ -64,7 +69,7 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<
     current_config: Config,
 
     k: usize,
-    temp_profile: fn(usize) -> f64,
+    temp_profile: TemperatureFn,
 }
 
 impl<'b, 'a: 'b, 'c, R: RandomGen, S: FeasabilitySolver<'a>> Iterator
