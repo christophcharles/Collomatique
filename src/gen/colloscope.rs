@@ -3036,14 +3036,6 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn build_soft_constraints(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
-
-        output.extend(self.build_balancing_optimizer());
-
-        output
-    }
-
     fn build_objective_contribs(&self) -> BTreeMap<Variable, f64> {
         let mut output = BTreeMap::new();
 
@@ -3151,9 +3143,9 @@ impl<'a> IlpTranslator<'a> {
         });
 
         // Soft constraints
-        let soft_constraints = self.build_soft_constraints();
+        let balancing_optimizer_constraints = self.build_balancing_optimizer();
 
-        for constraint in soft_constraints.into_iter() {
+        for constraint in balancing_optimizer_constraints.into_iter() {
             let exprs = match constraint.get_sign() {
                 crate::ilp::linexpr::Sign::Equals => {
                     let expr = constraint.get_lhs().clone();
