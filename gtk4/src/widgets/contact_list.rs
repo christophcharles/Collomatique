@@ -165,7 +165,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_margin_end: 5,
                 #[watch]
                 set_label: &self.generate_name_text(),
-                set_size_request: (150, -1),
+                set_size_request: (200, -1),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
