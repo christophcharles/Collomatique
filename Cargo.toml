@@ -23,5 +23,6 @@ coin_cbc = { version = "0.1.8", default-features = false }
 highs = "1.6"
 trait-variant = "0.1.2"
 gag = "1.0.0"
+indicatif = "0.17.8"
 
 [features]
