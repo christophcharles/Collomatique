@@ -2,7 +2,7 @@
 mod tests;
 
 use std::collections::BTreeMap;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
 use super::time;
@@ -12,7 +12,7 @@ use thiserror::Error;
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
     #[error("Subject {0} has empty students_per_interrogation: {1:?}")]
-    SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroU32>),
+    SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has in interrogation {1} the slot {2} after the week count ({3}) of the schedule")]
     SubjectWithSlotAfterLastWeek(usize, usize, usize, u32),
     #[error("Subject {0} has in interrogation {1} the slot {2} overlapping next day")]
@@ -66,7 +66,7 @@ pub struct Interrogation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
-    pub students_per_interrogation: RangeInclusive<NonZeroU32>,
+    pub students_per_interrogation: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,
     pub duration: NonZeroU32,
     pub interrogations: Vec<Interrogation>,
@@ -256,8 +256,8 @@ impl ValidatedData {
 }
 
 impl ValidatedData {
-    fn count_student_specializations(&self) -> BTreeMap<Student, NonZeroU32> {
-        let mut output: BTreeMap<Student, NonZeroU32> = BTreeMap::new();
+    fn count_student_specializations(&self) -> BTreeMap<Student, NonZeroUsize> {
+        let mut output: BTreeMap<Student, NonZeroUsize> = BTreeMap::new();
 
         for student in &self.students {
             match output.get_mut(student) {
@@ -267,7 +267,7 @@ impl ValidatedData {
                         .expect("There should be less than 2^32 student");
                 }
                 None => {
-                    output.insert(student.clone(), NonZeroU32::new(1).unwrap());
+                    output.insert(student.clone(), NonZeroUsize::new(1).unwrap());
                 }
             }
         }
