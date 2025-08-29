@@ -54,7 +54,7 @@ pub enum EditorCommandOutput {
     SaveFailed(PathBuf, String),
     ScriptChosen(PathBuf),
     ScriptNotChosen,
-    ScriptLoaded(String),
+    ScriptLoaded(PathBuf, String),
     ScriptLoadingFailed(PathBuf, String),
 }
 
@@ -485,16 +485,16 @@ impl Component for EditorPanel {
             EditorCommandOutput::ScriptChosen(path) => {
                 sender.oneshot_command(async move {
                     match tokio::fs::read_to_string(&path).await {
-                        Ok(text) => EditorCommandOutput::ScriptLoaded(text),
+                        Ok(text) => EditorCommandOutput::ScriptLoaded(path, text),
                         Err(e) => EditorCommandOutput::ScriptLoadingFailed(path, e.to_string()),
                     }
                 });
             }
             EditorCommandOutput::ScriptNotChosen => {}
-            EditorCommandOutput::ScriptLoaded(text) => {
+            EditorCommandOutput::ScriptLoaded(path, text) => {
                 self.check_script_dialog
                     .sender()
-                    .send(check_script::DialogInput::Show(text))
+                    .send(check_script::DialogInput::Show(path, text))
                     .unwrap();
             }
             EditorCommandOutput::ScriptLoadingFailed(path, error) => {
