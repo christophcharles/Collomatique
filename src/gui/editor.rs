@@ -1,3 +1,4 @@
+use collomatique::backend::json;
 use thiserror::Error;
 
 use iced::widget::{button, center, column, container, row, text, tooltip, Space};
@@ -17,7 +18,7 @@ pub enum Panel {
 struct AppStateBox {
     state: std::sync::Arc<
         std::sync::RwLock<
-            Option<collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>>,
+            Option<collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>>,
         >,
     >,
 }
@@ -27,21 +28,22 @@ impl AppStateBox {
         &self,
     ) -> std::sync::RwLockReadGuard<
         '_,
-        Option<collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>>,
+        Option<collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>>,
     > {
         self.state.read().unwrap()
     }
 
     fn extract(
         &mut self,
-    ) -> Option<collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>> {
+    ) -> Option<collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>>
+    {
         let mut lock = self.state.write().unwrap();
 
         lock.take()
     }
 
     fn new(
-        value: collomatique::frontend::state::AppState<collomatique::backend::sqlite::Store>,
+        value: collomatique::frontend::state::AppState<collomatique::backend::json::JsonStore>,
     ) -> Self {
         AppStateBox {
             state: std::sync::Arc::new(std::sync::RwLock::new(Some(value))),
@@ -57,54 +59,26 @@ pub struct State {
 }
 
 #[derive(Debug, Error, Clone)]
-pub enum ConnectDbError {
-    #[error("Nom de fichier invalide (Chaine UTF-8 invalide)")]
-    InvalidPath,
-    #[error("Le fichier {0} existe déjà et ne sera pas écrasé")]
-    DatabaseAlreadyExists(std::path::PathBuf),
-    #[error("Le fichier {0} n'existe pas")]
-    DatabaseDoesNotExist(std::path::PathBuf),
-    #[error("Erreur sqlx : {0}")]
-    SqlxError(std::sync::Arc<sqlx::Error>),
+pub enum OpenCollomatiqueFileError {
+    #[error("Erreur à l'ouverture json : {0}")]
+    JsonError(std::sync::Arc<collomatique::backend::json::FromJsonError>),
     #[error("Erreur d'entrée/sortie : {0}")]
     IOError(std::sync::Arc<std::io::Error>),
 }
 
-impl From<collomatique::backend::sqlite::NewError> for ConnectDbError {
-    fn from(value: collomatique::backend::sqlite::NewError) -> Self {
-        use collomatique::backend::sqlite::NewError;
+impl From<collomatique::backend::json::OpenError> for OpenCollomatiqueFileError {
+    fn from(value: collomatique::backend::json::OpenError) -> Self {
+        use collomatique::backend::json::OpenError;
         match value {
-            NewError::InvalidPath => ConnectDbError::InvalidPath,
-            NewError::DatabaseAlreadyExists(path) => ConnectDbError::DatabaseAlreadyExists(path),
-            NewError::SqlxError(sqlx_error) => sqlx_error.into(),
+            OpenError::IO(error) => OpenCollomatiqueFileError::IOError(std::sync::Arc::new(error)),
+            OpenError::FromJsonError(error) => {
+                OpenCollomatiqueFileError::JsonError(std::sync::Arc::new(error))
+            }
         }
     }
 }
 
-impl From<collomatique::backend::sqlite::OpenError> for ConnectDbError {
-    fn from(value: collomatique::backend::sqlite::OpenError) -> Self {
-        use collomatique::backend::sqlite::OpenError;
-        match value {
-            OpenError::InvalidPath => ConnectDbError::InvalidPath,
-            OpenError::DatabaseDoesNotExist(path) => ConnectDbError::DatabaseDoesNotExist(path),
-            OpenError::SqlxError(sqlx_error) => sqlx_error.into(),
-        }
-    }
-}
-
-impl From<sqlx::Error> for ConnectDbError {
-    fn from(value: sqlx::Error) -> Self {
-        ConnectDbError::SqlxError(std::sync::Arc::new(value))
-    }
-}
-
-impl From<std::io::Error> for ConnectDbError {
-    fn from(value: std::io::Error) -> Self {
-        ConnectDbError::IOError(std::sync::Arc::new(value))
-    }
-}
-
-pub type ConnectDbResult<T> = std::result::Result<T, ConnectDbError>;
+pub type OpenCollomatiqueFileResult<T> = std::result::Result<T, OpenCollomatiqueFileError>;
 
 #[derive(Debug, Clone)]
 pub enum CreatePolicy {
@@ -113,21 +87,13 @@ pub enum CreatePolicy {
     Open,
 }
 
-async fn connect_db(
+async fn open_collomatique_file(
     create_policy: CreatePolicy,
     path: &std::path::Path,
-) -> ConnectDbResult<collomatique::backend::sqlite::Store> {
-    use collomatique::backend::sqlite;
+) -> OpenCollomatiqueFileResult<collomatique::backend::json::JsonStore> {
     match create_policy {
-        CreatePolicy::Create => Ok(sqlite::Store::new_db(path).await?),
-        CreatePolicy::Open => Ok(sqlite::Store::open_db(path).await?),
-        CreatePolicy::CreateAndOverride => {
-            use tokio::fs;
-            if fs::try_exists(path).await? {
-                fs::remove_file(path).await?;
-            }
-            Ok(sqlite::Store::new_db(path).await?)
-        }
+        CreatePolicy::Create | CreatePolicy::CreateAndOverride => Ok(json::JsonStore::new()),
+        CreatePolicy::Open => Ok(json::JsonStore::from_json_file(path)?),
     }
 }
 
@@ -135,11 +101,11 @@ impl State {
     pub async fn new(
         create_policy: CreatePolicy,
         file: std::path::PathBuf,
-    ) -> ConnectDbResult<Self> {
+    ) -> OpenCollomatiqueFileResult<Self> {
         use collomatique::backend::Logic;
         use collomatique::frontend::state::AppState;
 
-        let logic = Logic::new(connect_db(create_policy, file.as_path()).await?);
+        let logic = Logic::new(open_collomatique_file(create_policy, file.as_path()).await?);
         let app_state = AppState::new(logic);
 
         Ok(Self {
