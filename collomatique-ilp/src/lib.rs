@@ -53,6 +53,7 @@
 
 pub mod linexpr;
 pub mod mat_repr;
+pub mod solvers;
 
 #[cfg(test)]
 mod tests;
