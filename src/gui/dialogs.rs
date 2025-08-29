@@ -1,5 +1,5 @@
 use iced::widget::{button, column, container, row, text, Space};
-use iced::{Element, Length, Task};
+use iced::{Element, Length, Subscription, Task};
 
 use super::{tools, GuiMessage, GuiState};
 
@@ -9,19 +9,54 @@ pub struct FileDesc {
     pub create: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Message {
     OpenNewFile,
     OpenExistingFile,
     FileSelected(Option<FileDesc>),
-    AlertDialog(String, String, fn(bool) -> GuiMessage),
+    AlertDialog(
+        String,
+        String,
+        std::sync::Arc<dyn Fn(bool) -> GuiMessage + Send + Sync>,
+    ),
     AlertDialogClosed(bool),
 }
 
-#[derive(Debug, Clone)]
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Message::OpenNewFile => write!(f, "Message::OpenNewFile"),
+            Message::OpenExistingFile => write!(f, "Message::OpenExistingFile"),
+            Message::FileSelected(file_desc) => write!(f, "Message::FileSelected({:?}", file_desc),
+            Message::AlertDialog(title, txt, _msg) => {
+                write!(f, "Message::AlertDialog({:?}, {:?}, Fn)", title, txt)
+            }
+            Message::AlertDialogClosed(result) => {
+                write!(f, "Message::AlertDialogClose({:?})", result)
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 pub enum DialogShown {
     FileChooser,
-    Alert(String, String, fn(bool) -> GuiMessage),
+    Alert(
+        String,
+        String,
+        std::sync::Arc<dyn Fn(bool) -> GuiMessage + Send + Sync>,
+    ),
+}
+
+impl std::fmt::Debug for DialogShown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DialogShown::FileChooser => write!(f, "DialogShown::FileChooser"),
+            DialogShown::Alert(title, txt, _msg) => {
+                write!(f, "DialogShown::Alert({:?}, {:?}, Fn)", title, txt)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -135,4 +170,8 @@ pub fn view(state: &State) -> Element<GuiMessage> {
 
 pub fn title(state: &State) -> String {
     super::title(state.previous_state.as_ref())
+}
+
+pub fn exit_subscription(_state: &State) -> Subscription<GuiMessage> {
+    Subscription::none()
 }

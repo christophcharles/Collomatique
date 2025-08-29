@@ -1,5 +1,5 @@
 use iced::widget::{button, center, column, container, row, text, tooltip, Space};
-use iced::{Element, Length, Task, Theme};
+use iced::{window, Element, Length, Subscription, Task, Theme};
 
 use super::{tools, GuiMessage, GuiState};
 
@@ -39,6 +39,8 @@ impl State {
 pub enum Message {
     PanelChanged(Panel),
     CloseClicked,
+    ExitRequest(window::Id),
+    ExitValidated(window::Id),
 }
 
 pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
@@ -55,16 +57,31 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             super::dialogs::Message::AlertDialog(
                 "Attention".into(),
                 "Fermer le colloscope ?".into(),
-                |result| {
+                std::sync::Arc::new(|result| {
                     if result {
                         GuiMessage::GoToWelcomeScreen
                     } else {
                         GuiMessage::Ignore
                     }
-                },
+                }),
             )
             .into(),
         ),
+        Message::ExitRequest(id) => Task::done(
+            super::dialogs::Message::AlertDialog(
+                "Attention".into(),
+                "Quitter Collomatique ?".into(),
+                std::sync::Arc::new(move |result| {
+                    if result {
+                        Message::ExitValidated(id).into()
+                    } else {
+                        GuiMessage::Ignore
+                    }
+                }),
+            )
+            .into(),
+        ),
+        Message::ExitValidated(id) => window::close(id),
     }
 }
 
@@ -189,4 +206,8 @@ pub fn title(state: &State) -> String {
         }
         None => String::from("Collomatique"),
     }
+}
+
+pub fn exit_subscription(_state: &State) -> Subscription<GuiMessage> {
+    iced::window::close_requests().map(|id| Message::ExitRequest(id).into())
 }
