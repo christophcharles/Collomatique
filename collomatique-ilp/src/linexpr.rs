@@ -246,7 +246,7 @@ impl<V: UsableData> LinExpr<V> {
     }
 
     /// Returns an iterator over the variables that appears in the expression and their associated coefficients
-    /// 
+    ///
     ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
@@ -287,8 +287,8 @@ impl<V: UsableData> LinExpr<V> {
     /// assert_eq!(expr2.coefficients().map(|(x,y)| (x.clone(), y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([(String::from("A"),0.0)]));
     /// ```
     /// You can use [LinExpr::clean] to remove the 0 coefficients.
-    pub fn coefficients(&self) -> impl ExactSizeIterator<Item=(&V, f64)> {
-        self.coefs.iter().map(|(x,y)| (x, y.into_inner()))
+    pub fn coefficients(&self) -> impl ExactSizeIterator<Item = (&V, f64)> {
+        self.coefs.iter().map(|(x, y)| (x, y.into_inner()))
     }
 
     /// Removes variables that have a 0 coefficient.
@@ -556,7 +556,7 @@ impl<V: UsableData> Constraint<V> {
     /// assert_eq!(constraint2.coefficients().map(|(x,y)| (x.clone(),y)).collect::<BTreeMap<_,_>>(), BTreeMap::from([(String::from("A"),0.0)]));
     /// ```
     /// You can use [Constraint::clean] to remove the 0 coefficients.
-    pub fn coefficients(&self) -> impl ExactSizeIterator<Item=(&V,f64)> {
+    pub fn coefficients(&self) -> impl ExactSizeIterator<Item = (&V, f64)> {
         self.expr.coefficients()
     }
 

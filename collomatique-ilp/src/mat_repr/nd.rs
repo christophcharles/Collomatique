@@ -1,5 +1,5 @@
-use super::{ProblemRepr, ConfigRepr};
-use crate::{Variable, UsableData, Constraint, linexpr::EqSymbol};
+use super::{ConfigRepr, ProblemRepr};
+use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable};
 
 use ndarray::{Array1, Array2};
 use std::collections::BTreeMap;
@@ -19,7 +19,7 @@ impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
     fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
     where
         V: 'a,
-        T: ExactSizeIterator<Item = &'a Constraint<V>>
+        T: ExactSizeIterator<Item = &'a Constraint<V>>,
     {
         let n = constraints.len();
         let p = variables.len();
@@ -35,11 +35,11 @@ impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
 
         let mut constraints_symbols = Vec::with_capacity(n);
 
-        for (i,c) in constraints.enumerate() {
+        for (i, c) in constraints.enumerate() {
             constraints_symbols.push(c.get_symbol());
             for (var, val) in c.coefficients() {
                 let j = variable_map[var];
-                mat[(i,j)] = val;
+                mat[(i, j)] = val;
                 constants[i] = c.get_constant();
             }
         }
@@ -52,7 +52,10 @@ impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
         }
     }
 
-    fn config_from<'a>(&'a self, vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>) -> impl ConfigRepr<'a, V> {
+    fn config_from<'a>(
+        &'a self,
+        vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    ) -> impl ConfigRepr<'a, V> {
         let p = self.mat.shape()[1];
 
         let mut values = Array1::zeros(p);
@@ -94,7 +97,7 @@ impl<V: UsableData> Ord for NdProblem<V> {
 
         assert_eq!(l1, l2);
 
-        for (f1,f2) in self.mat.iter().zip(other.mat.iter()) {
+        for (f1, f2) in self.mat.iter().zip(other.mat.iter()) {
             let v1 = ordered_float::OrderedFloat(*f1);
             let v2 = ordered_float::OrderedFloat(*f2);
 
@@ -109,7 +112,7 @@ impl<V: UsableData> Ord for NdProblem<V> {
 
         assert_eq!(l1, l2);
 
-        for (f1,f2) in self.constants.iter().zip(other.constants.iter()) {
+        for (f1, f2) in self.constants.iter().zip(other.constants.iter()) {
             let v1 = ordered_float::OrderedFloat(*f1);
             let v2 = ordered_float::OrderedFloat(*f2);
 
@@ -179,7 +182,7 @@ impl<'a, V: UsableData> Ord for NdConfig<'a, V> {
 
         assert_eq!(l1, l2);
 
-        for (f1,f2) in self.values.iter().zip(other.values.iter()) {
+        for (f1, f2) in self.values.iter().zip(other.values.iter()) {
             let v1 = ordered_float::OrderedFloat(*f1);
             let v2 = ordered_float::OrderedFloat(*f2);
 

@@ -966,7 +966,9 @@ pub struct ConfigData<V: UsableData> {
 
 impl<V: UsableData> Default for ConfigData<V> {
     fn default() -> Self {
-        ConfigData { values: BTreeMap::default() }
+        ConfigData {
+            values: BTreeMap::default(),
+        }
     }
 }
 
