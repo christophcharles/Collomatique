@@ -1,0 +1,9 @@
+[package]
+name = "collomatique-solver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+collomatique-ilp = { path = "../ilp" }
+ordered-float = "4.2.0"
+thiserror = "1.0"

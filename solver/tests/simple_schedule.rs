@@ -1,6 +1,6 @@
 #[test]
 fn no_solution_because_too_many_groups() {
-    use collomatique_core::{
+    use collomatique_solver::{
         examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
         ProblemBuilder,
     };
@@ -28,7 +28,7 @@ fn no_solution_because_too_many_groups() {
 
 #[test]
 fn no_solution_because_too_many_courses() {
-    use collomatique_core::{
+    use collomatique_solver::{
         examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
         ProblemBuilder,
     };
@@ -56,7 +56,7 @@ fn no_solution_because_too_many_courses() {
 
 #[test]
 fn solution_with_only_one_group() {
-    use collomatique_core::{
+    use collomatique_solver::{
         examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
         ProblemBuilder,
     };
@@ -106,7 +106,7 @@ fn solution_with_only_one_group() {
 
 #[test]
 fn solution_with_only_one_group_and_way_too_many_weeks() {
-    use collomatique_core::{
+    use collomatique_solver::{
         examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
         ProblemBuilder,
     };
@@ -157,7 +157,7 @@ fn solution_with_only_one_group_and_way_too_many_weeks() {
 
 #[test]
 fn solution_with_two_groups() {
-    use collomatique_core::{
+    use collomatique_solver::{
         examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
         ProblemBuilder,
     };
@@ -228,7 +228,7 @@ fn solution_with_two_groups() {
 
 #[test]
 fn solution_with_two_groups_and_way_too_many_weeks() {
-    use collomatique_core::{
+    use collomatique_solver::{
         examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
         ProblemBuilder,
     };

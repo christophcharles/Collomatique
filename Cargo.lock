@@ -820,6 +820,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "collomatique-ilp",
+ "collomatique-solver",
  "ordered-float",
  "serde",
  "thiserror",
@@ -835,6 +836,15 @@ dependencies = [
  "ndarray 0.15.6",
  "ordered-float",
  "sprs",
+ "thiserror",
+]
+
+[[package]]
+name = "collomatique-solver"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+ "ordered-float",
  "thiserror",
 ]
 

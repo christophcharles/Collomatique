@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 collomatique-ilp = { path = "../ilp" }
+collomatique-solver = { path = "../solver" }
 ordered-float = "4.2.0"
 thiserror = "1.0"
 serde = "1.0"
