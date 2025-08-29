@@ -4,7 +4,9 @@ mod tests;
 use crate::ilp::{Config, FeasableConfig, Problem};
 
 #[derive(Debug, Clone)]
-pub struct Solver {}
+pub struct Solver {
+    disable_logging: bool,
+}
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
@@ -21,7 +23,7 @@ impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
 
         let problem = config.get_problem();
 
-        let mut cbc_model = Self::build_model(problem, config);
+        let mut cbc_model = self.build_model(problem, config);
         if let Some(ms) = max_steps {
             cbc_model.model.set_parameter("maxN", &format!("{}", ms));
         }
@@ -40,12 +42,25 @@ struct CbcModel<V: VariableName> {
     cols: std::collections::BTreeMap<V, coin_cbc::Col>,
 }
 
+impl Default for Solver {
+    fn default() -> Self {
+        Solver::new()
+    }
+}
+
 impl Solver {
     pub fn new() -> Self {
-        Solver {}
+        Solver {
+            disable_logging: false,
+        }
+    }
+
+    pub fn with_disable_logging(disable_logging: bool) -> Self {
+        Solver { disable_logging }
     }
 
     fn build_model<V: VariableName, P: ProblemRepr<V>>(
+        &self,
         problem: &Problem<V, P>,
         config: &Config<'_, V, P>,
     ) -> CbcModel<V> {
@@ -93,8 +108,10 @@ impl Solver {
             }
         }
 
-        model.set_parameter("log", "0");
-        model.set_parameter("slog", "0");
+        if self.disable_logging {
+            model.set_parameter("log", "0");
+            model.set_parameter("slog", "0");
+        }
 
         CbcModel { model, cols }
     }
