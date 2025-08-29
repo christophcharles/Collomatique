@@ -311,10 +311,10 @@ impl GenColloscopeTranslator {
             id_map: BTreeMap::new(),
         };
 
-        for (&student_id, _student) in &data.students {
+        for (&student_id, student) in &data.students {
             let mut new_student = Student {
                 incompatibilities: BTreeSet::new(),
-                non_consecutive_interrogations: true,
+                non_consecutive_interrogations: student.no_consecutive_slots,
             };
 
             for (&incompat_id, _incompat) in &data.incompats {
