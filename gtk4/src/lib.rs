@@ -167,7 +167,7 @@ impl SimpleComponent for AppModel {
         },
         about_dialog = adw::AboutDialog {
             set_application_name: "Collomatique",
-            set_developer_name: env!("CARGO_PKG_AUTHORS"),
+            set_developer_name: &env!("CARGO_PKG_AUTHORS").replace(":", "\n"),
             set_version: env!("CARGO_PKG_VERSION"),
             set_website: "https://github.com/christophcharles/Collomatique",
             set_license_type: gtk::License::Agpl30,
