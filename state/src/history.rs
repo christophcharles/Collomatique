@@ -324,6 +324,24 @@ impl<T: Operation> ModificationHistory<T> {
         self.history_pointer < self.history.len()
     }
 
+    /// Returns the last operation in history but does not reverse it
+    ///
+    /// Similarly to [Self::undo] this returns the last operation in history
+    /// (if it exists). However the history is not changed.
+    ///
+    /// Also the operation is not reversed. So you just get the last operation
+    /// that was applied.
+    pub fn get_last_op(&self) -> Option<AggregatedOp<T>> {
+        if !self.can_undo() {
+            return None;
+        }
+
+        assert!(self.history_pointer <= self.history.len());
+        assert!(self.history_pointer > 0);
+        let last_ops = self.history[self.history_pointer - 1].clone();
+        Some(last_ops.0)
+    }
+
     /// Cancels the last operation in history
     ///
     /// The history is actually preserved but this changes

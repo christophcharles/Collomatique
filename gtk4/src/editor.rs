@@ -500,6 +500,12 @@ impl Component for EditorPanel {
             }
             EditorInput::NewStateFromScript(new_data) => {
                 self.data = new_data;
+                if let Some(last_op) = self.data.get_last_op() {
+                    let last_action = last_op.inner().last();
+                    self.show_particular_panel = last_action
+                        .map(|x| Self::inner_op_to_panel_number(x.inner()))
+                        .flatten();
+                }
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
             }
