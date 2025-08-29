@@ -13,6 +13,10 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
     ),
     LooseInterrogationSlots(collomatique_state_colloscopes::SubjectId),
+    LooseScheduleIncompat(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::IncompatId,
+    ),
 }
 
 impl SubjectsUpdateWarning {
@@ -57,6 +61,25 @@ impl SubjectsUpdateWarning {
                 };
                 format!(
                     "Perte des créneaux de colles pour la matière \"{}\"",
+                    subject.parameters.name,
+                )
+            }
+            Self::LooseScheduleIncompat(subject_id, incompat_id) => {
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return String::new();
+                };
+                let Some(incompat) = data
+                    .get_data()
+                    .get_incompats()
+                    .incompat_map
+                    .get(incompat_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte d'une incompatibilité horaire le {} à {} pour la matière \"{}\"",
+                    incompat.slot.start().weekday,
+                    incompat.slot.start().start_time,
                     subject.parameters.name,
                 )
             }
@@ -261,6 +284,15 @@ impl SubjectsUpdateOp {
                     }
                 }
 
+                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                    if incompat.subject_id == *subject_id {
+                        output.push(SubjectsUpdateWarning::LooseScheduleIncompat(
+                            *subject_id,
+                            *incompat_id,
+                        ));
+                    }
+                }
+
                 if let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
                 {
                     if !subject_slots.ordered_slots.is_empty() {
@@ -433,6 +465,24 @@ impl SubjectsUpdateOp {
                                     collomatique_state_colloscopes::TeacherOp::Update(
                                         *teacher_id,
                                         new_teacher,
+                                    ),
+                                ),
+                                "Enlever une référence à la matière à effacer".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                    if incompat.subject_id == *subject_id {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Incompat(
+                                    collomatique_state_colloscopes::IncompatOp::Remove(
+                                        *incompat_id,
                                     ),
                                 ),
                                 "Enlever une référence à la matière à effacer".into(),
