@@ -21,36 +21,40 @@ pub struct Database {
 impl Database {
     fn general_data_get(self_: PyRef<'_, Self>) -> PyResult<GeneralData> {
         let Answer::GeneralDataGet(val) =
-            SessionConnection::send_command(self_.py(), &self_.sender, Command::GeneralDataGet)
+            SessionConnection::send_command(self_.py(), &self_.sender, Command::GeneralDataGet)?
         else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(val)
     }
 
     fn general_data_set(self_: PyRef<'_, Self>, general_data: GeneralData) -> PyResult<()> {
-        let Answer::GeneralDataSet(val) = SessionConnection::send_command(
+        let Answer::GeneralDataSet = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
             Command::GeneralDataSet(general_data),
-        ) else {
+        )?
+        else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(())
     }
 
     fn week_patterns_get_all(
         self_: PyRef<'_, Self>,
     ) -> PyResult<BTreeMap<WeekPatternHandle, WeekPattern>> {
-        let Answer::WeekPatternsGetAll(val) =
-            SessionConnection::send_command(self_.py(), &self_.sender, Command::WeekPatternsGetAll)
+        let Answer::WeekPatternsGetAll(val) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::WeekPatternsGetAll,
+        )?
         else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(val)
     }
 
     fn week_patterns_get(
@@ -61,23 +65,25 @@ impl Database {
             self_.py(),
             &self_.sender,
             Command::WeekPatternsGet(handle),
-        ) else {
+        )?
+        else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(val)
     }
 
     fn week_patterns_create(self_: PyRef<'_, Self>, pattern: WeekPattern) -> PyResult<()> {
-        let Answer::WeekPatternsCreate(val) = SessionConnection::send_command(
+        let Answer::WeekPatternsCreate = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
             Command::WeekPatternsCreate(pattern),
-        ) else {
+        )?
+        else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(())
     }
 
     fn week_patterns_update(
@@ -85,27 +91,29 @@ impl Database {
         handle: WeekPatternHandle,
         pattern: WeekPattern,
     ) -> PyResult<()> {
-        let Answer::WeekPatternsUpdate(val) = SessionConnection::send_command(
+        let Answer::WeekPatternsUpdate = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
             Command::WeekPatternsUpdate(handle, pattern),
-        ) else {
+        )?
+        else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(())
     }
 
     fn week_patterns_remove(self_: PyRef<'_, Self>, handle: WeekPatternHandle) -> PyResult<()> {
-        let Answer::WeekPatternsRemove(val) = SessionConnection::send_command(
+        let Answer::WeekPatternsRemove = SessionConnection::send_command(
             self_.py(),
             &self_.sender,
             Command::WeekPatternsRemove(handle),
-        ) else {
+        )?
+        else {
             panic!("Bad answer type");
         };
 
-        val
+        Ok(())
     }
 }
 
@@ -141,19 +149,19 @@ impl std::error::Error for PythonError {}
 
 #[derive(Debug)]
 pub enum Answer {
-    GeneralDataGet(PyResult<GeneralData>),
-    GeneralDataSet(PyResult<()>),
-    WeekPatternsGetAll(PyResult<BTreeMap<WeekPatternHandle, WeekPattern>>),
-    WeekPatternsGet(PyResult<WeekPattern>),
-    WeekPatternsCreate(PyResult<()>),
-    WeekPatternsUpdate(PyResult<()>),
-    WeekPatternsRemove(PyResult<()>),
+    GeneralDataGet(GeneralData),
+    GeneralDataSet,
+    WeekPatternsGetAll(BTreeMap<WeekPatternHandle, WeekPattern>),
+    WeekPatternsGet(WeekPattern),
+    WeekPatternsCreate,
+    WeekPatternsUpdate,
+    WeekPatternsRemove,
 }
 
 #[derive(Debug)]
 pub struct Job {
     command: Command,
-    answer: Sender<Answer>,
+    answer: Sender<PyResult<Answer>>,
 }
 
 #[derive(Debug)]
@@ -220,19 +228,21 @@ impl<'scope> SessionConnection<'scope> {
         }
     }
 
-    async fn execute_job<T: state::Manager>(command: &Command, manager: &mut T) -> Answer {
+    async fn execute_job<T: state::Manager>(
+        command: &Command,
+        manager: &mut T,
+    ) -> PyResult<Answer> {
         match command {
             Command::GeneralDataGet => {
                 let general_data = manager
                     .general_data_get()
                     .await
-                    .map_err(|e| PyException::new_err(e.to_string()))
-                    .map(GeneralData::from);
+                    .map_err(|e| PyException::new_err(e.to_string()))?;
 
-                Answer::GeneralDataGet(general_data)
+                Ok(Answer::GeneralDataGet(general_data.into()))
             }
             Command::GeneralDataSet(general_data) => {
-                let result = manager
+                manager
                     .apply(Operation::GeneralData(general_data.into()))
                     .await
                     .map_err(|e| match e {
@@ -244,41 +254,39 @@ impl<'scope> SessionConnection<'scope> {
                             PyValueError::new_err("Some wwek patterns need truncating")
                         }
                         _ => panic!("Unexpected error!"),
-                    });
+                    })?;
 
-                Answer::GeneralDataSet(result)
+                Ok(Answer::GeneralDataSet)
             }
             Command::WeekPatternsGetAll => {
                 let result = manager
                     .week_patterns_get_all()
                     .await
-                    .map_err(|e| PyException::new_err(e.to_string()))
-                    .map(|map| {
-                        map.into_iter()
-                            .map(|(handle, pattern)| {
-                                (WeekPatternHandle { handle }, WeekPattern::from(pattern))
-                            })
-                            .collect::<BTreeMap<_, _>>()
-                    });
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, pattern)| {
+                        (WeekPatternHandle { handle }, WeekPattern::from(pattern))
+                    })
+                    .collect::<BTreeMap<_, _>>();
 
-                Answer::WeekPatternsGetAll(result)
+                Ok(Answer::WeekPatternsGetAll(result))
             }
             Command::WeekPatternsGet(handle) => {
-                let result = manager
-                    .week_patterns_get(handle.handle)
-                    .await
-                    .map_err(|e| match e {
-                        IdError::InternalError(int_err) => {
-                            PyException::new_err(int_err.to_string())
-                        }
-                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
-                    })
-                    .map(WeekPattern::from);
+                let result =
+                    manager
+                        .week_patterns_get(handle.handle)
+                        .await
+                        .map_err(|e| match e {
+                            IdError::InternalError(int_err) => {
+                                PyException::new_err(int_err.to_string())
+                            }
+                            IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                        })?;
 
-                Answer::WeekPatternsGet(result)
+                Ok(Answer::WeekPatternsGet(result.into()))
             }
             Command::WeekPatternsCreate(pattern) => {
-                let result = manager
+                manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Create(pattern.into()),
                     ))
@@ -289,12 +297,12 @@ impl<'scope> SessionConnection<'scope> {
                             PyValueError::new_err("Week number larger than week_count")
                         }
                         _ => panic!("Unexpected error!"),
-                    });
+                    })?;
 
-                Answer::WeekPatternsCreate(result)
+                Ok(Answer::WeekPatternsCreate)
             }
             Command::WeekPatternsUpdate(handle, pattern) => {
-                let result = manager
+                manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Update(handle.handle, pattern.into()),
                     ))
@@ -308,12 +316,12 @@ impl<'scope> SessionConnection<'scope> {
                             PyValueError::new_err("Week pattern was previsouly removed")
                         }
                         _ => panic!("Unexpected error!"),
-                    });
+                    })?;
 
-                Answer::WeekPatternsUpdate(result)
+                Ok(Answer::WeekPatternsUpdate)
             }
             Command::WeekPatternsRemove(handle) => {
-                let result = manager
+                manager
                     .apply(Operation::WeekPatterns(
                         state::WeekPatternsOperation::Remove(handle.handle),
                     ))
@@ -327,15 +335,15 @@ impl<'scope> SessionConnection<'scope> {
                             "There are remaining dependancies on this week pattern",
                         ),
                         _ => panic!("Unexpected error!"),
-                    });
+                    })?;
 
-                Answer::WeekPatternsRemove(result)
+                Ok(Answer::WeekPatternsRemove)
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
     }
 
-    fn send_command_internal(sender: &Sender<Job>, command: Command) -> Receiver<Answer> {
+    fn send_command_internal(sender: &Sender<Job>, command: Command) -> Receiver<PyResult<Answer>> {
         let (answer_sender, answer_receiver) = mpsc::channel();
 
         let job = Job {
@@ -350,7 +358,7 @@ impl<'scope> SessionConnection<'scope> {
         answer_receiver
     }
 
-    fn send_command(py: Python, sender: &Sender<Job>, command: Command) -> Answer {
+    fn send_command(py: Python, sender: &Sender<Job>, command: Command) -> PyResult<Answer> {
         let receiver = Self::send_command_internal(sender, command);
 
         py.allow_threads(move || receiver.recv().unwrap())
