@@ -1288,19 +1288,19 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     }
 
     /// Blames unsatisfied constraints
-    /// 
+    ///
     /// This returns an iterator of the unsatisfied constraints.
     /// The iterator iterates over tuples containing
     /// the actual problematic constraints and the corresponding descriptions
     /// that was provided at problem construction.
-    /// 
+    ///
     /// It can be empty if all the constraints are satisfied.
-    pub fn blame(&self) -> impl ExactSizeIterator<Item=&(Constraint<V>, C)> {
+    pub fn blame(&self) -> impl ExactSizeIterator<Item = &(Constraint<V>, C)> {
         let unsatisfied_constraints = self.repr.unsatisfied_constraints();
 
-        unsatisfied_constraints.into_iter().map(
-            |i| &self.problem.constraints[i]
-        )
+        unsatisfied_constraints
+            .into_iter()
+            .map(|i| &self.problem.constraints[i])
     }
 
     /// Turns a configuration into a feasable configuration
