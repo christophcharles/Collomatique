@@ -6,9 +6,9 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedOperation, AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation,
-    AnnotatedTeachersOperation, AnnotatedWeekPatternsOperation, ModificationHistory,
-    ReversibleOperation,
+    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedStudentsOperation,
+    AnnotatedSubjectGroupsOperation, AnnotatedTeachersOperation, AnnotatedWeekPatternsOperation,
+    ModificationHistory, ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
@@ -27,6 +27,12 @@ pub enum Operation {
     Teachers(TeachersOperation),
     Students(StudentsOperation),
     SubjectGroups(SubjectGroupsOperation),
+    Incompats(IncompatsOperation),
+    GroupLists(GroupListsOperation),
+    Subjects(SubjectsOperation),
+    TimeSlots(TimeSlotsOperation),
+    Groupings(GroupingsOperation),
+    GroupingIncompats(GroupingIncompatsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,6 +61,57 @@ pub enum SubjectGroupsOperation {
     Create(backend::SubjectGroup),
     Remove(SubjectGroupHandle),
     Update(SubjectGroupHandle, backend::SubjectGroup),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IncompatsOperation {
+    Create(backend::Incompat<WeekPatternHandle>),
+    Remove(IncompatHandle),
+    Update(IncompatHandle, backend::Incompat<WeekPatternHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupListsOperation {
+    Create(backend::GroupList<StudentHandle>),
+    Remove(GroupListHandle),
+    Update(GroupListHandle, backend::GroupList<StudentHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectsOperation {
+    Create(backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>),
+    Remove(SubjectHandle),
+    Update(
+        SubjectHandle,
+        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TimeSlotsOperation {
+    Create(backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>),
+    Remove(TimeSlotHandle),
+    Update(
+        TimeSlotHandle,
+        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupingsOperation {
+    Create(backend::Grouping<TimeSlotHandle>),
+    Remove(GroupingHandle),
+    Update(GroupingHandle, backend::Grouping<TimeSlotHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupingIncompatsOperation {
+    Create(backend::GroupingIncompat<GroupingHandle>),
+    Remove(GroupingIncompatHandle),
+    Update(
+        GroupingIncompatHandle,
+        backend::GroupingIncompat<GroupingHandle>,
+    ),
 }
 
 #[derive(Debug)]
