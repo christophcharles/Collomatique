@@ -140,9 +140,10 @@ pub struct GroupsDesc {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BalancingStrictness {
+pub enum BalancingConstraints {
     OverallOnly,
     StrictWithCuts,
+    StrictWithCutsAndOverall,
     Strict,
 }
 
@@ -197,7 +198,7 @@ impl BalancingSlotSelection {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BalancingRequirements {
-    pub strictness: BalancingStrictness,
+    pub constraints: BalancingConstraints,
     pub slot_selections: Vec<BalancingSlotSelection>,
 }
 
@@ -2031,7 +2032,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_group(
+    fn build_balancing_constraints_for_subject_overall_internal_for_slot_group(
         &self,
         i: usize,
         subject: &Subject,
@@ -2083,7 +2084,7 @@ impl<'a> IlpTranslator<'a> {
         }
     }
 
-    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_selection(
+    fn build_balancing_constraints_for_subject_overall_internal_for_slot_selection(
         &self,
         i: usize,
         subject: &Subject,
@@ -2116,16 +2117,25 @@ impl<'a> IlpTranslator<'a> {
             let relevant_slots = &slot_group.slots;
             let count = slot_group.count;
             for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
-                constraints.extend(self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_group(
-                    i, subject, j, week_span, relevant_slots, count, total_count, k
-                ));
+                constraints.extend(
+                    self.build_balancing_constraints_for_subject_overall_internal_for_slot_group(
+                        i,
+                        subject,
+                        j,
+                        week_span,
+                        relevant_slots,
+                        count,
+                        total_count,
+                        k,
+                    ),
+                );
             }
         }
 
         constraints
     }
 
-    fn build_balancing_constraints_for_subject_overall_only(
+    fn build_balancing_constraints_for_subject_overall(
         &self,
         i: usize,
         subject: &Subject,
@@ -2135,12 +2145,12 @@ impl<'a> IlpTranslator<'a> {
 
         for (j, slot_selection) in slot_selections.iter().enumerate() {
             constraints.extend(
-                self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_selection(
+                self.build_balancing_constraints_for_subject_overall_internal_for_slot_selection(
                     i,
                     subject,
                     j,
                     slot_selection,
-                )
+                ),
             );
         }
 
@@ -2345,28 +2355,44 @@ impl<'a> IlpTranslator<'a> {
         for (i, subject) in self.data.subjects.iter().enumerate() {
             if let Some(br) = &subject.balancing_requirements {
                 let slot_selections = &br.slot_selections;
-                constraints.extend(match &br.strictness {
-                    BalancingStrictness::OverallOnly => self
-                        .build_balancing_constraints_for_subject_overall_only(
+                match &br.constraints {
+                    BalancingConstraints::OverallOnly => {
+                        constraints.extend(self.build_balancing_constraints_for_subject_overall(
                             i,
                             subject,
                             slot_selections,
-                        ),
-                    BalancingStrictness::Strict => self
-                        .build_balancing_constraints_for_subject_strict(
+                        ))
+                    }
+                    BalancingConstraints::Strict => {
+                        constraints.extend(self.build_balancing_constraints_for_subject_strict(
                             i,
                             subject,
                             slot_selections,
                             false,
-                        ),
-                    BalancingStrictness::StrictWithCuts => self
-                        .build_balancing_constraints_for_subject_strict(
+                        ))
+                    }
+                    BalancingConstraints::StrictWithCuts => {
+                        constraints.extend(self.build_balancing_constraints_for_subject_strict(
                             i,
                             subject,
                             slot_selections,
                             true,
-                        ),
-                });
+                        ))
+                    }
+                    BalancingConstraints::StrictWithCutsAndOverall => {
+                        constraints.extend(self.build_balancing_constraints_for_subject_strict(
+                            i,
+                            subject,
+                            slot_selections,
+                            true,
+                        ));
+                        constraints.extend(self.build_balancing_constraints_for_subject_overall(
+                            i,
+                            subject,
+                            slot_selections,
+                        ));
+                    }
+                }
             }
         }
 

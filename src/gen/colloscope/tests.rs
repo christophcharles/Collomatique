@@ -2506,7 +2506,7 @@ fn group_on_slot_selection_variables() {
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::Strict,
+            constraints: BalancingConstraints::Strict,
             slot_selections: vec![
                 BalancingSlotSelection {
                     slot_groups: vec![
@@ -7160,7 +7160,7 @@ fn balancing_teachers() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_teachers_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7375,7 +7375,7 @@ fn balancing_timeslots() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7599,7 +7599,7 @@ fn balancing_timeslots_2() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -7814,7 +7814,7 @@ fn balancing_teachers_and_timeslots() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_teachers_and_timeslots_from_slots(
                 &slots,
             ),
@@ -8275,7 +8275,7 @@ fn balancing_timeslots_with_ghost_group() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -8592,7 +8592,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -8841,7 +8841,7 @@ fn balancing_timeslots_with_partial_last_period() {
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::OverallOnly,
+            constraints: BalancingConstraints::OverallOnly,
             slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
@@ -9837,7 +9837,7 @@ fn group_on_slot_selection_constraints() {
         period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         balancing_requirements: Some(BalancingRequirements {
-            strictness: BalancingStrictness::Strict,
+            constraints: BalancingConstraints::Strict,
             slot_selections: vec![
                 BalancingSlotSelection {
                     slot_groups: vec![
