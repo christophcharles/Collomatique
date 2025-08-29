@@ -21,6 +21,8 @@ use std::collections::BTreeMap;
 pub trait ProblemRepr<V: UsableData>:
     Clone + std::fmt::Debug + Send + Sync + PartialEq + Eq + PartialOrd + Ord
 {
+    type Config<'a>: ConfigRepr<'a, V> where Self: 'a;
+
     fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
     where
         V: 'a,
@@ -28,7 +30,7 @@ pub trait ProblemRepr<V: UsableData>:
     fn config_from<'a>(
         &'a self,
         vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
-    ) -> impl ConfigRepr<'a, V>;
+    ) -> Self::Config<'a>;
 }
 
 pub trait ConfigRepr<'a, V: UsableData>:

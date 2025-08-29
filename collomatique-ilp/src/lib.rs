@@ -922,9 +922,12 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// have the right variables, you should first check with [Problem::check_config_data_variables]
     /// or rather call [Problem::build_config] which will have a sanity check first.
     pub unsafe fn build_config_unchecked(&self, config_data: ConfigData<V>) -> Config<'_, V, C, P> {
+        let repr = self.repr.config_from(&config_data.values);
+
         Config {
             problem: self,
             values: config_data.values,
+            repr,
         }
     }
 
@@ -1145,6 +1148,7 @@ impl<V: UsableData> ConfigData<V> {
 pub struct Config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     problem: &'a Problem<V, C, P>,
     values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+    repr: P::Config<'a>,
 }
 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
@@ -1181,5 +1185,10 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     /// not part of [Config]), this function returns `None`.
     pub fn get<T: Into<V>>(&self, name: T) -> Option<f64> {
         self.values.get(&name.into()).map(|x| x.into_inner())
+    }
+
+    /// Returns true if the configuration is feasable
+    pub fn is_feasable(&self) -> bool {
+        self.repr.is_feasable()
     }
 }

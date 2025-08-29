@@ -16,6 +16,11 @@ pub struct NdProblem<V: UsableData> {
 }
 
 impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
+    type Config<'a> = NdConfig<'a, V>
+    where
+        V: 'a,
+        Self: 'a;
+
     fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
     where
         V: 'a,
@@ -55,7 +60,7 @@ impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
     fn config_from<'a>(
         &'a self,
         vars: &BTreeMap<V, ordered_float::OrderedFloat<f64>>,
-    ) -> impl ConfigRepr<'a, V> {
+    ) -> NdConfig<'a, V> {
         let p = self.mat.shape()[1];
 
         let mut values = Array1::zeros(p);
