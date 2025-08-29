@@ -137,7 +137,7 @@ impl SlotsUpdateOp {
                             warning: SlotsUpdateWarning::LooseRuleReferencingSlot(
                                 *slot_id, *rule_id,
                             ),
-                            ops: vec![UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id))],
+                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
                         });
                     }
                 }

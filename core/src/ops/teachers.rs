@@ -77,40 +77,36 @@ impl TeachersUpdateOp {
         match self {
             Self::AddNewTeacher(_) => None,
             Self::UpdateTeacher(teacher_id, teacher) => {
-                let mut ops = vec![];
                 for (subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     if teacher.subjects.contains(subject_id) {
                         continue;
                     }
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {
-                            ops.push(UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)));
+                            return Some(PreCleaningOp {
+                                warning: TeachersUpdateWarning::LooseInterrogationSlots(
+                                    *teacher_id,
+                                ),
+                                op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                            });
                         }
                     }
-                }
-                if !ops.is_empty() {
-                    return Some(PreCleaningOp {
-                        warning: TeachersUpdateWarning::LooseInterrogationSlots(*teacher_id),
-                        ops,
-                    });
                 }
 
                 None
             }
             Self::DeleteTeacher(teacher_id) => {
-                let mut ops = vec![];
                 for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {
-                            ops.push(UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)));
+                            return Some(PreCleaningOp {
+                                warning: TeachersUpdateWarning::LooseInterrogationSlots(
+                                    *teacher_id,
+                                ),
+                                op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                            });
                         }
                     }
-                }
-                if !ops.is_empty() {
-                    return Some(PreCleaningOp {
-                        warning: TeachersUpdateWarning::LooseInterrogationSlots(*teacher_id),
-                        ops,
-                    });
                 }
 
                 None

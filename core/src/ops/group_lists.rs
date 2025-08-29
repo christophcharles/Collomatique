@@ -218,10 +218,10 @@ impl GroupListsUpdateOp {
                             *group_list_id,
                             students_to_exclude,
                         ),
-                        ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                        op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
                             *group_list_id,
                             new_prefilled_groups,
-                        ))],
+                        )),
                     });
                 }
 
@@ -242,10 +242,10 @@ impl GroupListsUpdateOp {
                         warning: GroupListsUpdateWarning::LooseWholePrefilledGroupList(
                             *group_list_id,
                         ),
-                        ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                        op: UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
                             *group_list_id,
                             GroupListPrefilledGroups { groups: vec![] },
-                        ))],
+                        )),
                     });
                 }
 
@@ -260,13 +260,13 @@ impl GroupListsUpdateOp {
                                     *subject_id,
                                     *period_id,
                                 ),
-                                ops: vec![UpdateOp::GroupLists(
+                                op: UpdateOp::GroupLists(
                                     GroupListsUpdateOp::AssignGroupListToSubject(
                                         *period_id,
                                         *subject_id,
                                         None,
                                     ),
-                                )],
+                                ),
                             });
                         }
                     }

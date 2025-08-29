@@ -195,14 +195,14 @@ impl UpdateWarning {
 #[derive(Clone, Debug)]
 struct PreCleaningOp<T: Clone + std::fmt::Debug> {
     warning: T,
-    ops: Vec<UpdateOp>,
+    op: UpdateOp,
 }
 
 impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> PreCleaningOp<T> {
     fn into_general_warning(self) -> PreCleaningOp<UpdateWarning> {
         PreCleaningOp {
             warning: self.warning.into(),
-            ops: self.ops,
+            op: self.op,
         }
     }
 }
@@ -221,7 +221,7 @@ impl PreCleaningOp<UpdateWarning> {
         Some(CleaningOpDesc {
             warning_desc: self.warning.build_desc_from_data(data)?,
             warning: self.warning.clone(),
-            ops: self.ops.clone(),
+            op: self.op.clone(),
         })
     }
 }
@@ -230,7 +230,7 @@ impl PreCleaningOp<UpdateWarning> {
 struct CleaningOpDesc {
     warning_desc: String,
     warning: UpdateWarning,
-    ops: Vec<UpdateOp>,
+    op: UpdateOp,
 }
 
 impl UpdateOp {
