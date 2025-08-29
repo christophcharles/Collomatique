@@ -127,7 +127,7 @@ pub struct ManagerCollection<T: backend::Storage> {
     pub(super) subject_groups: Manager<T::SubjectGroupId, SubjectGroupHandle>,
     pub(super) incompats: Manager<T::IncompatId, IncompatHandle>,
     pub(super) group_lists: Manager<T::GroupListId, GroupListHandle>,
-    pub(super) subjects: Manager<T::StudentId, SubjectHandle>,
+    pub(super) subjects: Manager<T::SubjectId, SubjectHandle>,
     pub(super) time_slots: Manager<T::TimeSlotId, TimeSlotHandle>,
     pub(super) groupings: Manager<T::GroupingId, GroupingHandle>,
     pub(super) grouping_incompats: Manager<T::GroupingIncompatId, GroupingIncompatHandle>,

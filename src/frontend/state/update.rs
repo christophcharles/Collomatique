@@ -1,3 +1,5 @@
+use self::backend::SubjectGroupDependancy;
+
 use super::*;
 use std::collections::BTreeMap;
 
@@ -25,6 +27,12 @@ pub enum UpdateError<IntError: std::error::Error> {
     StudentRemoved(StudentHandle),
     #[error("Cannot remove student: it is referenced by the database")]
     StudentDependanciesRemaining(Vec<GroupListHandle>),
+    #[error("Subject group corresponding to handle {0:?} was previously removed")]
+    SubjectGroupRemoved(SubjectGroupHandle),
+    #[error("Cannot remove subject group: it is referenced by the database")]
+    SubjectGroupDependanciesRemaining(
+        Vec<backend::SubjectGroupDependancy<SubjectHandle, StudentHandle>>,
+    ),
 }
 
 #[derive(Debug, Error)]
@@ -37,6 +45,8 @@ pub enum RevError<IntError: std::error::Error> {
     TeacherRemoved(TeacherHandle),
     #[error("Student corresponding to handle {0:?} was previously removed")]
     StudentRemoved(StudentHandle),
+    #[error("Subject group corresponding to handle {0:?} was previously removed")]
+    SubjectGroupRemoved(SubjectGroupHandle),
 }
 
 impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntError> {
@@ -46,6 +56,7 @@ impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntEr
             RevError::WeekPatternRemoved(handle) => UpdateError::WeekPatternRemoved(handle),
             RevError::TeacherRemoved(handle) => UpdateError::TeacherRemoved(handle),
             RevError::StudentRemoved(handle) => UpdateError::StudentRemoved(handle),
+            RevError::SubjectGroupRemoved(handle) => UpdateError::SubjectGroupRemoved(handle),
         }
     }
 }
@@ -56,6 +67,7 @@ pub enum ReturnHandle {
     WeekPattern(WeekPatternHandle),
     Teacher(TeacherHandle),
     Student(StudentHandle),
+    SubjectGroup(SubjectGroupHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -130,6 +142,26 @@ pub trait Manager: ManagerInternal {
     ) -> Result<
         Vec<GroupListHandle>,
         IdError<<Self::Storage as backend::Storage>::InternalError, StudentHandle>,
+    >;
+    async fn subject_groups_get_all(
+        &mut self,
+    ) -> Result<
+        BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn subject_groups_get(
+        &self,
+        handle: SubjectGroupHandle,
+    ) -> Result<
+        backend::SubjectGroup,
+        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
+    >;
+    async fn subject_groups_check_can_remove(
+        &mut self,
+        handle: SubjectGroupHandle,
+    ) -> Result<
+        Vec<SubjectGroupDependancy<SubjectHandle, StudentHandle>>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
     >;
 
     async fn apply(
@@ -448,6 +480,102 @@ impl<T: ManagerInternal> Manager for T {
         }
     }
 
+    fn subject_groups_get_all(
+        &mut self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<SubjectGroupHandle, backend::SubjectGroup>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async {
+            let subject_groups_backend = self.get_backend_logic().subject_groups_get_all().await?;
+
+            let handle_manager = &mut self.get_handle_managers_mut().subject_groups;
+            let subject_groups = subject_groups_backend
+                .into_iter()
+                .map(|(id, subject_group)| {
+                    let handle = handle_manager.get_handle(id);
+                    (handle, subject_group)
+                })
+                .collect();
+
+            Ok(subject_groups)
+        }
+    }
+
+    fn subject_groups_get(
+        &self,
+        handle: SubjectGroupHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::SubjectGroup,
+            IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().subject_groups;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let subject_group = self
+                .get_backend_logic()
+                .subject_groups_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(subject_group)
+        }
+    }
+
+    fn subject_groups_check_can_remove(
+        &mut self,
+        handle: SubjectGroupHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            Vec<SubjectGroupDependancy<SubjectHandle, StudentHandle>>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, SubjectGroupHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().subject_groups;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let subject_group_deps_backend = self
+                .get_backend_logic()
+                .subject_groups_check_can_remove(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            let handle_managers = &mut self.get_handle_managers_mut();
+            let subject_handle_manager = &mut handle_managers.subjects;
+            let student_handle_manager = &mut handle_managers.students;
+
+            let subject_group_deps = subject_group_deps_backend
+                .into_iter()
+                .map(|dep| match dep {
+                    SubjectGroupDependancy::Student(id) => {
+                        SubjectGroupDependancy::Student(student_handle_manager.get_handle(id))
+                    }
+                    SubjectGroupDependancy::Subject(id) => {
+                        SubjectGroupDependancy::Subject(subject_handle_manager.get_handle(id))
+                    }
+                })
+                .collect();
+
+            Ok(subject_group_deps)
+        }
+    }
+
     fn apply(
         &mut self,
         op: Operation,
@@ -524,6 +652,8 @@ impl<T: ManagerInternal> Manager for T {
 }
 
 pub(super) mod private {
+    use self::backend::SubjectGroupDependancy;
+
     use super::*;
 
     #[trait_variant::make(Send)]
@@ -818,6 +948,94 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_subject_groups_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedSubjectGroupsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedSubjectGroupsOperation::Create(subject_group_handle, subject_group) => {
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .subject_groups_add(subject_group)
+                    .await
+                    .map_err(|e| UpdateError::Internal(e))?;
+                manager
+                    .get_handle_managers_mut()
+                    .subject_groups
+                    .update_handle(*subject_group_handle, Some(new_id));
+                Ok(ReturnHandle::SubjectGroup(*subject_group_handle))
+            }
+            AnnotatedSubjectGroupsOperation::Remove(subject_group_handle) => {
+                let subject_group_id = manager
+                    .get_handle_managers()
+                    .subject_groups
+                    .get_id(*subject_group_handle)
+                    .ok_or(UpdateError::SubjectGroupRemoved(*subject_group_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .subject_groups_remove(subject_group_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| match dep {
+                                    SubjectGroupDependancy::Student(id) => {
+                                        SubjectGroupDependancy::Student(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .students
+                                                .get_handle(id),
+                                        )
+                                    }
+                                    SubjectGroupDependancy::Subject(id) => {
+                                        SubjectGroupDependancy::Subject(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .subjects
+                                                .get_handle(id),
+                                        )
+                                    }
+                                })
+                                .collect();
+                            UpdateError::SubjectGroupDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .subject_groups
+                    .update_handle(*subject_group_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedSubjectGroupsOperation::Update(subject_group_handle, subject_group) => {
+                let student_id = manager
+                    .get_handle_managers()
+                    .subject_groups
+                    .get_id(*subject_group_handle)
+                    .ok_or(UpdateError::SubjectGroupRemoved(*subject_group_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .subject_groups_update(student_id, subject_group)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -827,6 +1045,7 @@ pub(super) mod private {
             AnnotatedOperation::WeekPatterns(op) => update_week_patterns_state(manager, op).await,
             AnnotatedOperation::Teachers(op) => update_teachers_state(manager, op).await,
             AnnotatedOperation::Students(op) => update_students_state(manager, op).await,
+            AnnotatedOperation::SubjectGroups(op) => update_subject_groups_state(manager, op).await,
         }
     }
 
@@ -1028,6 +1247,57 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_subject_groups_op<T: ManagerInternal>(
+        manager: &T,
+        op: &AnnotatedSubjectGroupsOperation,
+    ) -> Result<
+        AnnotatedSubjectGroupsOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedSubjectGroupsOperation::Create(handle, _subject_group) => {
+                AnnotatedSubjectGroupsOperation::Remove(*handle)
+            }
+            AnnotatedSubjectGroupsOperation::Remove(handle) => {
+                let subject_group_id = manager
+                    .get_handle_managers()
+                    .subject_groups
+                    .get_id(*handle)
+                    .ok_or(RevError::SubjectGroupRemoved(*handle))?;
+                let subject_group = manager
+                    .get_backend_logic()
+                    .subject_groups_get(subject_group_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedSubjectGroupsOperation::Create(*handle, subject_group)
+            }
+            AnnotatedSubjectGroupsOperation::Update(handle, _new_subject_group) => {
+                let subject_group_id = manager
+                    .get_handle_managers()
+                    .subject_groups
+                    .get_id(*handle)
+                    .ok_or(RevError::SubjectGroupRemoved(*handle))?;
+                let subject_group = manager
+                    .get_backend_logic()
+                    .subject_groups_get(subject_group_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedSubjectGroupsOperation::Update(*handle, subject_group)
+            }
+        };
+        Ok(backward)
+    }
+
     pub async fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
@@ -1047,6 +1317,9 @@ pub(super) mod private {
             AnnotatedOperation::Students(op) => {
                 AnnotatedOperation::Students(build_backward_students_op(manager, op).await?)
             }
+            AnnotatedOperation::SubjectGroups(op) => AnnotatedOperation::SubjectGroups(
+                build_backward_subject_groups_op(manager, op).await?,
+            ),
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)

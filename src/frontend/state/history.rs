@@ -8,6 +8,7 @@ pub enum AnnotatedOperation {
     WeekPatterns(AnnotatedWeekPatternsOperation),
     Teachers(AnnotatedTeachersOperation),
     Students(AnnotatedStudentsOperation),
+    SubjectGroups(AnnotatedSubjectGroupsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,6 +30,13 @@ pub enum AnnotatedStudentsOperation {
     Create(handles::StudentHandle, backend::Student),
     Remove(handles::StudentHandle),
     Update(handles::StudentHandle, backend::Student),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedSubjectGroupsOperation {
+    Create(handles::SubjectGroupHandle, backend::SubjectGroup),
+    Remove(handles::SubjectGroupHandle),
+    Update(handles::SubjectGroupHandle, backend::SubjectGroup),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -85,6 +93,26 @@ impl AnnotatedStudentsOperation {
     }
 }
 
+impl AnnotatedSubjectGroupsOperation {
+    fn annotate<T: backend::Storage>(
+        op: SubjectGroupsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            SubjectGroupsOperation::Create(subject_group) => {
+                let handle = handle_managers.subject_groups.create_handle();
+                AnnotatedSubjectGroupsOperation::Create(handle, subject_group)
+            }
+            SubjectGroupsOperation::Remove(handle) => {
+                AnnotatedSubjectGroupsOperation::Remove(handle)
+            }
+            SubjectGroupsOperation::Update(handle, student) => {
+                AnnotatedSubjectGroupsOperation::Update(handle, student)
+            }
+        }
+    }
+}
+
 impl AnnotatedOperation {
     pub fn annotate<T: backend::Storage>(
         op: Operation,
@@ -100,6 +128,9 @@ impl AnnotatedOperation {
             ),
             Operation::Students(op) => AnnotatedOperation::Students(
                 AnnotatedStudentsOperation::annotate(op, handle_managers),
+            ),
+            Operation::SubjectGroups(op) => AnnotatedOperation::SubjectGroups(
+                AnnotatedSubjectGroupsOperation::annotate(op, handle_managers),
             ),
         }
     }
