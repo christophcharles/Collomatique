@@ -204,11 +204,8 @@ fn icon_button<'a>(
 ) -> Element<'a, GuiMessage> {
     let btn = button(container(tools::icon(ico)).center_x(25).center_y(25))
         .style(style)
-        .padding(2);
-    let btn = match message {
-        Some(msg) => btn.on_press(msg),
-        None => btn,
-    };
+        .padding(2)
+        .on_press_maybe(message);
 
     tooltip(btn, text(label).size(10), tooltip::Position::FollowCursor)
         .style(container::bordered_box)
