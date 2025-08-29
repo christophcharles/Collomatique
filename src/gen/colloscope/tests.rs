@@ -6673,10 +6673,7 @@ fn balancing_teachers() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: true,
-            timeslots: false,
-        },
+        balancing_requirements: BalancingRequirements::Teachers,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6879,10 +6876,7 @@ fn balancing_timeslots() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: true,
-        },
+        balancing_requirements: BalancingRequirements::Timeslots,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -7094,10 +7088,7 @@ fn balancing_timeslots_2() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: true,
-        },
+        balancing_requirements: BalancingRequirements::Timeslots,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -7300,10 +7291,7 @@ fn balancing_teachers_and_timeslots() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: true,
-            timeslots: true,
-        },
+        balancing_requirements: BalancingRequirements::TeachersAndTimeslots,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -7515,10 +7503,7 @@ fn no_balancing() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: false,
-        },
+        balancing_requirements: BalancingRequirements::None,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -7663,10 +7648,7 @@ fn balancing_timeslots_with_ghost_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: true,
-        },
+        balancing_requirements: BalancingRequirements::Timeslots,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -8007,10 +7989,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(1).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: true,
-        },
+        balancing_requirements: BalancingRequirements::Timeslots,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -8301,10 +8280,7 @@ fn balancing_timeslots_with_partial_last_period() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
-        balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: true,
-        },
+        balancing_requirements: BalancingRequirements::Timeslots,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
