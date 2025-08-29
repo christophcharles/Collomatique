@@ -4,7 +4,9 @@ use super::*;
 pub enum AssignmentsUpdateWarning {}
 
 impl AssignmentsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+    pub fn build_desc_from_data<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
         &self,
         _data: &T,
     ) -> Option<String> {
