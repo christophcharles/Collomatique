@@ -305,6 +305,7 @@ CREATE TABLE "group_items" (
 
 use super::*;
 
+mod colloscopes;
 mod group_lists;
 mod grouping_incompats;
 mod groupings;
@@ -329,6 +330,7 @@ impl Storage for Store {
     type TimeSlotId = time_slots::Id;
     type GroupingId = groupings::Id;
     type GroupingIncompatId = grouping_incompats::Id;
+    type ColloscopeId = colloscopes::Id;
 
     type InternalError = Error;
 
@@ -878,5 +880,57 @@ impl Storage for Store {
         >,
     > + Send {
         incompat_for_student::get(&self.pool, student_id, incompat_id)
+    }
+
+    fn colloscopes_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::ColloscopeId,
+                Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        colloscopes::get_all(&self.pool)
+    }
+
+    fn colloscopes_get(
+        &self,
+        index: Self::ColloscopeId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+            IdError<Self::InternalError, Self::ColloscopeId>,
+        >,
+    > + Send {
+        colloscopes::get(&self.pool, index)
+    }
+
+    unsafe fn colloscopes_add_unchecked(
+        &mut self,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::ColloscopeId, Self::InternalError>,
+    > + Send {
+        colloscopes::add(&self.pool, colloscope)
+    }
+
+    unsafe fn colloscopes_remove_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        colloscopes::remove(&self.pool, index)
+    }
+
+    unsafe fn colloscopes_update_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        colloscopes::update(&self.pool, index, colloscope)
     }
 }
