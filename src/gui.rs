@@ -16,20 +16,15 @@ enum GuiState {
 }
 
 #[derive(Debug, Clone)]
-struct FileSelection {
-    path: std::path::PathBuf,
-    create_policy: editor::CreatePolicy,
-}
-
-#[derive(Debug, Clone)]
 enum GuiMessage {
     WelcomeMessage(welcome::Message),
     EditorMessage(editor::Message),
     DialogMessage(dialogs::Message),
-    FileSelected(Option<FileSelection>),
+    FileSelected(Option<std::path::PathBuf>),
     FileLoaded(editor::OpenCollomatiqueFileResult<editor::State>),
     OpenExistingFile,
     OpenNewFile,
+    OpenNewFileWithName(std::path::PathBuf),
     GoToWelcomeScreen,
     Ignore,
 }
@@ -58,8 +53,8 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
         GuiMessage::WelcomeMessage(msg) => welcome::update(state, msg),
         GuiMessage::DialogMessage(msg) => dialogs::update(state, msg),
         GuiMessage::FileSelected(result) => match result {
-            Some(file_desc) => Task::perform(
-                editor::State::new(file_desc.create_policy, file_desc.path),
+            Some(file_path) => Task::perform(
+                editor::State::new_with_existing_file(file_path),
                 GuiMessage::FileLoaded,
             ),
             None => Task::none(),
@@ -81,28 +76,16 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
             dialogs::Message::FileChooserDialog(
                 "Ouvrir un colloscope".into(),
                 false,
-                std::sync::Arc::new(|path| {
-                    GuiMessage::FileSelected(path.map(|path| FileSelection {
-                        path: path,
-                        create_policy: editor::CreatePolicy::Open,
-                    }))
-                }),
+                std::sync::Arc::new(|path| GuiMessage::FileSelected(path)),
             )
             .into(),
         ),
-        GuiMessage::OpenNewFile => Task::done(
-            dialogs::Message::FileChooserDialog(
-                "Créer un colloscope".into(),
-                true,
-                std::sync::Arc::new(|path| {
-                    GuiMessage::FileSelected(path.map(|path| FileSelection {
-                        path: path,
-                        create_policy: editor::CreatePolicy::CreateAndOverride,
-                    }))
-                }),
-            )
-            .into(),
-        ),
+        GuiMessage::OpenNewFile => Task::done(GuiMessage::FileLoaded(
+            editor::State::new_with_empty_file(None),
+        )),
+        GuiMessage::OpenNewFileWithName(file) => Task::done(GuiMessage::FileLoaded(
+            editor::State::new_with_empty_file(Some(file)),
+        )),
         GuiMessage::GoToWelcomeScreen => {
             *state = GuiState::Welcome;
             Task::none()
@@ -135,7 +118,7 @@ fn exit_subscription(state: &GuiState) -> Subscription<GuiMessage> {
     }
 }
 
-pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
+pub fn run_gui(create: bool, path: Option<std::path::PathBuf>) -> Result<()> {
     iced::application(title, update, view)
         .font(include_bytes!("../fonts/collomatique-icons.ttf").as_slice())
         .exit_on_close_request(false)
@@ -143,15 +126,36 @@ pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
         .run_with(move || {
             (
                 GuiState::Welcome,
-                if let Some(file) = &db {
-                    iced::Task::done(GuiMessage::FileSelected(Some(FileSelection {
-                        path: file.clone(),
-                        create_policy: if create {
-                            editor::CreatePolicy::Create
-                        } else {
-                            editor::CreatePolicy::Open
-                        },
-                    })))
+                if let Some(file) = &path {
+                    if create {
+                        match file.try_exists() {
+                            Ok(exists) => {
+                                if exists {
+                                    Task::done(
+                                        dialogs::Message::ErrorDialog(
+                                            "Erreur à la création du fichier".into(),
+                                            format!(
+                                                "Le fichier {} existe déjà.",
+                                                file.to_string_lossy()
+                                            ),
+                                        )
+                                        .into(),
+                                    )
+                                } else {
+                                    iced::Task::done(GuiMessage::OpenNewFileWithName(file.clone()))
+                                }
+                            }
+                            Err(e) => Task::done(
+                                dialogs::Message::ErrorDialog(
+                                    "Erreur en testant l'existence du fichier".into(),
+                                    e.to_string(),
+                                )
+                                .into(),
+                            ),
+                        }
+                    } else {
+                        iced::Task::done(GuiMessage::FileSelected(Some(file.clone())))
+                    }
                 } else {
                     if create {
                         iced::Task::done(GuiMessage::OpenNewFile)
