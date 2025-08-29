@@ -419,6 +419,7 @@ pub struct IlpTranslator<'a> {
     data: &'a ValidatedData,
 }
 
+use crate::ilp::linexpr::{Constraint, Expr};
 use crate::ilp::{Problem, ProblemBuilder};
 
 impl<'a> IlpTranslator<'a> {
@@ -538,12 +539,37 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
+    fn build_at_most_one_group_per_slot_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        self.data
+            .subjects
+            .iter()
+            .enumerate()
+            .flat_map(|(i, subject)| {
+                subject.slots.iter().enumerate().map(move |(j, _slot)| {
+                    let mut expr = Expr::constant(0);
+
+                    for (k, _group) in subject.groups.assigned_to_group.iter().enumerate() {
+                        expr = expr
+                            + Expr::var(Variable::GroupInSlot {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                            });
+                    }
+
+                    expr.leq(&Expr::constant(1))
+                })
+            })
+            .collect()
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
             .add_variables(self.build_dynamic_group_assignment_variables())
             .add_variables(self.build_student_in_group_variables())
             .add_variables(self.build_exact_periodicity_variables())
+            .add_constraints(self.build_at_most_one_group_per_slot_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
