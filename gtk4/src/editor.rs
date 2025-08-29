@@ -41,54 +41,12 @@ pub enum EditorCommandOutput {
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(5);
 
-mod toast {
-    use std::{num::NonZeroU32, sync::atomic::AtomicBool};
-
-    pub struct ToastInfo {
-        need_update: AtomicBool,
-        text: Option<String>,
+enum ToastInfo {
+    Toast {
+        text: String,
         timeout: Option<NonZeroU32>,
-    }
-
-    impl ToastInfo {
-        pub fn new() -> Self {
-            ToastInfo {
-                need_update: AtomicBool::new(false),
-                text: None,
-                timeout: None,
-            }
-        }
-
-        pub fn new_toast(&mut self, text: String, timeout: Option<NonZeroU32>) {
-            self.need_update
-                .store(true, std::sync::atomic::Ordering::Release);
-            self.text = Some(text);
-            self.timeout = timeout;
-        }
-
-        pub fn dismiss_toast(&mut self) {
-            self.need_update
-                .store(true, std::sync::atomic::Ordering::Release);
-            self.text = None;
-        }
-
-        pub fn get_toast(&self) -> Option<&str> {
-            self.text.as_ref().map(|x| x.as_str())
-        }
-
-        pub fn get_timeout(&self) -> Option<&NonZeroU32> {
-            self.timeout.as_ref()
-        }
-
-        pub fn updated(&self) {
-            self.need_update
-                .store(false, std::sync::atomic::Ordering::Release);
-        }
-
-        pub fn need_update(&self) -> bool {
-            self.need_update.load(std::sync::atomic::Ordering::Acquire)
-        }
-    }
+    },
+    Dismiss,
 }
 
 pub struct EditorPanel {
@@ -96,7 +54,7 @@ pub struct EditorPanel {
     data: AppState<Data>,
     dirty: bool,
     save_dialog: Controller<dialogs::open_save::Dialog>,
-    toast_info: toast::ToastInfo,
+    toast_info: Option<ToastInfo>,
 }
 
 impl EditorPanel {
@@ -262,7 +220,7 @@ impl Component for EditorPanel {
             data: AppState::new(Data::new()),
             dirty: false,
             save_dialog,
-            toast_info: toast::ToastInfo::new(),
+            toast_info: None,
         };
         let widgets = view_output!();
 
@@ -309,10 +267,10 @@ impl Component for EditorPanel {
                 let data_copy = self.data.get_data().clone();
                 self.dirty = false;
                 self.file_name = Some(path.clone());
-                self.toast_info.new_toast(
-                    format!("Enregistrement en cours de {}...", path.to_string_lossy(),),
-                    None,
-                );
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("Enregistrement en cours de {}...", path.to_string_lossy(),),
+                    timeout: None,
+                });
                 sender.oneshot_command(async move {
                     match collomatique_storage::save_data_to_file(&data_copy, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
@@ -344,16 +302,16 @@ impl Component for EditorPanel {
     ) {
         match message {
             EditorCommandOutput::SaveSuccessful(path) => {
-                self.toast_info.new_toast(
-                    format!("{} enregistré", path.to_string_lossy()),
-                    DEFAULT_TOAST_TIMEOUT,
-                );
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("{} enregistré", path.to_string_lossy()),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
             }
             EditorCommandOutput::SaveFailed(path, error) => {
                 if Some(&path) != self.file_name.as_ref() {
                     return;
                 }
-                self.toast_info.dismiss_toast();
+                self.toast_info = Some(ToastInfo::Dismiss);
                 self.dirty = true;
                 sender.output(EditorOutput::UpdateActions).unwrap();
                 sender.output(EditorOutput::SaveError(path, error)).unwrap();
@@ -361,18 +319,46 @@ impl Component for EditorPanel {
         }
     }
 
-    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if self.toast_info.need_update() {
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update(message, sender.clone(), root);
+        self.update_toast(widgets);
+        self.update_view(widgets, sender);
+    }
+
+    fn update_cmd_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update_cmd(message, sender.clone(), root);
+        self.update_toast(widgets);
+        self.update_view(widgets, sender);
+    }
+}
+
+impl EditorPanel {
+    fn update_toast(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if let Some(toast_info) = self.toast_info.take() {
             widgets.toast_overlay.dismiss_all();
-            if let Some(text) = self.toast_info.get_toast() {
-                let new_toast = adw::Toast::new(text);
-                new_toast.set_timeout(match self.toast_info.get_timeout() {
-                    Some(t) => t.get(),
-                    None => 0,
-                });
-                widgets.toast_overlay.add_toast(new_toast);
+            match toast_info {
+                ToastInfo::Toast { text, timeout } => {
+                    let new_toast = adw::Toast::new(&text);
+                    new_toast.set_timeout(match timeout {
+                        Some(t) => t.get(),
+                        None => 0,
+                    });
+                    widgets.toast_overlay.add_toast(new_toast);
+                }
+                ToastInfo::Dismiss => {} // Nothing else to do
             }
-            self.toast_info.updated();
         }
     }
 }
