@@ -35,8 +35,8 @@ impl<
     type GeneralConstraintDesc = ConstraintDesc<PeriodId, SubjectId>;
     type StructureVariable = ();
 
-    fn is_fit_for_problem(&self, desc: &Self::Problem) -> bool {
-        desc.period_descriptions.contains_key(&self.period_id)
+    fn is_fit_for_problem(&self, _desc: &Self::Problem) -> bool {
+        true
     }
 
     fn extra_aggregated_variables(
@@ -69,17 +69,17 @@ impl<
         >,
         Self::GeneralConstraintDesc,
     )> {
-        let Some(period_desc) = desc.period_descriptions.get(&self.period_id) else {
-            return vec![];
-        };
-
         let mut constraints = vec![];
 
-        for (subject_id, subject_desc) in &period_desc.subject_descriptions {
+        for (subject_id, subject_desc) in &desc.subject_descriptions {
+            let Some(period_desc) = subject_desc.period_descriptions.get(&self.period_id) else {
+                return vec![];
+            };
+
             let mut counting_group_expr = collomatique_ilp::LinExpr::<
                 collomatique_solver::ExtraVariable<_, _, _>,
             >::constant(0.);
-            let max_group = subject_desc.group_count.end().get() - 1;
+            let max_group = period_desc.group_count.end().get() - 1;
             for group in 0..=max_group {
                 counting_group_expr = counting_group_expr
                     + collomatique_ilp::LinExpr::var(
@@ -97,24 +97,24 @@ impl<
                 counting_group_expr.geq(&collomatique_ilp::LinExpr::<
                     collomatique_solver::ExtraVariable<_, _, _>,
                 >::constant(
-                    subject_desc.group_count.start().get().into()
+                    period_desc.group_count.start().get().into()
                 )),
                 ConstraintDesc::GroupCountLowerBoundForSubject(
                     self.period_id.clone(),
                     subject_id.clone(),
-                    subject_desc.group_count.start().clone(),
+                    period_desc.group_count.start().clone(),
                 ),
             ));
             constraints.push((
                 counting_group_expr.leq(&collomatique_ilp::LinExpr::<
                     collomatique_solver::ExtraVariable<_, _, _>,
                 >::constant(
-                    subject_desc.group_count.end().get().into()
+                    period_desc.group_count.end().get().into()
                 )),
                 ConstraintDesc::GroupCountUpperBoundForSubject(
                     self.period_id.clone(),
                     subject_id.clone(),
-                    subject_desc.group_count.end().clone(),
+                    period_desc.group_count.end().clone(),
                 ),
             ));
 
@@ -122,7 +122,7 @@ impl<
                 let mut counting_student_expr = collomatique_ilp::LinExpr::<
                     collomatique_solver::ExtraVariable<_, _, _>,
                 >::constant(0.);
-                for student_id in &subject_desc.students {
+                for student_id in &period_desc.students {
                     counting_student_expr = counting_student_expr
                         + collomatique_ilp::LinExpr::var(
                             collomatique_solver::ExtraVariable::BaseStructure(
@@ -136,7 +136,7 @@ impl<
                         );
                 }
 
-                let lower_bound = f64::from(subject_desc.group_count.start().get());
+                let lower_bound = f64::from(subject_desc.students_per_group.start().get());
                 let conditional_lower_bound = lower_bound
                     * collomatique_ilp::LinExpr::var(
                         collomatique_solver::ExtraVariable::BaseStructure(
@@ -153,7 +153,7 @@ impl<
                         self.period_id.clone(),
                         subject_id.clone(),
                         group,
-                        subject_desc.group_count.start().clone(),
+                        subject_desc.students_per_group.start().clone(),
                     ),
                 ));
                 constraints.push((
@@ -166,7 +166,7 @@ impl<
                         self.period_id.clone(),
                         subject_id.clone(),
                         group,
-                        subject_desc.group_count.end().clone(),
+                        subject_desc.students_per_group.end().clone(),
                     ),
                 ));
             }
