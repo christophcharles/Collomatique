@@ -26,6 +26,8 @@ pub mod students;
 pub use students::*;
 pub mod assignments;
 pub use assignments::*;
+pub mod week_patterns;
+pub use week_patterns::*;
 
 #[derive(Debug)]
 pub enum UpdateOp {
@@ -34,6 +36,7 @@ pub enum UpdateOp {
     Teachers(TeachersUpdateOp),
     Students(StudentsUpdateOp),
     Assignments(AssignmentsUpdateOp),
+    WeekPatterns(WeekPatternsUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -48,6 +51,8 @@ pub enum UpdateError {
     Students(#[from] StudentsUpdateError),
     #[error(transparent)]
     Assignments(#[from] AssignmentsUpdateError),
+    #[error(transparent)]
+    WeekPatterns(#[from] WeekPatternsUpdateError),
 }
 
 impl UpdateOp {
@@ -58,6 +63,7 @@ impl UpdateOp {
             UpdateOp::Teachers(teacher_op) => teacher_op.get_desc(),
             UpdateOp::Students(student_op) => student_op.get_desc(),
             UpdateOp::Assignments(assignment_op) => assignment_op.get_desc(),
+            UpdateOp::WeekPatterns(week_pattern_op) => week_pattern_op.get_desc(),
         }
     }
 
@@ -85,6 +91,10 @@ impl UpdateOp {
             UpdateOp::Assignments(assignment_op) => {
                 assignment_op.apply(data)?;
                 Ok(None)
+            }
+            UpdateOp::WeekPatterns(week_pattern_op) => {
+                let result = week_pattern_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
             }
         }
     }

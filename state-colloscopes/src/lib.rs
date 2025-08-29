@@ -22,7 +22,9 @@ use ops::{
     AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp,
     AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
-pub use ops::{AnnotatedOp, AssignmentOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
+pub use ops::{
+    AnnotatedOp, AssignmentOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+};
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
 };
