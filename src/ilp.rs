@@ -265,6 +265,14 @@ impl<V: VariableName> Problem<V> {
     pub fn get_constraints(&self) -> &BTreeSet<linexpr::Constraint<V>> {
         &self.constraints
     }
+
+    pub fn get_variables(&self) -> &BTreeSet<V> {
+        &self.variables
+    }
+
+    pub fn get_trivialized_variables(&self) -> &BTreeMap<V, bool> {
+        &self.trivialized_variables
+    }
 }
 
 use std::collections::BTreeMap;
@@ -276,6 +284,10 @@ pub struct Config<'a, V: VariableName> {
 }
 
 impl<'a, V: VariableName> Config<'a, V> {
+    pub fn get_problem(&self) -> &Problem<V> {
+        self.problem
+    }
+
     pub fn get<T: Into<V>>(&self, var: T) -> Result<bool, V> {
         let name = var.into();
         if let Some(val) = self.problem.trivialized_variables.get(&name) {

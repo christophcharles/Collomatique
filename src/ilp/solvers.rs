@@ -1,4 +1,5 @@
 pub mod a_star;
+pub mod backtracking;
 pub mod dijkstra;
 
 use super::{Config, FeasableConfig};
