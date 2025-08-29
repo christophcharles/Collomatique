@@ -140,7 +140,7 @@ impl<'a, 'b: 'a> ConfigRepr<'a, 'b> {
         true
     }
 
-    pub fn neighbours(&self) -> Vec<ConfigRepr> {
+    pub fn neighbours(&self) -> Vec<ConfigRepr<'a, 'b>> {
         let mut output = vec![];
 
         for i in 0..self.values.len() {
