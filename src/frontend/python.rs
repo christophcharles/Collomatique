@@ -17,13 +17,14 @@ fn extract_function_arguments(py: Python, func: &Py<PyAny>) -> PyResult<Vec<Stri
     use pyo3::types::{PyString, PyTuple};
 
     let code_attr = func.getattr(py, "__code__")?;
+    let argcount_any = code_attr.getattr(py, "co_argcount")?;
+    let argcount: usize = argcount_any.extract(py)?;
     let varnames_any = code_attr.getattr(py, "co_varnames")?;
     let varnames: &Bound<PyTuple> = varnames_any.downcast_bound(py)?;
 
     let mut output = vec![];
 
-    let len = varnames.to_list().len();
-    for i in 0..len {
+    for i in 0..argcount {
         let item_any = varnames.get_item(i)?;
         let item: &Bound<PyString> = item_any.downcast()?;
 
