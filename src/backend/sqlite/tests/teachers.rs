@@ -193,7 +193,7 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
 }
 
 #[sqlx::test]
-async fn week_pattern_remove_then_add(pool: sqlx::SqlitePool) {
+async fn teachers_remove_then_add(pool: sqlx::SqlitePool) {
     let store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
