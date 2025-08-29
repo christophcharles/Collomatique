@@ -6,15 +6,15 @@ use super::*;
 use ndarray::{Array, Array1, Array2, ArrayView};
 
 #[derive(Debug, Clone, Default)]
-pub struct MatRepr {
+pub struct NdProblem {
     leq_mat: Array2<i32>,
     leq_constants: Array1<i32>,
     eq_mat: Array2<i32>,
     eq_constants: Array1<i32>,
 }
 
-impl MatRepr {
-    pub fn new(variables_vec: &Vec<String>, constraints: &Vec<linexpr::Constraint>) -> MatRepr {
+impl NdProblem {
+    pub fn new(variables_vec: &Vec<String>, constraints: &Vec<linexpr::Constraint>) -> NdProblem {
         let p = variables_vec.len();
 
         let mut leq_mat = Array2::zeros((0, p));
@@ -47,7 +47,7 @@ impl MatRepr {
         let leq_constants = Array::from_vec(leq_constants_vec);
         let eq_constants = Array::from_vec(eq_constants_vec);
 
-        MatRepr {
+        NdProblem {
             leq_mat,
             leq_constants,
             eq_mat,
@@ -55,15 +55,15 @@ impl MatRepr {
         }
     }
 
-    pub fn default_config_repr(&self) -> ConfigRepr {
+    pub fn default_nd_config(&self) -> NdConfig {
         let p = self.leq_mat.shape()[1];
 
         let values = Array1::zeros(p);
 
-        ConfigRepr { values }
+        NdConfig { values }
     }
 
-    pub fn random_config_repr<T: random::RandomGen>(&self, random_gen: &mut T) -> ConfigRepr {
+    pub fn random_nd_config<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig {
         let p = self.leq_mat.shape()[1];
 
         let mut values = Array1::zeros(p);
@@ -72,24 +72,24 @@ impl MatRepr {
             values[i] = if random_gen.randbool() { 1 } else { 0 };
         }
 
-        ConfigRepr { values }
+        NdConfig { values }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigRepr {
+pub struct NdConfig {
     values: Array1<i32>,
 }
 
-impl PartialEq for ConfigRepr {
+impl PartialEq for NdConfig {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl Eq for ConfigRepr {}
+impl Eq for NdConfig {}
 
-impl Ord for ConfigRepr {
+impl Ord for NdConfig {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let l1 = self.values.len();
         let l2 = other.values.len();
@@ -106,23 +106,23 @@ impl Ord for ConfigRepr {
     }
 }
 
-impl PartialOrd for ConfigRepr {
+impl PartialOrd for NdConfig {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl ConfigRepr {
-    pub fn max_distance_to_constraint(&self, mat_repr: &MatRepr) -> f32 {
+impl NdConfig {
+    pub fn max_distance_to_constraint(&self, nd_problem: &NdProblem) -> f32 {
         let mut max_dist = 0.0f32;
-        let p = mat_repr.leq_mat.shape()[1];
+        let p = nd_problem.leq_mat.shape()[1];
 
-        let leq_column = mat_repr.leq_mat.dot(&self.values) + &mat_repr.leq_constants;
+        let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
 
         for (i, v) in leq_column.iter().copied().enumerate() {
             let mut norm2 = 0.0f32;
             for j in 0..p {
-                norm2 += mat_repr.leq_mat[(i, j)] as f32;
+                norm2 += nd_problem.leq_mat[(i, j)] as f32;
             }
             let dist = ((v as f32) / norm2.sqrt()).min(0.0f32);
 
@@ -131,12 +131,12 @@ impl ConfigRepr {
             }
         }
 
-        let eq_column = mat_repr.eq_mat.dot(&self.values) + &mat_repr.eq_constants;
+        let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
 
         for (i, v) in eq_column.iter().copied().enumerate() {
             let mut norm2 = 0.0f32;
             for j in 0..p {
-                norm2 += mat_repr.eq_mat[(i, j)] as f32;
+                norm2 += nd_problem.eq_mat[(i, j)] as f32;
             }
             let dist = ((v as f32) / norm2.sqrt()).abs();
 
@@ -148,9 +148,9 @@ impl ConfigRepr {
         max_dist
     }
 
-    pub fn is_feasable(&self, mat_repr: &MatRepr) -> bool {
-        let leq_column = mat_repr.leq_mat.dot(&self.values) + &mat_repr.leq_constants;
-        let eq_column = mat_repr.eq_mat.dot(&self.values) + &mat_repr.eq_constants;
+    pub fn is_feasable(&self, nd_problem: &NdProblem) -> bool {
+        let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
+        let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
 
         for v in &leq_column {
             if *v > 0 {
@@ -165,7 +165,7 @@ impl ConfigRepr {
         true
     }
 
-    pub fn neighbours(&self) -> Vec<ConfigRepr> {
+    pub fn neighbours(&self) -> Vec<NdConfig> {
         let mut output = vec![];
 
         for i in 0..self.values.len() {
@@ -179,7 +179,7 @@ impl ConfigRepr {
         output
     }
 
-    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> ConfigRepr {
+    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig {
         let mut output = self.clone();
 
         let i = random_gen.rand_in_range(0..self.values.len());

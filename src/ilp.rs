@@ -85,14 +85,14 @@ impl ProblemBuilder {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let mat_repr = ndtools::MatRepr::new(&variables_vec, &self.constraints);
+        let nd_problem = ndtools::NdProblem::new(&variables_vec, &self.constraints);
         Ok(Problem {
             variables: self.variables,
             variables_vec,
             variables_lookup,
             constraints: self.constraints,
             eval_fn: self.eval_fn,
-            mat_repr,
+            nd_problem,
         })
     }
 }
@@ -106,7 +106,7 @@ pub struct Problem {
     variables_lookup: BTreeMap<String, usize>,
     constraints: Vec<linexpr::Constraint>,
     eval_fn: EvalFn,
-    mat_repr: ndtools::MatRepr,
+    nd_problem: ndtools::NdProblem,
 }
 
 impl std::fmt::Display for Problem {
@@ -132,7 +132,7 @@ impl Problem {
     pub fn default_config<'a>(&'a self) -> Config<'a> {
         Config {
             problem: self,
-            repr: self.mat_repr.default_config_repr(),
+            nd_config: self.nd_problem.default_nd_config(),
         }
     }
 
@@ -152,7 +152,7 @@ impl Problem {
     pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config {
         Config {
             problem: self,
-            repr: self.mat_repr.random_config_repr(random_gen),
+            nd_config: self.nd_problem.random_nd_config(random_gen),
         }
     }
 }
@@ -162,7 +162,7 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone)]
 pub struct Config<'a> {
     problem: &'a Problem,
-    repr: ndtools::ConfigRepr,
+    nd_config: ndtools::NdConfig,
 }
 
 impl<'a> Config<'a> {
@@ -172,7 +172,7 @@ impl<'a> Config<'a> {
             Some(i) => i,
             None => return Err(Error::InvalidVariable(name)),
         };
-        Ok(unsafe { self.repr.get_unchecked(*i) == 1 })
+        Ok(unsafe { self.nd_config.get_unchecked(*i) == 1 })
     }
 
     pub fn set<T: Into<String>>(&mut self, var: T, val: bool) -> Result<()> {
@@ -182,7 +182,7 @@ impl<'a> Config<'a> {
             None => return Err(Error::InvalidVariable(name)),
         };
         unsafe {
-            self.repr.set_unchecked(*i, if val { 1 } else { 0 });
+            self.nd_config.set_unchecked(*i, if val { 1 } else { 0 });
         }
         Ok(())
     }
@@ -190,27 +190,28 @@ impl<'a> Config<'a> {
     pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'a> {
         Config {
             problem: self.problem,
-            repr: self.repr.random_neighbour(random_gen),
+            nd_config: self.nd_config.random_neighbour(random_gen),
         }
     }
 
     pub fn neighbours(&self) -> Vec<Config<'a>> {
-        self.repr
+        self.nd_config
             .neighbours()
             .into_iter()
             .map(|x| Config {
                 problem: self.problem,
-                repr: x,
+                nd_config: x,
             })
             .collect()
     }
 
     pub fn max_distance_to_constraint(&self) -> f32 {
-        self.repr.max_distance_to_constraint(&self.problem.mat_repr)
+        self.nd_config
+            .max_distance_to_constraint(&self.problem.nd_problem)
     }
 
     pub fn is_feasable(&self) -> bool {
-        self.repr.is_feasable(&self.problem.mat_repr)
+        self.nd_config.is_feasable(&self.problem.nd_problem)
     }
 
     pub fn into_feasable(self) -> Option<FeasableConfig<'a>> {
@@ -234,7 +235,7 @@ impl<'a> std::fmt::Display for Config<'a> {
             .variables_vec
             .iter()
             .enumerate()
-            .map(|(i, var)| format!("{}: {}", var, unsafe { self.repr.get_unchecked(i) }))
+            .map(|(i, var)| format!("{}: {}", var, unsafe { self.nd_config.get_unchecked(i) }))
             .collect();
         write!(f, "{}", slice.join(", "))?;
         write!(f, " ]")?;
@@ -256,12 +257,12 @@ impl<'a> Ord for Config<'a> {
         let p1: *const Problem = &*self.problem;
         let p2: *const Problem = &*other.problem;
 
-        let mat_repr_ord = p1.cmp(&p2);
-        if mat_repr_ord != std::cmp::Ordering::Equal {
-            return mat_repr_ord;
+        let problem_ord = p1.cmp(&p2);
+        if problem_ord != std::cmp::Ordering::Equal {
+            return problem_ord;
         }
 
-        return self.repr.cmp(&other.repr);
+        return self.nd_config.cmp(&other.nd_config);
     }
 }
 
