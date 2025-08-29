@@ -575,11 +575,13 @@ impl Data {
                 self.validate_subject(params)?;
 
                 let position = match after_id {
-                    Some(id) => self
-                        .inner_data
-                        .subjects
-                        .find_subject_position(*id)
-                        .ok_or(SubjectError::InvalidSubjectId(*id))?,
+                    Some(id) => {
+                        self.inner_data
+                            .subjects
+                            .find_subject_position(*id)
+                            .ok_or(SubjectError::InvalidSubjectId(*id))?
+                            + 1
+                    }
                     None => 0,
                 };
 
