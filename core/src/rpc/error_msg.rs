@@ -1,7 +1,7 @@
 use super::*;
 
 pub mod general_planning;
-use general_planning::*;
+pub use general_planning::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
@@ -14,5 +14,11 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
         match value {
             UpdateError::GeneralPlanning(e) => ErrorMsg::GeneralPlanning(e.into()),
         }
+    }
+}
+
+impl From<GeneralPlanningError> for ErrorMsg {
+    fn from(value: GeneralPlanningError) -> Self {
+        ErrorMsg::GeneralPlanning(value)
     }
 }

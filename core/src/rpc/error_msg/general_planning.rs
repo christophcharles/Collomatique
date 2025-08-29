@@ -4,6 +4,7 @@ use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GeneralPlanningError {
+    UpdateFirstWeek(UpdateFirstWeekError),
     UpdatePeriodWeekCount(UpdatePeriodWeekCountError),
     DeletePeriod(DeletePeriodError),
     CutPeriod(CutPeriodError),
@@ -30,6 +31,47 @@ impl From<crate::ops::GeneralPlanningUpdateError> for GeneralPlanningError {
             }
         }
     }
+}
+
+impl From<UpdateFirstWeekError> for GeneralPlanningError {
+    fn from(value: UpdateFirstWeekError) -> Self {
+        GeneralPlanningError::UpdateFirstWeek(value)
+    }
+}
+
+impl From<UpdatePeriodWeekCountError> for GeneralPlanningError {
+    fn from(value: UpdatePeriodWeekCountError) -> Self {
+        GeneralPlanningError::UpdatePeriodWeekCount(value)
+    }
+}
+
+impl From<DeletePeriodError> for GeneralPlanningError {
+    fn from(value: DeletePeriodError) -> Self {
+        GeneralPlanningError::DeletePeriod(value)
+    }
+}
+
+impl From<CutPeriodError> for GeneralPlanningError {
+    fn from(value: CutPeriodError) -> Self {
+        GeneralPlanningError::CutPeriod(value)
+    }
+}
+
+impl From<MergeWithPreviousPeriodError> for GeneralPlanningError {
+    fn from(value: MergeWithPreviousPeriodError) -> Self {
+        GeneralPlanningError::MergeWithPreviousPeriod(value)
+    }
+}
+
+impl From<UpdateWeekStatusError> for GeneralPlanningError {
+    fn from(value: UpdateWeekStatusError) -> Self {
+        GeneralPlanningError::UpdateWeekStatus(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateFirstWeekError {
+    DateIsNotAMonday,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

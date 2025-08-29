@@ -151,6 +151,30 @@ impl InMemoryData for Data {
 }
 
 impl Data {
+    /// Promotes an u64 to a [PeriodId] if it is valid
+    pub fn validate_period_id(&self, id: u64) -> Option<PeriodId> {
+        for (period_id, _) in &self.inner_data.periods.ordered_period_list {
+            if period_id.inner() == id {
+                return Some(*period_id);
+            }
+        }
+
+        None
+    }
+
+    /// Promotes an u64 to a [StudentId] if it is valid
+    pub fn validate_student_id(&self, id: u64) -> Option<StudentId> {
+        let student_id = unsafe { StudentId::new(id) };
+
+        if !self.inner_data.student_list.contains_key(&student_id) {
+            return None;
+        }
+
+        Some(student_id)
+    }
+}
+
+impl Data {
     /// Create a new [Data]
     ///
     /// This [Data] is basically empty and corresponds to the
