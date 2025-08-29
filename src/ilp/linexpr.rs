@@ -3,35 +3,53 @@ mod tests;
 
 use std::collections::BTreeMap;
 
+pub trait VariableName:
+    std::fmt::Debug + std::fmt::Display + PartialOrd + Ord + PartialEq + Eq + Clone
+{
+}
+
+impl<T: std::fmt::Debug + std::fmt::Display + PartialOrd + Ord + PartialEq + Eq + Clone>
+    VariableName for T
+{
+}
+
 #[derive(Debug, Clone, Default)]
-pub struct Expr {
-    coefs: BTreeMap<String, i32>,
+pub struct Expr<V: VariableName> {
+    coefs: BTreeMap<V, i32>,
     constant: i32,
 }
 
-impl PartialEq for Expr {
+impl<V: VariableName> PartialEq for Expr<V> {
     fn eq(&self, other: &Self) -> bool {
         self.constant == other.constant && (self.cleaned().coefs == other.cleaned().coefs)
     }
 }
 
-impl Eq for Expr {}
+impl<V: VariableName> Eq for Expr<V> {}
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Config {
-    values: BTreeMap<String, bool>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Config<V: VariableName> {
+    values: BTreeMap<V, bool>,
 }
 
-impl Config {
+impl<V: VariableName> Default for Config<V> {
+    fn default() -> Self {
+        Config {
+            values: BTreeMap::new(),
+        }
+    }
+}
+
+impl<V: VariableName> Config<V> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) {
+    pub fn set<T: Into<V>>(&mut self, var: T, val: bool) {
         self.values.insert(var.into(), val);
     }
 
-    pub fn get<T: Into<String>>(&mut self, var: T) -> Option<bool> {
+    pub fn get<T: Into<V>>(&mut self, var: T) -> Option<bool> {
         let val = self.values.get(&var.into())?;
 
         Some(*val)
@@ -46,15 +64,15 @@ pub enum Sign {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Constraint {
-    expr: Expr,
+pub struct Constraint<V: VariableName> {
+    expr: Expr<V>,
     sign: Sign,
 }
 
 use std::collections::BTreeSet;
 
-impl Expr {
-    pub fn var<T: Into<String>>(name: T) -> Self {
+impl<V: VariableName> Expr<V> {
+    pub fn var<T: Into<V>>(name: T) -> Self {
         Expr {
             coefs: BTreeMap::from([(name.into(), 1)]),
             constant: 0,
@@ -69,30 +87,30 @@ impl Expr {
     }
 }
 
-impl Expr {
-    pub fn variables(&self) -> BTreeSet<String> {
+impl<V: VariableName> Expr<V> {
+    pub fn variables(&self) -> BTreeSet<V> {
         self.coefs.keys().cloned().collect()
     }
 
-    pub fn get(&self, var: &str) -> Option<i32> {
-        self.coefs.get(var).cloned()
+    pub fn get<T: Into<V>>(&self, var: T) -> Option<i32> {
+        self.coefs.get(&var.into()).cloned()
     }
 
-    pub fn leq(&self, rhs: &Expr) -> Constraint {
+    pub fn leq(&self, rhs: &Expr<V>) -> Constraint<V> {
         Constraint {
             expr: self - rhs,
             sign: Sign::LessThan,
         }
     }
 
-    pub fn geq(&self, rhs: &Expr) -> Constraint {
+    pub fn geq(&self, rhs: &Expr<V>) -> Constraint<V> {
         Constraint {
             expr: rhs - self,
             sign: Sign::LessThan,
         }
     }
 
-    pub fn eq(&self, rhs: &Expr) -> Constraint {
+    pub fn eq(&self, rhs: &Expr<V>) -> Constraint<V> {
         Constraint {
             expr: self - rhs,
             sign: Sign::Equals,
@@ -103,19 +121,19 @@ impl Expr {
         self.coefs.retain(|_k, v| *v != 0);
     }
 
-    pub fn cleaned(&self) -> Expr {
+    pub fn cleaned(&self) -> Expr<V> {
         let mut output = self.clone();
         output.clean();
         output
     }
 }
 
-impl Constraint {
-    pub fn variables(&self) -> BTreeSet<String> {
+impl<V: VariableName> Constraint<V> {
+    pub fn variables(&self) -> BTreeSet<V> {
         self.expr.variables()
     }
 
-    pub fn get_var(&self, var: &str) -> Option<i32> {
+    pub fn get_var<T: Into<V>>(&self, var: T) -> Option<i32> {
         self.expr.get(var)
     }
 
@@ -131,14 +149,14 @@ impl Constraint {
         self.expr.clean();
     }
 
-    pub fn cleaned(&self) -> Constraint {
+    pub fn cleaned(&self) -> Constraint<V> {
         let mut output = self.clone();
         output.clean();
         output
     }
 }
 
-impl std::fmt::Display for Expr {
+impl<V: VariableName> std::fmt::Display for Expr<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.coefs.is_empty() && self.constant == 0 {
             write!(f, "0")?;
@@ -182,16 +200,16 @@ impl std::fmt::Display for Sign {
     }
 }
 
-impl std::fmt::Display for Constraint {
+impl<V: VariableName> std::fmt::Display for Constraint<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {} 0", self.expr, self.sign)
     }
 }
 
-impl std::ops::Add for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add for &Expr<V> {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: &Expr) -> Self::Output {
+    fn add(self, rhs: &Expr<V>) -> Self::Output {
         let mut output = Expr {
             coefs: self.coefs.clone(),
             constant: self.constant,
@@ -211,98 +229,98 @@ impl std::ops::Add for &Expr {
     }
 }
 
-impl std::ops::Add for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add for Expr<V> {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: Expr) -> Self::Output {
+    fn add(self, rhs: Expr<V>) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl std::ops::Add<Expr> for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<Expr<V>> for &Expr<V> {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: Expr) -> Self::Output {
+    fn add(self, rhs: Expr<V>) -> Self::Output {
         self + &rhs
     }
 }
 
-impl std::ops::Add<&Expr> for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<&Expr<V>> for Expr<V> {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: &Expr) -> Self::Output {
+    fn add(self, rhs: &Expr<V>) -> Self::Output {
         &self + rhs
     }
 }
 
-impl std::ops::Add<&i32> for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<&i32> for &Expr<V> {
+    type Output = Expr<V>;
 
     fn add(self, rhs: &i32) -> Self::Output {
         self + Expr::constant(*rhs)
     }
 }
 
-impl std::ops::Add<i32> for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<i32> for &Expr<V> {
+    type Output = Expr<V>;
 
     fn add(self, rhs: i32) -> Self::Output {
         self + &rhs
     }
 }
 
-impl std::ops::Add<&i32> for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<&i32> for Expr<V> {
+    type Output = Expr<V>;
 
     fn add(self, rhs: &i32) -> Self::Output {
         &self + rhs
     }
 }
 
-impl std::ops::Add<i32> for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<i32> for Expr<V> {
+    type Output = Expr<V>;
 
     fn add(self, rhs: i32) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl std::ops::Add<&Expr> for &i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<&Expr<V>> for &i32 {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: &Expr) -> Self::Output {
+    fn add(self, rhs: &Expr<V>) -> Self::Output {
         rhs + self
     }
 }
 
-impl std::ops::Add<Expr> for &i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<Expr<V>> for &i32 {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: Expr) -> Self::Output {
+    fn add(self, rhs: Expr<V>) -> Self::Output {
         self + &rhs
     }
 }
 
-impl std::ops::Add<&Expr> for i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<&Expr<V>> for i32 {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: &Expr) -> Self::Output {
+    fn add(self, rhs: &Expr<V>) -> Self::Output {
         &self + rhs
     }
 }
 
-impl std::ops::Add<Expr> for i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Add<Expr<V>> for i32 {
+    type Output = Expr<V>;
 
-    fn add(self, rhs: Expr) -> Self::Output {
+    fn add(self, rhs: Expr<V>) -> Self::Output {
         &self + &rhs
     }
 }
 
-impl std::ops::Mul<&Expr> for &i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Mul<&Expr<V>> for &i32 {
+    type Output = Expr<V>;
 
-    fn mul(self, rhs: &Expr) -> Self::Output {
+    fn mul(self, rhs: &Expr<V>) -> Self::Output {
         let mut output = rhs.clone();
 
         for (_key, value) in output.coefs.iter_mut() {
@@ -315,138 +333,138 @@ impl std::ops::Mul<&Expr> for &i32 {
     }
 }
 
-impl std::ops::Mul<&Expr> for i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Mul<&Expr<V>> for i32 {
+    type Output = Expr<V>;
 
-    fn mul(self, rhs: &Expr) -> Self::Output {
+    fn mul(self, rhs: &Expr<V>) -> Self::Output {
         (&self) * rhs
     }
 }
 
-impl std::ops::Mul<Expr> for &i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Mul<Expr<V>> for &i32 {
+    type Output = Expr<V>;
 
-    fn mul(self, rhs: Expr) -> Self::Output {
+    fn mul(self, rhs: Expr<V>) -> Self::Output {
         self * &rhs
     }
 }
 
-impl std::ops::Mul<Expr> for i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Mul<Expr<V>> for i32 {
+    type Output = Expr<V>;
 
-    fn mul(self, rhs: Expr) -> Self::Output {
+    fn mul(self, rhs: Expr<V>) -> Self::Output {
         &self * &rhs
     }
 }
 
-impl std::ops::Neg for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Neg for &Expr<V> {
+    type Output = Expr<V>;
 
     fn neg(self) -> Self::Output {
         (-1) * self
     }
 }
 
-impl std::ops::Neg for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Neg for Expr<V> {
+    type Output = Expr<V>;
 
     fn neg(self) -> Self::Output {
         -&self
     }
 }
 
-impl std::ops::Sub for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub for &Expr<V> {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: &Expr) -> Self::Output {
+    fn sub(self, rhs: &Expr<V>) -> Self::Output {
         self + (-1) * rhs
     }
 }
 
-impl std::ops::Sub for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub for Expr<V> {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: Expr) -> Self::Output {
+    fn sub(self, rhs: Expr<V>) -> Self::Output {
         &self - &rhs
     }
 }
 
-impl std::ops::Sub<Expr> for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<Expr<V>> for &Expr<V> {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: Expr) -> Self::Output {
+    fn sub(self, rhs: Expr<V>) -> Self::Output {
         self - &rhs
     }
 }
 
-impl std::ops::Sub<&Expr> for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<&Expr<V>> for Expr<V> {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: &Expr) -> Self::Output {
+    fn sub(self, rhs: &Expr<V>) -> Self::Output {
         &self - rhs
     }
 }
 
-impl std::ops::Sub<&i32> for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<&i32> for &Expr<V> {
+    type Output = Expr<V>;
 
     fn sub(self, rhs: &i32) -> Self::Output {
         self + (-*rhs)
     }
 }
 
-impl std::ops::Sub<&i32> for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<&i32> for Expr<V> {
+    type Output = Expr<V>;
 
     fn sub(self, rhs: &i32) -> Self::Output {
         &self - rhs
     }
 }
 
-impl std::ops::Sub<i32> for &Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<i32> for &Expr<V> {
+    type Output = Expr<V>;
 
     fn sub(self, rhs: i32) -> Self::Output {
         self - &rhs
     }
 }
 
-impl std::ops::Sub<i32> for Expr {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<i32> for Expr<V> {
+    type Output = Expr<V>;
 
     fn sub(self, rhs: i32) -> Self::Output {
         &self - &rhs
     }
 }
 
-impl std::ops::Sub<&Expr> for &i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<&Expr<V>> for &i32 {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: &Expr) -> Self::Output {
+    fn sub(self, rhs: &Expr<V>) -> Self::Output {
         -rhs + self
     }
 }
 
-impl std::ops::Sub<&Expr> for i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<&Expr<V>> for i32 {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: &Expr) -> Self::Output {
+    fn sub(self, rhs: &Expr<V>) -> Self::Output {
         &self - rhs
     }
 }
 
-impl std::ops::Sub<Expr> for &i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<Expr<V>> for &i32 {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: Expr) -> Self::Output {
+    fn sub(self, rhs: Expr<V>) -> Self::Output {
         self - &rhs
     }
 }
 
-impl std::ops::Sub<Expr> for i32 {
-    type Output = Expr;
+impl<V: VariableName> std::ops::Sub<Expr<V>> for i32 {
+    type Output = Expr<V>;
 
-    fn sub(self, rhs: Expr) -> Self::Output {
+    fn sub(self, rhs: Expr<V>) -> Self::Output {
         &self - &rhs
     }
 }
