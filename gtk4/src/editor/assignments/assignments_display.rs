@@ -1,6 +1,6 @@
 use glib::object::ObjectExt;
 use glib::SignalHandlerId;
-use gtk::prelude::{BoxExt, CheckButtonExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
@@ -42,6 +42,7 @@ pub enum PeriodEntryInput {
         collomatique_state_colloscopes::SubjectId,
         bool,
     ),
+    CopyPreviousPeriod,
 }
 
 #[derive(Debug, Clone)]
@@ -82,11 +83,27 @@ impl FactoryComponent for PeriodEntry {
             set_hexpand: true,
             set_orientation: gtk::Orientation::Vertical,
             set_spacing: 10,
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                #[watch]
-                set_label: &self.generate_title_text(),
-                set_use_markup: true,
+            gtk::Box {
+                set_hexpand: true,
+                set_orientation: gtk::Orientation::Horizontal,
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    #[watch]
+                    set_label: &self.generate_title_text(),
+                    set_use_markup: true,
+                },
+                gtk::Box {
+                    set_hexpand: true,
+                },
+                gtk::Button {
+                    set_icon_name: "edit-copy-symbolic",
+                    add_css_class: "flat",
+                    set_sensitive: false,
+                    #[watch]
+                    set_visible: self.data.first_week_num != 0,
+                    set_tooltip_text: Some("Dupliquer les inscriptions de la période précédente"),
+                    connect_clicked => PeriodEntryInput::CopyPreviousPeriod,
+                },
             },
             gtk::Label {
                 #[watch]
@@ -123,7 +140,7 @@ impl FactoryComponent for PeriodEntry {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let column_view_widget = &self.column_view.view;
         let widgets = view_output!();
@@ -164,6 +181,7 @@ impl FactoryComponent for PeriodEntry {
                     ))
                     .unwrap();
             }
+            PeriodEntryInput::CopyPreviousPeriod => {}
         }
     }
 }
