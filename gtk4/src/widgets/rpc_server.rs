@@ -250,7 +250,6 @@ impl Component for RpcLogger {
                 }
             }
             LoggerCommandOutput::NewStderrData(data, stderr_buf) => {
-                print!("Received: {}", data);
                 let complete_cmd = CompleteCmdMsg::from_text_msg(&data);
                 let cmd = match complete_cmd {
                     Ok(c) => match c {
@@ -355,7 +354,6 @@ impl RpcLogger {
 
     fn send_text_cmd(&mut self, sender: ComponentSender<Self>, cmd: String) {
         if let Some(stdin) = &mut self.child_stdin {
-            println!("Sending: {}", cmd);
             let result = stdin.write_all(cmd.as_bytes());
             if let Err(e) = result {
                 if e.kind() == std::io::ErrorKind::BrokenPipe {
