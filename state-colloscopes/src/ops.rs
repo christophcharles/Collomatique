@@ -78,7 +78,7 @@ impl AnnotatedOp {
     ///
     /// This might lead to the creation of new unique ids
     /// through an [IdIssuer].
-    pub(crate) fn annotate(op: Op, id_issuer: &IdIssuer) -> AnnotatedOp {
+    pub(crate) fn annotate(op: Op, id_issuer: &mut IdIssuer) -> AnnotatedOp {
         match op {
             Op::Student(student_op) => {
                 AnnotatedOp::Student(AnnotatedStudentOp::annotate(student_op, id_issuer))
@@ -91,7 +91,7 @@ impl AnnotatedStudentOp {
     /// Used internally
     ///
     /// Annotates the subcategory of operations [StudentOp].
-    fn annotate(student_op: StudentOp, id_issuer: &IdIssuer) -> AnnotatedStudentOp {
+    fn annotate(student_op: StudentOp, id_issuer: &mut IdIssuer) -> AnnotatedStudentOp {
         match student_op {
             StudentOp::Add(student) => AnnotatedStudentOp::Add(id_issuer.get_student_id(), student),
             StudentOp::Remove(student_id) => AnnotatedStudentOp::Remove(student_id),

@@ -37,7 +37,7 @@ pub trait InMemoryData: Send + Sync + std::fmt::Debug {
     /// less complete description operation that should be annotated with ids.
     /// The [InMemoryData] object must then issue ids and complete the type
     /// accordingly.
-    fn annotate(&self, op: Self::OriginalOperation) -> Self::AnnotatedOperation;
+    fn annotate(&mut self, op: Self::OriginalOperation) -> Self::AnnotatedOperation;
 
     /// Build the reverse of an operation
     ///
@@ -93,7 +93,7 @@ pub trait Manager: private::ManagerInternal {
         &mut self,
         op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
     ) -> Result<(), <<Self as private::ManagerInternal>::Data as InMemoryData>::Error> {
-        let annotated_op = self.get_in_memory_data().annotate(op);
+        let annotated_op = self.get_in_memory_data_mut().annotate(op);
 
         let reverse_operation = self
             .get_in_memory_data()
