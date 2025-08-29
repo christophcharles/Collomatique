@@ -815,17 +815,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "collomatique-core"
-version = "0.1.0"
-dependencies = [
- "collomatique-ilp",
- "collomatique-solver",
- "collomatique-time",
- "ordered-float",
- "thiserror",
-]
-
-[[package]]
 name = "collomatique-ilp"
 version = "0.1.0"
 dependencies = [
@@ -843,6 +832,17 @@ name = "collomatique-solver"
 version = "0.1.0"
 dependencies = [
  "collomatique-ilp",
+ "ordered-float",
+ "thiserror",
+]
+
+[[package]]
+name = "collomatique-solver-colloscopes"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+ "collomatique-solver",
+ "collomatique-time",
  "ordered-float",
  "thiserror",
 ]
