@@ -24,9 +24,18 @@ impl<'a> Solver<'a> {
         f_scores: &BTreeMap<ConfigRepr<'a>, f32>,
     ) -> Option<ConfigRepr<'a>> {
         use ordered_float::OrderedFloat;
-
-        let (min_config, _) = f_scores.iter().min_by_key(|(_, s)| OrderedFloat(**s))?;
-        open_nodes.take(min_config)
+        let min_config = open_nodes
+            .iter()
+            .min_by_key(|n| {
+                OrderedFloat(
+                    f_scores
+                        .get(*n)
+                        .copied()
+                        .expect("fScore should be computed for open_nodes"),
+                )
+            })?
+            .clone();
+        open_nodes.take(&min_config)
     }
 }
 
