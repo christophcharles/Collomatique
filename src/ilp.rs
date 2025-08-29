@@ -25,9 +25,16 @@ pub type Result<T, V> = std::result::Result<T, Error<V>>;
 pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 
 #[derive(Debug, Clone)]
+pub struct ObjectiveTerm<V: VariableName> {
+    coef: f64,
+    exprs: BTreeSet<linexpr::Expr<V>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     variables: BTreeSet<V>,
+    objective_terms: Vec<ObjectiveTerm<V>>,
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -51,6 +58,7 @@ impl<V: VariableName> Default for ProblemBuilder<V> {
         ProblemBuilder {
             constraints: BTreeSet::new(),
             variables: BTreeSet::new(),
+            objective_terms: Vec::new(),
         }
     }
 }
@@ -82,6 +90,23 @@ impl<V: VariableName> ProblemBuilder<V> {
         for constraint in constraints {
             self = self.add_constraint(constraint)?;
         }
+        Ok(self)
+    }
+
+    pub fn add_objective_term<U, I>(mut self, coef: f64, exprs: I) -> ConstraintResult<Self, V>
+    where
+        I: IntoIterator<Item = linexpr::Expr<V>>,
+    {
+        let exprs = BTreeSet::from_iter(exprs);
+        for expr in &exprs {
+            for var in expr.variables() {
+                if !self.variables.contains(&var) {
+                    return Err(ConstraintError::UndeclaredVariable(var));
+                }
+            }
+        }
+
+        self.objective_terms.push(ObjectiveTerm { coef, exprs });
         Ok(self)
     }
 
@@ -123,6 +148,7 @@ impl<V: VariableName> ProblemBuilder<V> {
             variables_lookup,
             constraints: self.constraints,
             pb_repr,
+            objective_terms: self.objective_terms,
         }
     }
 
@@ -137,10 +163,31 @@ impl<V: VariableName> ProblemBuilder<V> {
             .filter(|c: &Constraint<V>| c.variables().iter().all(&mut predicate))
             .collect();
         let variables = self.variables.into_iter().filter(&mut predicate).collect();
+        let objective_terms = self
+            .objective_terms
+            .into_iter()
+            .filter_map(|obj_term| {
+                let exprs: BTreeSet<_> = obj_term
+                    .exprs
+                    .into_iter()
+                    .filter(|e| e.variables().iter().all(&mut predicate))
+                    .collect();
+
+                if exprs.is_empty() {
+                    return None;
+                }
+
+                Some(ObjectiveTerm {
+                    coef: obj_term.coef,
+                    exprs,
+                })
+            })
+            .collect();
 
         ProblemBuilder {
             constraints,
             variables,
+            objective_terms,
         }
     }
 }
@@ -154,6 +201,7 @@ pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
     pb_repr: P,
+    objective_terms: Vec<ObjectiveTerm<V>>,
 }
 
 impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
@@ -169,6 +217,18 @@ impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
             write!(f, "{}) {}\n", i, c)?;
         }
 
+        write!(f, "objectives terms :\n")?;
+        for (i, o) in self.objective_terms.iter().enumerate() {
+            let strings: Vec<_> = o.exprs.iter().map(|x| x.to_string()).collect();
+            write!(
+                f,
+                "{}) coefficient: {}, expressions: {}",
+                i,
+                o.coef,
+                strings.join(", ")
+            )?;
+        }
+
         Ok(())
     }
 }
@@ -178,6 +238,7 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
         ProblemBuilder {
             constraints: self.constraints,
             variables: self.variables,
+            objective_terms: self.objective_terms,
         }
     }
 
@@ -218,6 +279,10 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
 
     pub fn get_variables(&self) -> &BTreeSet<V> {
         &self.variables
+    }
+
+    pub fn get_objective_terms(&self) -> &Vec<ObjectiveTerm<V>> {
+        &self.objective_terms
     }
 }
 
