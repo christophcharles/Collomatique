@@ -23,6 +23,7 @@ pub enum DialogInput {
     Cancel,
     Accept,
     UpdateName(String),
+    UpdateStatusInPattern(usize, bool),
 }
 
 #[derive(Debug)]
@@ -112,7 +113,11 @@ impl SimpleComponent for Dialog {
 
         let period_entries = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                PeriodOutput::UpdateStatusInPattern(week_num, new_status) => {
+                    DialogInput::UpdateStatusInPattern(week_num, new_status)
+                }
+            });
 
         let model = Dialog {
             hidden: true,
@@ -141,14 +146,13 @@ impl SimpleComponent for Dialog {
                     .periods
                     .ordered_period_list
                     .iter()
-                    .scan(0usize, |acc, (id, desc)| {
+                    .scan(0usize, |acc, (_id, desc)| {
                         let current_first_week = *acc;
                         *acc += desc.len();
                         Some(PeriodData {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
                             period_desc: desc.clone(),
-                            period_id: id.clone(),
                             weeks_in_pattern: (current_first_week
                                 ..(current_first_week + desc.len()))
                                 .into_iter()
@@ -181,6 +185,22 @@ impl SimpleComponent for Dialog {
                 }
                 self.week_pattern.name = new_name;
             }
+            DialogInput::UpdateStatusInPattern(week_num, new_status) => {
+                if self
+                    .week_pattern
+                    .weeks
+                    .get(week_num)
+                    .cloned()
+                    .unwrap_or(true)
+                    == new_status
+                {
+                    return;
+                }
+                if week_num >= self.week_pattern.weeks.len() {
+                    self.week_pattern.weeks.resize(week_num + 1, true);
+                }
+                self.week_pattern.weeks[week_num] = new_status;
+            }
         }
     }
 
@@ -198,7 +218,6 @@ struct PeriodData {
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     first_week_num: usize,
     period_desc: Vec<bool>,
-    period_id: collomatique_state_colloscopes::PeriodId,
     weeks_in_pattern: Vec<bool>,
 }
 
@@ -213,6 +232,12 @@ struct PeriodEntry {
 #[derive(Debug, Clone)]
 enum PeriodInput {
     UpdateData(PeriodData),
+    UpdateStatusInPattern(usize, bool),
+}
+
+#[derive(Debug, Clone)]
+enum PeriodOutput {
+    UpdateStatusInPattern(usize, bool),
 }
 
 impl PeriodEntry {
@@ -230,7 +255,7 @@ impl PeriodEntry {
 impl FactoryComponent for PeriodEntry {
     type Init = PeriodData;
     type Input = PeriodInput;
-    type Output = ();
+    type Output = PeriodOutput;
     type CommandOutput = ();
     type ParentWidget = gtk::Box;
 
@@ -248,10 +273,14 @@ impl FactoryComponent for PeriodEntry {
         },
     }
 
-    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+    fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
         let week_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                WeekOutput::UpdateStatusInPattern(index, new_status) => {
+                    PeriodInput::UpdateStatusInPattern(index, new_status)
+                }
+            });
 
         let mut model = Self {
             data,
@@ -278,7 +307,7 @@ impl FactoryComponent for PeriodEntry {
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         self.should_redraw = false;
         match msg {
             PeriodInput::UpdateData(new_data) => {
@@ -286,6 +315,19 @@ impl FactoryComponent for PeriodEntry {
                 self.should_redraw = true;
 
                 self.update_factory();
+            }
+            PeriodInput::UpdateStatusInPattern(index, new_status) => {
+                if self.data.weeks_in_pattern[index] == new_status {
+                    return;
+                }
+                self.data.weeks_in_pattern[index] = new_status;
+                let global_index = self.data.first_week_num + index;
+                sender
+                    .output(PeriodOutput::UpdateStatusInPattern(
+                        global_index,
+                        new_status,
+                    ))
+                    .unwrap();
             }
         }
     }
@@ -332,6 +374,12 @@ struct WeekEntry {
 #[derive(Debug, Clone)]
 enum WeekInput {
     UpdateData(WeekData),
+    UpdateStatusInPattern(bool),
+}
+
+#[derive(Debug, Clone)]
+enum WeekOutput {
+    UpdateStatusInPattern(usize, bool),
 }
 
 impl WeekEntry {
@@ -345,7 +393,7 @@ impl WeekEntry {
 impl FactoryComponent for WeekEntry {
     type Init = WeekData;
     type Input = WeekInput;
-    type Output = ();
+    type Output = WeekOutput;
     type CommandOutput = ();
     type ParentWidget = adw::PreferencesGroup;
 
@@ -353,8 +401,17 @@ impl FactoryComponent for WeekEntry {
         #[root]
         root_widget = adw::SwitchRow {
             set_hexpand: true,
+            set_use_markup: false,
             #[watch]
             set_title: &self.generate_week_title(),
+            #[track(self.should_redraw)]
+            set_active: self.data.status_in_pattern,
+            connect_active_notify[sender] => move |widget| {
+                let status = widget.is_active();
+                sender.input(
+                    WeekInput::UpdateStatusInPattern(status)
+                );
+            },
         },
     }
 
@@ -371,7 +428,7 @@ impl FactoryComponent for WeekEntry {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
 
@@ -382,12 +439,24 @@ impl FactoryComponent for WeekEntry {
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         self.should_redraw = false;
         match msg {
             WeekInput::UpdateData(new_data) => {
                 self.data = new_data;
                 self.should_redraw = true;
+            }
+            WeekInput::UpdateStatusInPattern(new_status) => {
+                if self.data.status_in_pattern == new_status {
+                    return;
+                }
+                self.data.status_in_pattern = new_status;
+                sender
+                    .output(WeekOutput::UpdateStatusInPattern(
+                        self.index.current_index(),
+                        new_status,
+                    ))
+                    .unwrap();
             }
         }
     }
