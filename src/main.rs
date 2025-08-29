@@ -73,6 +73,6 @@ fn main() {
     let iterator = sa_optimizer.iterate(dijkstra_solver, &mut random_gen);
 
     for (i, (sol, cost)) in iterator.enumerate() {
-        println!("{}: {} - {:?}", i, cost, Config::from(sol));
+        println!("{}: {} - {:?}", i, cost, Config::from(sol.as_ref()));
     }
 }
