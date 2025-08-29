@@ -219,7 +219,7 @@ pub enum SubjectError {
     #[error("teacher id ({0:?}) is associated to the subject id {1:?}")]
     SubjectStillHasAssociatedTeachers(TeacherId, SubjectId),
 
-    /// The subject is referenced by a teacher
+    /// The subject is referenced by a slot
     #[error("subject id ({0:?}) is referenced by slots")]
     SubjectStillHasAssociatedSlots(SubjectId),
 }
@@ -284,6 +284,10 @@ pub enum WeekPatternError {
     /// The week pattern id already exists
     #[error("week pattern id ({0:?}) already exists")]
     WeekPatternIdAlreadyExists(WeekPatternId),
+
+    /// The week pattern is referenced by a slot
+    #[error("week pattern id ({0:?}) is referenced by a slot ({1:?})")]
+    WeekPatternStillHasAssociatedSlots(WeekPatternId, SlotId),
 }
 
 /// Errors for interrogation slot operations
@@ -1639,6 +1643,18 @@ impl Data {
                     .contains_key(id)
                 {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                }
+
+                for (_subject_id, subject_slots) in &self.inner_data.slots.subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if let Some(week_pattern_id) = &slot.week_pattern {
+                            if *id == *week_pattern_id {
+                                return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
+                                    *id, *slot_id,
+                                ));
+                            }
+                        }
+                    }
                 }
 
                 self.inner_data.week_patterns.week_pattern_map.remove(id);
