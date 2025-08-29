@@ -470,10 +470,10 @@ pub enum GroupListsCommand {
 #[derive(Debug, Clone)]
 pub enum SubjectsCommand {
     GetAll,
-    Get(SubjectGroupHandle),
-    Create(SubjectGroup),
-    Update(SubjectGroupHandle, SubjectGroup),
-    Remove(SubjectGroupHandle),
+    Get(SubjectHandle),
+    Create(Subject),
+    Update(SubjectHandle, Subject),
+    Remove(SubjectHandle),
 }
 
 #[derive(Debug, Clone)]
@@ -1081,45 +1081,643 @@ impl<'scope> SessionConnection<'scope> {
     }
 
     async fn execute_incompats_job<T: state::Manager>(
-        _incompats_command: &IncompatsCommand,
-        _manager: &mut T,
+        incompats_command: &IncompatsCommand,
+        manager: &mut T,
     ) -> PyResult<IncompatsAnswer> {
-        todo!()
+        match incompats_command {
+            IncompatsCommand::GetAll => {
+                let result = manager
+                    .incompats_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, incompat)| (handle.into(), Incompat::from(incompat)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(IncompatsAnswer::GetAll(result))
+            }
+            IncompatsCommand::Get(handle) => {
+                let result = manager
+                    .incompats_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(IncompatsAnswer::Get(result.into()))
+            }
+            IncompatsCommand::Create(incompat) => {
+                let output = manager
+                    .apply(Operation::Incompats(state::IncompatsOperation::Create(
+                        incompat.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::IncompatBadWeekPattern(week_pattern) => {
+                            PyValueError::new_err(format!(
+                                "Incompat references a bad week pattern handle {:?}",
+                                week_pattern
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::Incompat(handle) = output else {
+                    panic!("No incompat handle returned on IncompatsCommand::Create");
+                };
+
+                Ok(IncompatsAnswer::Create(handle.into()))
+            }
+            IncompatsCommand::Update(handle, incompat) => {
+                manager
+                    .apply(Operation::Incompats(state::IncompatsOperation::Update(
+                        handle.handle,
+                        incompat.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::IncompatRemoved(_) => {
+                            PyValueError::new_err("Incompat was previously removed")
+                        }
+                        UpdateError::IncompatBadWeekPattern(week_pattern) => {
+                            PyValueError::new_err(format!(
+                                "Incompat references a bad week pattern handle {:?}",
+                                week_pattern
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(IncompatsAnswer::Update)
+            }
+            IncompatsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::Incompats(state::IncompatsOperation::Remove(
+                        handle.handle,
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::IncompatRemoved(_) => {
+                            PyValueError::new_err("Incompat was previously removed")
+                        }
+                        UpdateError::IncompatDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this incompat",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(IncompatsAnswer::Remove)
+            }
+        }
     }
 
     async fn execute_group_lists_job<T: state::Manager>(
-        _group_lists_command: &GroupListsCommand,
-        _manager: &mut T,
+        group_lists_command: &GroupListsCommand,
+        manager: &mut T,
     ) -> PyResult<GroupListsAnswer> {
-        todo!()
+        match group_lists_command {
+            GroupListsCommand::GetAll => {
+                let result = manager
+                    .group_lists_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, group_list)| (handle.into(), GroupList::from(group_list)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(GroupListsAnswer::GetAll(result))
+            }
+            GroupListsCommand::Get(handle) => {
+                let result = manager
+                    .group_lists_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(GroupListsAnswer::Get(result.into()))
+            }
+            GroupListsCommand::Create(group_list) => {
+                let output = manager
+                    .apply(Operation::GroupLists(state::GroupListsOperation::Create(
+                        group_list.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupListBadStudent(student_handle) => {
+                            PyValueError::new_err(format!(
+                                "Group list references a bad student handle {:?}",
+                                student_handle
+                            ))
+                        }
+                        UpdateError::GroupListWithInconsistentStudentMapping => {
+                            PyValueError::new_err("Inconsistent student mapping")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::GroupList(handle) = output else {
+                    panic!("No group list handle returned on GroupListsCommand::Create");
+                };
+
+                Ok(GroupListsAnswer::Create(handle.into()))
+            }
+            GroupListsCommand::Update(handle, group_list) => {
+                manager
+                    .apply(Operation::GroupLists(state::GroupListsOperation::Update(
+                        handle.handle,
+                        group_list.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupListRemoved(_) => {
+                            PyValueError::new_err("Group list was previously removed")
+                        }
+                        UpdateError::GroupListBadStudent(student_handle) => {
+                            PyValueError::new_err(format!(
+                                "Group list references a bad student handle {:?}",
+                                student_handle
+                            ))
+                        }
+                        UpdateError::GroupListWithInconsistentStudentMapping => {
+                            PyValueError::new_err("Inconsistent student mapping")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(GroupListsAnswer::Update)
+            }
+            GroupListsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::GroupLists(state::GroupListsOperation::Remove(
+                        handle.handle,
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupListRemoved(_) => {
+                            PyValueError::new_err("Group list was previously removed")
+                        }
+                        UpdateError::GroupListDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this group list",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(GroupListsAnswer::Remove)
+            }
+        }
     }
 
     async fn execute_subjects_job<T: state::Manager>(
-        _subjects_command: &SubjectsCommand,
-        _manager: &mut T,
+        subjects_command: &SubjectsCommand,
+        manager: &mut T,
     ) -> PyResult<SubjectsAnswer> {
-        todo!()
+        match subjects_command {
+            SubjectsCommand::GetAll => {
+                let result = manager
+                    .subjects_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, subject)| (handle.into(), Subject::from(subject)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(SubjectsAnswer::GetAll(result))
+            }
+            SubjectsCommand::Get(handle) => {
+                let result = manager
+                    .subjects_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(SubjectsAnswer::Get(result.into()))
+            }
+            SubjectsCommand::Create(group_list) => {
+                let output = manager
+                    .apply(Operation::Subjects(state::SubjectsOperation::Create(
+                        group_list.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SubjectBadSubjectGroup(subject_group_handle) => {
+                            PyValueError::new_err(format!(
+                                "Subject references a bad subject group handle {:?}",
+                                subject_group_handle
+                            ))
+                        }
+                        UpdateError::SubjectBadIncompat(incompat_handle) => {
+                            PyValueError::new_err(format!(
+                                "Subject references a bad subject group handle {:?}",
+                                incompat_handle
+                            ))
+                        }
+                        UpdateError::SubjectBadGroupList(group_list_handle) => {
+                            PyValueError::new_err(format!(
+                                "Subject references a bad subject group handle {:?}",
+                                group_list_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::Subject(handle) = output else {
+                    panic!("No subject handle returned on SubjectsCommand::Create");
+                };
+
+                Ok(SubjectsAnswer::Create(handle.into()))
+            }
+            SubjectsCommand::Update(handle, subject) => {
+                manager
+                    .apply(Operation::Subjects(state::SubjectsOperation::Update(
+                        handle.handle,
+                        subject.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SubjectRemoved(_) => {
+                            PyValueError::new_err("Subject was previously removed")
+                        }
+                        UpdateError::SubjectBadSubjectGroup(subject_group_handle) => {
+                            PyValueError::new_err(format!(
+                                "Subject references a bad subject group handle {:?}",
+                                subject_group_handle
+                            ))
+                        }
+                        UpdateError::SubjectBadIncompat(incompat_handle) => {
+                            PyValueError::new_err(format!(
+                                "Subject references a bad subject group handle {:?}",
+                                incompat_handle
+                            ))
+                        }
+                        UpdateError::SubjectBadGroupList(group_list_handle) => {
+                            PyValueError::new_err(format!(
+                                "Subject references a bad subject group handle {:?}",
+                                group_list_handle
+                            ))
+                        }
+                        UpdateError::SubjectWithStudentRegistered(student_handle) => {
+                            PyValueError::new_err(format!(
+                                "Cannot change subject group: student {:?} is still resgistered",
+                                student_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(SubjectsAnswer::Update)
+            }
+            SubjectsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::Subjects(state::SubjectsOperation::Remove(
+                        handle.handle,
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::SubjectRemoved(_) => {
+                            PyValueError::new_err("Subject was previously removed")
+                        }
+                        UpdateError::SubjectDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this subject",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(SubjectsAnswer::Remove)
+            }
+        }
     }
 
     async fn execute_time_slots_job<T: state::Manager>(
-        _time_slots_command: &TimeSlotsCommand,
-        _manager: &mut T,
+        time_slots_command: &TimeSlotsCommand,
+        manager: &mut T,
     ) -> PyResult<TimeSlotsAnswer> {
-        todo!()
+        match time_slots_command {
+            TimeSlotsCommand::GetAll => {
+                let result = manager
+                    .time_slots_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, time_slot)| (handle.into(), TimeSlot::from(time_slot)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(TimeSlotsAnswer::GetAll(result))
+            }
+            TimeSlotsCommand::Get(handle) => {
+                let result = manager
+                    .time_slots_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(TimeSlotsAnswer::Get(result.into()))
+            }
+            TimeSlotsCommand::Create(time_slot) => {
+                let output = manager
+                    .apply(Operation::TimeSlots(state::TimeSlotsOperation::Create(
+                        time_slot.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::TimeSlotBadSubject(subject_group_handle) => {
+                            PyValueError::new_err(format!(
+                                "Time slot references a bad subject group handle {:?}",
+                                subject_group_handle
+                            ))
+                        }
+                        UpdateError::TimeSlotBadTeacher(teacher_handle) => {
+                            PyValueError::new_err(format!(
+                                "Time slot references a bad teacher handle {:?}",
+                                teacher_handle
+                            ))
+                        }
+                        UpdateError::TimeSlotBadWeekPattern(week_pattern_handle) => {
+                            PyValueError::new_err(format!(
+                                "Time slot references a bad week pattern handle {:?}",
+                                week_pattern_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::TimeSlot(handle) = output else {
+                    panic!("No time slot handle returned on TimeSlotsCommand::Create");
+                };
+
+                Ok(TimeSlotsAnswer::Create(handle.into()))
+            }
+            TimeSlotsCommand::Update(handle, time_slot) => {
+                manager
+                    .apply(Operation::TimeSlots(state::TimeSlotsOperation::Update(
+                        handle.handle,
+                        time_slot.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::TimeSlotRemoved(_) => {
+                            PyValueError::new_err("Time slot was previously removed")
+                        }
+                        UpdateError::TimeSlotBadSubject(subject_group_handle) => {
+                            PyValueError::new_err(format!(
+                                "Time slot references a bad subject group handle {:?}",
+                                subject_group_handle
+                            ))
+                        }
+                        UpdateError::TimeSlotBadTeacher(teacher_handle) => {
+                            PyValueError::new_err(format!(
+                                "Time slot references a bad teacher handle {:?}",
+                                teacher_handle
+                            ))
+                        }
+                        UpdateError::TimeSlotBadWeekPattern(week_pattern_handle) => {
+                            PyValueError::new_err(format!(
+                                "Time slot references a bad week pattern handle {:?}",
+                                week_pattern_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(TimeSlotsAnswer::Update)
+            }
+            TimeSlotsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::TimeSlots(state::TimeSlotsOperation::Remove(
+                        handle.handle,
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::TimeSlotRemoved(_) => {
+                            PyValueError::new_err("Time slot was previously removed")
+                        }
+                        UpdateError::TimeSlotDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this time slot",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(TimeSlotsAnswer::Remove)
+            }
+        }
     }
 
     async fn execute_groupings_job<T: state::Manager>(
-        _groupings_command: &GroupingsCommand,
-        _manager: &mut T,
+        groupings_command: &GroupingsCommand,
+        manager: &mut T,
     ) -> PyResult<GroupingsAnswer> {
-        todo!()
+        match groupings_command {
+            GroupingsCommand::GetAll => {
+                let result = manager
+                    .groupings_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, grouping)| (handle.into(), Grouping::from(grouping)))
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(GroupingsAnswer::GetAll(result))
+            }
+            GroupingsCommand::Get(handle) => {
+                let result = manager
+                    .groupings_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(GroupingsAnswer::Get(result.into()))
+            }
+            GroupingsCommand::Create(grouping) => {
+                let output = manager
+                    .apply(Operation::Groupings(state::GroupingsOperation::Create(
+                        grouping.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupingBadTimeSlot(time_slot_handle) => {
+                            PyValueError::new_err(format!(
+                                "Grouping references a bad time slot handle {:?}",
+                                time_slot_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::Grouping(handle) = output else {
+                    panic!("No grouping handle returned on GroupingsCommand::Create");
+                };
+
+                Ok(GroupingsAnswer::Create(handle.into()))
+            }
+            GroupingsCommand::Update(handle, grouping) => {
+                manager
+                    .apply(Operation::Groupings(state::GroupingsOperation::Update(
+                        handle.handle,
+                        grouping.into(),
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupingRemoved(_) => {
+                            PyValueError::new_err("Grouping was previously removed")
+                        }
+                        UpdateError::GroupingBadTimeSlot(time_slot_handle) => {
+                            PyValueError::new_err(format!(
+                                "Grouping references a bad time slot handle {:?}",
+                                time_slot_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(GroupingsAnswer::Update)
+            }
+            GroupingsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::Groupings(state::GroupingsOperation::Remove(
+                        handle.handle,
+                    )))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupingRemoved(_) => {
+                            PyValueError::new_err("Grouping was previously removed")
+                        }
+                        UpdateError::GroupingDependanciesRemaining(_) => PyValueError::new_err(
+                            "There are remaining dependancies on this grouping",
+                        ),
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(GroupingsAnswer::Remove)
+            }
+        }
     }
 
     async fn execute_grouping_incompats_job<T: state::Manager>(
-        _grouping_incompats_command: &GroupingIncompatsCommand,
-        _manager: &mut T,
+        grouping_incompats_command: &GroupingIncompatsCommand,
+        manager: &mut T,
     ) -> PyResult<GroupingIncompatsAnswer> {
-        todo!()
+        match grouping_incompats_command {
+            GroupingIncompatsCommand::GetAll => {
+                let result = manager
+                    .grouping_incompats_get_all()
+                    .await
+                    .map_err(|e| PyException::new_err(e.to_string()))?
+                    .into_iter()
+                    .map(|(handle, grouping_incompat)| {
+                        (handle.into(), GroupingIncompat::from(grouping_incompat))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+
+                Ok(GroupingIncompatsAnswer::GetAll(result))
+            }
+            GroupingIncompatsCommand::Get(handle) => {
+                let result = manager
+                    .grouping_incompats_get(handle.handle)
+                    .await
+                    .map_err(|e| match e {
+                        IdError::InternalError(int_err) => {
+                            PyException::new_err(int_err.to_string())
+                        }
+                        IdError::InvalidId(_) => PyValueError::new_err("Invalid handle"),
+                    })?;
+
+                Ok(GroupingIncompatsAnswer::Get(result.into()))
+            }
+            GroupingIncompatsCommand::Create(grouping_incompat) => {
+                let output = manager
+                    .apply(Operation::GroupingIncompats(
+                        state::GroupingIncompatsOperation::Create(grouping_incompat.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupingIncompatBadGrouping(grouping_handle) => {
+                            PyValueError::new_err(format!(
+                                "Grouping incompat references a bad grouping handle {:?}",
+                                grouping_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                let ReturnHandle::GroupingIncompat(handle) = output else {
+                    panic!("No grouping incompat handle returned on GroupingsCommand::Create");
+                };
+
+                Ok(GroupingIncompatsAnswer::Create(handle.into()))
+            }
+            GroupingIncompatsCommand::Update(handle, grouping) => {
+                manager
+                    .apply(Operation::GroupingIncompats(
+                        state::GroupingIncompatsOperation::Update(handle.handle, grouping.into()),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupingIncompatRemoved(_) => {
+                            PyValueError::new_err("Grouping incompat was previously removed")
+                        }
+                        UpdateError::GroupingIncompatBadGrouping(grouping_handle) => {
+                            PyValueError::new_err(format!(
+                                "Grouping incompat references a bad grouping handle {:?}",
+                                grouping_handle
+                            ))
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(GroupingIncompatsAnswer::Update)
+            }
+            GroupingIncompatsCommand::Remove(handle) => {
+                manager
+                    .apply(Operation::GroupingIncompats(
+                        state::GroupingIncompatsOperation::Remove(handle.handle),
+                    ))
+                    .await
+                    .map_err(|e| match e {
+                        UpdateError::Internal(int_err) => PyException::new_err(int_err.to_string()),
+                        UpdateError::GroupingIncompatRemoved(_) => {
+                            PyValueError::new_err("Grouping incompat was previously removed")
+                        }
+                        _ => panic!("Unexpected error!"),
+                    })?;
+
+                Ok(GroupingIncompatsAnswer::Remove)
+            }
+        }
     }
 
     async fn execute_job<T: state::Manager>(
