@@ -1,4 +1,3 @@
-use std::num::NonZeroU32;
 use thiserror::Error;
 
 mod handles;
@@ -7,8 +6,7 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedGeneralOperation, AnnotatedOperation, AnnotatedWeekPatternsOperation,
-    ModificationHistory, ReversibleOperation,
+    AnnotatedOperation, AnnotatedWeekPatternsOperation, ModificationHistory, ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
@@ -22,16 +20,8 @@ use self::history::AggregatedOperations;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operation {
-    General(GeneralOperation),
     GeneralData(backend::GeneralData),
     WeekPatterns(WeekPatternsOperation),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GeneralOperation {
-    SetWeekCount(NonZeroU32),
-    SetMaxInterrogationsPerDay(Option<NonZeroU32>),
-    SetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
