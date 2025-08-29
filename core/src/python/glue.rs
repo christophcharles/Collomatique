@@ -49,11 +49,12 @@ pub fn current_session() -> Session {
 }
 
 #[pyfunction]
-pub fn open_dialog(list: Vec<(String, String)>) -> Option<std::path::PathBuf> {
+pub fn open_dialog(title: String, list: Vec<(String, String)>) -> Option<std::path::PathBuf> {
     let token = Token {};
 
     let result = token.send_msg(crate::rpc::CmdMsg::GuiRequest(
         crate::rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
+            title,
             list: list
                 .into_iter()
                 .map(|ext| ExtensionDesc {

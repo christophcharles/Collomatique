@@ -377,16 +377,17 @@ impl Dialog {
         gui_cmd: collomatique_core::rpc::cmd_msg::GuiMsg,
     ) {
         match gui_cmd {
-            collomatique_core::rpc::cmd_msg::GuiMsg::OpenFileDialog(extensions) => {
+            collomatique_core::rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
                 sender.oneshot_command(async move {
-                    let ext_vec: Vec<_> = extensions
+                    let ext_vec: Vec<_> = params
                         .list
                         .iter()
                         .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
                         .collect();
 
                     let file_name =
-                        crate::tools::open_save::generic_open_dialog(&ext_vec[..]).await;
+                        crate::tools::open_save::generic_open_dialog(&params.title, &ext_vec[..])
+                            .await;
 
                     DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
                         collomatique_core::rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
