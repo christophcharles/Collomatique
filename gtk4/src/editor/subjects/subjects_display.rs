@@ -210,6 +210,7 @@ impl FactoryComponent for Entry {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
                     set_halign: gtk::Align::Start,
+                    #[watch]
                     set_label: &self.generate_students_per_group_text(),
                     set_use_markup: true,
                 },
@@ -223,6 +224,7 @@ impl FactoryComponent for Entry {
                 },
                 gtk::Label {
                     set_halign: gtk::Align::Start,
+                    #[watch]
                     set_label: &self.generate_groups_per_interrogation_text(),
                     set_use_markup: true,
                 },
@@ -236,6 +238,7 @@ impl FactoryComponent for Entry {
                 },
                 gtk::Label {
                     set_halign: gtk::Align::Start,
+                    #[watch]
                     set_label: &self.generate_periodicity_text(),
                     set_use_markup: true,
                 },
@@ -244,6 +247,7 @@ impl FactoryComponent for Entry {
                 },
                 gtk::Label {
                     set_halign: gtk::Align::End,
+                    #[watch]
                     set_label: &self.generate_duration_text(),
                     set_use_markup: true,
                     add_css_class: "dimmed",
