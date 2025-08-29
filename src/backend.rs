@@ -1944,11 +1944,11 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     fn is_week_in_week_pattern(
         data: &GenColloscopeData<T>,
         week_pattern_id: T::WeekPatternId,
-        week: u32,
+        week: Week,
     ) -> bool {
         match data.week_patterns.get(&week_pattern_id) {
             None => false,
-            Some(week_pattern) => week_pattern.weeks.contains(&Week(week)),
+            Some(week_pattern) => week_pattern.weeks.contains(&week),
         }
     }
 
@@ -1985,7 +1985,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     fn is_week_in_incompat_group(
         data: &GenColloscopeData<T>,
         group: &IncompatGroup<T::WeekPatternId>,
-        week: u32,
+        week: Week,
     ) -> bool {
         for slot in &group.slots {
             if Self::is_week_in_week_pattern(data, slot.week_pattern_id, week) {
@@ -2011,7 +2011,9 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         for (&incompat_id, incompat) in &data.incompats {
             let mut ids = BTreeSet::new();
 
-            for week in 0..week_count.get() {
+            for i in 0..week_count.get() {
+                let week = Week(i);
+
                 let mut new_incompat = Incompatibility {
                     max_count: incompat.max_count,
                     groups: BTreeSet::new(),
@@ -2027,7 +2029,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
                         .iter()
                         .map(|s| SlotWithDuration {
                             start: crate::gen::colloscope::SlotStart {
-                                week,
+                                week: week.0,
                                 weekday: s.start.day,
                                 start_time: s.start.time.clone(),
                             },
