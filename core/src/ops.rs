@@ -24,6 +24,8 @@ pub mod teachers;
 pub use teachers::*;
 pub mod students;
 pub use students::*;
+pub mod assignments;
+pub use assignments::*;
 
 #[derive(Debug)]
 pub enum UpdateOp {
@@ -31,6 +33,7 @@ pub enum UpdateOp {
     Subjects(SubjectsUpdateOp),
     Teachers(TeachersUpdateOp),
     Students(StudentsUpdateOp),
+    Assignments(AssignmentsUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -43,6 +46,8 @@ pub enum UpdateError {
     Teachers(#[from] TeachersUpdateError),
     #[error(transparent)]
     Students(#[from] StudentsUpdateError),
+    #[error(transparent)]
+    Assignments(#[from] AssignmentsUpdateError),
 }
 
 impl UpdateOp {
@@ -52,6 +57,7 @@ impl UpdateOp {
             UpdateOp::Subjects(subject_op) => subject_op.get_desc(),
             UpdateOp::Teachers(teacher_op) => teacher_op.get_desc(),
             UpdateOp::Students(student_op) => student_op.get_desc(),
+            UpdateOp::Assignments(assignment_op) => assignment_op.get_desc(),
         }
     }
 
@@ -75,6 +81,10 @@ impl UpdateOp {
             UpdateOp::Students(student_op) => {
                 let result = student_op.apply(data)?;
                 Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Assignments(assignment_op) => {
+                assignment_op.apply(data)?;
+                Ok(None)
             }
         }
     }

@@ -8,6 +8,8 @@ pub mod teachers;
 pub use teachers::*;
 pub mod students;
 pub use students::*;
+pub mod assignments;
+pub use assignments::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
@@ -15,6 +17,7 @@ pub enum ErrorMsg {
     Subjects(SubjectsError),
     Teachers(TeachersError),
     Students(StudentsError),
+    Assignments(AssignmentsError),
 }
 
 impl From<crate::ops::UpdateError> for ErrorMsg {
@@ -25,6 +28,7 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
             UpdateError::Subjects(e) => ErrorMsg::Subjects(e.into()),
             UpdateError::Teachers(e) => ErrorMsg::Teachers(e.into()),
             UpdateError::Students(e) => ErrorMsg::Students(e.into()),
+            UpdateError::Assignments(e) => ErrorMsg::Assignments(e.into()),
         }
     }
 }
@@ -60,6 +64,7 @@ impl std::fmt::Display for ErrorMsg {
             ErrorMsg::Subjects(e) => e.fmt(f),
             ErrorMsg::Teachers(e) => e.fmt(f),
             ErrorMsg::Students(e) => e.fmt(f),
+            ErrorMsg::Assignments(e) => e.fmt(f),
         }
     }
 }
