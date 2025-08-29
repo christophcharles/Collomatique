@@ -14,9 +14,10 @@ pub struct NdProblem<V: VariableName> {
     eq_mat: Array2<i32>,
     eq_constants: Array1<i32>,
     constraints_map: BTreeMap<linexpr::Constraint<V>, ConstraintRef>,
+    constraints_ref: Vec<BTreeSet<ConstraintRef>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum ConstraintRef {
     Leq(usize),
     Eq(usize),
@@ -56,6 +57,8 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
 
         let mut constraints_map = BTreeMap::new();
 
+        let mut constraints_ref = vec![BTreeSet::new(); p];
+
         let mut leq_index = 0usize;
         let mut eq_index = 0usize;
 
@@ -65,6 +68,8 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
                     for (var, val) in c.coefs() {
                         let j = variable_map[var];
                         eq_mat[(eq_index, j)] = *val;
+
+                        constraints_ref[j].insert(ConstraintRef::Eq(eq_index));
                     }
                     constraints_map.insert(c.clone(), ConstraintRef::Eq(eq_index));
                     eq_constants[eq_index] = c.get_constant();
@@ -74,6 +79,8 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
                     for (var, val) in c.coefs() {
                         let j = variable_map[var];
                         leq_mat[(leq_index, j)] = *val;
+
+                        constraints_ref[j].insert(ConstraintRef::Leq(leq_index));
                     }
                     constraints_map.insert(c.clone(), ConstraintRef::Leq(leq_index));
                     leq_constants[leq_index] = c.get_constant();
@@ -88,6 +95,7 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
             eq_mat,
             eq_constants,
             constraints_map,
+            constraints_ref,
         }
     }
 
@@ -157,6 +165,7 @@ impl<V: VariableName> PartialOrd for NdConfig<V> {
 
 impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
     type Problem = NdProblem<V>;
+    type Precomputation = (Array1<i32>, Array1<i32>);
 
     fn max_distance_to_constraint(&self, problem: &NdProblem<V>) -> f32 {
         let mut max_dist = 0.0f32;
@@ -193,9 +202,59 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
         max_dist
     }
 
-    fn compute_lhs(&self, problem: &NdProblem<V>) -> BTreeMap<linexpr::Constraint<V>, i32> {
+    fn precompute(&self, problem: &Self::Problem) -> Self::Precomputation {
         let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
         let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
+
+        (leq_column, eq_column)
+    }
+
+    fn update_precomputation(
+        &self,
+        problem: &Self::Problem,
+        data: &mut Self::Precomputation,
+        vars: &BTreeSet<usize>,
+    ) {
+        let lines_to_update: BTreeSet<_> = vars
+            .iter()
+            .flat_map(|x| problem.constraints_ref[*x].iter())
+            .collect();
+
+        for line in lines_to_update {
+            use ndarray::s;
+            match line {
+                ConstraintRef::Eq(c) => {
+                    let partial_mat = problem.eq_mat.slice(s![*c..*c + 1, ..]);
+                    let partial_constants = problem.eq_constants[*c];
+
+                    let temp = partial_mat.dot(&self.values);
+                    assert_eq!(temp.dim(), 1);
+
+                    let new_val = temp[0] + partial_constants;
+
+                    data.1[*c] = new_val;
+                }
+                ConstraintRef::Leq(c) => {
+                    let partial_mat = problem.leq_mat.slice(s![*c..*c + 1, ..]);
+                    let partial_constants = problem.leq_constants[*c];
+
+                    let temp = partial_mat.dot(&self.values);
+                    assert_eq!(temp.dim(), 1);
+
+                    let new_val = temp[0] + partial_constants;
+
+                    data.0[*c] = new_val;
+                }
+            }
+        }
+    }
+
+    fn compute_lhs(
+        &self,
+        problem: &NdProblem<V>,
+        precomputation: &Self::Precomputation,
+    ) -> BTreeMap<linexpr::Constraint<V>, i32> {
+        let (leq_column, eq_column) = precomputation;
 
         let mut output = BTreeMap::new();
 
@@ -210,16 +269,15 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
         output
     }
 
-    fn is_feasable(&self, problem: &NdProblem<V>) -> bool {
-        let leq_column = problem.leq_mat.dot(&self.values) + &problem.leq_constants;
-        let eq_column = problem.eq_mat.dot(&self.values) + &problem.eq_constants;
+    fn is_feasable(&self, _problem: &NdProblem<V>, precomputation: &Self::Precomputation) -> bool {
+        let (leq_column, eq_column) = precomputation;
 
-        for v in &leq_column {
+        for v in leq_column {
             if *v > 0 {
                 return false;
             }
         }
-        for v in &eq_column {
+        for v in eq_column {
             if *v != 0 {
                 return false;
             }
@@ -227,27 +285,12 @@ impl<V: VariableName> super::ConfigRepr<V> for NdConfig<V> {
         true
     }
 
-    fn neighbours(&self) -> Vec<NdConfig<V>> {
-        let mut output = vec![];
+    fn neighbour(&self, i: usize) -> Self {
+        let mut neighbour = self.clone();
 
-        for i in 0..self.values.len() {
-            let mut neighbour = self.clone();
+        neighbour.values[i] = 1 - neighbour.values[i];
 
-            neighbour.values[i] = 1 - neighbour.values[i];
-
-            output.push(neighbour);
-        }
-
-        output
-    }
-
-    fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig<V> {
-        let mut output = self.clone();
-
-        let i = random_gen.rand_in_range(0..self.values.len());
-        output.values[i] = 1 - output.values[i];
-
-        output
+        neighbour
     }
 
     unsafe fn get_unchecked(&self, i: usize) -> i32 {
