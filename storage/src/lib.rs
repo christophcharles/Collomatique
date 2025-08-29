@@ -55,7 +55,7 @@ pub fn deserialize_data(
     file_content: &str,
 ) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
     let json_data = serde_json::from_str::<json::JsonData>(file_content)?;
-    Ok(decode::decode(&json_data)?)
+    Ok(decode::decode(json_data)?)
 }
 
 /// Serialize the content of a colloscope file
