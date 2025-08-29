@@ -318,6 +318,205 @@ pub trait ExtraObjective<T: BaseConstraints> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SoftConstraints<T: BaseConstraints, E: ExtraConstraints<T>> {
+    internal_extra: E,
+    phantom: std::marker::PhantomData<T>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SoftVariable<S: UsableData, C: UsableData> {
+    Orig(S),
+    Soft(usize, C),
+}
+
+impl<S: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display> std::fmt::Display
+    for SoftVariable<S, C>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SoftVariable::Orig(x) => write!(f, "{}", x),
+            SoftVariable::Soft(i, d) => write!(f, "soft_{} ({})", i, d),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SoftConstraint<S: UsableData, C: UsableData> {
+    Orig(S),
+    Soft(usize, C, bool),
+}
+
+impl<S: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display> std::fmt::Display
+    for SoftConstraint<S, C>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SoftConstraint::Orig(x) => write!(f, "{}", x),
+            SoftConstraint::Soft(i, d, geq) => {
+                write!(f, "Soft constraint n°{} for {} (geq = {})", i, d, geq)
+            }
+        }
+    }
+}
+
+impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConstraints<T, E> {
+    type StructureConstraintDesc =
+        SoftConstraint<E::StructureConstraintDesc, E::GeneralConstraintDesc>;
+    type StructureVariable = SoftVariable<E::StructureVariable, E::GeneralConstraintDesc>;
+
+    fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+        self.internal_extra
+            .extra_structure_variables(base)
+            .into_iter()
+            .map(|(x, v)| (SoftVariable::Orig(x), v))
+            .chain(
+                self.internal_extra
+                    .extra_general_constraints(base)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (_c, desc))| (SoftVariable::Soft(i, desc), Variable::non_negative())),
+            )
+            .collect()
+    }
+
+    fn extra_structure_constraints(
+        &self,
+        base: &T,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )> {
+        self.internal_extra
+            .extra_structure_constraints(base)
+            .into_iter()
+            .map(|(c, desc)| {
+                (
+                    c.transmute(|x| match x {
+                        ExtraVariable::BaseMain(m) => ExtraVariable::BaseMain(m.clone()),
+                        ExtraVariable::BaseStructure(s) => ExtraVariable::BaseStructure(s.clone()),
+                        ExtraVariable::Extra(e) => {
+                            ExtraVariable::Extra(SoftVariable::Orig(e.clone()))
+                        }
+                    }),
+                    SoftConstraint::Orig(desc),
+                )
+            })
+            .chain(
+                self.internal_extra
+                    .extra_general_constraints(base)
+                    .into_iter()
+                    .enumerate()
+                    .flat_map(|(i, (c, desc))| {
+                        let expr = c.get_lhs().transmute(|x| match x {
+                            ExtraVariable::BaseMain(m) => ExtraVariable::BaseMain(m.clone()),
+                            ExtraVariable::BaseStructure(s) => {
+                                ExtraVariable::BaseStructure(s.clone())
+                            }
+                            ExtraVariable::Extra(e) => {
+                                ExtraVariable::Extra(SoftVariable::Orig(e.clone()))
+                            }
+                        });
+                        let v = ExtraVariable::Extra(SoftVariable::Soft(i, desc.clone()));
+
+                        let mut output = Vec::new();
+                        output.push((
+                            expr.leq(&LinExpr::var(v.clone())),
+                            SoftConstraint::Soft(i, desc.clone(), false),
+                        ));
+
+                        if c.get_symbol() == collomatique_ilp::linexpr::EqSymbol::Equals {
+                            output.push((
+                                expr.geq(&(-LinExpr::var(v))),
+                                SoftConstraint::Soft(i, desc, true),
+                            ));
+                        }
+
+                        output
+                    }),
+            )
+            .collect()
+    }
+
+    fn objective_func(
+        &self,
+        base: &T,
+    ) -> LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
+    {
+        let mut new_obj = LinExpr::constant(0.0);
+
+        for (i, (_c, desc)) in self
+            .internal_extra
+            .extra_general_constraints(base)
+            .into_iter()
+            .enumerate()
+        {
+            let v = ExtraVariable::Extra(SoftVariable::Soft(i, desc));
+            new_obj = new_obj + LinExpr::var(v);
+        }
+
+        new_obj
+    }
+
+    fn objective_sense(&self, _base: &T) -> ObjectiveSense {
+        ObjectiveSense::Minimize
+    }
+
+    fn reconstruct_extra_structure_variables(
+        &self,
+        base: &T,
+        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+    ) -> Option<ConfigData<Self::StructureVariable>> {
+        let orig_structure_variables = self
+            .internal_extra
+            .reconstruct_extra_structure_variables(base, config)?;
+
+        let values = config
+            .transmute(|x| match x {
+                BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
+                BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
+            })
+            .set_iter(
+                orig_structure_variables
+                    .transmute(|x| ExtraVariable::Extra(x.clone()))
+                    .get_values(),
+            )
+            .get_values();
+
+        let mut output = orig_structure_variables.transmute(|x| SoftVariable::Orig(x.clone()));
+
+        for (i, (c, desc)) in self
+            .internal_extra
+            .extra_general_constraints(base)
+            .into_iter()
+            .enumerate()
+        {
+            let value = c.get_lhs().eval(&values).ok()?;
+            let var = SoftVariable::Soft(i, desc);
+
+            match c.get_symbol() {
+                collomatique_ilp::linexpr::EqSymbol::Equals => {
+                    output = output.set(var, value.abs())
+                }
+                collomatique_ilp::linexpr::EqSymbol::LessThan => {
+                    output = output.set(var, value.max(0.))
+                }
+            }
+        }
+
+        Some(output)
+    }
+}
+
+impl<T: BaseConstraints, E: ExtraConstraints<T>> SoftConstraints<T, E> {
+    pub fn new(extra: E) -> Self {
+        SoftConstraints {
+            internal_extra: extra,
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InternalId(u64);
 
