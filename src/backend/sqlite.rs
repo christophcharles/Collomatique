@@ -429,9 +429,8 @@ impl Storage for Store {
     unsafe fn week_patterns_remove_unchecked(
         &mut self,
         index: Self::WeekPatternId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         week_patterns::remove(&self.pool, index)
     }
     fn week_patterns_update(
