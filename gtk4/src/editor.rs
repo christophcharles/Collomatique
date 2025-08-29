@@ -241,7 +241,7 @@ impl Component for EditorPanel {
                                 dialogs::open_save::DefaultFile::ExistingFile(path.clone())
                             }
                             None => dialogs::open_save::DefaultFile::SuggestedName(
-                                "FichierSansNom.colloscope".into(),
+                                "FichierSansNom.collomatique".into(),
                             ),
                         },
                     ))
