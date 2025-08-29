@@ -110,8 +110,6 @@ impl Solver {
             .iter()
             .filter(|var| config.get(var) != origin.get(var));
 
-        let var_count = config.get_problem().get_variables().len() as f64;
-
         for var in changed_variables {
             let col = cbc_model.cols[var];
             let value = if config.get(var).expect("Variable should be valid") {
@@ -119,9 +117,10 @@ impl Solver {
             } else {
                 0.
             };
-            let coef = 1. - 2. * value;
-            // If the variable is changed, we should keep it nearly at all cost
-            cbc_model.model.set_obj_coeff(col, coef * var_count / 2.);
+
+            let row = cbc_model.model.add_row();
+            cbc_model.model.set_weight(row, col, 1.);
+            cbc_model.model.set_row_equal(row, value);
         }
     }
 
