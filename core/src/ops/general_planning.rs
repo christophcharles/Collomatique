@@ -1,14 +1,74 @@
 use super::*;
 
 #[derive(Debug)]
-pub enum GeneralPlanningUpdateWarning {}
+pub enum GeneralPlanningUpdateWarning {
+    LooseStudentExclusionForPeriod(
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
+    LooseStudentAssignmentsForPeriod(collomatique_state_colloscopes::PeriodId),
+    LooseSubjectDataForPeriod(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
+}
 
 impl GeneralPlanningUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> String {
-        String::new()
+        match self {
+            GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(student_id, period_id) => {
+                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return String::new();
+                };
+                let Some(period_index) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte des informations de présence de l'élève {} {} sur la période {}",
+                    student.desc.firstname,
+                    student.desc.surname,
+                    period_index + 1
+                )
+            }
+            GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(period_id) => {
+                let Some(period_index) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte des inscriptions des élèves sur la période {}",
+                    period_index + 1
+                )
+            }
+            GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(subject_id, period_id) => {
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return String::new();
+                };
+                let Some(period_index) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte des informations de la matière \"{}\" sur la période {}",
+                    subject.parameters.name,
+                    period_index + 1
+                )
+            }
+        }
     }
 }
 
@@ -104,9 +164,142 @@ impl GeneralPlanningUpdateOp {
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Vec<GeneralPlanningUpdateWarning> {
-        vec![]
+        match self {
+            GeneralPlanningUpdateOp::DeleteFirstWeek => vec![],
+            GeneralPlanningUpdateOp::UpdateFirstWeek(_) => vec![],
+            GeneralPlanningUpdateOp::AddNewPeriod(_) => vec![],
+            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_, _) => vec![],
+            GeneralPlanningUpdateOp::CutPeriod(_, _) => vec![],
+            GeneralPlanningUpdateOp::UpdateWeekStatus(_, _, _) => vec![],
+            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                let mut output = vec![];
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        output.push(GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
+                            *subject_id,
+                            *period_id,
+                        ));
+                    }
+                }
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        output.push(
+                            GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(
+                                *student_id,
+                                *period_id,
+                            ),
+                        );
+                    }
+                }
+
+                let mut is_a_student_affected = false;
+
+                let Some(period_assignments) = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .cloned()
+                else {
+                    return vec![];
+                };
+
+                for (_subject_id, assigned_students) in period_assignments.subject_map {
+                    if !assigned_students.is_empty() {
+                        is_a_student_affected = true;
+                    }
+                }
+
+                if is_a_student_affected {
+                    output.push(
+                        GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
+                    );
+                }
+
+                output
+            }
+            GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
+                let Some(pos) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return vec![];
+                };
+                if pos == 0 {
+                    return vec![];
+                }
+                let previous_id = data.get_data().get_periods().ordered_period_list[pos - 1].0;
+
+                let mut output = vec![];
+
+                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id)
+                        != subject.excluded_periods.contains(&previous_id)
+                    {
+                        output.push(GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
+                            *subject_id,
+                            *period_id,
+                        ));
+                    }
+                }
+
+                for (student_id, student) in &data.get_data().get_students().student_map {
+                    if student.excluded_periods.contains(period_id)
+                        != student.excluded_periods.contains(&previous_id)
+                    {
+                        output.push(
+                            GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(
+                                *student_id,
+                                *period_id,
+                            ),
+                        );
+                    }
+                }
+
+                let Some(period_assignments) = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .cloned()
+                else {
+                    return vec![];
+                };
+
+                let Some(previous_assignments) =
+                    data.get_data().get_assignments().period_map.get(period_id)
+                else {
+                    return vec![];
+                };
+
+                let mut is_a_student_affected = false;
+
+                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    let Some(previous_students) = previous_assignments.subject_map.get(subject_id)
+                    else {
+                        is_a_student_affected = true;
+                        continue;
+                    };
+
+                    if *assigned_students != *previous_students {
+                        is_a_student_affected = true;
+                    }
+                }
+
+                if is_a_student_affected {
+                    output.push(
+                        GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
+                    );
+                }
+
+                output
+            }
+        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(

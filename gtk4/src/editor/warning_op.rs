@@ -22,7 +22,7 @@ pub enum DialogOutput {
 impl Dialog {
     fn generate_secondary_text(&self) -> String {
         let mut output = String::from(
-            "L'opération est potentiellement destructive et aura les conséquences suivantes",
+            "L'opération est potentiellement destructive et aura les conséquences suivantes :",
         );
 
         for warning in &self.warnings {
@@ -47,6 +47,7 @@ impl SimpleComponent for Dialog {
             #[watch]
             set_visible: !model.hidden,
             set_text: Some("Attention !"),
+            #[watch]
             set_secondary_text: Some(&model.generate_secondary_text()),
             add_button: ("Poursuivre", gtk::ResponseType::Accept),
             add_button: ("Annuler", gtk::ResponseType::Cancel),

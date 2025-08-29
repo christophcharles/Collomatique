@@ -1,14 +1,39 @@
 use super::*;
 
 #[derive(Debug)]
-pub enum StudentsUpdateWarning {}
+pub enum StudentsUpdateWarning {
+    LooseStudentAssignmentForPeriod(
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
+}
 
 impl StudentsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> String {
-        String::new()
+        match self {
+            StudentsUpdateWarning::LooseStudentAssignmentForPeriod(student_id, period_id) => {
+                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return String::new();
+                };
+                let Some(period_index) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte des inscriptions de {} {} sur la période {}",
+                    student.desc.firstname,
+                    student.desc.surname,
+                    period_index + 1
+                )
+            }
+        }
     }
 }
 
@@ -63,9 +88,46 @@ impl StudentsUpdateOp {
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Vec<StudentsUpdateWarning> {
-        vec![]
+        match self {
+            Self::AddNewStudent(_student) => vec![],
+            Self::DeleteStudent(_student_id) => vec![],
+            Self::UpdateStudent(student_id, student) => {
+                let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return vec![];
+                };
+
+                let mut output = vec![];
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if old_student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    if !student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let mut has_assignments = false;
+                    for (_subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(student_id) {
+                            has_assignments = true;
+                        }
+                    }
+
+                    if has_assignments {
+                        output.push(StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                            *student_id,
+                            *period_id,
+                        ));
+                    }
+                }
+
+                output
+            }
+        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
