@@ -506,7 +506,7 @@ fn build_groups_worksheet_subject_group(
         &format,
     )?;
 
-    Ok(current_col + 1)
+    Ok(current_col)
 }
 
 fn build_groups_worksheet(
