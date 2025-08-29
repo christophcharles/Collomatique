@@ -482,7 +482,7 @@ impl GenColloscopeTranslator {
                         &subject.slots_information.slots,
                     )
                 }
-                BalancingSlotSelections::Timeslots => {
+                BalancingSlotSelections::TimeSlots => {
                     BalancingRequirements::balance_timeslots_from_slots(
                         &subject.slots_information.slots,
                     )

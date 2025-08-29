@@ -94,7 +94,7 @@ FROM subjects
         let balancing_slot_selections = match record.balancing_slot_selections {
             0 => Ok(BalancingSlotSelections::TeachersAndTimeSlots),
             1 => Ok(BalancingSlotSelections::Teachers),
-            2 => Ok(BalancingSlotSelections::Timeslots),
+            2 => Ok(BalancingSlotSelections::TimeSlots),
             3 => Ok(BalancingSlotSelections::Manual),
             _ => Err(Error::CorruptedDatabase(format!(
                 "invalid balancing_slot_selections ({}) stored in database",
@@ -218,7 +218,7 @@ FROM subjects WHERE subject_id = ?
     let balancing_slot_selections = match record.balancing_slot_selections {
         0 => Ok(BalancingSlotSelections::TeachersAndTimeSlots),
         1 => Ok(BalancingSlotSelections::Teachers),
-        2 => Ok(BalancingSlotSelections::Timeslots),
+        2 => Ok(BalancingSlotSelections::TimeSlots),
         3 => Ok(BalancingSlotSelections::Manual),
         _ => Err(Error::CorruptedDatabase(format!(
             "invalid balancing_slot_selections ({}) stored in database",
@@ -290,7 +290,7 @@ pub async fn add(
     let balancing_slot_selections = match subject.balancing_requirements.slot_selections {
         BalancingSlotSelections::TeachersAndTimeSlots => 0,
         BalancingSlotSelections::Teachers => 1,
-        BalancingSlotSelections::Timeslots => 2,
+        BalancingSlotSelections::TimeSlots => 2,
         BalancingSlotSelections::Manual => 3,
     };
 
@@ -392,7 +392,7 @@ pub async fn update(
     let balancing_slot_selections = match subject.balancing_requirements.slot_selections {
         BalancingSlotSelections::TeachersAndTimeSlots => 0,
         BalancingSlotSelections::Teachers => 1,
-        BalancingSlotSelections::Timeslots => 2,
+        BalancingSlotSelections::TimeSlots => 2,
         BalancingSlotSelections::Manual => 3,
     };
 

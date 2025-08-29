@@ -1226,7 +1226,7 @@ impl From<BalancingConstraints> for crate::backend::BalancingConstraints {
 pub enum BalancingSlotSelections {
     TeachersAndTimeSlots,
     Teachers,
-    Timeslots,
+    TimeSlots,
     Manual,
 }
 
@@ -1238,7 +1238,7 @@ impl std::fmt::Display for BalancingSlotSelections {
             match *self {
                 BalancingSlotSelections::Manual => "Manual",
                 BalancingSlotSelections::Teachers => "Teachers",
-                BalancingSlotSelections::Timeslots => "Timeslots",
+                BalancingSlotSelections::TimeSlots => "TimeSlots",
                 BalancingSlotSelections::TeachersAndTimeSlots => "TeachersAndTimeSlots",
             }
         )
@@ -1260,7 +1260,7 @@ impl From<&crate::backend::BalancingSlotSelections> for BalancingSlotSelections 
         match value {
             BSS::Manual => BalancingSlotSelections::Manual,
             BSS::Teachers => BalancingSlotSelections::Teachers,
-            BSS::Timeslots => BalancingSlotSelections::Timeslots,
+            BSS::TimeSlots => BalancingSlotSelections::TimeSlots,
             BSS::TeachersAndTimeSlots => BalancingSlotSelections::TeachersAndTimeSlots,
         }
     }
@@ -1278,7 +1278,7 @@ impl From<&BalancingSlotSelections> for crate::backend::BalancingSlotSelections 
         match value {
             BalancingSlotSelections::Manual => BSS::Manual,
             BalancingSlotSelections::Teachers => BSS::Teachers,
-            BalancingSlotSelections::Timeslots => BSS::Timeslots,
+            BalancingSlotSelections::TimeSlots => BSS::TimeSlots,
             BalancingSlotSelections::TeachersAndTimeSlots => BSS::TeachersAndTimeSlots,
         }
     }
