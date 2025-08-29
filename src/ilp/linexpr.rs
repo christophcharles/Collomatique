@@ -34,7 +34,13 @@ pub struct Constraint {
     sign: Sign,
 }
 
+use std::collections::BTreeSet;
+
 impl Expr {
+    pub fn variables(&self) -> BTreeSet<String> {
+        self.coefs.keys().cloned().collect()
+    }
+
     pub fn leq(&self, rhs: &Expr) -> Constraint {
         Constraint {
             expr: self - rhs,
@@ -101,6 +107,10 @@ impl Expr {
 }
 
 impl Constraint {
+    pub fn variables(&self) -> BTreeSet<String> {
+        self.expr.variables()
+    }
+
     pub fn clean(&mut self) {
         self.expr.clean();
     }
