@@ -558,6 +558,7 @@ pub struct GeneralData {
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
     pub week_count: NonZeroU32,
+    pub periodicity_cuts: BTreeSet<NonZeroU32>,
 }
 
 use std::collections::BTreeSet;

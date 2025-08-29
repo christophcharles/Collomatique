@@ -57,6 +57,7 @@ struct GeneralDataDb {
     interrogations_per_week: Option<std::ops::Range<u32>>,
     max_interrogations_per_day: Option<NonZeroU32>,
     week_count: NonZeroU32,
+    periodicity_cuts: BTreeSet<NonZeroU32>,
 }
 
 impl Store {
@@ -313,6 +314,7 @@ CREATE TABLE "collo_group_items" (
             interrogations_per_week: None,
             max_interrogations_per_day: None,
             week_count: NonZeroU32::new(30).unwrap(),
+            periodicity_cuts: BTreeSet::new(),
         }).expect("should serialize to valid json"))
         .execute(pool)
         .await?;
@@ -395,6 +397,7 @@ impl Storage for Store {
             interrogations_per_week: general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: general_data.max_interrogations_per_day.clone(),
             week_count: general_data.week_count,
+            periodicity_cuts: general_data.periodicity_cuts.clone(),
         };
 
         let mut conn = self.pool.acquire().await.map_err(Error::from)?;
@@ -445,6 +448,7 @@ impl Storage for Store {
             interrogations_per_week: general_data_json.interrogations_per_week,
             max_interrogations_per_day: general_data_json.max_interrogations_per_day,
             week_count: general_data_json.week_count,
+            periodicity_cuts: general_data_json.periodicity_cuts,
         };
 
         Ok(general_data)
