@@ -65,6 +65,8 @@ impl Solver {
         let mut cbc_model = self.build_model(problem, init_config);
         if minimize_distance_to_init_config {
             self.add_minimize_dist_constraint(&mut cbc_model, init_config);
+        } else {
+            self.add_objective_fn(&mut cbc_model, problem);
         }
 
         let sol = cbc_model.model.solve();
@@ -89,8 +91,8 @@ impl Solver {
                 VariableType::Bool => (v.clone(), model.add_binary()),
                 VariableType::Integer(range) => {
                     let col = model.add_integer();
-                    model.set_col_lower(col, *range.start() as f64);
-                    model.set_col_upper(col, *range.end() as f64);
+                    model.set_col_lower(col, (*range.start()).into());
+                    model.set_col_upper(col, (*range.end()).into());
                     (v.clone(), col)
                 }
             })
@@ -111,7 +113,10 @@ impl Solver {
                     model.set_col_initial_solution(*col, value);
                 }
                 VariableType::Integer(_range) => {
-                    let value = init_config.get_i32(var).expect("Variable should be valid") as f64;
+                    let value = init_config
+                        .get_i32(var)
+                        .expect("Variable should be valid")
+                        .into();
                     model.set_col_initial_solution(*col, value);
                 }
             }
@@ -170,6 +175,25 @@ impl Solver {
                 }
                 VariableType::Integer(_range) => {
                     // We have to ignore...
+                }
+            }
+        }
+    }
+
+    fn add_objective_fn<V: VariableName, P: ProblemRepr<V>>(
+        &self,
+        cbc_model: &mut CbcModel<V>,
+        problem: &Problem<V, P>,
+    ) {
+        use coin_cbc::Sense;
+        cbc_model.model.set_obj_sense(Sense::Minimize);
+        for (var, col) in &cbc_model.cols {
+            match problem.get_objective_fn().get(var) {
+                Some(coef) => {
+                    cbc_model.model.set_obj_coeff(*col, coef.into());
+                }
+                None => {
+                    cbc_model.model.set_obj_coeff(*col, 0.);
                 }
             }
         }
