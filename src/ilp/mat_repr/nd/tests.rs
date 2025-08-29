@@ -94,6 +94,8 @@ fn test_is_feasable() {
 
 #[test]
 fn test_is_feasable_no_constraint() {
+    use crate::ilp::Problem;
+
     let pb: Problem<String> = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b"])
         .unwrap()
@@ -134,6 +136,7 @@ fn test_neighbours() {
 
     let nd_config = config.nd_config.clone();
 
+    use std::collections::BTreeSet;
     let neighbours = nd_config
         .neighbours()
         .into_iter()
