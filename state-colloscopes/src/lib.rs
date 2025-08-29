@@ -49,6 +49,11 @@ pub struct PersonWithContact {
     pub email: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InnerData {
+    student_list: BTreeMap<StudentId, PersonWithContact>,
+}
+
 /// Complete data that can be handled in the colloscope
 ///
 /// This [Data] structure contains all the data that can
@@ -65,12 +70,12 @@ pub struct PersonWithContact {
 #[derive(Debug, Clone)]
 pub struct Data {
     id_issuer: IdIssuer,
-    student_list: BTreeMap<StudentId, PersonWithContact>,
+    inner_data: InnerData,
 }
 
 impl PartialEq for Data {
     fn eq(&self, other: &Self) -> bool {
-        self.student_list == other.student_list
+        self.inner_data == other.inner_data
     }
 }
 
@@ -146,15 +151,16 @@ impl Data {
                 .map(|(key, value)| (StudentId::new(key), value))
                 .collect()
         };
+
         Ok(Data {
             id_issuer,
-            student_list,
+            inner_data: InnerData { student_list },
         })
     }
 
     /// Get the student list
     pub fn get_student_list(&self) -> &BTreeMap<StudentId, PersonWithContact> {
-        &self.student_list
+        &self.inner_data.student_list
     }
 
     /// Used internally
@@ -163,22 +169,23 @@ impl Data {
     fn apply_student(&mut self, student_op: &AnnotatedStudentOp) -> std::result::Result<(), Error> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, student) => {
-                if self.student_list.contains_key(student_id) {
+                if self.inner_data.student_list.contains_key(student_id) {
                     return Err(Error::StudentIdAlreadyExists(student_id.clone()));
                 }
 
-                self.student_list
+                self.inner_data
+                    .student_list
                     .insert(student_id.clone(), student.clone());
                 Ok(())
             }
             AnnotatedStudentOp::Remove(student_id) => {
-                if self.student_list.remove(&student_id).is_none() {
+                if self.inner_data.student_list.remove(&student_id).is_none() {
                     return Err(Error::InvalidStudentId(student_id.clone()));
                 }
                 Ok(())
             }
             AnnotatedStudentOp::Update(student_id, student) => {
-                let Some(old_student) = self.student_list.get_mut(&student_id) else {
+                let Some(old_student) = self.inner_data.student_list.get_mut(&student_id) else {
                     return Err(Error::InvalidStudentId(student_id.clone()));
                 };
 
@@ -197,21 +204,23 @@ impl Data {
     ) -> std::result::Result<AnnotatedStudentOp, Error> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, _student) => {
-                if self.student_list.contains_key(student_id) {
+                if self.inner_data.student_list.contains_key(student_id) {
                     return Err(Error::StudentIdAlreadyExists(student_id.clone()));
                 }
 
                 Ok(AnnotatedStudentOp::Remove(student_id.clone()))
             }
             AnnotatedStudentOp::Remove(student_id) => {
-                let Some(old_student) = self.student_list.get(&student_id).cloned() else {
+                let Some(old_student) = self.inner_data.student_list.get(&student_id).cloned()
+                else {
                     return Err(Error::InvalidStudentId(student_id.clone()));
                 };
 
                 Ok(AnnotatedStudentOp::Add(student_id.clone(), old_student))
             }
             AnnotatedStudentOp::Update(student_id, _student) => {
-                let Some(old_student) = self.student_list.get(&student_id).cloned() else {
+                let Some(old_student) = self.inner_data.student_list.get(&student_id).cloned()
+                else {
                     return Err(Error::InvalidStudentId(student_id.clone()));
                 };
 
