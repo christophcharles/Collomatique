@@ -17,7 +17,7 @@ pub enum UpdateError<IntError: std::error::Error + std::fmt::Debug> {
     ),
 }
 
-use backend::{IdError, WeekPatternDependancy};
+use backend::{IdError, WeekPatternDependancy, WeekPatternError};
 
 #[trait_variant::make(Send)]
 pub trait Manager: ManagerInternal {
@@ -46,6 +46,10 @@ pub trait Manager: ManagerInternal {
         Vec<WeekPatternDependancy<IncompatHandle, TimeSlotHandle>>,
         IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
     >;
+    async fn week_patterns_check_data(
+        &self,
+        pattern: &backend::WeekPattern,
+    ) -> std::result::Result<(), WeekPatternError<<Self::Storage as backend::Storage>::InternalError>>;
 
     async fn apply(
         &mut self,
@@ -173,6 +177,22 @@ impl<T: ManagerInternal> Manager for T {
                 .collect();
 
             Ok(week_pattern_deps)
+        }
+    }
+
+    fn week_patterns_check_data(
+        &self,
+        pattern: &backend::WeekPattern,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            WeekPatternError<<Self::Storage as backend::Storage>::InternalError>,
+        >,
+    > + Send {
+        async {
+            self.get_backend_logic()
+                .week_patterns_check_data(pattern)
+                .await
         }
     }
 
