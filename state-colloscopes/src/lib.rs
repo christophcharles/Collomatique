@@ -315,6 +315,41 @@ impl Data {
 
         None
     }
+
+    /// Promotes an u64 to a [TeacherId] if it is valid
+    pub fn validate_teacher_id(&self, id: u64) -> Option<TeacherId> {
+        let temp_teacher_id = unsafe { TeacherId::new(id) };
+        if self
+            .inner_data
+            .teachers
+            .teacher_map
+            .contains_key(&temp_teacher_id)
+        {
+            return Some(temp_teacher_id);
+        }
+
+        None
+    }
+
+    /// Promotes a [teachers::TeacherExternalData] to a [teachers::Teacher] if it is valid
+    pub fn promote_teacher(
+        &self,
+        teacher: teachers::TeacherExternalData,
+    ) -> Result<teachers::Teacher, u64> {
+        let mut new_subjects = BTreeSet::new();
+
+        for subject_id in teacher.subjects {
+            let Some(validated_id) = self.validate_subject_id(subject_id) else {
+                return Err(subject_id);
+            };
+            new_subjects.insert(validated_id);
+        }
+
+        Ok(teachers::Teacher {
+            desc: teacher.desc,
+            subjects: new_subjects,
+        })
+    }
 }
 
 impl Data {

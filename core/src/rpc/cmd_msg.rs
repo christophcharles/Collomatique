@@ -1,9 +1,12 @@
 use super::*;
 
+pub mod common;
+pub use common::*;
 pub mod general_planning;
 pub use general_planning::*;
 pub mod subjects;
 pub use subjects::*;
+pub mod teachers;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
