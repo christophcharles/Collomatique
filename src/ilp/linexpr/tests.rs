@@ -23,26 +23,16 @@ fn expr_display() {
 #[test]
 fn expr_add() {
     let expr1 = Expr {
-        coefs: BTreeMap::from([
-            ("a".into(), -2),
-            ("b".into(), 3),
-        ]),
+        coefs: BTreeMap::from([("a".into(), -2), ("b".into(), 3)]),
         constant: 2,
     };
     let expr2 = Expr {
-        coefs: BTreeMap::from([
-            ("b".into(), -4),
-            ("c".into(), 5),
-        ]),
+        coefs: BTreeMap::from([("b".into(), -4), ("c".into(), 5)]),
         constant: 3,
     };
 
     let expr3 = Expr {
-        coefs: BTreeMap::from([
-            ("a".into(), -2),
-            ("b".into(), -1),
-            ("c".into(), 5),
-        ]),
+        coefs: BTreeMap::from([("a".into(), -2), ("b".into(), -1), ("c".into(), 5)]),
         constant: 5,
     };
 
@@ -52,26 +42,16 @@ fn expr_add() {
 #[test]
 fn expr_sub() {
     let expr1 = Expr {
-        coefs: BTreeMap::from([
-            ("a".into(), -2),
-            ("b".into(), 3),
-        ]),
+        coefs: BTreeMap::from([("a".into(), -2), ("b".into(), 3)]),
         constant: 2,
     };
     let expr2 = Expr {
-        coefs: BTreeMap::from([
-            ("b".into(), -4),
-            ("c".into(), 5),
-        ]),
+        coefs: BTreeMap::from([("b".into(), -4), ("c".into(), 5)]),
         constant: 3,
     };
 
     let expr3 = Expr {
-        coefs: BTreeMap::from([
-            ("a".into(), -2),
-            ("b".into(), 7),
-            ("c".into(), -5),
-        ]),
+        coefs: BTreeMap::from([("a".into(), -2), ("b".into(), 7), ("c".into(), -5)]),
         constant: -1,
     };
 
@@ -80,28 +60,25 @@ fn expr_sub() {
 
 #[test]
 fn expr_mul() {
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") + 2;
-    let expr2 = -4 * Expr::var("a") + 6* Expr::var("b") + 4;
-    assert_eq!(2*expr1, expr2);
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") + 2;
+    let expr2 = -4 * Expr::var("a") + 6 * Expr::var("b") + 4;
+    assert_eq!(2 * expr1, expr2);
 
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") + 2;
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") + 2;
     let expr2 = 6 * Expr::var("a") - 9 * Expr::var("b") - 6;
-    assert_eq!((-3)*expr1, expr2);
+    assert_eq!((-3) * expr1, expr2);
 
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") + 2;
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") + 2;
     let expr2 = Expr::constant(0);
-    assert_eq!(0*expr1, expr2);
+    assert_eq!(0 * expr1, expr2);
 }
 
 #[test]
 fn expr_reduce() {
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") - 4 * Expr::var("c") + 1;
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") - 4 * Expr::var("c") + 1;
 
     let config = Config {
-        values: BTreeMap::from([
-            ("a".into(), true),
-            ("c".into(), false),
-        ]),
+        values: BTreeMap::from([("a".into(), true), ("c".into(), false)]),
     };
 
     let expr2 = 3 * Expr::var("b") - 1;
@@ -111,7 +88,7 @@ fn expr_reduce() {
 
 #[test]
 fn expr_to_value() {
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") - 4 * Expr::var("c") + 1;
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") - 4 * Expr::var("c") + 1;
     let expr2 = Expr::constant(42);
 
     assert_eq!(expr1.to_value(), None);
@@ -120,14 +97,11 @@ fn expr_to_value() {
 
 #[test]
 fn expr_eval() {
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") - 4 * Expr::var("c") + 1;
-    let expr2 = -2* Expr::var("a") - 4 * Expr::var("c") + 1;
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") - 4 * Expr::var("c") + 1;
+    let expr2 = -2 * Expr::var("a") - 4 * Expr::var("c") + 1;
 
     let config = Config {
-        values: BTreeMap::from([
-            ("a".into(), true),
-            ("c".into(), false),
-        ]),
+        values: BTreeMap::from([("a".into(), true), ("c".into(), false)]),
     };
 
     assert_eq!(expr1.eval(&config), None);
@@ -136,18 +110,15 @@ fn expr_eval() {
 
 #[test]
 fn constraint_eval() {
-    let expr1 = -2* Expr::var("a") + 3 *  Expr::var("b") - 4 * Expr::var("c") + 1;
-    let expr2 = -2* Expr::var("a") - 4 * Expr::var("c") + 1;
+    let expr1 = -2 * Expr::var("a") + 3 * Expr::var("b") - 4 * Expr::var("c") + 1;
+    let expr2 = -2 * Expr::var("a") - 4 * Expr::var("c") + 1;
 
     let constraint1 = expr1.leq(&Expr::constant(0));
     let constraint2 = expr2.eq(&Expr::constant(0));
     let constraint3 = expr2.geq(&Expr::constant(-2));
 
     let config = Config {
-        values: BTreeMap::from([
-            ("a".into(), true),
-            ("c".into(), false),
-        ]),
+        values: BTreeMap::from([("a".into(), true), ("c".into(), false)]),
     };
 
     assert_eq!(constraint1.eval(&config), None);
