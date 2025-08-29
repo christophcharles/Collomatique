@@ -12,6 +12,8 @@ pub mod assignments;
 pub use assignments::*;
 pub mod week_patterns;
 pub use week_patterns::*;
+pub mod slots;
+pub use slots::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
@@ -21,6 +23,7 @@ pub enum ErrorMsg {
     Students(StudentsError),
     Assignments(AssignmentsError),
     WeekPatterns(WeekPatternsError),
+    Slots(SlotsError),
 }
 
 impl From<crate::ops::UpdateError> for ErrorMsg {
@@ -33,6 +36,7 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
             UpdateError::Students(e) => ErrorMsg::Students(e.into()),
             UpdateError::Assignments(e) => ErrorMsg::Assignments(e.into()),
             UpdateError::WeekPatterns(e) => ErrorMsg::WeekPatterns(e.into()),
+            UpdateError::Slots(e) => ErrorMsg::Slots(e.into()),
         }
     }
 }
@@ -73,6 +77,12 @@ impl From<WeekPatternsError> for ErrorMsg {
     }
 }
 
+impl From<SlotsError> for ErrorMsg {
+    fn from(value: SlotsError) -> Self {
+        ErrorMsg::Slots(value)
+    }
+}
+
 impl std::fmt::Display for ErrorMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -82,6 +92,7 @@ impl std::fmt::Display for ErrorMsg {
             ErrorMsg::Students(e) => e.fmt(f),
             ErrorMsg::Assignments(e) => e.fmt(f),
             ErrorMsg::WeekPatterns(e) => e.fmt(f),
+            ErrorMsg::Slots(e) => e.fmt(f),
         }
     }
 }

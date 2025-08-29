@@ -28,6 +28,8 @@ pub mod assignments;
 pub use assignments::*;
 pub mod week_patterns;
 pub use week_patterns::*;
+pub mod slots;
+pub use slots::*;
 
 #[derive(Debug)]
 pub enum UpdateOp {
@@ -37,6 +39,7 @@ pub enum UpdateOp {
     Students(StudentsUpdateOp),
     Assignments(AssignmentsUpdateOp),
     WeekPatterns(WeekPatternsUpdateOp),
+    Slots(SlotsUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -53,6 +56,8 @@ pub enum UpdateError {
     Assignments(#[from] AssignmentsUpdateError),
     #[error(transparent)]
     WeekPatterns(#[from] WeekPatternsUpdateError),
+    #[error(transparent)]
+    Slots(#[from] SlotsUpdateError),
 }
 
 #[derive(Debug)]
@@ -63,6 +68,7 @@ pub enum UpdateWarning {
     Students(StudentsUpdateWarning),
     Assignments(AssignmentsUpdateWarning),
     WeekPatterns(WeekPatternsUpdateWarning),
+    Slots(SlotsUpdateWarning),
 }
 
 impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
@@ -101,6 +107,12 @@ impl From<WeekPatternsUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<SlotsUpdateWarning> for UpdateWarning {
+    fn from(value: SlotsUpdateWarning) -> Self {
+        UpdateWarning::Slots(value)
+    }
+}
+
 impl UpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
@@ -113,6 +125,7 @@ impl UpdateWarning {
             UpdateWarning::Students(w) => w.build_desc(data),
             UpdateWarning::Assignments(w) => w.build_desc(data),
             UpdateWarning::WeekPatterns(w) => w.build_desc(data),
+            UpdateWarning::Slots(w) => w.build_desc(data),
         }
     }
 
@@ -130,6 +143,7 @@ impl UpdateOp {
             UpdateOp::Students(student_op) => student_op.get_desc(),
             UpdateOp::Assignments(assignment_op) => assignment_op.get_desc(),
             UpdateOp::WeekPatterns(week_pattern_op) => week_pattern_op.get_desc(),
+            UpdateOp::Slots(slot_op) => slot_op.get_desc(),
         }
     }
 
@@ -156,6 +170,7 @@ impl UpdateOp {
             UpdateOp::WeekPatterns(week_pattern_op) => {
                 UpdateWarning::from_iter(week_pattern_op.get_warnings(data))
             }
+            UpdateOp::Slots(slot_op) => UpdateWarning::from_iter(slot_op.get_warnings(data)),
         }
     }
 
@@ -186,6 +201,10 @@ impl UpdateOp {
             }
             UpdateOp::WeekPatterns(week_pattern_op) => {
                 let result = week_pattern_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Slots(slot_op) => {
+                let result = slot_op.apply(data)?;
                 Ok(result.map(|x| x.into()))
             }
         }

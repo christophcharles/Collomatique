@@ -32,8 +32,8 @@ impl From<crate::ops::SubjectsUpdateError> for SubjectsError {
             SubjectsUpdateError::AddNewSubject(e) => SubjectsError::AddNewSubject(e.into()),
             SubjectsUpdateError::UpdateSubject(e) => SubjectsError::UpdateSubject(e.into()),
             SubjectsUpdateError::DeleteSubject(e) => SubjectsError::DeleteSubject(e.into()),
-            SubjectsUpdateError::MoveUp(e) => SubjectsError::MoveUp(e.into()),
-            SubjectsUpdateError::MoveDown(e) => SubjectsError::MoveDown(e.into()),
+            SubjectsUpdateError::MoveSubjectUp(e) => SubjectsError::MoveUp(e.into()),
+            SubjectsUpdateError::MoveSubjectDown(e) => SubjectsError::MoveDown(e.into()),
             SubjectsUpdateError::UpdatePeriodStatus(e) => {
                 SubjectsError::UpdatePeriodStatus(e.into())
             }
@@ -221,13 +221,13 @@ impl std::fmt::Display for MoveUpError {
     }
 }
 
-impl From<crate::ops::MoveUpError> for MoveUpError {
-    fn from(value: crate::ops::MoveUpError) -> Self {
+impl From<crate::ops::MoveSubjectUpError> for MoveUpError {
+    fn from(value: crate::ops::MoveSubjectUpError) -> Self {
         match value {
-            crate::ops::MoveUpError::InvalidSubjectId(id) => {
+            crate::ops::MoveSubjectUpError::InvalidSubjectId(id) => {
                 MoveUpError::InvalidSubjectId(id.into())
             }
-            crate::ops::MoveUpError::NoUpperPosition => MoveUpError::NoUpperPosition,
+            crate::ops::MoveSubjectUpError::NoUpperPosition => MoveUpError::NoUpperPosition,
         }
     }
 }
@@ -254,13 +254,13 @@ impl std::fmt::Display for MoveDownError {
     }
 }
 
-impl From<crate::ops::MoveDownError> for MoveDownError {
-    fn from(value: crate::ops::MoveDownError) -> Self {
+impl From<crate::ops::MoveSubjectDownError> for MoveDownError {
+    fn from(value: crate::ops::MoveSubjectDownError) -> Self {
         match value {
-            crate::ops::MoveDownError::InvalidSubjectId(id) => {
+            crate::ops::MoveSubjectDownError::InvalidSubjectId(id) => {
                 MoveDownError::InvalidSubjectId(id.into())
             }
-            crate::ops::MoveDownError::NoLowerPosition => MoveDownError::NoLowerPosition,
+            crate::ops::MoveSubjectDownError::NoLowerPosition => MoveDownError::NoLowerPosition,
         }
     }
 }
