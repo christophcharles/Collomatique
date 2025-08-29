@@ -53,6 +53,7 @@ pub enum NewId {
     SubjectId(cmd_msg::MsgSubjectId),
     TeacherId(cmd_msg::MsgTeacherId),
     WeekPatternId(cmd_msg::MsgWeekPatternId),
+    SlotId(cmd_msg::MsgSlotId),
 }
 
 impl From<collomatique_state_colloscopes::NewId> for NewId {
@@ -65,6 +66,7 @@ impl From<collomatique_state_colloscopes::NewId> for NewId {
             collomatique_state_colloscopes::NewId::WeekPatternId(id) => {
                 NewId::WeekPatternId(id.into())
             }
+            collomatique_state_colloscopes::NewId::SlotId(id) => NewId::SlotId(id.into()),
         }
     }
 }

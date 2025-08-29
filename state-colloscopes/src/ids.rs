@@ -96,6 +96,24 @@ impl WeekPatternId {
     }
 }
 
+/// This type represents an ID for an interrogation slot
+///
+/// Every interrogation slot gets a unique ID. IDs then identify slots
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SlotId(u64);
+
+impl SlotId {
+    /// Returns the value for the ID
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+
+    pub(crate) unsafe fn new(value: u64) -> SlotId {
+        SlotId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -111,12 +129,14 @@ impl IdIssuer {
         subject_ids: impl Iterator<Item = u64>,
         teacher_ids: impl Iterator<Item = u64>,
         week_patterns_ids: impl Iterator<Item = u64>,
+        slot_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
         let existing_ids = student_ids
             .chain(period_ids)
             .chain(subject_ids)
             .chain(teacher_ids)
-            .chain(week_patterns_ids);
+            .chain(week_patterns_ids)
+            .chain(slot_ids);
         Ok(IdIssuer {
             helper: tools::IdIssuerHelper::new(existing_ids)?,
         })
@@ -145,5 +165,10 @@ impl IdIssuer {
     /// Get a new unused ID for a week pattern
     pub fn get_week_pattern_id(&mut self) -> WeekPatternId {
         WeekPatternId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a week pattern
+    pub fn get_slot_id(&mut self) -> SlotId {
+        SlotId(self.helper.get_new_id().inner())
     }
 }

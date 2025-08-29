@@ -16,7 +16,7 @@ use week_patterns::WeekPatternsExternalData;
 
 pub mod ids;
 use ids::IdIssuer;
-pub use ids::{PeriodId, StudentId, SubjectId, TeacherId, WeekPatternId};
+pub use ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId};
 pub mod ops;
 use ops::{
     AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp,
@@ -318,6 +318,7 @@ pub enum NewId {
     SubjectId(SubjectId),
     TeacherId(TeacherId),
     WeekPatternId(WeekPatternId),
+    SlotId(SlotId),
 }
 
 impl From<StudentId> for NewId {
@@ -782,6 +783,7 @@ impl Data {
             subject_ids,
             teacher_ids,
             week_patterns_ids,
+            vec![].into_iter(),
         )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
