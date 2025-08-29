@@ -186,14 +186,91 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<SqliteConnec
     }
 }
 
+async fn generate_general_data(
+    _db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::GeneralData> {
+    use collomatique::gen::colloscope::*;
+    use std::num::NonZeroU32;
+
+    Ok(GeneralData {
+        teacher_count: 0,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    })
+}
+
+async fn generate_subjects(
+    _db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::SubjectList> {
+    use collomatique::gen::colloscope::*;
+
+    Ok(SubjectList::new())
+}
+
+async fn generate_incompatibilies(
+    _db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::IncompatibilityList> {
+    use collomatique::gen::colloscope::*;
+
+    Ok(IncompatibilityList::new())
+}
+
+async fn generate_students(
+    _db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::StudentList> {
+    use collomatique::gen::colloscope::*;
+
+    Ok(StudentList::new())
+}
+
+async fn generate_slot_groupings(
+    _db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::SlotGroupingList> {
+    use collomatique::gen::colloscope::*;
+
+    Ok(SlotGroupingList::new())
+}
+
+async fn generate_grouping_incompats(
+    _db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::SlotGroupingIncompatSet> {
+    use collomatique::gen::colloscope::*;
+
+    Ok(SlotGroupingIncompatSet::new())
+}
+
+async fn generate_colloscope_data(
+    db_conn: &mut SqliteConnection,
+) -> Result<collomatique::gen::colloscope::ValidatedData> {
+    use collomatique::gen::colloscope::*;
+    /*let result = sqlx::query!("SELECT * FROM students")
+    .fetch_all(db_conn)
+    .await?;*/
+
+    let general = generate_general_data(db_conn).await?;
+    let subjects = generate_subjects(db_conn).await?;
+    let incompatibilities = generate_incompatibilies(db_conn).await?;
+    let students = generate_students(db_conn).await?;
+    let slot_groupings = generate_slot_groupings(db_conn).await?;
+    let grouping_incompats = generate_grouping_incompats(db_conn).await?;
+
+    Ok(ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )?)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut db = connect_db(args.create, args.db.as_path()).await?;
-    let result = sqlx::query!("SELECT * FROM students")
-        .fetch_all(&mut db)
-        .await?;
+
+    let result = generate_colloscope_data(&mut db).await?;
 
     println!("{:?}", result);
 
