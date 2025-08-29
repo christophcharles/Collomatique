@@ -321,8 +321,8 @@ pub enum ObjectiveSense {
 /// This is the builder for [Problem].
 /// To build a problem, start with [ProblemBuilder::new].
 ///
-/// Then, add the various constraints with [ProblemBuilder::set_constraint]
-/// or [ProblemBuilder::set_constraints].
+/// Then, add the various constraints with [ProblemBuilder::add_constraint]
+/// or [ProblemBuilder::add_constraints].
 ///
 /// Don't forget to declare the variables with [ProblemBuilder::set_variable] or [ProblemBuilder::set_variables].
 ///
@@ -386,21 +386,21 @@ pub enum ObjectiveSense {
 ///         ("y22", Variable::binary())
 ///     ])
 ///     // Both class should not attend a course at the same time
-///     .set_constraints([
+///     .add_constraints([
 ///         ((&x11 + &y11).leq(&one), "At most one group in course 1 on week 1"),
 ///         ((&x12 + &y12).leq(&one), "At most one group in course 1 on week 2"),
 ///         ((&x21 + &y21).leq(&one), "At most one group in course 2 on week 1"),
 ///         ((&x22 + &y22).leq(&one), "At most one group in course 2 on week 2")
 ///     ])
 ///     // Each class should not attend more than one course at a given time
-///     .set_constraints([
+///     .add_constraints([
 ///         ((&x11 + &x21).leq(&one), "At most one course for group X on week 1"),
 ///         ((&x12 + &x22).leq(&one), "At most one course for group X on week 2"),
 ///         ((&y11 + &y21).leq(&one), "At most one course for group Y on week 1"),
 ///         ((&y12 + &y22).leq(&one), "At most one course for group Y on week 2")
 ///     ])
 ///     // Each class must complete each course exactly once
-///     .set_constraints([
+///     .add_constraints([
 ///         ((&x11 + &x12).eq(&one), "Group X should have course 1 exactly once"),
 ///         ((&x21 + &x22).eq(&one), "Group X should have course 2 exactly once"),
 ///         ((&y11 + &y12).eq(&one), "Group Y should have course 1 exactly once"),
@@ -413,7 +413,7 @@ pub enum ObjectiveSense {
 /// ```
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: UsableData, C: UsableData> {
-    constraints: BTreeMap<Constraint<V>, C>,
+    constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
     objective_func: LinExpr<V>,
     objective_sense: ObjectiveSense,
@@ -422,7 +422,7 @@ pub struct ProblemBuilder<V: UsableData, C: UsableData> {
 impl<V: UsableData, C: UsableData> Default for ProblemBuilder<V, C> {
     fn default() -> Self {
         ProblemBuilder {
-            constraints: BTreeMap::default(),
+            constraints: Vec::default(),
             variables: BTreeMap::default(),
             objective_func: LinExpr::default(),
             objective_sense: ObjectiveSense::default(),
@@ -443,8 +443,8 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     /// ```
     ///
     /// This is only a starting point. You can add variables by using [ProblemBuilder::set_variable]
-    /// or [ProblemBuilder::set_variables]. You can similarly add constraints with [ProblemBuilder::set_constraint]
-    /// or [ProblemBuilder::set_constraints].
+    /// or [ProblemBuilder::set_variables]. You can similarly add constraints with [ProblemBuilder::add_constraint]
+    /// or [ProblemBuilder::add_constraints].
     ///
     /// An objective function can also be set with [ProblemBuilder::set_objective_function].
     ///
@@ -514,13 +514,9 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
 
     /// Add a constraint to the constructed problem
     ///
-    /// This is the primary function (along with [ProblemBuilder::set_constraints])
+    /// This is the primary function (along with [ProblemBuilder::add_constraints])
     /// used to add constraints. It takes a constraint (represented with [linexpr::Constraint])
     /// and a description of this constraint (with the generic type C).
-    ///
-    /// If the exact same constraint already exists, the description of the constraint is simply
-    /// overwritten.
-    ///
     /// ```
     /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr};
     /// let a = LinExpr::var("A");
@@ -531,30 +527,28 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variable("A", Variable::binary())
     ///     .set_variable("B", Variable::binary())
-    ///     .set_constraint(constraint, "A + B <= 1")
+    ///     .add_constraint(constraint, "A + B <= 1")
     ///     .build()
     ///     .expect("No undeclared variables");
     ///
     /// let constraints = problem.get_constraints();
     /// assert_eq!(constraints.len(), 1);
     ///
-    /// let c = constraints.into_iter().next().unwrap().0.clone();
+    /// let c = constraints[0].0.clone();
     /// // Displays "1*A + 1*B + (-1) <= 0"
     /// println!("{}", c);
     /// # assert_eq!(format!("{}", c), "1*A + 1*B + (-1) <= 0");
     /// ```
-    pub fn set_constraint<T: Into<C>>(mut self, constraint: Constraint<V>, desc: T) -> Self {
-        self.constraints.insert(constraint, desc.into());
+    pub fn add_constraint<T: Into<C>>(mut self, constraint: Constraint<V>, desc: T) -> Self {
+        self.constraints.push((constraint, desc.into()));
         self
     }
 
     /// Add multiple constraints to the constructed problem.
     ///
-    /// This function works mostly like [ProblemBuilder::set_constraint] and is
+    /// This function works mostly like [ProblemBuilder::add_constraint] and is
     /// used to add constraints. It takes an iterator over tuples containing constraints (represented with [linexpr::Constraint])
     /// and descriptions of these constraint (with the generic type C).
-    ///
-    /// If one of the constraints already exists, its description is simply overwritten.
     ///
     /// ```
     /// # use collomatique_ilp::{ProblemBuilder, Variable, VariableType, linexpr::LinExpr};
@@ -569,7 +563,7 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     ///     .set_variable("A", Variable::binary())
     ///     .set_variable("B", Variable::binary())
     ///     .set_variable("C", Variable::binary())
-    ///     .set_constraints([
+    ///     .add_constraints([
     ///         (c1, "A + B <= 1"),
     ///         (c2, "A + C <= 1")
     ///     ])
@@ -590,15 +584,13 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     /// #       assert_eq!(format!("{}) {} ({})", i+1, c.0, c.1), "2) 1*A + 1*C + (-1) <= 0 (A + C <= 1)");
     /// #   }
     /// }
-    /// // Note: the order is actually fixed by the lexicographical order
-    /// // since this is the Ord trait on String.
     /// ```
-    pub fn set_constraints<U: Into<C>, T: IntoIterator<Item = (Constraint<V>, U)>>(
+    pub fn add_constraints<U: Into<C>, T: IntoIterator<Item = (Constraint<V>, U)>>(
         mut self,
         constraints: T,
     ) -> Self {
         for (constraint, desc) in constraints {
-            self.constraints.insert(constraint, desc.into());
+            self.constraints.push((constraint, desc.into()));
         }
         self
     }
@@ -663,8 +655,8 @@ pub type BuildResult<T, V, C> = std::result::Result<T, BuildError<V, C>>;
 impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     /// Builds the underlying problem.
     ///
-    /// Once you have constructed the problem using [ProblemBuilder::set_constraint],
-    /// [ProblemBuilder::set_constraints], declared the variables using [ProblemBuilder::set_variable]
+    /// Once you have constructed the problem using [ProblemBuilder::add_constraint],
+    /// [ProblemBuilder::add_constraints], declared the variables using [ProblemBuilder::set_variable]
     /// or [ProblemBuilder::set_variables] and optionally defined an objective function with
     /// [ProblemBuilder::set_objective_function], you can commit the result into a [Problem].
     ///
@@ -681,7 +673,7 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     /// let c = (&a + &b).leq(&LinExpr::constant(1.));
     ///
     /// let problem = ProblemBuilder::<String,String>::new()
-    ///     .set_constraint(c, "A + B <= 1")
+    ///     .add_constraint(c, "A + B <= 1")
     ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
     ///     .build()
     ///     .unwrap(); // Panics!
@@ -699,7 +691,7 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     /// let problem = ProblemBuilder::<String,String>::new()
     ///     .set_variable("A", Variable::binary())
     ///     .set_variable("B", Variable::binary())
-    ///     .set_constraint(c, "A + B <= 1")
+    ///     .add_constraint(c, "A + B <= 1")
     ///     .set_objective_function(obj_func.clone(), ObjectiveSense::Maximize)
     ///     .build()
     ///     .expect("No undeclared variables");
@@ -754,15 +746,15 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
 
 #[derive(Debug, Clone)]
 pub struct Problem<V: UsableData, C: UsableData> {
-    constraints: BTreeMap<Constraint<V>, C>,
+    constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
     objective_func: LinExpr<V>,
     objective_sense: ObjectiveSense,
 }
 
 impl<V: UsableData, C: UsableData> Problem<V, C> {
-    pub fn get_constraints(&self) -> &BTreeMap<Constraint<V>, C> {
-        &self.constraints
+    pub fn get_constraints(&self) -> &[(Constraint<V>, C)] {
+        &self.constraints[..]
     }
 
     pub fn get_variables(&self) -> &BTreeMap<V, Variable> {
