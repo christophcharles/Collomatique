@@ -346,7 +346,9 @@ impl Component for EditorPanel {
 
         let subjects = subjects::Subjects::builder()
             .launch(())
-            .forward(sender.input_sender(), |_| EditorInput::Ignore);
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Subjects(op))
+            });
 
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
