@@ -4,10 +4,7 @@
 
 use std::{collections::BTreeSet, num::NonZeroU32};
 
-use crate::{
-    ids::{PeriodId, SubjectId},
-    WeekPatternId,
-};
+use crate::ids::{PeriodId, SubjectId};
 
 /// Description of the subjects
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -31,11 +28,6 @@ pub struct Subject {
     ///
     /// By default a subject is present for every period.
     pub excluded_periods: BTreeSet<PeriodId>,
-    /// Schedule incompatibilities
-    ///
-    /// This is a list of times when students following the subject
-    /// are not available
-    pub incompatibilities: BTreeSet<SubjectIncompatibility>,
 }
 
 /// Description of one subject
@@ -50,36 +42,6 @@ pub struct SubjectParameters {
     /// If `None`, this means there are no interrogations
     /// for this subject.
     pub interrogation_parameters: Option<SubjectInterrogationParameters>,
-}
-
-/// Description of a schedule incompatibility
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SubjectIncompatibility {
-    /// Slot of time when the students are not available
-    ///
-    /// This is given as a weekday, a start time and a duration
-    pub slot: collomatique_time::SlotWithDuration,
-    /// Week pattern for the incompatibility
-    ///
-    /// If `None`, this means every week
-    pub week_pattern: Option<WeekPatternId>,
-}
-
-impl SubjectIncompatibility {
-    /// Builds a subject incompatibility from external data
-    ///
-    /// No checks is done for consistency so this is unsafe.
-    /// See [SubjectIncompatibilityExternalData::validate].
-    pub(crate) unsafe fn from_external_data(
-        external_data: SubjectIncompatibilityExternalData,
-    ) -> SubjectIncompatibility {
-        SubjectIncompatibility {
-            slot: external_data.slot,
-            week_pattern: external_data
-                .week_pattern
-                .map(|x| unsafe { WeekPatternId::new(x) }),
-        }
-    }
 }
 
 /// Description of the interrogations parameters for a subject
@@ -280,11 +242,6 @@ impl Subject {
                 .into_iter()
                 .map(|x| unsafe { PeriodId::new(x) })
                 .collect(),
-            incompatibilities: external_data
-                .incompatibilities
-                .into_iter()
-                .map(|x| unsafe { SubjectIncompatibility::from_external_data(x) })
-                .collect(),
         }
     }
 }
@@ -346,14 +303,10 @@ impl SubjectsExternalData {
     /// that the ranges are non-empty and that week references are in bound
     ///
     /// **Beware**, this does not check the validity of the ids for the subjects!
-    pub fn validate_all(
-        &self,
-        period_ids: &BTreeSet<u64>,
-        week_pattern_ids: &BTreeSet<u64>,
-    ) -> bool {
+    pub fn validate_all(&self, period_ids: &BTreeSet<u64>) -> bool {
         self.ordered_subject_list
             .iter()
-            .all(|(_id, data)| data.validate(period_ids, week_pattern_ids))
+            .all(|(_id, data)| data.validate(period_ids))
     }
 
     /// Finds the position of a subject by id
@@ -390,30 +343,6 @@ pub struct SubjectExternalData {
     /// By default a subject is present for every period.
     /// Ids that appear here should be period ids.
     pub excluded_periods: BTreeSet<u64>,
-    /// Schedule incompatibilities
-    ///
-    /// This is a list of times when students following the subject
-    /// are not available
-    pub incompatibilities: BTreeSet<SubjectIncompatibilityExternalData>,
-}
-
-/// Description of a schedule incompatibility but unchecked
-///
-/// This structure is an unchecked equivalent of [SubjectIncompatibility].
-/// The main difference is that there are no garantees for the
-/// validity of the ids.
-///
-/// This should be used when extracting from a file for instance
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SubjectIncompatibilityExternalData {
-    /// Slot of time when the students are not available
-    ///
-    /// This is given as a weekday, a start time and a duration
-    pub slot: collomatique_time::SlotWithDuration,
-    /// Week pattern for the incompatibility
-    ///
-    /// If `None`, this means every week
-    pub week_pattern: Option<u64>,
 }
 
 impl SubjectExternalData {
@@ -421,7 +350,7 @@ impl SubjectExternalData {
     ///
     /// In practice, this means checking that the ids for periods and week patterns are valid
     /// that the ranges are non-empty
-    pub fn validate(&self, period_ids: &BTreeSet<u64>, week_pattern_ids: &BTreeSet<u64>) -> bool {
+    pub fn validate(&self, period_ids: &BTreeSet<u64>) -> bool {
         if !self.excluded_periods.iter().all(|x| period_ids.contains(x)) {
             return false;
         }
@@ -454,13 +383,6 @@ impl SubjectExternalData {
             }
             _ => {}
         }
-        if !self
-            .incompatibilities
-            .iter()
-            .all(|x| x.validate(week_pattern_ids))
-        {
-            return false;
-        }
         true
     }
 }
@@ -474,34 +396,6 @@ impl From<Subject> for SubjectExternalData {
                 .into_iter()
                 .map(|x| x.inner())
                 .collect(),
-            incompatibilities: value
-                .incompatibilities
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
-        }
-    }
-}
-
-impl SubjectIncompatibilityExternalData {
-    /// Checks the validity of a [SubjectIncompatibilityExternalData].
-    ///
-    /// In practice, this means checking that the id for week pattern is valid
-    pub fn validate(&self, week_pattern_ids: &BTreeSet<u64>) -> bool {
-        if let Some(id) = &self.week_pattern {
-            if !week_pattern_ids.contains(id) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
-impl From<SubjectIncompatibility> for SubjectIncompatibilityExternalData {
-    fn from(value: SubjectIncompatibility) -> Self {
-        SubjectIncompatibilityExternalData {
-            slot: value.slot,
-            week_pattern: value.week_pattern.map(|x| x.inner()),
         }
     }
 }

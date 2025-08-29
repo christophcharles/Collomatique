@@ -22,7 +22,6 @@ pub struct List {
 pub struct Subject {
     pub parameters: SubjectParameters,
     pub excluded_periods: BTreeSet<u64>,
-    pub incompatibilities: Vec<SubjectIncompatibility>,
 }
 
 impl From<&collomatique_state_colloscopes::Subject> for Subject {
@@ -30,81 +29,16 @@ impl From<&collomatique_state_colloscopes::Subject> for Subject {
         Subject {
             parameters: value.parameters.clone().into(),
             excluded_periods: value.excluded_periods.iter().map(|x| x.inner()).collect(),
-            incompatibilities: value.incompatibilities.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl TryFrom<Subject> for collomatique_state_colloscopes::subjects::SubjectExternalData {
-    type Error = SubjectDecodeError;
-
-    fn try_from(value: Subject) -> Result<Self, SubjectDecodeError> {
-        let mut incompatibilities = BTreeSet::new();
-
-        for incompat in value.incompatibilities {
-            if !incompatibilities.insert(incompat.try_into()?) {
-                return Err(SubjectDecodeError::DuplicateSlot);
-            }
+impl From<Subject> for collomatique_state_colloscopes::subjects::SubjectExternalData {
+    fn from(value: Subject) -> Self {
+        collomatique_state_colloscopes::subjects::SubjectExternalData {
+            parameters: value.parameters.into(),
+            excluded_periods: value.excluded_periods,
         }
-
-        Ok(
-            collomatique_state_colloscopes::subjects::SubjectExternalData {
-                parameters: value.parameters.into(),
-                excluded_periods: value.excluded_periods,
-                incompatibilities,
-            },
-        )
-    }
-}
-
-pub enum SubjectDecodeError {
-    InvalidSlot,
-    DuplicateSlot,
-}
-
-/// JSON desc of a single subject incompatibility
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SubjectIncompatibility {
-    pub weekday: chrono::Weekday,
-    pub start_time: chrono::NaiveTime,
-    pub duration_in_minutes: NonZeroU32,
-    pub week_pattern: Option<u64>,
-}
-
-impl From<&collomatique_state_colloscopes::subjects::SubjectIncompatibility>
-    for SubjectIncompatibility
-{
-    fn from(value: &collomatique_state_colloscopes::subjects::SubjectIncompatibility) -> Self {
-        SubjectIncompatibility {
-            weekday: value.slot.start().weekday.into_inner(),
-            start_time: value.slot.start().start_time,
-            duration_in_minutes: value.slot.duration().get(),
-            week_pattern: value.week_pattern.map(|x| x.inner()),
-        }
-    }
-}
-
-impl TryFrom<SubjectIncompatibility>
-    for collomatique_state_colloscopes::subjects::SubjectIncompatibilityExternalData
-{
-    type Error = SubjectDecodeError;
-
-    fn try_from(value: SubjectIncompatibility) -> Result<Self, SubjectDecodeError> {
-        Ok(
-            collomatique_state_colloscopes::subjects::SubjectIncompatibilityExternalData {
-                slot: match collomatique_time::SlotWithDuration::new(
-                    collomatique_time::SlotStart {
-                        weekday: collomatique_time::Weekday(value.weekday),
-                        start_time: value.start_time,
-                    },
-                    value.duration_in_minutes.into(),
-                ) {
-                    Some(s) => s,
-                    None => return Err(SubjectDecodeError::InvalidSlot),
-                },
-                week_pattern: value.week_pattern,
-            },
-        )
     }
 }
 

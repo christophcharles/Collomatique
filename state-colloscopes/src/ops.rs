@@ -32,6 +32,8 @@ pub enum Op {
     WeekPattern(WeekPatternOp),
     /// Operation on slots
     Slot(SlotOp),
+    /// Operation on incompatibilities
+    Incompat(IncompatOp),
 }
 
 impl Operation for Op {}
@@ -140,6 +142,20 @@ pub enum SlotOp {
     Update(SlotId, slots::Slot),
 }
 
+/// Incompat operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// incompatibilities we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IncompatOp {
+    /// Add an incompatibility
+    Add(incompats::Incompatibility),
+    /// Remove an existing incompatibility
+    Remove(IncompatId),
+    /// Update an incompatibility
+    Update(IncompatId, incompats::Incompatibility),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -163,6 +179,8 @@ pub enum AnnotatedOp {
     WeekPattern(AnnotatedWeekPatternOp),
     /// Operation on slots
     Slot(AnnotatedSlotOp),
+    /// Operation on slots
+    Incompat(AnnotatedIncompatOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -204,6 +222,12 @@ impl From<AnnotatedWeekPatternOp> for AnnotatedOp {
 impl From<AnnotatedSlotOp> for AnnotatedOp {
     fn from(value: AnnotatedSlotOp) -> Self {
         AnnotatedOp::Slot(value)
+    }
+}
+
+impl From<AnnotatedIncompatOp> for AnnotatedOp {
+    fn from(value: AnnotatedIncompatOp) -> Self {
+        AnnotatedOp::Incompat(value)
     }
 }
 
@@ -337,6 +361,24 @@ pub enum AnnotatedSlotOp {
     Update(SlotId, slots::Slot),
 }
 
+/// Incompat operation enumeration
+///
+/// Compared to [IncompatOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedIncompatOp {
+    /// Add an incompatibility
+    /// First parameter is the incompat id for the new incompatibility
+    Add(IncompatId, incompats::Incompatibility),
+    /// Remove an existing incompat
+    Remove(IncompatId),
+    /// Update an existing incompat
+    Update(IncompatId, incompats::Incompatibility),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -377,6 +419,10 @@ impl AnnotatedOp {
             }
             Op::Slot(slot_op) => {
                 let (op, id) = AnnotatedSlotOp::annotate(slot_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Incompat(incompat_op) => {
+                let (op, id) = AnnotatedIncompatOp::annotate(incompat_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
         }
@@ -532,6 +578,27 @@ impl AnnotatedSlotOp {
             }
             SlotOp::Remove(slot_id) => (AnnotatedSlotOp::Remove(slot_id), None),
             SlotOp::Update(slot_id, slot) => (AnnotatedSlotOp::Update(slot_id, slot), None),
+        }
+    }
+}
+
+impl AnnotatedIncompatOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [IncompatOp].
+    fn annotate(
+        incompat_op: IncompatOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedIncompatOp, Option<IncompatId>) {
+        match incompat_op {
+            IncompatOp::Add(incompat) => {
+                let new_id = id_issuer.get_incompat_id();
+                (AnnotatedIncompatOp::Add(new_id, incompat), Some(new_id))
+            }
+            IncompatOp::Remove(incompat_id) => (AnnotatedIncompatOp::Remove(incompat_id), None),
+            IncompatOp::Update(incompat_id, incompat) => {
+                (AnnotatedIncompatOp::Update(incompat_id, incompat), None)
+            }
         }
     }
 }

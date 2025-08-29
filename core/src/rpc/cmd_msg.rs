@@ -114,3 +114,12 @@ impl From<collomatique_state_colloscopes::SlotId> for MsgSlotId {
         MsgSlotId(value.inner())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgIncompatId(pub u64);
+
+impl From<collomatique_state_colloscopes::IncompatId> for MsgIncompatId {
+    fn from(value: collomatique_state_colloscopes::IncompatId) -> Self {
+        MsgIncompatId(value.inner())
+    }
+}
