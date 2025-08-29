@@ -3,19 +3,21 @@ use super::*;
 #[test]
 fn test_config_from_iterator() {
     let pb = crate::ilp::ProblemBuilder::<String>::new()
-        .add_variables(["x", "y", "z", "t"])
+        .add_bool_variables(["x", "y", "z", "t"])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
-    let config = pb.config_from(["x", "y", "z"]).unwrap();
+    let config = pb
+        .config_from([("x", true), ("y", true), ("z", true)])
+        .unwrap();
 
-    assert_eq!(config.get("x"), Ok(true));
-    assert_eq!(config.get("y"), Ok(true));
-    assert_eq!(config.get("z"), Ok(true));
-    assert_eq!(config.get("t"), Ok(false));
+    assert_eq!(config.get_bool("x"), Ok(true));
+    assert_eq!(config.get_bool("y"), Ok(true));
+    assert_eq!(config.get_bool("z"), Ok(true));
+    assert_eq!(config.get_bool("t"), Ok(false));
 
     assert_eq!(
-        config.get("w"),
+        config.get_bool("w"),
         Err(Error::InvalidVariable(String::from("w")))
     );
 }
@@ -23,11 +25,11 @@ fn test_config_from_iterator() {
 #[test]
 fn invalid_variable_in_config() {
     let pb = crate::ilp::ProblemBuilder::<String>::new()
-        .add_variables(["x", "y", "z", "t"])
+        .add_bool_variables(["x", "y", "z", "t"])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
-    let config = pb.config_from(["x", "y", "w"]);
+    let config = pb.config_from([("x", true), ("y", true), ("w", true)]);
 
     assert_eq!(
         config.err(),
@@ -45,13 +47,13 @@ fn test_is_feasable() {
     let d = Expr::<String>::var("d");
 
     let pb = crate::ilp::ProblemBuilder::<String>::new()
-        .add_variable("a")
+        .add_bool_variable("a")
         .unwrap()
-        .add_variable("b")
+        .add_bool_variable("b")
         .unwrap()
-        .add_variable("c")
+        .add_bool_variable("c")
         .unwrap()
-        .add_variable("d")
+        .add_bool_variable("d")
         .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
         .unwrap()
@@ -59,24 +61,34 @@ fn test_is_feasable() {
         .unwrap()
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["b"]).unwrap();
-    let config_3 = pb.config_from(["a", "b"]).unwrap();
-    let config_4 = pb.config_from(["c"]).unwrap();
-    let config_5 = pb.config_from(["a", "c"]).unwrap();
-    let config_6 = pb.config_from(["b", "c"]).unwrap();
-    let config_7 = pb.config_from(["a", "b", "c"]).unwrap();
-    let config_8 = pb.config_from(["d"]).unwrap();
-    let config_9 = pb.config_from(["a", "d"]).unwrap();
-    let config_a = pb.config_from(["b", "d"]).unwrap();
-    let config_b = pb.config_from(["a", "b", "d"]).unwrap();
-    let config_c = pb.config_from(["c", "d"]).unwrap();
-    let config_d = pb.config_from(["a", "c", "d"]).unwrap();
-    let config_e = pb.config_from(["b", "c", "d"]).unwrap();
-    let config_f = pb.config_from(["a", "b", "c", "d"]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
+    let config_7 = pb
+        .config_from([("a", true), ("b", true), ("c", true)])
+        .unwrap();
+    let config_8 = pb.config_from([("d", true)]).unwrap();
+    let config_9 = pb.config_from([("a", true), ("d", true)]).unwrap();
+    let config_a = pb.config_from([("b", true), ("d", true)]).unwrap();
+    let config_b = pb
+        .config_from([("a", true), ("b", true), ("d", true)])
+        .unwrap();
+    let config_c = pb.config_from([("c", true), ("d", true)]).unwrap();
+    let config_d = pb
+        .config_from([("a", true), ("c", true), ("d", true)])
+        .unwrap();
+    let config_e = pb
+        .config_from([("b", true), ("c", true), ("d", true)])
+        .unwrap();
+    let config_f = pb
+        .config_from([("a", true), ("b", true), ("c", true), ("d", true)])
+        .unwrap();
 
     assert_eq!(config_0.is_feasable(), false);
     assert_eq!(config_1.is_feasable(), true);
@@ -99,14 +111,14 @@ fn test_is_feasable() {
 #[test]
 fn test_is_feasable_no_constraint() {
     let pb: Problem<String> = crate::ilp::ProblemBuilder::new()
-        .add_variables(["a", "b"])
+        .add_bool_variables(["a", "b"])
         .unwrap()
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["b"]).unwrap();
-    let config_3 = pb.config_from(["a", "b"]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
 
     assert_eq!(config_0.is_feasable(), true);
     assert_eq!(config_1.is_feasable(), true);
@@ -117,9 +129,9 @@ fn test_is_feasable_no_constraint() {
 #[test]
 fn problem_extra_variable() {
     let pb = ProblemBuilder::<String>::new()
-        .add_variable("X")
+        .add_bool_variable("X")
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     assert_eq!(pb.variables, BTreeSet::from([String::from("X")]));
 }
@@ -127,13 +139,13 @@ fn problem_extra_variable() {
 #[test]
 fn problem_extra_variables() {
     let pb = ProblemBuilder::<String>::new()
-        .add_variable("X")
+        .add_bool_variable("X")
         .unwrap()
-        .add_variable("Y")
+        .add_bool_variable("Y")
         .unwrap()
-        .add_variables(["Z", "W"])
+        .add_bool_variables(["Z", "W"])
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
 
     assert_eq!(
         pb.variables,
@@ -141,7 +153,7 @@ fn problem_extra_variables() {
             String::from("X"),
             String::from("Y"),
             String::from("Z"),
-            String::from("W")
+            String::from("W"),
         ])
     );
 }
@@ -151,7 +163,7 @@ fn problem_undeclared_variable() {
     use crate::ilp::linexpr::Expr;
 
     let res = ProblemBuilder::<String>::new()
-        .add_variable("X")
+        .add_bool_variable("X")
         .unwrap()
         .add_constraint((Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)));
 
@@ -162,35 +174,11 @@ fn problem_undeclared_variable() {
 }
 
 #[test]
-fn problem_iterate_simplify() {
-    use crate::ilp::linexpr::Expr;
-
-    let constraints = BTreeSet::from([
-        (Expr::<String>::var("X") + Expr::var("Y") + Expr::var("W")).eq(&Expr::constant(1)),
-        (Expr::var("X") + Expr::var("Z")).eq(&Expr::constant(1)),
-        Expr::var("Z").leq(&Expr::constant(0)),
-    ]);
-
-    let simplified_constraints =
-        BTreeSet::from([(Expr::<String>::var("Y") + Expr::var("W")).eq(&Expr::constant(0))]);
-
-    let trivialized_variables =
-        BTreeMap::from([(String::from("X"), true), (String::from("Z"), false)]);
-
-    assert_eq!(
-        ProblemBuilder::<String>::iterate_simplify(&constraints),
-        (simplified_constraints, trivialized_variables)
-    );
-}
-
-#[test]
 fn problem_filter_variable() {
     use crate::ilp::linexpr::Expr;
 
     let pb1 = ProblemBuilder::<String>::new()
-        .add_variables(["X", "Y", "Z", "W"])
-        .unwrap()
-        .add_constants([("T", false), ("S", true)])
+        .add_bool_variables(["T", "S", "X", "Y", "Z", "W"])
         .unwrap()
         .add_constraints([
             (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
@@ -203,9 +191,7 @@ fn problem_filter_variable() {
         .filter_variables(|v| (*v != String::from("Z")) && (*v != String::from("S")));
 
     let pb2 = ProblemBuilder::<String>::new()
-        .add_variables(["X", "Y", "W"])
-        .unwrap()
-        .add_constants([("T", false)])
+        .add_bool_variables(["T", "X", "Y", "W"])
         .unwrap()
         .add_constraints([
             (Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)),
@@ -215,5 +201,4 @@ fn problem_filter_variable() {
 
     assert_eq!(pb1.constraints, pb2.constraints);
     assert_eq!(pb1.variables, pb2.variables);
-    assert_eq!(pb1.constants, pb2.constants);
 }

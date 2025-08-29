@@ -119,12 +119,45 @@ where
 }
 
 #[derive(Error, Debug)]
+pub enum Cross2Error<T, CrossId1, CrossId2>
+where
+    T: std::fmt::Debug + std::error::Error,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Cross2IdError<T, Id, CrossId1, CrossId2>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+    CrossId1: std::fmt::Debug,
+    CrossId2: std::fmt::Debug,
+{
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId1(CrossId1),
+    #[error("Cross id {0:?} is invalid")]
+    InvalidCrossId2(CrossId2),
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
 pub enum Cross3Error<T, CrossId1, CrossId2, CrossId3>
 where
     T: std::fmt::Debug + std::error::Error,
     CrossId1: std::fmt::Debug,
     CrossId2: std::fmt::Debug,
-    CrossId2: std::fmt::Debug,
+    CrossId3: std::fmt::Debug,
 {
     #[error("Cross id {0:?} is invalid")]
     InvalidCrossId1(CrossId1),
@@ -239,6 +272,8 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     type TimeSlotId: OrdId;
     type GroupingId: OrdId;
     type GroupingIncompatId: OrdId;
+    type ColloscopeId: OrdId;
+    type SlotSelectionId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error + Send;
 
@@ -523,6 +558,83 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
     ) -> std::result::Result<bool, Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
+
+    async fn colloscopes_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::ColloscopeId, Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>>,
+        Self::InternalError,
+    >;
+    async fn colloscopes_get(
+        &self,
+        index: Self::ColloscopeId,
+    ) -> std::result::Result<
+        Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+        IdError<Self::InternalError, Self::ColloscopeId>,
+    >;
+    async unsafe fn colloscopes_add_unchecked(
+        &mut self,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> std::result::Result<Self::ColloscopeId, Self::InternalError>;
+    async unsafe fn colloscopes_remove_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async unsafe fn colloscopes_update_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+
+    async fn slot_selections_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::SlotSelectionId, SlotSelection<Self::SubjectId, Self::TimeSlotId>>,
+        Self::InternalError,
+    >;
+    async fn slot_selections_get(
+        &self,
+        index: Self::SlotSelectionId,
+    ) -> std::result::Result<
+        SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+        IdError<Self::InternalError, Self::SlotSelectionId>,
+    >;
+    async unsafe fn slot_selections_add_unchecked(
+        &mut self,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> std::result::Result<Self::SlotSelectionId, Self::InternalError>;
+    async unsafe fn slot_selections_remove_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async unsafe fn slot_selections_update_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CostsAdjustments {
+    pub max_interrogations_per_day_for_single_student: i32,
+    pub max_interrogations_per_day_for_all_students: i32,
+    pub interrogations_per_week_range_for_single_student: i32,
+    pub interrogations_per_week_range_for_all_students: i32,
+    pub balancing: i32,
+    pub consecutive_slots: i32,
+}
+
+impl Default for CostsAdjustments {
+    fn default() -> Self {
+        CostsAdjustments {
+            max_interrogations_per_day_for_single_student: 1,
+            max_interrogations_per_day_for_all_students: 1,
+            interrogations_per_week_range_for_single_student: 1,
+            interrogations_per_week_range_for_all_students: 1,
+            balancing: 1,
+            consecutive_slots: 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -530,6 +642,8 @@ pub struct GeneralData {
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
     pub week_count: NonZeroU32,
+    pub periodicity_cuts: BTreeSet<NonZeroU32>,
+    pub costs_adjustments: CostsAdjustments,
 }
 
 use std::collections::BTreeSet;
@@ -566,6 +680,7 @@ pub struct Student {
     pub firstname: String,
     pub email: Option<String>,
     pub phone: Option<String>,
+    pub no_consecutive_slots: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -631,10 +746,31 @@ impl<StudentId: OrdId> GroupList<StudentId> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BalancingConstraints {
+    OptimizeOnly,
+    OverallOnly,
+    StrictWithCuts,
+    StrictWithCutsAndOverall,
+    Strict,
+    OptimizeAndConsecutiveDifferentTeachers,
+    OverallAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndConsecutiveDifferentTeachers,
+    StrictWithCutsAndOverallAndConsecutiveDifferentTeachers,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BalancingSlotSelections {
+    TeachersAndTimeSlots,
+    Teachers,
+    TimeSlots,
+    Manual,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BalancingRequirements {
-    pub teachers: bool,
-    pub timeslots: bool,
+    pub constraints: BalancingConstraints,
+    pub slot_selections: BalancingSlotSelections,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -659,6 +795,30 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
     pub start: SlotStart,
     pub week_pattern_id: WeekPatternId,
     pub room: String,
+    pub cost: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotGroup<TimeSlotId: OrdId> {
+    pub slots: BTreeSet<TimeSlotId>,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotSelection<SubjectId: OrdId, TimeSlotId: OrdId> {
+    pub subject_id: SubjectId,
+    pub slot_groups: Vec<SlotGroup<TimeSlotId>>,
+}
+
+impl<SubjectId: OrdId, TimeSlotId: OrdId> SlotSelection<SubjectId, TimeSlotId> {
+    fn references_time_slot(&self, index: TimeSlotId) -> bool {
+        for slot_group in &self.slot_groups {
+            if slot_group.slots.contains(&index) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -685,6 +845,68 @@ impl<GroupingId: OrdId> GroupingIncompat<GroupingId> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeTimeSlot<TeacherId: OrdId> {
+    pub teacher_id: TeacherId,
+    pub start: SlotStart,
+    pub room: String,
+    pub group_assignments: BTreeMap<Week, BTreeSet<usize>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeGroupList<StudentId: OrdId> {
+    pub name: String,
+    pub groups: Vec<String>,
+    pub students_mapping: BTreeMap<StudentId, usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeSubject<TeacherId: OrdId, StudentId: OrdId> {
+    pub time_slots: Vec<ColloscopeTimeSlot<TeacherId>>,
+    pub group_list: ColloscopeGroupList<StudentId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Colloscope<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId> {
+    pub name: String,
+    pub subjects: BTreeMap<SubjectId, ColloscopeSubject<TeacherId, StudentId>>,
+}
+
+impl<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId>
+    Colloscope<TeacherId, SubjectId, StudentId>
+{
+    pub fn references_teacher(&self, teacher_id: TeacherId) -> bool {
+        for (_subject_id, subject) in &self.subjects {
+            for time_slot in &subject.time_slots {
+                if time_slot.teacher_id == teacher_id {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn references_subject(&self, subject_id: SubjectId) -> bool {
+        for (&current_subject_id, _subject) in &self.subjects {
+            if subject_id == current_subject_id {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn references_student(&self, student_id: StudentId) -> bool {
+        for (_subject_id, subject) in &self.subjects {
+            for (&current_student_id, _mapping) in &subject.group_list.students_mapping {
+                if current_student_id == student_id {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum WeekPatternDependancy<IncompatId: OrdId, TimeSlotId: OrdId> {
     Incompat(IncompatId),
@@ -704,8 +926,40 @@ pub enum IncompatDependancy<SubjectId: OrdId, StudentId: OrdId> {
 }
 
 #[derive(Clone, Debug)]
-pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId> {
+pub enum SubjectDependancy<
+    TimeSlotId: OrdId,
+    StudentId: OrdId,
+    ColloscopeId: OrdId,
+    SlotSelectionId: OrdId,
+> {
     TimeSlot(TimeSlotId),
+    Student(StudentId),
+    Colloscope(ColloscopeId),
+    SlotSelection(SlotSelectionId),
+}
+
+#[derive(Clone, Debug)]
+pub enum TimeSlotDependancy<GroupingId: OrdId, SlotSelectionId: OrdId> {
+    Grouping(GroupingId),
+    SlotSelection(SlotSelectionId),
+}
+
+#[derive(Clone, Debug)]
+pub enum TeacherDependancy<TimeSlotId: OrdId, ColloscopeId: OrdId> {
+    TimeSlot(TimeSlotId),
+    Colloscope(ColloscopeId),
+}
+
+#[derive(Clone, Debug)]
+pub enum StudentDependancy<GroupListId: OrdId, ColloscopeId: OrdId> {
+    GroupList(GroupListId),
+    Colloscope(ColloscopeId),
+}
+
+#[derive(Clone, Debug)]
+pub enum ColloscopeDependancy<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId> {
+    Teacher(TeacherId),
+    Subject(SubjectId),
     Student(StudentId),
 }
 
@@ -713,6 +967,13 @@ pub enum SubjectDependancy<TimeSlotId: OrdId, StudentId: OrdId> {
 pub enum DataStatusWithId<Id: OrdId> {
     Ok,
     BadCrossId(Id),
+}
+
+#[derive(Clone, Debug)]
+pub enum DataStatusWithId2<Id1: OrdId, Id2: OrdId> {
+    Ok,
+    BadCrossId1(Id1),
+    BadCrossId2(Id2),
 }
 
 #[derive(Clone, Debug)]
@@ -937,7 +1198,10 @@ impl<T: Storage> Logic<T> {
     pub async fn teachers_check_can_remove(
         &self,
         index: T::TeacherId,
-    ) -> std::result::Result<Vec<T::TimeSlotId>, IdError<T::InternalError, T::TeacherId>> {
+    ) -> std::result::Result<
+        Vec<TeacherDependancy<T::TimeSlotId, T::ColloscopeId>>,
+        IdError<T::InternalError, T::TeacherId>,
+    > {
         let teachers = self.teachers_get_all().await?;
 
         if !teachers.contains_key(&index) {
@@ -949,7 +1213,14 @@ impl<T: Storage> Logic<T> {
         let time_slots = self.time_slots_get_all().await?;
         for (time_slot_id, time_slot) in time_slots {
             if time_slot.teacher_id == index {
-                dependancies.push(time_slot_id);
+                dependancies.push(TeacherDependancy::TimeSlot(time_slot_id));
+            }
+        }
+
+        let colloscopes = self.colloscopes_get_all().await?;
+        for (colloscope_id, colloscope) in colloscopes {
+            if colloscope.references_teacher(index) {
+                dependancies.push(TeacherDependancy::Colloscope(colloscope_id));
             }
         }
 
@@ -958,8 +1229,14 @@ impl<T: Storage> Logic<T> {
     pub async fn teachers_remove(
         &mut self,
         index: T::TeacherId,
-    ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TeacherId, Vec<T::TimeSlotId>>>
-    {
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            T::InternalError,
+            T::TeacherId,
+            Vec<TeacherDependancy<T::TimeSlotId, T::ColloscopeId>>,
+        >,
+    > {
         let dependancies = self
             .teachers_check_can_remove(index)
             .await
@@ -998,7 +1275,10 @@ impl<T: Storage> Logic<T> {
     pub async fn students_check_can_remove(
         &self,
         index: T::StudentId,
-    ) -> std::result::Result<Vec<T::GroupListId>, IdError<T::InternalError, T::StudentId>> {
+    ) -> std::result::Result<
+        Vec<StudentDependancy<T::GroupListId, T::ColloscopeId>>,
+        IdError<T::InternalError, T::StudentId>,
+    > {
         let students = self.students_get_all().await?;
 
         if !students.contains_key(&index) {
@@ -1010,7 +1290,14 @@ impl<T: Storage> Logic<T> {
         let group_lists = self.group_lists_get_all().await?;
         for (group_list_id, group_list) in group_lists {
             if group_list.references_student(index) {
-                dependancies.push(group_list_id)
+                dependancies.push(StudentDependancy::GroupList(group_list_id));
+            }
+        }
+
+        let colloscopes = self.colloscopes_get_all().await?;
+        for (colloscope_id, colloscope) in colloscopes {
+            if colloscope.references_student(index) {
+                dependancies.push(StudentDependancy::Colloscope(colloscope_id));
             }
         }
 
@@ -1019,8 +1306,14 @@ impl<T: Storage> Logic<T> {
     pub async fn students_remove(
         &mut self,
         index: T::StudentId,
-    ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::StudentId, Vec<T::GroupListId>>>
-    {
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            T::InternalError,
+            T::StudentId,
+            Vec<StudentDependancy<T::GroupListId, T::ColloscopeId>>,
+        >,
+    > {
         let dependancies = self
             .students_check_can_remove(index)
             .await
@@ -1507,7 +1800,7 @@ impl<T: Storage> Logic<T> {
         &self,
         index: T::SubjectId,
     ) -> std::result::Result<
-        Vec<SubjectDependancy<T::TimeSlotId, T::StudentId>>,
+        Vec<SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId, T::SlotSelectionId>>,
         IdError<T::InternalError, T::SubjectId>,
     > {
         let subject = self.subjects_get(index).await?;
@@ -1538,6 +1831,20 @@ impl<T: Storage> Logic<T> {
             }
         }
 
+        let colloscopes = self.colloscopes_get_all().await?;
+        for (colloscope_id, colloscope) in colloscopes {
+            if colloscope.references_subject(index) {
+                dependancies.push(SubjectDependancy::Colloscope(colloscope_id));
+            }
+        }
+
+        let slot_selections = self.slot_selections_get_all().await?;
+        for (slot_selection_id, slot_selection) in slot_selections {
+            if slot_selection.subject_id == index {
+                dependancies.push(SubjectDependancy::SlotSelection(slot_selection_id));
+            }
+        }
+
         Ok(dependancies)
     }
     pub async fn subjects_remove(
@@ -1548,7 +1855,9 @@ impl<T: Storage> Logic<T> {
         CheckedIdError<
             T::InternalError,
             T::SubjectId,
-            Vec<SubjectDependancy<T::TimeSlotId, T::StudentId>>,
+            Vec<
+                SubjectDependancy<T::TimeSlotId, T::StudentId, T::ColloscopeId, T::SlotSelectionId>,
+            >,
         >,
     > {
         let dependancies = self
@@ -1629,29 +1938,61 @@ impl<T: Storage> Logic<T> {
             }
         }
     }
+    async fn is_time_slot_referenced_by_slot_selections(
+        &self,
+        index: T::TimeSlotId,
+    ) -> std::result::Result<Option<T::SlotSelectionId>, T::InternalError> {
+        let slot_selections = self.slot_selections_get_all().await?;
+
+        for (slot_selection_id, slot_selection) in slot_selections {
+            if slot_selection.references_time_slot(index) {
+                return Ok(Some(slot_selection_id));
+            }
+        }
+
+        Ok(None)
+    }
     pub async fn time_slots_update(
         &mut self,
         index: T::TimeSlotId,
         time_slot: &TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>,
     ) -> std::result::Result<
         (),
-        Cross3IdError<
+        Cross3IdWithDepError<
             T::InternalError,
             T::TimeSlotId,
             T::SubjectId,
             T::TeacherId,
             T::WeekPatternId,
+            T::SlotSelectionId,
         >,
     > {
         if !self.time_slots_check_id(index).await? {
-            return Err(Cross3IdError::InvalidId(index));
+            return Err(Cross3IdWithDepError::InvalidId(index));
+        }
+
+        if let Some(slot_selection_id) = self
+            .is_time_slot_referenced_by_slot_selections(index)
+            .await?
+        {
+            let current_time_slot = self.time_slots_get(index).await.map_err(|e| match e {
+                IdError::InvalidId(id) => panic!(
+                    "Time slot id {:?} should be valid as it was already checked",
+                    id
+                ),
+                IdError::InternalError(int_err) => Cross3IdWithDepError::InternalError(int_err),
+            })?;
+
+            if current_time_slot.subject_id != time_slot.subject_id {
+                return Err(Cross3IdWithDepError::BlockingDependancy(slot_selection_id));
+            }
         }
 
         let data_status = self.time_slots_check_data(time_slot).await?;
         match data_status {
-            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdError::InvalidCrossId1(id1)),
-            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdError::InvalidCrossId2(id2)),
-            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdError::InvalidCrossId3(id3)),
+            DataStatusWithId3::BadCrossId1(id1) => Err(Cross3IdWithDepError::InvalidCrossId1(id1)),
+            DataStatusWithId3::BadCrossId2(id2) => Err(Cross3IdWithDepError::InvalidCrossId2(id2)),
+            DataStatusWithId3::BadCrossId3(id3) => Err(Cross3IdWithDepError::InvalidCrossId3(id3)),
             DataStatusWithId3::Ok => {
                 unsafe { self.storage.time_slots_update_unchecked(index, time_slot) }.await?;
                 Ok(())
@@ -1661,7 +2002,10 @@ impl<T: Storage> Logic<T> {
     pub async fn time_slots_check_can_remove(
         &self,
         index: T::TimeSlotId,
-    ) -> std::result::Result<Vec<T::GroupingId>, IdError<T::InternalError, T::TimeSlotId>> {
+    ) -> std::result::Result<
+        Vec<TimeSlotDependancy<T::GroupingId, T::SlotSelectionId>>,
+        IdError<T::InternalError, T::TimeSlotId>,
+    > {
         if !self.time_slots_check_id(index).await? {
             return Err(IdError::InvalidId(index));
         }
@@ -1671,7 +2015,14 @@ impl<T: Storage> Logic<T> {
         let groupings = self.groupings_get_all().await?;
         for (grouping_id, grouping) in groupings {
             if grouping.references_time_slot(index) {
-                dependancies.push(grouping_id);
+                dependancies.push(TimeSlotDependancy::Grouping(grouping_id));
+            }
+        }
+
+        let slot_selections = self.slot_selections_get_all().await?;
+        for (slot_selection_id, slot_selection) in slot_selections {
+            if slot_selection.references_time_slot(index) {
+                dependancies.push(TimeSlotDependancy::SlotSelection(slot_selection_id));
             }
         }
 
@@ -1680,8 +2031,14 @@ impl<T: Storage> Logic<T> {
     pub async fn time_slots_remove(
         &mut self,
         index: T::TimeSlotId,
-    ) -> std::result::Result<(), CheckedIdError<T::InternalError, T::TimeSlotId, Vec<T::GroupingId>>>
-    {
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<
+            T::InternalError,
+            T::TimeSlotId,
+            Vec<TimeSlotDependancy<T::GroupingId, T::SlotSelectionId>>,
+        >,
+    > {
         let dependancies = self
             .time_slots_check_can_remove(index)
             .await
@@ -1984,687 +2341,236 @@ impl<T: Storage> Logic<T> {
         .await?;
         Ok(())
     }
-}
 
-impl<T: Storage> Logic<T> {
-    pub fn gen_colloscope_translator<'a>(&'a self) -> GenColloscopeTranslator<'a, T> {
-        GenColloscopeTranslator { data_storage: self }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct GenColloscopeTranslator<'a, T: Storage> {
-    data_storage: &'a Logic<T>,
-}
-
-#[derive(Debug, Error)]
-pub enum GenColloscopeError<T: Storage, StorageError = <T as Storage>::InternalError>
-where
-    StorageError: std::fmt::Debug + std::error::Error,
-{
-    #[error("Error in the storage backend: {0:?}")]
-    StorageError(#[from] StorageError),
-    #[error("Error while validating data: {0:?}")]
-    ValidationError(crate::gen::colloscope::Error),
-    #[error("Inconsistent data: bad subject id ({0:?})")]
-    BadSubjectId(T::SubjectId),
-    #[error("Inconsistent data: bad teacher id ({0:?})")]
-    BadTeacherId(T::TeacherId),
-    #[error("Inconsistent data: bad week pattern id ({0:?})")]
-    BadWeekPatternId(T::WeekPatternId),
-    #[error("Inconsistent data: bad group list id ({0:?})")]
-    BadGroupListId(T::GroupListId),
-    #[error("Inconsistent data: bad student id ({0:?})")]
-    BadStudentId(T::StudentId),
-    #[error("Inconsistent data: bad group index ({0})")]
-    BadGroupIndex(usize),
-    #[error(
-        "Group size constraints are too strict (nb student = {0}, allowed group sizes in {1:?})"
-    )]
-    InconsistentGroupSizeConstraints(usize, std::ops::RangeInclusive<NonZeroUsize>),
-    #[error("Inconsistent data: bad time slot id ({0:?})")]
-    BadTimeSlotId(T::TimeSlotId),
-    #[error("Inconsistent data: bad grouping id ({0:?})")]
-    BadGroupingId(T::GroupingId),
-}
-
-impl<T: Storage, StorageError: std::fmt::Debug + std::error::Error>
-    GenColloscopeError<T, StorageError>
-{
-    fn from_validation(validation_error: crate::gen::colloscope::Error) -> Self {
-        GenColloscopeError::ValidationError(validation_error)
-    }
-}
-
-type GenColloscopeResult<R, T> = Result<R, GenColloscopeError<T>>;
-
-struct GenColloscopeData<T: Storage> {
-    general_data: GeneralData,
-    week_patterns: BTreeMap<T::WeekPatternId, WeekPattern>,
-    teachers: BTreeMap<T::TeacherId, Teacher>,
-    incompats: BTreeMap<T::IncompatId, Incompat<T::WeekPatternId>>,
-    students: BTreeMap<T::StudentId, Student>,
-    incompat_for_student_data: BTreeSet<(T::StudentId, T::IncompatId)>,
-    subjects: BTreeMap<T::SubjectId, Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>>,
-    subject_for_student_data: BTreeSet<(T::StudentId, T::SubjectId)>,
-    time_slots: BTreeMap<T::TimeSlotId, TimeSlot<T::SubjectId, T::TeacherId, T::WeekPatternId>>,
-    group_lists: BTreeMap<T::GroupListId, GroupList<T::StudentId>>,
-    groupings: BTreeMap<T::GroupingId, Grouping<T::TimeSlotId>>,
-    grouping_incompats: BTreeMap<T::GroupingIncompatId, GroupingIncompat<T::GroupingId>>,
-}
-
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    async fn extract_data(&self) -> GenColloscopeResult<GenColloscopeData<T>, T> {
-        let incompats = self.data_storage.incompats_get_all().await?;
-        let students = self.data_storage.students_get_all().await?;
-
-        let mut incompat_for_student_data = BTreeSet::new();
-        for (&student_id, _student) in &students {
-            for (&incompat_id, _incompat) in &incompats {
-                if self
-                    .data_storage
-                    .incompat_for_student_get(student_id, incompat_id)
-                    .await
-                    .map_err(|e| match e {
-                        Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid", id1),
-                        Id2Error::InvalidId2(id2) => {
-                            panic!("Incompat id {:?} should be valid", id2)
-                        }
-                        Id2Error::InternalError(int_err) => int_err,
-                    })?
-                {
-                    incompat_for_student_data.insert((student_id, incompat_id));
-                }
-            }
-        }
-
-        let subjects = self.data_storage.subjects_get_all().await?;
-        let subject_groups = self.data_storage.subject_groups_get_all().await?;
-
-        let mut subject_for_student_data = BTreeSet::new();
-        for (&student_id, _student) in &students {
-            for (&subject_group_id, _subject_group) in &subject_groups {
-                let subject_opt = self
-                    .data_storage
-                    .subject_group_for_student_get(student_id, subject_group_id)
-                    .await
-                    .map_err(|e| match e {
-                        Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid", id1),
-                        Id2Error::InvalidId2(id2) => {
-                            panic!("Subject group id {:?} should be valid", id2)
-                        }
-                        Id2Error::InternalError(int_err) => int_err,
-                    })?;
-
-                if let Some(subject_id) = subject_opt {
-                    subject_for_student_data.insert((student_id, subject_id));
-                }
-            }
-        }
-
-        Ok(GenColloscopeData {
-            general_data: self.data_storage.general_data_get().await?,
-            week_patterns: self.data_storage.week_patterns_get_all().await?,
-            teachers: self.data_storage.teachers_get_all().await?,
-            incompats,
-            students,
-            incompat_for_student_data,
-            subjects,
-            subject_for_student_data,
-            time_slots: self.data_storage.time_slots_get_all().await?,
-            group_lists: self.data_storage.group_lists_get_all().await?,
-            groupings: self.data_storage.groupings_get_all().await?,
-            grouping_incompats: self.data_storage.grouping_incompats_get_all().await?,
-        })
-    }
-
-    fn is_week_in_week_pattern(
-        data: &GenColloscopeData<T>,
-        week_pattern_id: T::WeekPatternId,
-        week: Week,
-    ) -> bool {
-        match data.week_patterns.get(&week_pattern_id) {
-            None => false,
-            Some(week_pattern) => week_pattern.weeks.contains(&week),
-        }
-    }
-
-    fn build_general_data(
+    pub async fn colloscopes_get_all(
         &self,
-        data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::GeneralData, T> {
-        Ok(crate::gen::colloscope::GeneralData {
-            teacher_count: data.teachers.len(),
-            week_count: data.general_data.week_count,
-            interrogations_per_week: data.general_data.interrogations_per_week.clone(),
-            max_interrogations_per_day: data.general_data.max_interrogations_per_day,
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-struct IncompatibilitiesData<T: Storage> {
-    incompat_list: crate::gen::colloscope::IncompatibilityList,
-    incompat_group_list: crate::gen::colloscope::IncompatibilityGroupList,
-    id_map: BTreeMap<T::IncompatId, BTreeSet<usize>>,
-}
-
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn is_week_in_incompat_group(
-        data: &GenColloscopeData<T>,
-        group: &IncompatGroup<T::WeekPatternId>,
-        week: Week,
-    ) -> bool {
-        for slot in &group.slots {
-            if Self::is_week_in_week_pattern(data, slot.week_pattern_id, week) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn build_incompatibility_data(
-        &self,
-        data: &GenColloscopeData<T>,
-        week_count: NonZeroU32,
-    ) -> GenColloscopeResult<IncompatibilitiesData<T>, T> {
-        use crate::gen::colloscope::{Incompatibility, IncompatibilityGroup, SlotWithDuration};
-
-        let mut output = IncompatibilitiesData {
-            incompat_list: vec![],
-            incompat_group_list: vec![],
-            id_map: BTreeMap::new(),
-        };
-
-        for (&incompat_id, incompat) in &data.incompats {
-            let mut ids = BTreeSet::new();
-
-            for i in 0..week_count.get() {
-                let week = Week(i);
-
-                let mut new_incompat = Incompatibility {
-                    max_count: incompat.max_count,
-                    groups: BTreeSet::new(),
-                };
-
-                for group in &incompat.groups {
-                    if !Self::is_week_in_incompat_group(data, group, week) {
-                        continue;
-                    }
-
-                    let slots = group
-                        .slots
-                        .iter()
-                        .map(|s| SlotWithDuration {
-                            start: crate::gen::colloscope::SlotStart {
-                                week: week.0,
-                                weekday: s.start.day,
-                                start_time: s.start.time.clone(),
-                            },
-                            duration: s.duration,
-                        })
-                        .collect();
-                    let new_group = IncompatibilityGroup { slots };
-
-                    new_incompat.groups.insert(output.incompat_group_list.len());
-                    output.incompat_group_list.push(new_group);
-                }
-
-                if !new_incompat.groups.is_empty() {
-                    ids.insert(output.incompat_list.len());
-                    output.incompat_list.push(new_incompat);
-                }
-            }
-
-            output.id_map.insert(incompat_id, ids);
-        }
-
-        Ok(output)
-    }
-}
-
-#[derive(Clone, Debug)]
-struct StudentData<T: Storage> {
-    student_list: crate::gen::colloscope::StudentList,
-    id_map: BTreeMap<T::StudentId, usize>,
-}
-
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_student_data(
-        &self,
-        data: &GenColloscopeData<T>,
-        incompat_id_map: &BTreeMap<T::IncompatId, BTreeSet<usize>>,
-    ) -> GenColloscopeResult<StudentData<T>, T> {
-        use crate::gen::colloscope::Student;
-
-        let mut output = StudentData {
-            student_list: vec![],
-            id_map: BTreeMap::new(),
-        };
-
-        for (&student_id, _student) in &data.students {
-            let mut new_student = Student {
-                incompatibilities: BTreeSet::new(),
-            };
-
-            for (&incompat_id, _incompat) in &data.incompats {
-                if data
-                    .incompat_for_student_data
-                    .contains(&(student_id, incompat_id))
-                {
-                    new_student.incompatibilities.extend(
-                        incompat_id_map
-                            .get(&incompat_id)
-                            .expect("Incompat id should be valid in map")
-                            .iter()
-                            .cloned(),
-                    )
-                }
-            }
-
-            for (&subject_id, subject) in &data.subjects {
-                if let Some(incompat_id) = subject.incompat_id {
-                    if data
-                        .subject_for_student_data
-                        .contains(&(student_id, subject_id))
-                    {
-                        // Because we are using BTreeSet, we don't care if the incompat was already added
-                        new_student.incompatibilities.extend(
-                            incompat_id_map
-                                .get(&incompat_id)
-                                .expect("Incompat id should be valid in map")
-                                .iter()
-                                .cloned(),
-                        )
-                    }
-                }
-            }
-
-            output.id_map.insert(student_id, output.student_list.len());
-            output.student_list.push(new_student);
-        }
-
-        Ok(output)
-    }
-}
-
-#[derive(Clone, Debug)]
-struct BareSubjectData<T: Storage> {
-    subject_list: crate::gen::colloscope::SubjectList,
-    id_map: BTreeMap<T::SubjectId, usize>,
-}
-
-#[derive(Clone, Debug)]
-struct SubjectData<T: Storage> {
-    subject_list: crate::gen::colloscope::SubjectList,
-    slot_id_map: BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
-}
-
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_bare_subjects(
-        &self,
-        data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<BareSubjectData<T>, T> {
-        use crate::gen::colloscope::{BalancingRequirements, GroupsDesc, Subject};
-
-        let mut output = BareSubjectData {
-            subject_list: vec![],
-            id_map: BTreeMap::new(),
-        };
-
-        for (&subject_id, subject) in &data.subjects {
-            let new_subject = Subject {
-                students_per_group: subject.students_per_group.clone(),
-                max_groups_per_slot: subject.max_groups_per_slot,
-                period: subject.period,
-                period_is_strict: subject.period_is_strict,
-                is_tutorial: subject.is_tutorial,
-                balancing_requirements: BalancingRequirements {
-                    teachers: subject.balancing_requirements.teachers,
-                    timeslots: subject.balancing_requirements.timeslots,
-                },
-                duration: subject.duration,
-                slots: vec![],
-                groups: GroupsDesc::default(),
-            };
-
-            output.id_map.insert(subject_id, output.subject_list.len());
-            output.subject_list.push(new_subject);
-        }
-
-        Ok(output)
-    }
-
-    fn add_slots_to_subjects_and_build_slot_id_map(
-        &self,
-        data: &GenColloscopeData<T>,
-        subjects: &mut crate::gen::colloscope::SubjectList,
-        subject_id_map: &BTreeMap<T::SubjectId, usize>,
-    ) -> GenColloscopeResult<
-        BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
-        T,
+    ) -> std::result::Result<
+        BTreeMap<T::ColloscopeId, Colloscope<T::TeacherId, T::SubjectId, T::StudentId>>,
+        T::InternalError,
     > {
-        use crate::gen::colloscope::{SlotRef, SlotStart, SlotWithTeacher};
+        self.storage.colloscopes_get_all().await
+    }
+    pub async fn colloscopes_get(
+        &self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<
+        Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+        IdError<T::InternalError, T::ColloscopeId>,
+    > {
+        self.storage.colloscopes_get(index).await
+    }
+    pub async fn colloscopes_check_id(
+        &self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<bool, T::InternalError> {
+        let colloscopes = self.colloscopes_get_all().await?;
 
-        let mut slot_id_map = BTreeMap::new();
+        Ok(colloscopes.contains_key(&index))
+    }
+    pub async fn colloscopes_check_data(
+        &self,
+        colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+    ) -> std::result::Result<
+        DataStatusWithId3<T::TeacherId, T::SubjectId, T::StudentId>,
+        T::InternalError,
+    > {
+        let teachers = self.teachers_get_all().await?;
+        let subjects = self.subjects_get_all().await?;
+        let students = self.students_get_all().await?;
 
-        let teacher_id_map: BTreeMap<_, _> = data
-            .teachers
-            .iter()
-            .enumerate()
-            .map(|(i, (&teacher_id, _teacher))| (teacher_id, i))
-            .collect();
-
-        for (&time_slot_id, time_slot) in &data.time_slots {
-            let subject_index = *subject_id_map
-                .get(&time_slot.subject_id)
-                .ok_or(GenColloscopeError::BadSubjectId(time_slot.subject_id))?;
-            let subject = subjects.get_mut(subject_index).expect(&format!(
-                "Subject index {} was built from id_map with id {:?} and should be valid",
-                subject_index, time_slot.subject_id
-            ));
-
-            let teacher = *teacher_id_map
-                .get(&time_slot.teacher_id)
-                .ok_or(GenColloscopeError::BadTeacherId(time_slot.teacher_id))?;
-
-            let week_pattern = data.week_patterns.get(&time_slot.week_pattern_id).ok_or(
-                GenColloscopeError::BadWeekPatternId(time_slot.week_pattern_id),
-            )?;
-
-            let mut ids = BTreeMap::new();
-            for &week in &week_pattern.weeks {
-                let new_slot = SlotWithTeacher {
-                    teacher,
-                    start: SlotStart {
-                        week: week.0,
-                        weekday: time_slot.start.day,
-                        start_time: time_slot.start.time.clone(),
-                    },
-                };
-
-                ids.insert(
-                    week,
-                    SlotRef {
-                        subject: subject_index,
-                        slot: subject.slots.len(),
-                    },
-                );
-                subject.slots.push(new_slot);
+        for (&subject_id, subject_desc) in &colloscope.subjects {
+            if !subjects.contains_key(&subject_id) {
+                return Ok(DataStatusWithId3::BadCrossId2(subject_id));
             }
-            slot_id_map.insert(time_slot_id, ids);
-        }
 
-        Ok(slot_id_map)
-    }
-
-    fn build_default_empty_groups(
-        &self,
-        subject: &mut crate::gen::colloscope::Subject,
-    ) -> GenColloscopeResult<(), T> {
-        use crate::gen::colloscope::GroupDesc;
-
-        let min_group_size = subject.students_per_group.start().get();
-        let max_group_size = subject.students_per_group.end().get();
-
-        let student_count = subject.groups.not_assigned.len();
-
-        let minimum_group_count = (student_count + (max_group_size - 1)) / max_group_size;
-        let maximum_group_count = student_count / min_group_size;
-
-        if minimum_group_count > maximum_group_count {
-            return Err(GenColloscopeError::InconsistentGroupSizeConstraints(
-                student_count,
-                subject.students_per_group.clone(),
-            ));
-        }
-
-        let group_count = minimum_group_count;
-
-        subject.groups.prefilled_groups = vec![
-            GroupDesc {
-                students: BTreeSet::new(),
-                can_be_extended: true,
-            };
-            group_count
-        ];
-
-        Ok(())
-    }
-
-    fn migrate_students_to_groups(
-        &self,
-        subject: &mut crate::gen::colloscope::Subject,
-        group_list: &GroupList<T::StudentId>,
-        student_id_map: &BTreeMap<T::StudentId, usize>,
-    ) -> GenColloscopeResult<(), T> {
-        use crate::gen::colloscope::GroupDesc;
-        let mut prefilled_groups: Vec<_> = group_list
-            .groups
-            .iter()
-            .map(|group| GroupDesc {
-                students: BTreeSet::new(),
-                can_be_extended: group.extendable,
-            })
-            .collect();
-
-        for (&student_id, &group_index) in &group_list.students_mapping {
-            let student_index = *student_id_map
-                .get(&student_id)
-                .ok_or(GenColloscopeError::BadStudentId(student_id))?;
-
-            if subject.groups.not_assigned.contains(&student_index) {
-                subject.groups.not_assigned.remove(&student_index);
-                let group = prefilled_groups
-                    .get_mut(group_index)
-                    .ok_or(GenColloscopeError::BadGroupIndex(group_index))?;
-                group.students.insert(student_index);
-            }
-        }
-
-        // Remove groups that are empty and not extendable
-        subject.groups.prefilled_groups = prefilled_groups
-            .into_iter()
-            .filter(|group| !(group.students.is_empty() && !group.can_be_extended))
-            .collect();
-
-        Ok(())
-    }
-
-    fn add_groups_to_subjects(
-        &self,
-        data: &GenColloscopeData<T>,
-        subjects: &mut crate::gen::colloscope::SubjectList,
-        subject_id_map: &BTreeMap<T::SubjectId, usize>,
-        student_id_map: &BTreeMap<T::StudentId, usize>,
-    ) -> GenColloscopeResult<(), T> {
-        for (&subject_id, &subject_index) in subject_id_map {
-            let subject = subjects
-                .get_mut(subject_index)
-                .expect(&format!("Subject index {} should be valid", subject_index));
-
-            // Put all students that are registered as not_assigned at first
-            for (&student_id, _student) in &data.students {
-                let student_index = *student_id_map
-                    .get(&student_id)
-                    .expect(&format!("Student id {:?} should be valid", student_id));
-                if data
-                    .subject_for_student_data
-                    .contains(&(student_id, subject_id))
-                {
-                    subject.groups.not_assigned.insert(student_index);
+            for (&student_id, _mapping) in &subject_desc.group_list.students_mapping {
+                if !students.contains_key(&student_id) {
+                    return Ok(DataStatusWithId3::BadCrossId3(student_id));
                 }
             }
 
-            // If the subject has a group_list, we use it.
-            // If not, we build a default group list with empty extendable groups
-            let og_subject = data
-                .subjects
-                .get(&subject_id)
-                .expect("Subject id should be valid");
-            match og_subject.group_list_id {
-                Some(group_list_id) => {
-                    let group_list = data
-                        .group_lists
-                        .get(&group_list_id)
-                        .ok_or(GenColloscopeError::BadGroupListId(group_list_id))?;
-
-                    self.migrate_students_to_groups(subject, group_list, student_id_map)?;
-                }
-                None => {
-                    self.build_default_empty_groups(subject)?;
+            for time_slot in &subject_desc.time_slots {
+                if !teachers.contains_key(&time_slot.teacher_id) {
+                    return Ok(DataStatusWithId3::BadCrossId1(time_slot.teacher_id));
                 }
             }
         }
 
+        Ok(DataStatusWithId3::Ok)
+    }
+    pub async fn colloscopes_add(
+        &mut self,
+        colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+    ) -> std::result::Result<
+        T::ColloscopeId,
+        Cross3Error<T::InternalError, T::TeacherId, T::SubjectId, T::StudentId>,
+    > {
+        let data_status = self.colloscopes_check_data(colloscope).await?;
+        match data_status {
+            DataStatusWithId3::BadCrossId1(id) => Err(Cross3Error::InvalidCrossId1(id)),
+            DataStatusWithId3::BadCrossId2(id) => Err(Cross3Error::InvalidCrossId2(id)),
+            DataStatusWithId3::BadCrossId3(id) => Err(Cross3Error::InvalidCrossId3(id)),
+            DataStatusWithId3::Ok => {
+                let id = unsafe { self.storage.colloscopes_add_unchecked(colloscope) }.await?;
+                Ok(id)
+            }
+        }
+    }
+    pub async fn colloscopes_check_can_remove(
+        &self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::ColloscopeId>> {
+        if !self.colloscopes_check_id(index).await? {
+            return Err(IdError::InvalidId(index));
+        }
+
         Ok(())
     }
+    pub async fn colloscopes_remove(
+        &mut self,
+        index: T::ColloscopeId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::ColloscopeId>> {
+        self.colloscopes_check_can_remove(index).await?;
 
-    fn build_subject_data(
-        &self,
-        data: &GenColloscopeData<T>,
-        student_id_map: &BTreeMap<T::StudentId, usize>,
-    ) -> GenColloscopeResult<SubjectData<T>, T> {
-        let mut bare_subject_data = self.build_bare_subjects(data)?;
-
-        let slot_id_map = self.add_slots_to_subjects_and_build_slot_id_map(
-            data,
-            &mut bare_subject_data.subject_list,
-            &bare_subject_data.id_map,
-        )?;
-
-        self.add_groups_to_subjects(
-            data,
-            &mut bare_subject_data.subject_list,
-            &bare_subject_data.id_map,
-            student_id_map,
-        )?;
-
-        Ok(SubjectData {
-            subject_list: bare_subject_data.subject_list,
-            slot_id_map,
-        })
+        unsafe { self.storage.colloscopes_remove_unchecked(index) }.await?;
+        Ok(())
     }
-}
+    pub async fn colloscopes_update(
+        &mut self,
+        index: T::ColloscopeId,
+        colloscope: &Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+    ) -> std::result::Result<
+        (),
+        Cross3IdError<T::InternalError, T::ColloscopeId, T::TeacherId, T::SubjectId, T::StudentId>,
+    > {
+        if !self.colloscopes_check_id(index).await? {
+            return Err(Cross3IdError::InvalidId(index));
+        }
 
-#[derive(Clone, Debug)]
-struct SlotGroupingData<T: Storage> {
-    slot_grouping_list: crate::gen::colloscope::SlotGroupingList,
-    id_map: BTreeMap<T::GroupingId, BTreeMap<Week, usize>>,
-}
+        let data_status = self.colloscopes_check_data(colloscope).await?;
+        match data_status {
+            DataStatusWithId3::BadCrossId1(id) => Err(Cross3IdError::InvalidCrossId1(id)),
+            DataStatusWithId3::BadCrossId2(id) => Err(Cross3IdError::InvalidCrossId2(id)),
+            DataStatusWithId3::BadCrossId3(id) => Err(Cross3IdError::InvalidCrossId3(id)),
+            DataStatusWithId3::Ok => {
+                unsafe { self.storage.colloscopes_update_unchecked(index, colloscope) }.await?;
+                Ok(())
+            }
+        }
+    }
 
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_slot_grouping_data(
+    pub async fn slot_selections_get_all(
         &self,
-        data: &GenColloscopeData<T>,
-        week_count: NonZeroU32,
-        slot_id_map: &BTreeMap<T::TimeSlotId, BTreeMap<Week, crate::gen::colloscope::SlotRef>>,
-    ) -> GenColloscopeResult<SlotGroupingData<T>, T> {
-        use crate::gen::colloscope::SlotGrouping;
+    ) -> std::result::Result<
+        BTreeMap<T::SlotSelectionId, SlotSelection<T::SubjectId, T::TimeSlotId>>,
+        T::InternalError,
+    > {
+        self.storage.slot_selections_get_all().await
+    }
+    pub async fn slot_selections_get(
+        &self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<
+        SlotSelection<T::SubjectId, T::TimeSlotId>,
+        IdError<T::InternalError, T::SlotSelectionId>,
+    > {
+        self.storage.slot_selections_get(index).await
+    }
+    pub async fn slot_selections_check_id(
+        &self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<bool, T::InternalError> {
+        let slot_selections = self.slot_selections_get_all().await?;
 
-        let mut output = SlotGroupingData {
-            slot_grouping_list: vec![],
-            id_map: BTreeMap::new(),
-        };
+        Ok(slot_selections.contains_key(&index))
+    }
+    pub async fn slot_selections_check_data(
+        &self,
+        slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
+    ) -> std::result::Result<DataStatusWithId2<T::SubjectId, T::TimeSlotId>, T::InternalError> {
+        let subjects = self.subjects_get_all().await?;
+        let time_slots = self.time_slots_get_all().await?;
 
-        for (&grouping_id, grouping) in &data.groupings {
-            let mut ids = BTreeMap::new();
+        if !subjects.contains_key(&slot_selection.subject_id) {
+            return Ok(DataStatusWithId2::BadCrossId1(slot_selection.subject_id));
+        }
 
-            for i in 0..week_count.get() {
-                let week = Week(i);
-
-                let mut slots = BTreeSet::new();
-
-                for &time_slot_id in &grouping.slots {
-                    let week_map = slot_id_map
-                        .get(&time_slot_id)
-                        .ok_or(GenColloscopeError::BadTimeSlotId(time_slot_id))?;
-
-                    let slot_ref_opt = week_map.get(&week);
-                    if let Some(slot_ref) = slot_ref_opt {
-                        slots.insert(slot_ref.clone());
+        for slot_group in &slot_selection.slot_groups {
+            for &time_slot_id in &slot_group.slots {
+                match time_slots.get(&time_slot_id) {
+                    None => return Ok(DataStatusWithId2::BadCrossId2(time_slot_id)),
+                    Some(time_slot) => {
+                        if time_slot.subject_id != slot_selection.subject_id {
+                            return Ok(DataStatusWithId2::BadCrossId2(time_slot_id));
+                        }
                     }
                 }
-
-                if !slots.is_empty() {
-                    ids.insert(week, output.slot_grouping_list.len());
-                    output.slot_grouping_list.push(SlotGrouping { slots });
-                };
             }
-
-            output.id_map.insert(grouping_id, ids);
         }
 
-        Ok(output)
+        Ok(DataStatusWithId2::Ok)
     }
-}
-
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    fn build_grouping_incompats(
+    pub async fn slot_selections_add(
+        &mut self,
+        slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
+    ) -> std::result::Result<
+        T::SlotSelectionId,
+        Cross2Error<T::InternalError, T::SubjectId, T::TimeSlotId>,
+    > {
+        let data_status = self.slot_selections_check_data(slot_selection).await?;
+        match data_status {
+            DataStatusWithId2::BadCrossId1(id) => Err(Cross2Error::InvalidCrossId1(id)),
+            DataStatusWithId2::BadCrossId2(id) => Err(Cross2Error::InvalidCrossId2(id)),
+            DataStatusWithId2::Ok => {
+                let id =
+                    unsafe { self.storage.slot_selections_add_unchecked(slot_selection) }.await?;
+                Ok(id)
+            }
+        }
+    }
+    pub async fn slot_selections_check_can_remove(
         &self,
-        data: &GenColloscopeData<T>,
-        week_count: NonZeroU32,
-        grouping_id_map: &BTreeMap<T::GroupingId, BTreeMap<Week, usize>>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::SlotGroupingIncompatSet, T> {
-        use crate::gen::colloscope::SlotGroupingIncompat;
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::SlotSelectionId>> {
+        if !self.slot_selections_check_id(index).await? {
+            return Err(IdError::InvalidId(index));
+        }
 
-        let mut output = BTreeSet::new();
+        Ok(())
+    }
+    pub async fn slot_selections_remove(
+        &mut self,
+        index: T::SlotSelectionId,
+    ) -> std::result::Result<(), IdError<T::InternalError, T::SlotSelectionId>> {
+        self.slot_selections_check_can_remove(index).await?;
 
-        for (&_grouping_incompat_id, grouping_incompat) in &data.grouping_incompats {
-            for i in 0..week_count.get() {
-                let week = Week(i);
+        unsafe { self.storage.slot_selections_remove_unchecked(index) }.await?;
+        Ok(())
+    }
+    pub async fn slot_selections_update(
+        &mut self,
+        index: T::SlotSelectionId,
+        slot_selection: &SlotSelection<T::SubjectId, T::TimeSlotId>,
+    ) -> std::result::Result<
+        (),
+        Cross2IdError<T::InternalError, T::SlotSelectionId, T::SubjectId, T::TimeSlotId>,
+    > {
+        if !self.slot_selections_check_id(index).await? {
+            return Err(Cross2IdError::InvalidId(index));
+        }
 
-                let mut groupings = BTreeSet::new();
-
-                for &grouping_id in &grouping_incompat.groupings {
-                    let week_map = grouping_id_map
-                        .get(&grouping_id)
-                        .ok_or(GenColloscopeError::BadGroupingId(grouping_id))?;
-
-                    let grouping_index_opt = week_map.get(&week);
-                    if let Some(&grouping_index) = grouping_index_opt {
-                        groupings.insert(grouping_index);
-                    }
+        let data_status = self.slot_selections_check_data(slot_selection).await?;
+        match data_status {
+            DataStatusWithId2::BadCrossId1(id) => Err(Cross2IdError::InvalidCrossId1(id)),
+            DataStatusWithId2::BadCrossId2(id) => Err(Cross2IdError::InvalidCrossId2(id)),
+            DataStatusWithId2::Ok => {
+                unsafe {
+                    self.storage
+                        .slot_selections_update_unchecked(index, slot_selection)
                 }
-
-                let max_count = grouping_incompat.max_count;
-                if groupings.len() > max_count.get() {
-                    output.insert(SlotGroupingIncompat {
-                        groupings,
-                        max_count,
-                    });
-                };
+                .await?;
+                Ok(())
             }
         }
-
-        Ok(output)
-    }
-}
-
-impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
-    pub async fn build_validated_data(
-        &self,
-    ) -> GenColloscopeResult<crate::gen::colloscope::ValidatedData, T> {
-        let data = self.extract_data().await?;
-
-        let general = self.build_general_data(&data)?;
-        let incompatibility_data = self.build_incompatibility_data(&data, general.week_count)?;
-        let student_data = self.build_student_data(&data, &incompatibility_data.id_map)?;
-        let subject_data = self.build_subject_data(&data, &student_data.id_map)?;
-        let slot_grouping_data =
-            self.build_slot_grouping_data(&data, general.week_count, &subject_data.slot_id_map)?;
-        let grouping_incompats =
-            self.build_grouping_incompats(&data, general.week_count, &slot_grouping_data.id_map)?;
-
-        crate::gen::colloscope::ValidatedData::new(
-            general,
-            subject_data.subject_list,
-            incompatibility_data.incompat_group_list,
-            incompatibility_data.incompat_list,
-            student_data.student_list,
-            slot_grouping_data.slot_grouping_list,
-            grouping_incompats,
-        )
-        .map_err(GenColloscopeError::from_validation)
     }
 }

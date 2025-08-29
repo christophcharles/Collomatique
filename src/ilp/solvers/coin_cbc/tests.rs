@@ -1,7 +1,7 @@
 #[test]
 fn coin_cbc() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     // We test on a simple scheduling problem.
     //
@@ -44,9 +44,9 @@ fn coin_cbc() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
+        .add_bool_variables(["y11", "y12", "y21", "y22"])
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
@@ -75,19 +75,21 @@ fn coin_cbc() {
         .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
-        .build();
+        .build::<DefaultRepr<String>>();
     let config = pb.default_config();
 
     let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = solver.restore_feasability(&config);
+    let solution = solver.find_closest_solution(&config);
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap(),
+        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+            .unwrap(),
+        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+            .unwrap(),
     ]);
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
@@ -96,7 +98,7 @@ fn coin_cbc() {
 #[test]
 fn coin_cbc_2() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     // We test on a simple scheduling problem.
     //
@@ -139,9 +141,9 @@ fn coin_cbc_2() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
+        .add_bool_variables(["y11", "y12", "y21", "y22"])
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
@@ -170,19 +172,23 @@ fn coin_cbc_2() {
         .unwrap()
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
-        .build();
-    let config = pb.config_from(["y21", "y22", "x11"]).unwrap();
+        .build::<DefaultRepr<String>>();
+    let config = pb
+        .config_from([("y21", true), ("y22", true), ("x11", true)])
+        .unwrap();
 
     let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = solver.restore_feasability(&config);
+    let solution = solver.find_closest_solution(&config);
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap(),
+        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+            .unwrap(),
+        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+            .unwrap(),
     ]);
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
@@ -191,7 +197,7 @@ fn coin_cbc_2() {
 #[test]
 fn coin_cbc_impossible() {
     use crate::ilp::linexpr::Expr;
-    use crate::ilp::ProblemBuilder;
+    use crate::ilp::{DefaultRepr, ProblemBuilder};
 
     let x11 = Expr::<String>::var("x11");
     let x12 = Expr::<String>::var("x12");
@@ -201,7 +207,7 @@ fn coin_cbc_impossible() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_constraints([
             (&x11 + &x12).eq(&one),
@@ -211,14 +217,14 @@ fn coin_cbc_impossible() {
             (&x11 + &x22).eq(&one),
         ])
         .unwrap()
-        .build();
-    let config = pb.config_from(["x11"]).unwrap();
+        .build::<DefaultRepr<String>>();
+    let config = pb.config_from([("x11", true)]).unwrap();
 
     let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
-    let solution = solver.restore_feasability(&config);
+    let solution = solver.find_closest_solution(&config);
 
     assert!(solution.is_none());
 }

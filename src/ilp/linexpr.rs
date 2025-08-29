@@ -78,6 +78,10 @@ impl<V: VariableName> Expr<V> {
         self.coefs.keys().cloned().collect()
     }
 
+    pub fn get_constant(&self) -> i32 {
+        self.constant
+    }
+
     pub fn get<T: Into<V>>(&self, var: T) -> Option<i32> {
         self.coefs.get(&var.into()).cloned()
     }
@@ -134,29 +138,6 @@ impl<V: VariableName> Expr<V> {
 
         Expr { coefs, constant }
     }
-
-    pub fn eval(&self, vars: &BTreeMap<V, bool>) -> Option<i32> {
-        let mut tot = self.constant;
-
-        for (v, c) in &self.coefs {
-            if *c == 0 {
-                continue;
-            }
-
-            match vars.get(v) {
-                Some(val) => {
-                    if *val {
-                        tot += *c;
-                    }
-                }
-                None => {
-                    return None;
-                }
-            }
-        }
-
-        Some(tot)
-    }
 }
 
 impl<V: VariableName> Constraint<V> {
@@ -180,6 +161,10 @@ impl<V: VariableName> Constraint<V> {
         self.expr.constant
     }
 
+    pub fn get_lhs(&self) -> &Expr<V> {
+        &self.expr
+    }
+
     pub fn clean(&mut self) {
         self.expr.clean();
     }
@@ -199,73 +184,6 @@ impl<V: VariableName> Constraint<V> {
         output.reduce(vars);
         output
     }
-
-    pub fn eval(&self, vars: &BTreeMap<V, bool>) -> Option<bool> {
-        let val = self.expr.eval(vars)?;
-
-        match self.sign {
-            Sign::Equals => Some(val == 0),
-            Sign::LessThan => Some(val <= 0),
-        }
-    }
-
-    pub fn simple_solve(&self) -> SimpleSolution<V> {
-        let mut non_zero_coef = None;
-        let mut non_zero_coefs_count = 0;
-
-        for (v, c) in &self.expr.coefs {
-            if *c != 0 {
-                non_zero_coefs_count += 1;
-                if non_zero_coefs_count == 1 {
-                    non_zero_coef = Some(v.clone());
-                }
-            }
-        }
-
-        match non_zero_coefs_count {
-            0 => {
-                let val = self
-                    .eval(&BTreeMap::new())
-                    .expect("constraint should evaluate since it has no non-zero coefs");
-
-                if val {
-                    SimpleSolution::Solution(None)
-                } else {
-                    SimpleSolution::NoSolution
-                }
-            }
-            1 => {
-                let v = non_zero_coef.expect("There should be a non-zero coefficient");
-
-                let false_is_solution = self
-                    .eval(&BTreeMap::from([(v.clone(), false)]))
-                    .expect("constraint should evaluate with v given");
-                let true_is_solution = self
-                    .eval(&BTreeMap::from([(v.clone(), true)]))
-                    .expect("constraint should evaluate with v given");
-
-                if true_is_solution {
-                    if false_is_solution {
-                        SimpleSolution::NotSimpleSolvable
-                    } else {
-                        SimpleSolution::Solution(Some((v.clone(), true)))
-                    }
-                } else if false_is_solution {
-                    SimpleSolution::Solution(Some((v.clone(), false)))
-                } else {
-                    SimpleSolution::NoSolution
-                }
-            }
-            _ => SimpleSolution::NotSimpleSolvable,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SimpleSolution<V: VariableName> {
-    NotSimpleSolvable,
-    NoSolution,
-    Solution(Option<(V, bool)>),
 }
 
 impl<V: VariableName> std::fmt::Display for Expr<V> {

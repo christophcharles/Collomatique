@@ -5,13 +5,13 @@ async fn prepare_db(pool: sqlx::SqlitePool) -> Store {
 
     let _ = sqlx::query!(
         r#"
-INSERT INTO students (surname, firstname)
-VALUES ("Roth", ""), ("Marin", ""), ("Bordes", ""), ("Bresson", ""), ("Gosset",""),
-("Martel", ""), ("Delarue", ""), ("Chauvet", ""), ("Bourdon", ""), ("Lafond", ""),
-("Rondeau", ""), ("Vigneron", ""), ("Davy", ""), ("Gosselin", ""), ("Jeannin", ""),
-("Sicard", ""), ("Mounier", ""), ("Lafon", ""), ("Brun", ""), ("Hardy", ""),
-("Girault", ""), ("Delahaye", ""), ("Levasseur", ""), ("Gonthier", "");
-        
+INSERT INTO students (surname, firstname, no_consecutive_slots)
+VALUES ("Roth", "", 0), ("Marin", "", 0), ("Bordes", "", 0), ("Bresson", "", 0), ("Gosset","", 0),
+("Martel", "", 0), ("Delarue", "", 0), ("Chauvet", "", 0), ("Bourdon", "", 0), ("Lafond", "", 0),
+("Rondeau", "", 0), ("Vigneron", "", 0), ("Davy", "", 0), ("Gosselin", "", 0), ("Jeannin", "", 0),
+("Sicard", "", 0), ("Mounier", "", 0), ("Lafon", "", 0), ("Brun", "", 0), ("Hardy", "", 0),
+("Girault", "", 0), ("Delahaye", "", 0), ("Levasseur", "", 0), ("Gonthier", "", 0);
+                
 INSERT INTO groups (name, extendable)
 VALUES ("1", 0), ("2", 0), ("3", 0), ("4", 0), ("5", 0), ("6", 0), ("7", 0), ("8", 0),
 ("5", 0), ("6", 0), ("3+7", 0), ("P", 0), ("I", 0);
@@ -54,15 +54,15 @@ VALUES (1,1,1,600,60), (2,1,0,720,60), (2, 1, 3, 720, 120), (3, 1, 0, 480, 120),
 INSERT INTO subjects
 (name, subject_group_id, incompat_id, group_list_id,
 duration, min_students_per_group, max_students_per_group, period, period_is_strict,
-is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots)
+is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections)
 VALUES
 ("HGG", 1, NULL, 2, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("ESH", 1, 1, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("Lettres-Philo", 5, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("LV2 - Espagnol", 2, 2, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("LV2 - Allemand", 2, 3, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("TP Info", 6, NULL, 3, 120, 10, 19, 2, 0, 1, 1, 0, 0);
 
 INSERT INTO teachers (surname, firstname, contact)
@@ -87,16 +87,16 @@ VALUES
 ("BUISSON", "Louise", "louise.buisson@ac-lyon.fr");
 
 INSERT INTO time_slots
-(subject_id, teacher_id, start_day, start_time, week_pattern_id, room)
+(subject_id, teacher_id, start_day, start_time, week_pattern_id, room, cost)
 VALUES
-(1, 1, 3, 960, 1, ""), (1, 1, 3, 1020, 2, ""),
-(2, 2, 1, 840, 1, ""), (2, 2, 1, 960, 1, ""), (2, 3, 3, 960, 1, ""), (2, 4, 3, 1020, 1, ""),
-(3, 5, 0, 840, 1, ""), (3, 5, 3, 960, 1, ""), (3, 6, 3, 960, 1, ""), (3, 7, 2, 1020, 1, ""),
-(4, 8, 0, 900, 1, ""), (4, 9, 0, 900, 1, ""), (4, 10, 2, 1020, 1, ""), (4, 11, 3, 1020, 1, ""),
-(7, 12, 0, 840, 1, ""), (7, 13, 0, 840, 1, ""), (7, 14, 1, 960, 1, ""), (7, 14, 1, 1020, 1, ""),
-(5, 15, 0, 840, 1, ""), (5, 16, 0, 900, 1, ""), (5, 17, 4, 1020, 1, ""),
-(6, 18, 3, 780, 1, ""),
-(8, 14, 2, 960, 1, ""); 
+(1, 1, 3, 960, 1, "", 0), (1, 1, 3, 1020, 2, "", 100),
+(2, 2, 1, 840, 1, "", 0), (2, 2, 1, 960, 1, "", 0), (2, 3, 3, 960, 1, "", 0), (2, 4, 3, 1020, 1, "", 0),
+(3, 5, 0, 840, 1, "", 0), (3, 5, 3, 960, 1, "", 0), (3, 6, 3, 960, 1, "", 0), (3, 7, 2, 1020, 1, "", 0),
+(4, 8, 0, 900, 1, "", 0), (4, 9, 0, 900, 1, "", 0), (4, 10, 2, 1020, 1, "", 0), (4, 11, 3, 1020, 1, "", 0),
+(7, 12, 0, 840, 1, "", 0), (7, 13, 0, 840, 1, "", 0), (7, 14, 1, 960, 1, "", 0), (7, 14, 1, 1020, 1, "", 0),
+(5, 15, 0, 840, 1, "", 0), (5, 16, 0, 900, 1, "", 0), (5, 17, 4, 1020, 1, "", 0),
+(6, 18, 3, 780, 1, "", 0),
+(8, 14, 2, 960, 1, "", 0); 
         "#
     )
     .execute(&store.pool)

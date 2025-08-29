@@ -8,42 +8,37 @@ pub struct Solver {
     disable_logging: bool,
 }
 
+enum Objective {
+    None,
+    MinimumDistance,
+    MinimumObjectiveFn,
+}
+
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn restore_feasability_with_origin_and_max_steps<'a>(
+    fn find_closest_solution_with_time_limit<'a>(
         &self,
         config: &Config<'a, V, P>,
-        origin: Option<&FeasableConfig<'a, V, P>>,
-        max_steps: Option<usize>,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        // cbc does not seem to shut up even if logging is disabled
-        // we block output directly
-        let stdout_gag = gag::Gag::stdout();
-        // We allow for errors in case this is run in multiple threads
-        if !self.disable_logging {
-            if let Ok(gag) = stdout_gag {
-                drop(gag);
-            }
-        }
+        self.solve_internal(config, Objective::MinimumDistance, time_limit_in_seconds)
+    }
 
-        // When everything is solved for some reason this is sometimes an issue...
-        if let Some(result) = config.clone().into_feasable() {
-            return Some(result);
-        }
-
-        let problem = config.get_problem();
-
-        let mut cbc_model = self.build_model(problem, config);
-        if let Some(ms) = max_steps {
-            cbc_model.model.set_parameter("maxN", &format!("{}", ms));
-        }
-        if let Some(o) = origin {
-            Self::add_origin_constraints(&mut cbc_model, config, &o);
-        }
-
-        let sol = cbc_model.model.solve();
-
-        Self::reconstruct_config(problem, &sol, &cbc_model.cols)
+    fn solve<'a>(
+        &self,
+        config_hint: &Config<'a, V, P>,
+        minimize_objective: bool,
+        time_limit_in_seconds: Option<u32>,
+    ) -> Option<FeasableConfig<'a, V, P>> {
+        self.solve_internal(
+            config_hint,
+            if minimize_objective {
+                Objective::MinimumObjectiveFn
+            } else {
+                Objective::None
+            },
+            time_limit_in_seconds,
+        )
     }
 }
 
@@ -69,12 +64,51 @@ impl Solver {
         Solver { disable_logging }
     }
 
+    fn solve_internal<'a, V: VariableName, P: ProblemRepr<V>>(
+        &self,
+        init_config: &Config<'a, V, P>,
+        objective: Objective,
+        time_limit_in_seconds: Option<u32>,
+    ) -> Option<FeasableConfig<'a, V, P>> {
+        // cbc does not seem to shut up even if logging is disabled
+        // we block output directly
+        let stdout_gag = gag::Gag::stdout();
+        // We allow for errors in case this is run in multiple threads
+        if !self.disable_logging {
+            if let Ok(gag) = stdout_gag {
+                drop(gag);
+            }
+        }
+
+        let problem = init_config.get_problem();
+
+        let mut cbc_model = self.build_model(problem, init_config);
+        match objective {
+            Objective::MinimumDistance => {
+                self.add_minimize_dist_constraint(&mut cbc_model, init_config)
+            }
+            Objective::MinimumObjectiveFn => self.add_objective_terms(&mut cbc_model, problem),
+            Objective::None => {}
+        }
+
+        if let Some(time_limit) = time_limit_in_seconds {
+            cbc_model.model.set_parameter("timeMode", "elapsed");
+            cbc_model
+                .model
+                .set_parameter("seconds", &time_limit.to_string());
+        }
+
+        let sol = cbc_model.model.solve();
+
+        Self::reconstruct_config(problem, &sol, &cbc_model.cols)
+    }
+
     fn build_model<V: VariableName, P: ProblemRepr<V>>(
         &self,
         problem: &Problem<V, P>,
-        config: &Config<'_, V, P>,
+        init_config: &Config<'_, V, P>,
     ) -> CbcModel<V> {
-        use coin_cbc::{Model, Sense};
+        use coin_cbc::Model;
         use std::collections::BTreeMap;
 
         let mut model = Model::default();
@@ -85,20 +119,13 @@ impl Solver {
             .map(|v| (v.clone(), model.add_binary()))
             .collect();
 
-        model.set_obj_sense(Sense::Minimize);
         for (var, col) in &cols {
-            let value = if config.get(var).expect("Variable should be valid") {
+            let value = if init_config.get_bool(var).expect("Variable should be valid") {
                 1.
             } else {
                 0.
             };
             model.set_col_initial_solution(*col, value);
-
-            // Try minimizing the number of changes with respect to the config
-            // So if a variable is true in the config, false should be penalized
-            // And if a variable is false in the config, true should be penalized
-            // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-            model.set_obj_coeff(*col, 1. - 2. * value);
         }
 
         for constraint in problem.get_constraints() {
@@ -126,28 +153,63 @@ impl Solver {
         CbcModel { model, cols }
     }
 
-    fn add_origin_constraints<'a, V: VariableName, P: ProblemRepr<V>>(
+    fn add_minimize_dist_constraint<V: VariableName, P: ProblemRepr<V>>(
+        &self,
         cbc_model: &mut CbcModel<V>,
-        config: &Config<'a, V, P>,
-        origin: &FeasableConfig<'a, V, P>,
+        init_config: &Config<'_, V, P>,
     ) {
-        let changed_variables = config
-            .get_problem()
-            .get_variables()
-            .iter()
-            .filter(|var| config.get(var) != origin.get(var));
-
-        for var in changed_variables {
-            let col = cbc_model.cols[var];
-            let value = if config.get(var).expect("Variable should be valid") {
+        use coin_cbc::Sense;
+        cbc_model.model.set_obj_sense(Sense::Minimize);
+        for (var, col) in &cbc_model.cols {
+            let value = if init_config.get_bool(var).expect("Variable should be valid") {
                 1.
             } else {
                 0.
             };
+            // Try minimizing the number of changes with respect to the config
+            // So if a variable is true in the config, false should be penalized
+            // And if a variable is false in the config, true should be penalized
+            // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+            cbc_model.model.set_obj_coeff(*col, 1. - 2. * value);
+        }
+    }
 
-            let row = cbc_model.model.add_row();
-            cbc_model.model.set_weight(row, col, 1.);
-            cbc_model.model.set_row_equal(row, value);
+    fn add_objective_terms<V: VariableName, P: ProblemRepr<V>>(
+        &self,
+        cbc_model: &mut CbcModel<V>,
+        problem: &Problem<V, P>,
+    ) {
+        use coin_cbc::Sense;
+        cbc_model.model.set_obj_sense(Sense::Minimize);
+
+        for objective_term in problem.get_objective_terms() {
+            let new_col = cbc_model.model.add_col();
+            cbc_model.model.set_col_lower(new_col, -f64::INFINITY);
+            cbc_model.model.set_col_upper(new_col, f64::INFINITY);
+
+            cbc_model.model.set_obj_coeff(new_col, objective_term.coef);
+
+            for expr in &objective_term.exprs {
+                let row = cbc_model.model.add_row();
+
+                cbc_model.model.set_weight(row, new_col, -1.);
+
+                for v in expr.variables() {
+                    let col = cbc_model.cols[&v];
+                    let weight = expr.get(v).unwrap();
+
+                    cbc_model.model.set_weight(row, col, weight.into());
+                }
+
+                cbc_model
+                    .model
+                    .set_row_upper(row, (-expr.get_constant()).into());
+            }
+        }
+
+        for (v, coef) in problem.get_objective_contribs() {
+            let col = cbc_model.cols[&v];
+            cbc_model.model.set_obj_coeff(col, *coef);
         }
     }
 
@@ -156,34 +218,16 @@ impl Solver {
         sol: &'b coin_cbc::Solution,
         cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        use coin_cbc::raw::{SecondaryStatus, Status};
-        use std::collections::BTreeSet;
+        use std::collections::BTreeMap;
 
-        if sol.raw().status() != Status::Finished {
-            return None;
-        }
-        if sol.raw().secondary_status() != SecondaryStatus::HasSolution {
-            return None;
-        }
-
-        let vars: BTreeSet<_> = cols
+        let bool_vars: BTreeMap<_, _> = cols
             .iter()
-            .filter_map(|(v, col)| {
-                if sol.col(*col) == 1. {
-                    Some(v.clone())
-                } else {
-                    None
-                }
-            })
+            .map(|(v, col)| (v.clone(), sol.col(*col) == 1.))
             .collect();
 
         let config = problem
-            .config_from(&vars)
+            .config_from(bool_vars)
             .expect("Variables should be valid");
-        Some(
-            config
-                .into_feasable()
-                .expect("Config from coin_cbc should be feasable"),
-        )
+        config.into_feasable()
     }
 }

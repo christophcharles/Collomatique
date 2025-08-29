@@ -16,6 +16,8 @@ pub enum AnnotatedOperation {
     Groupings(AnnotatedGroupingsOperation),
     GroupingIncompats(AnnotatedGroupingIncompatsOperation),
     RegisterStudent(AnnotatedRegisterStudentOperation),
+    Colloscopes(AnnotatedColloscopesOperation),
+    SlotSelections(AnnotatedSlotSelectionsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -120,6 +122,32 @@ pub enum AnnotatedRegisterStudentOperation {
         Option<handles::SubjectHandle>,
     ),
     InIncompat(handles::StudentHandle, handles::IncompatHandle, bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedColloscopesOperation {
+    Create(
+        handles::ColloscopeHandle,
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
+    Remove(handles::ColloscopeHandle),
+    Update(
+        handles::ColloscopeHandle,
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedSlotSelectionsOperation {
+    Create(
+        handles::SlotSelectionHandle,
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+    ),
+    Remove(handles::SlotSelectionHandle),
+    Update(
+        handles::SlotSelectionHandle,
+        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+    ),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -332,6 +360,44 @@ impl AnnotatedRegisterStudentOperation {
     }
 }
 
+impl AnnotatedColloscopesOperation {
+    fn annotate<T: backend::Storage>(
+        op: ColloscopesOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            ColloscopesOperation::Create(colloscope) => {
+                let handle = handle_managers.colloscopes.create_handle();
+                AnnotatedColloscopesOperation::Create(handle, colloscope)
+            }
+            ColloscopesOperation::Remove(handle) => AnnotatedColloscopesOperation::Remove(handle),
+            ColloscopesOperation::Update(handle, colloscope) => {
+                AnnotatedColloscopesOperation::Update(handle, colloscope)
+            }
+        }
+    }
+}
+
+impl AnnotatedSlotSelectionsOperation {
+    fn annotate<T: backend::Storage>(
+        op: SlotSelectionsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            SlotSelectionsOperation::Create(slot_selection) => {
+                let handle = handle_managers.slot_selections.create_handle();
+                AnnotatedSlotSelectionsOperation::Create(handle, slot_selection)
+            }
+            SlotSelectionsOperation::Remove(handle) => {
+                AnnotatedSlotSelectionsOperation::Remove(handle)
+            }
+            SlotSelectionsOperation::Update(handle, slot_selection) => {
+                AnnotatedSlotSelectionsOperation::Update(handle, slot_selection)
+            }
+        }
+    }
+}
+
 impl AnnotatedOperation {
     pub fn annotate<T: backend::Storage>(
         op: Operation,
@@ -371,6 +437,12 @@ impl AnnotatedOperation {
             ),
             Operation::RegisterStudent(op) => AnnotatedOperation::RegisterStudent(
                 AnnotatedRegisterStudentOperation::annotate(op, handle_managers),
+            ),
+            Operation::Colloscopes(op) => AnnotatedOperation::Colloscopes(
+                AnnotatedColloscopesOperation::annotate(op, handle_managers),
+            ),
+            Operation::SlotSelections(op) => AnnotatedOperation::SlotSelections(
+                AnnotatedSlotSelectionsOperation::annotate(op, handle_managers),
             ),
         }
     }
