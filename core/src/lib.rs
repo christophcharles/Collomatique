@@ -26,3 +26,4 @@
 //!
 
 pub mod colloscopes;
+pub mod time;
