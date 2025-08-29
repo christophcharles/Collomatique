@@ -116,7 +116,7 @@ pub struct GroupDesc {
     pub can_be_extended: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct GroupsDesc {
     pub prefilled_groups: Vec<GroupDesc>,
     pub not_assigned: BTreeSet<usize>,
@@ -141,6 +141,21 @@ pub struct Subject {
     pub duration: NonZeroU32,
     pub slots: Vec<SlotWithTeacher>,
     pub groups: GroupsDesc,
+}
+
+impl Default for Subject {
+    fn default() -> Self {
+        Subject {
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            is_tutorial: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![],
+            groups: GroupsDesc::default(),
+        }
+    }
 }
 
 pub type SubjectList = Vec<Subject>;

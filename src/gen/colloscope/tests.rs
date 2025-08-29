@@ -52,7 +52,6 @@ fn simple_validated_data() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -105,6 +104,7 @@ fn simple_validated_data() {
             ],
             not_assigned: BTreeSet::from([5, 6, 7, 8]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![Incompatibility {
         slots: vec![SlotWithDuration {
@@ -200,7 +200,6 @@ fn invalid_students_per_interrogation() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 0,
@@ -214,6 +213,7 @@ fn invalid_students_per_interrogation() {
             prefilled_groups: vec![],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
@@ -250,7 +250,6 @@ fn subject_slot_overlaps_next_day() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 0,
@@ -264,6 +263,7 @@ fn subject_slot_overlaps_next_day() {
             prefilled_groups: vec![],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
@@ -332,7 +332,6 @@ fn invalid_teacher_number() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 1,
@@ -346,6 +345,7 @@ fn invalid_teacher_number() {
             prefilled_groups: vec![],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
@@ -419,7 +419,6 @@ fn slot_ref_has_invalid_subject() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -433,13 +432,12 @@ fn slot_ref_has_invalid_subject() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -453,6 +451,7 @@ fn slot_ref_has_invalid_subject() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -505,7 +504,6 @@ fn slot_ref_has_invalid_slot() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -519,13 +517,12 @@ fn slot_ref_has_invalid_slot() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -539,6 +536,7 @@ fn slot_ref_has_invalid_slot() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -591,7 +589,6 @@ fn slot_grouping_overlap() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -615,13 +612,12 @@ fn slot_grouping_overlap() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -635,6 +631,7 @@ fn slot_grouping_overlap() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -702,7 +699,6 @@ fn grouping_incompact_invalid_ref() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -716,14 +712,12 @@ fn grouping_incompact_invalid_ref() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
-            duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
                 start: SlotStart {
@@ -736,6 +730,7 @@ fn grouping_incompact_invalid_ref() {
                 prefilled_groups: vec![],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -818,7 +813,6 @@ fn duplicated_groups() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -871,6 +865,7 @@ fn duplicated_groups() {
             ],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -924,7 +919,6 @@ fn duplicated_student() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -977,6 +971,7 @@ fn duplicated_student() {
             ],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1039,7 +1034,6 @@ fn duplicated_student_not_assigned() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1088,6 +1082,7 @@ fn duplicated_student_not_assigned() {
             ],
             not_assigned: BTreeSet::from([3]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1152,7 +1147,6 @@ fn invalid_student_in_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1201,6 +1195,7 @@ fn invalid_student_in_group() {
             ],
             not_assigned: BTreeSet::from([0]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1254,7 +1249,6 @@ fn invalid_student_not_assigned() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1297,6 +1291,7 @@ fn invalid_student_not_assigned() {
             }],
             not_assigned: BTreeSet::from([4, 7]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1350,7 +1345,6 @@ fn empty_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1403,6 +1397,7 @@ fn empty_group() {
             ],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1469,7 +1464,6 @@ fn extensible_empty_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1522,6 +1516,7 @@ fn extensible_empty_group() {
             ],
             not_assigned: BTreeSet::from([6, 7]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1584,7 +1579,6 @@ fn group_too_large() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1633,6 +1627,7 @@ fn group_too_large() {
             ],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1699,7 +1694,6 @@ fn non_extensible_too_small_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1752,6 +1746,7 @@ fn non_extensible_too_small_group() {
             ],
             not_assigned: BTreeSet::new(),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1818,7 +1813,6 @@ fn too_few_groups() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1867,6 +1861,7 @@ fn too_few_groups() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5, 6, 7, 8]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -1932,7 +1927,6 @@ fn too_many_groups() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1993,6 +1987,7 @@ fn too_many_groups() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5, 6, 7, 8]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -2058,7 +2053,6 @@ fn no_full_period() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2091,6 +2085,7 @@ fn no_full_period() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -2144,7 +2139,6 @@ fn group_in_slot_variables() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2233,6 +2227,7 @@ fn group_in_slot_variables() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -2342,7 +2337,6 @@ fn dynamic_group_assignment_variables() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2431,6 +2425,7 @@ fn dynamic_group_assignment_variables() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -2620,7 +2615,6 @@ fn student_in_group_variables() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2709,6 +2703,7 @@ fn student_in_group_variables() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -2800,7 +2795,6 @@ fn with_student_not_in_last_period_variables() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2857,13 +2851,13 @@ fn with_student_not_in_last_period_variables() {
                 ],
                 not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2920,6 +2914,7 @@ fn with_student_not_in_last_period_variables() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2, 3, 4, 5]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -3024,7 +3019,6 @@ fn without_student_not_in_last_period_variables() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3081,13 +3075,13 @@ fn without_student_not_in_last_period_variables() {
                 ],
                 not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3144,6 +3138,7 @@ fn without_student_not_in_last_period_variables() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2, 3, 4, 5]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -3222,7 +3217,6 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3279,14 +3273,13 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                 ],
                 not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
-            duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
                     teacher: 1,
@@ -3342,6 +3335,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2, 3, 4, 5]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -3433,7 +3427,6 @@ fn periodicity_variables_for_strict_period() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3522,6 +3515,7 @@ fn periodicity_variables_for_strict_period() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -3622,8 +3616,6 @@ fn periodicity_variables_for_loose_unfinished_period() {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
-        period_is_strict: false,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3712,6 +3704,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -3812,8 +3805,6 @@ fn without_periodicity_variables_for_loose_complete_period() {
         students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
-        period_is_strict: false,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3902,6 +3893,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -3977,7 +3969,6 @@ fn use_grouping() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -4026,6 +4017,7 @@ fn use_grouping() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -4100,7 +4092,6 @@ fn at_most_max_groups_per_slot_constraints() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4189,13 +4180,12 @@ fn at_most_max_groups_per_slot_constraints() {
                 ],
                 not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(2).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4228,6 +4218,7 @@ fn at_most_max_groups_per_slot_constraints() {
                 ],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -4401,7 +4392,6 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4434,13 +4424,13 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4473,6 +4463,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -4590,7 +4581,6 @@ fn one_interrogation_per_period() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4639,13 +4629,13 @@ fn one_interrogation_per_period() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4694,6 +4684,7 @@ fn one_interrogation_per_period() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -4844,7 +4835,6 @@ fn one_interrogation_per_period_with_incomplete_period() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4885,13 +4875,12 @@ fn one_interrogation_per_period_with_incomplete_period() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4932,6 +4921,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -5095,7 +5085,6 @@ fn students_per_group_count() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5152,6 +5141,7 @@ fn students_per_group_count() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -5278,7 +5268,6 @@ fn student_in_single_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5335,6 +5324,7 @@ fn student_in_single_group() {
             ],
             not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -5460,7 +5450,6 @@ fn dynamic_groups_student_in_group_inequalities() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5493,6 +5482,7 @@ fn dynamic_groups_student_in_group_inequalities() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -5583,7 +5573,6 @@ fn dynamic_groups_group_in_slot_inequalities() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5616,6 +5605,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -5704,7 +5694,6 @@ fn one_periodicity_choice_per_student() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5745,13 +5734,12 @@ fn one_periodicity_choice_per_student() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5792,13 +5780,12 @@ fn one_periodicity_choice_per_student() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5839,6 +5826,7 @@ fn one_periodicity_choice_per_student() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -5984,7 +5972,6 @@ fn periodicity_inequalities() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6025,13 +6012,12 @@ fn periodicity_inequalities() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6072,13 +6058,12 @@ fn periodicity_inequalities() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6119,6 +6104,7 @@ fn periodicity_inequalities() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -6364,7 +6350,6 @@ fn interrogations_per_week() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6397,13 +6382,13 @@ fn interrogations_per_week() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6436,6 +6421,7 @@ fn interrogations_per_week() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
@@ -6475,6 +6461,7 @@ fn interrogations_per_week() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
@@ -6600,7 +6587,6 @@ fn grouping_inequalities() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6649,6 +6635,7 @@ fn grouping_inequalities() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -6756,7 +6743,6 @@ fn grouping_incompats() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6805,6 +6791,7 @@ fn grouping_incompats() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
@@ -6892,7 +6879,6 @@ fn students_incompats() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6941,6 +6927,7 @@ fn students_incompats() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = IncompatibilityList::from([
         Incompatibility {
@@ -7115,8 +7102,6 @@ fn simple_colloscope() {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7149,13 +7134,12 @@ fn simple_colloscope() {
                 ],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7188,6 +7172,7 @@ fn simple_colloscope() {
                 ],
                 not_assigned: BTreeSet::new(),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -7281,8 +7266,6 @@ fn colloscope_with_dynamic_groups() {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7315,13 +7298,12 @@ fn colloscope_with_dynamic_groups() {
                 ],
                 not_assigned: BTreeSet::from([2, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
-            period_is_strict: false,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7354,6 +7336,7 @@ fn colloscope_with_dynamic_groups() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = IncompatibilityList::new();
@@ -7587,7 +7570,6 @@ fn at_most_one_interrogation_per_empty_group() {
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
-        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -7620,6 +7602,7 @@ fn at_most_one_interrogation_per_empty_group() {
             ],
             not_assigned: BTreeSet::from([3, 4, 5]),
         },
+        ..Subject::default()
     }];
     let incompatibilities = vec![];
     let students = vec![
@@ -7692,7 +7675,6 @@ fn max_interrogations_per_day() {
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7725,13 +7707,13 @@ fn max_interrogations_per_day() {
                 ],
                 not_assigned: BTreeSet::from([3, 4, 5]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
-            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7764,6 +7746,7 @@ fn max_interrogations_per_day() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
         Subject {
             students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
@@ -7803,6 +7786,7 @@ fn max_interrogations_per_day() {
                 ],
                 not_assigned: BTreeSet::from([0, 1, 2]),
             },
+            ..Subject::default()
         },
     ];
     let incompatibilities = vec![];
