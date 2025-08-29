@@ -74,6 +74,7 @@ enum ToastInfo {
 #[repr(usize)]
 enum PanelNumbers {
     GeneralPlanning = 0,
+    Subjects = 1,
 }
 
 pub struct EditorPanel {
@@ -156,6 +157,7 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp::Period(_) => {
                 Some(PanelNumbers::GeneralPlanning)
             }
+            collomatique_state_colloscopes::AnnotatedOp::Subject(_) => Some(PanelNumbers::Subjects),
             _ => None,
         }
     }
