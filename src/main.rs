@@ -200,6 +200,16 @@ enum WeekPatternCommand {
         /// Possible predefined patterns
         pattern: WeekPatternFilling,
     },
+    /// Empty existing week pattern
+    Empty {
+        /// Name of the week pattern
+        name: String,
+        /// If multiple week patterns have the same name, select which one to use.
+        /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        week_pattern_number: Option<NonZeroUsize>,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -875,6 +885,37 @@ async fn week_pattern_command(
             let new_week_pattern = WeekPattern {
                 name,
                 weeks: predefined_week_pattern_weeks(pattern, general_data.week_count),
+            };
+
+            if let Err(e) = app_state
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                    handle,
+                    new_week_pattern,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::WeekNumberTooBig(_week) => panic!(
+                        "The week pattern should be valid as it was constructed automatically"
+                    ),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
+        }
+        WeekPatternCommand::Empty {
+            name,
+            week_pattern_number,
+        } => {
+            let (id, _week_pattern) =
+                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let handle = app_state.get_week_pattern_handle(id);
+
+            let new_week_pattern = WeekPattern {
+                name,
+                weeks: BTreeSet::new(),
             };
 
             if let Err(e) = app_state
