@@ -37,6 +37,16 @@ pub struct SubjectParameters {
     ///
     /// This is just a descriptive string
     pub name: String,
+    /// Parameters for the interrogations
+    ///
+    /// If `None`, this means there are no interrogations
+    /// for this subject.
+    pub interrogation_parameters: Option<SubjectInterrogationParameters>,
+}
+
+/// Description of the interrogations parameters for a subject
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectInterrogationParameters {
     /// Students per group
     ///
     /// This is the number of students that should be
@@ -200,6 +210,14 @@ impl Default for SubjectParameters {
     fn default() -> Self {
         SubjectParameters {
             name: String::new(),
+            interrogation_parameters: Some(SubjectInterrogationParameters::default()),
+        }
+    }
+}
+
+impl Default for SubjectInterrogationParameters {
+    fn default() -> Self {
+        SubjectInterrogationParameters {
             students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
             groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
             duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
@@ -322,12 +340,15 @@ impl SubjectExternalData {
         if !self.excluded_periods.iter().all(|x| period_ids.contains(x)) {
             return false;
         }
-        if self.parameters.students_per_group.is_empty()
-            || self.parameters.groups_per_interrogation.is_empty()
+        let Some(interrogation_parameters) = &self.parameters.interrogation_parameters else {
+            return true;
+        };
+        if interrogation_parameters.students_per_group.is_empty()
+            || interrogation_parameters.groups_per_interrogation.is_empty()
         {
             return false;
         }
-        match &self.parameters.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 blocks,
                 minimum_week_separation: _,

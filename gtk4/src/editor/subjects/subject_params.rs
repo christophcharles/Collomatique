@@ -14,6 +14,8 @@ pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     params: collomatique_state_colloscopes::SubjectParameters,
+    has_interrogations: bool,
+    interrogation_params: collomatique_state_colloscopes::SubjectInterrogationParameters,
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     periodicity_panel: PeriodicityPanel,
     exactly_periodic_params: NonZeroU32,
@@ -58,6 +60,7 @@ pub enum DialogInput {
     UpdateName(String),
     UpdateDuration(collomatique_time::NonZeroDurationInMinutes),
     UpdateDurationTakenIntoAccount(bool),
+    UpdateHasInterrogations(bool),
     UpdateStudentsPerGroupMinimum(NonZeroU32),
     UpdateStudentsPerGroupMaximum(NonZeroU32),
     UpdateGroupsPerInterrogationMinimum(NonZeroU32),
@@ -115,8 +118,11 @@ impl Dialog {
     fn periodicity_panel_from_params(
         params: &collomatique_state_colloscopes::SubjectParameters,
     ) -> PeriodicityPanel {
+        let Some(interrogation_parameters) = &params.interrogation_parameters else {
+            return PeriodicityPanel::ExactlyPeriodic;
+        };
         use collomatique_state_colloscopes::SubjectPeriodicity;
-        match &params.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::AmountInYear {
                 interrogation_count_in_year: _,
                 minimum_week_separation: _,
@@ -135,11 +141,26 @@ impl Dialog {
         }
     }
 
+    fn interrogation_params_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> collomatique_state_colloscopes::SubjectInterrogationParameters {
+        params.interrogation_parameters.clone().unwrap_or_default()
+    }
+
+    fn has_interrogations_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> bool {
+        params.interrogation_parameters.is_some()
+    }
+
     fn periodicity_from_params(
         params: &collomatique_state_colloscopes::SubjectParameters,
     ) -> NonZeroU32 {
+        let Some(interrogation_parameters) = &params.interrogation_parameters else {
+            return NonZeroU32::new(2).unwrap();
+        };
         use collomatique_state_colloscopes::SubjectPeriodicity;
-        match &params.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => *periodicity_in_weeks,
@@ -154,8 +175,14 @@ impl Dialog {
     fn once_for_every_block_of_weeks_params_from_params(
         params: &collomatique_state_colloscopes::SubjectParameters,
     ) -> OnceForEveryBlockOfWeeksParams {
+        let Some(interrogation_parameters) = &params.interrogation_parameters else {
+            return OnceForEveryBlockOfWeeksParams {
+                minimum_week_separation: NonZeroU32::new(1).unwrap(),
+                block_size_in_weeks: NonZeroU32::new(2).unwrap(),
+            };
+        };
         use collomatique_state_colloscopes::SubjectPeriodicity;
-        match &params.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => OnceForEveryBlockOfWeeksParams {
@@ -179,8 +206,14 @@ impl Dialog {
     fn amount_in_year_params_from_params(
         params: &collomatique_state_colloscopes::SubjectParameters,
     ) -> AmountInYearParams {
+        let Some(interrogation_parameters) = &params.interrogation_parameters else {
+            return AmountInYearParams {
+                interrogation_count_in_year: 2..=2,
+                minimum_week_separation: 1,
+            };
+        };
         use collomatique_state_colloscopes::SubjectPeriodicity;
-        match &params.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::AmountInYear {
                 interrogation_count_in_year,
                 minimum_week_separation,
@@ -198,9 +231,16 @@ impl Dialog {
     fn amount_for_every_arbitrary_block_params_from_params(
         params: &collomatique_state_colloscopes::SubjectParameters,
     ) -> AmountForEveryArbitraryBlockParams {
+        let Some(interrogation_parameters) = &params.interrogation_parameters else {
+            return AmountForEveryArbitraryBlockParams {
+                blocks: vec![],
+                minimum_week_separation: 0,
+            };
+        };
+
         use collomatique_state_colloscopes::SubjectPeriodicity;
 
-        match &params.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 blocks,
                 minimum_week_separation,
@@ -292,6 +332,24 @@ impl SimpleComponent for Dialog {
                                     sender.input(DialogInput::UpdateName(text));
                                 },
                             },
+                            adw::SwitchRow {
+                                set_hexpand: true,
+                                set_title: "Pas de colles",
+                                set_subtitle: "Cette matière n'a que des cours",
+                                #[track(model.should_redraw)]
+                                set_active: !model.has_interrogations,
+                                connect_active_notify[sender] => move |widget| {
+                                    let no_interrogations = widget.is_active();
+                                    sender.input(DialogInput::UpdateHasInterrogations(!no_interrogations));
+                                },
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "Durée des colles",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Durée d'une colle (en minutes)",
@@ -306,7 +364,7 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.params.duration.get().get() as f64,
+                                set_value: model.interrogation_params.duration.get().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let duration_u32 = widget.value() as u32;
                                     let duration = collomatique_time::NonZeroDurationInMinutes::new(duration_u32).unwrap();
@@ -318,7 +376,7 @@ impl SimpleComponent for Dialog {
                                 set_title: "Durée compatibilisée",
                                 set_subtitle: "Pour équilibrer le nombre d'heures par semaine",
                                 #[track(model.should_redraw)]
-                                set_active: model.params.take_duration_into_account,
+                                set_active: model.interrogation_params.take_duration_into_account,
                                 connect_active_notify[sender] => move |widget| {
                                     let duration_taken_into_account = widget.is_active();
                                     sender.input(DialogInput::UpdateDurationTakenIntoAccount(duration_taken_into_account));
@@ -330,6 +388,8 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Nombre d'élèves minimum et maximum dans les groupes"),
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Minimum",
@@ -337,7 +397,7 @@ impl SimpleComponent for Dialog {
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 1.,
                                     #[watch]
-                                    set_upper: model.params.students_per_group.end().get() as f64,
+                                    set_upper: model.interrogation_params.students_per_group.end().get() as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
                                 },
@@ -345,7 +405,7 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.params.students_per_group.start().get() as f64,
+                                set_value: model.interrogation_params.students_per_group.start().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let students_per_group_min_u32 = widget.value() as u32;
                                     let students_per_group_min = NonZeroU32::new(students_per_group_min_u32).unwrap();
@@ -358,7 +418,7 @@ impl SimpleComponent for Dialog {
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     #[watch]
-                                    set_lower: model.params.students_per_group.start().get() as f64,
+                                    set_lower: model.interrogation_params.students_per_group.start().get() as f64,
                                     set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
@@ -367,7 +427,7 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.params.students_per_group.end().get() as f64,
+                                set_value: model.interrogation_params.students_per_group.end().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let students_per_group_max_u32 = widget.value() as u32;
                                     let students_per_group_max = NonZeroU32::new(students_per_group_max_u32).unwrap();
@@ -380,6 +440,8 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Nombre de groupes à coller simultanément"),
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Minimum",
@@ -387,7 +449,7 @@ impl SimpleComponent for Dialog {
                                 set_adjustment = &gtk::Adjustment {
                                     set_lower: 1.,
                                     #[watch]
-                                    set_upper: model.params.groups_per_interrogation.end().get() as f64,
+                                    set_upper: model.interrogation_params.groups_per_interrogation.end().get() as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
                                 },
@@ -395,7 +457,7 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.params.groups_per_interrogation.start().get() as f64,
+                                set_value: model.interrogation_params.groups_per_interrogation.start().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let groups_per_interrogation_min_u32 = widget.value() as u32;
                                     let groups_per_interrogation_min = NonZeroU32::new(groups_per_interrogation_min_u32).unwrap();
@@ -408,7 +470,7 @@ impl SimpleComponent for Dialog {
                                 #[wrap(Some)]
                                 set_adjustment = &gtk::Adjustment {
                                     #[watch]
-                                    set_lower: model.params.groups_per_interrogation.start().get() as f64,
+                                    set_lower: model.interrogation_params.groups_per_interrogation.start().get() as f64,
                                     set_upper: u32::MAX as f64,
                                     set_step_increment: 1.,
                                     set_page_increment: 5.,
@@ -417,7 +479,7 @@ impl SimpleComponent for Dialog {
                                 set_snap_to_ticks: true,
                                 set_numeric: true,
                                 #[track(model.should_redraw)]
-                                set_value: model.params.groups_per_interrogation.end().get() as f64,
+                                set_value: model.interrogation_params.groups_per_interrogation.end().get() as f64,
                                 connect_value_notify[sender] => move |widget| {
                                     let groups_per_interrogation_max_u32 = widget.value() as u32;
                                     let groups_per_interrogation_max = NonZeroU32::new(groups_per_interrogation_max_u32).unwrap();
@@ -430,6 +492,8 @@ impl SimpleComponent for Dialog {
                             set_description: Some("Périodicité des colles de la matière"),
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[watch]
+                            set_visible: model.has_interrogations,
                             adw::ComboRow {
                                 set_title: "Type de périodicité",
                                 set_model: Some(&Self::generate_periodicity_type_model()),
@@ -446,7 +510,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::ExactlyPeriodic,
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::ExactlyPeriodic) && model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Périodicité (en semaines)",
@@ -473,7 +537,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryBlockOfWeeks,
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::OnceForEveryBlockOfWeeks) && model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Taille des blocs (en semaines)",
@@ -521,7 +585,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::AmountInYear,
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::AmountInYear) && model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Minimum de colles dans l'année",
@@ -589,7 +653,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock,
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock) && model.has_interrogations,
                             adw::SpinRow {
                                 set_hexpand: true,
                                 set_title: "Séparation minimale (en semaines)",
@@ -616,13 +680,15 @@ impl SimpleComponent for Dialog {
                             set_orientation: gtk::Orientation::Vertical,
                             #[watch]
                             set_visible: (model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock) &&
-                                (!model.amount_for_every_arbitrary_block_params.blocks.is_empty()),
+                                (!model.amount_for_every_arbitrary_block_params.blocks.is_empty()) &&
+                                model.has_interrogations,
                         },
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock,
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock) &&
+                                model.has_interrogations,
                             adw::ButtonRow {
                                 set_hexpand: true,
                                 set_title: "Ajouter un bloc",
@@ -667,6 +733,8 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             params: params.clone(),
+            interrogation_params: Self::interrogation_params_from_params(&params),
+            has_interrogations: Self::has_interrogations_from_params(&params),
             global_first_week: None,
             periodicity_panel: Self::periodicity_panel_from_params(&params),
             exactly_periodic_params: Self::periodicity_from_params(&params),
@@ -699,6 +767,8 @@ impl SimpleComponent for Dialog {
                 self.amount_in_year_params = Self::amount_in_year_params_from_params(&params);
                 self.amount_for_every_arbitrary_block_params =
                     Self::amount_for_every_arbitrary_block_params_from_params(&params);
+                self.interrogation_params = Self::interrogation_params_from_params(&params);
+                self.has_interrogations = Self::has_interrogations_from_params(&params);
                 self.params = params;
                 self.global_first_week = global_first_week;
                 self.synchronize_block_factory();
@@ -708,7 +778,7 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::Accept => {
                 self.hidden = true;
-                self.params.periodicity = match self.periodicity_panel {
+                self.interrogation_params.periodicity = match self.periodicity_panel {
                     PeriodicityPanel::ExactlyPeriodic => {
                         collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
                             periodicity_in_weeks: self.exactly_periodic_params,
@@ -733,6 +803,11 @@ impl SimpleComponent for Dialog {
                         }
                     }
                 };
+                self.params.interrogation_parameters = if self.has_interrogations {
+                    Some(self.interrogation_params.clone())
+                } else {
+                    None
+                };
                 sender
                     .output(DialogOutput::Accepted(self.params.clone()))
                     .unwrap();
@@ -744,48 +819,64 @@ impl SimpleComponent for Dialog {
                 self.params.name = new_name;
             }
             DialogInput::UpdateDuration(new_duration) => {
-                if self.params.duration == new_duration {
+                if self.interrogation_params.duration == new_duration {
                     return;
                 }
-                self.params.duration = new_duration;
+                self.interrogation_params.duration = new_duration;
             }
             DialogInput::UpdateDurationTakenIntoAccount(duration_taken_into_account) => {
-                if self.params.take_duration_into_account == duration_taken_into_account {
+                if self.interrogation_params.take_duration_into_account
+                    == duration_taken_into_account
+                {
                     return;
                 }
-                self.params.take_duration_into_account = duration_taken_into_account;
+                self.interrogation_params.take_duration_into_account = duration_taken_into_account;
+            }
+            DialogInput::UpdateHasInterrogations(has_interrogations) => {
+                if self.has_interrogations == has_interrogations {
+                    return;
+                }
+                self.has_interrogations = has_interrogations;
             }
             DialogInput::UpdateStudentsPerGroupMinimum(new_min) => {
-                if *self.params.students_per_group.start() == new_min {
+                if *self.interrogation_params.students_per_group.start() == new_min {
                     return;
                 }
-                let old_max = self.params.students_per_group.end().clone();
+                let old_max = self.interrogation_params.students_per_group.end().clone();
                 assert!(new_min <= old_max);
-                self.params.students_per_group = new_min..=old_max;
+                self.interrogation_params.students_per_group = new_min..=old_max;
             }
             DialogInput::UpdateStudentsPerGroupMaximum(new_max) => {
-                if *self.params.students_per_group.end() == new_max {
+                if *self.interrogation_params.students_per_group.end() == new_max {
                     return;
                 }
-                let old_min = self.params.students_per_group.start().clone();
+                let old_min = self.interrogation_params.students_per_group.start().clone();
                 assert!(old_min <= new_max);
-                self.params.students_per_group = old_min..=new_max;
+                self.interrogation_params.students_per_group = old_min..=new_max;
             }
             DialogInput::UpdateGroupsPerInterrogationMinimum(new_min) => {
-                if *self.params.groups_per_interrogation.start() == new_min {
+                if *self.interrogation_params.groups_per_interrogation.start() == new_min {
                     return;
                 }
-                let old_max = self.params.groups_per_interrogation.end().clone();
+                let old_max = self
+                    .interrogation_params
+                    .groups_per_interrogation
+                    .end()
+                    .clone();
                 assert!(new_min <= old_max);
-                self.params.groups_per_interrogation = new_min..=old_max;
+                self.interrogation_params.groups_per_interrogation = new_min..=old_max;
             }
             DialogInput::UpdateGroupsPerInterrogationMaximum(new_max) => {
-                if *self.params.groups_per_interrogation.end() == new_max {
+                if *self.interrogation_params.groups_per_interrogation.end() == new_max {
                     return;
                 }
-                let old_min = self.params.groups_per_interrogation.start().clone();
+                let old_min = self
+                    .interrogation_params
+                    .groups_per_interrogation
+                    .start()
+                    .clone();
                 assert!(old_min <= new_max);
-                self.params.groups_per_interrogation = old_min..=new_max;
+                self.interrogation_params.groups_per_interrogation = old_min..=new_max;
             }
             DialogInput::UpdatePeriodicityType(new_periodicity_type) => {
                 if self.periodicity_panel == new_periodicity_type {

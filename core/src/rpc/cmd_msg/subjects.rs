@@ -66,6 +66,20 @@ use std::num::NonZeroU32;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectParametersMsg {
     pub name: String,
+    pub interrogation_parameters: Option<SubjectInterrogationParametersMsg>,
+}
+
+impl From<SubjectParametersMsg> for collomatique_state_colloscopes::SubjectParameters {
+    fn from(value: SubjectParametersMsg) -> Self {
+        collomatique_state_colloscopes::SubjectParameters {
+            name: value.name,
+            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectInterrogationParametersMsg {
     pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
     pub groups_per_interrogation: std::ops::RangeInclusive<NonZeroU32>,
     pub duration: NonZeroU32,
@@ -73,10 +87,11 @@ pub struct SubjectParametersMsg {
     pub periodicity: SubjectPeriodicityMsg,
 }
 
-impl From<SubjectParametersMsg> for collomatique_state_colloscopes::SubjectParameters {
-    fn from(value: SubjectParametersMsg) -> Self {
-        collomatique_state_colloscopes::SubjectParameters {
-            name: value.name,
+impl From<SubjectInterrogationParametersMsg>
+    for collomatique_state_colloscopes::SubjectInterrogationParameters
+{
+    fn from(value: SubjectInterrogationParametersMsg) -> Self {
+        collomatique_state_colloscopes::SubjectInterrogationParameters {
             students_per_group: value.students_per_group,
             groups_per_interrogation: value.groups_per_interrogation,
             duration: value.duration.into(),

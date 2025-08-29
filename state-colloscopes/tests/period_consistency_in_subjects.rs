@@ -1,7 +1,7 @@
 use collomatique_state::{traits::Manager, AppState};
 use collomatique_state_colloscopes::{
-    subjects::WeekBlock, Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters,
-    SubjectPeriodicity,
+    subjects::{SubjectInterrogationParameters, WeekBlock},
+    Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters, SubjectPeriodicity,
 };
 use std::{collections::BTreeSet, num::NonZeroU32};
 
@@ -30,14 +30,17 @@ fn add_subject_referencing_period_then_remove_period() {
             Subject {
                 parameters: SubjectParameters {
                     name: "Math".into(),
-                    students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                    groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                        ..=NonZeroU32::new(1).unwrap(),
-                    duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
-                    take_duration_into_account: true,
-                    periodicity: SubjectPeriodicity::ExactlyPeriodic {
-                        periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
-                    },
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                        },
+                    }),
                 },
                 excluded_periods: BTreeSet::from([id2]),
             },
@@ -86,14 +89,17 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
             Subject {
                 parameters: SubjectParameters {
                     name: "Math".into(),
-                    students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                    groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                        ..=NonZeroU32::new(1).unwrap(),
-                    duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
-                    take_duration_into_account: true,
-                    periodicity: SubjectPeriodicity::ExactlyPeriodic {
-                        periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
-                    },
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                        },
+                    }),
                 },
                 excluded_periods: BTreeSet::from([id2]),
             },
@@ -110,14 +116,17 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
             Subject {
                 parameters: SubjectParameters {
                     name: "Math".into(),
-                    students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                    groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                        ..=NonZeroU32::new(1).unwrap(),
-                    duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
-                    take_duration_into_account: true,
-                    periodicity: SubjectPeriodicity::ExactlyPeriodic {
-                        periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
-                    },
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                        },
+                    }),
                 },
                 excluded_periods: BTreeSet::new(),
             },
@@ -171,26 +180,29 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
             Subject {
                 parameters: SubjectParameters {
                     name: "Math".into(),
-                    students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                    groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                        ..=NonZeroU32::new(1).unwrap(),
-                    duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
-                    take_duration_into_account: true,
-                    periodicity: SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                        minimum_week_separation: 1,
-                        blocks: vec![
-                            WeekBlock {
-                                delay_in_weeks: 0,
-                                size_in_weeks: NonZeroU32::new(3).unwrap(),
-                                interrogation_count_in_block: 1..=1,
-                            },
-                            WeekBlock {
-                                delay_in_weeks: 0,
-                                size_in_weeks: NonZeroU32::new(2).unwrap(),
-                                interrogation_count_in_block: 1..=1,
-                            },
-                        ],
-                    },
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                            minimum_week_separation: 1,
+                            blocks: vec![
+                                WeekBlock {
+                                    delay_in_weeks: 0,
+                                    size_in_weeks: NonZeroU32::new(3).unwrap(),
+                                    interrogation_count_in_block: 1..=1,
+                                },
+                                WeekBlock {
+                                    delay_in_weeks: 0,
+                                    size_in_weeks: NonZeroU32::new(2).unwrap(),
+                                    interrogation_count_in_block: 1..=1,
+                                },
+                            ],
+                        },
+                    }),
                 },
                 excluded_periods: BTreeSet::new(),
             },

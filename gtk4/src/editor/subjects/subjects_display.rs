@@ -63,22 +63,33 @@ impl Entry {
     }
 
     fn generate_students_per_group_text(&self) -> String {
-        format!(
-            "<b>Élèves par groupes :</b> {}",
-            Self::range_to_text(&self.subject_params.students_per_group),
-        )
+        if let Some(interrogation_parameters) = &self.subject_params.interrogation_parameters {
+            format!(
+                "<b>Élèves par groupes :</b> {}",
+                Self::range_to_text(&interrogation_parameters.students_per_group),
+            )
+        } else {
+            String::new()
+        }
     }
 
     fn generate_groups_per_interrogation_text(&self) -> String {
-        format!(
-            "<b>Groupes par colle :</b> {}",
-            Self::range_to_text(&self.subject_params.groups_per_interrogation),
-        )
+        if let Some(interrogation_parameters) = &self.subject_params.interrogation_parameters {
+            format!(
+                "<b>Groupes par colle :</b> {}",
+                Self::range_to_text(&interrogation_parameters.groups_per_interrogation),
+            )
+        } else {
+            String::new()
+        }
     }
 
     fn generate_periodicity_text(&self) -> String {
+        let Some(interrogation_parameters) = &self.subject_params.interrogation_parameters else {
+            return String::new();
+        };
         use collomatique_state_colloscopes::SubjectPeriodicity;
-        match &self.subject_params.periodicity {
+        match &interrogation_parameters.periodicity {
             SubjectPeriodicity::AmountInYear {
                 interrogation_count_in_year,
                 minimum_week_separation,
@@ -128,10 +139,14 @@ impl Entry {
     }
 
     fn generate_duration_text(&self) -> String {
+        let Some(interrogation_parameters) = &self.subject_params.interrogation_parameters else {
+            return String::new();
+        };
+
         format!(
             "<i>{} minutes</i>{}",
-            self.subject_params.duration.get(),
-            if self.subject_params.take_duration_into_account {
+            interrogation_parameters.duration.get(),
+            if interrogation_parameters.take_duration_into_account {
                 ""
             } else {
                 " (non-comptées)"
@@ -221,9 +236,18 @@ impl FactoryComponent for Entry {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
                     set_halign: gtk::Align::Start,
+                    set_label: "<b>Pas de colles</b>",
+                    set_use_markup: true,
+                    #[watch]
+                    set_visible: self.subject_params.interrogation_parameters.is_none(),
+                },
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
                     #[watch]
                     set_label: &self.generate_students_per_group_text(),
                     set_use_markup: true,
+                    #[watch]
+                    set_visible: self.subject_params.interrogation_parameters.is_some(),
                 },
                 gtk::Separator {
                     set_orientation: gtk::Orientation::Horizontal,
@@ -238,6 +262,8 @@ impl FactoryComponent for Entry {
                     #[watch]
                     set_label: &self.generate_groups_per_interrogation_text(),
                     set_use_markup: true,
+                    #[watch]
+                    set_visible: self.subject_params.interrogation_parameters.is_some(),
                 },
                 gtk::Separator {
                     set_orientation: gtk::Orientation::Horizontal,
@@ -252,6 +278,8 @@ impl FactoryComponent for Entry {
                     #[watch]
                     set_label: &self.generate_periodicity_text(),
                     set_use_markup: true,
+                    #[watch]
+                    set_visible: self.subject_params.interrogation_parameters.is_some(),
                 },
                 gtk::Box {
                     set_hexpand: true,
@@ -262,6 +290,8 @@ impl FactoryComponent for Entry {
                     set_label: &self.generate_duration_text(),
                     set_use_markup: true,
                     add_css_class: "dimmed",
+                    #[watch]
+                    set_visible: self.subject_params.interrogation_parameters.is_some(),
                 },
             },
             #[local_ref]
