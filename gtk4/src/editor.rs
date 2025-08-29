@@ -1,4 +1,5 @@
 use adw::prelude::NavigationPageExt;
+use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, WidgetExt};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
@@ -21,11 +22,13 @@ pub enum EditorInput {
     SaveCurrentFileAs(PathBuf),
     SaveAsClicked,
     SaveClicked,
+    UndoClicked,
+    RedoClicked,
 }
 
 #[derive(Debug)]
 pub enum EditorOutput {
-    UpdateDirty,
+    UpdateActions,
 }
 
 pub struct EditorPanel {
@@ -40,9 +43,12 @@ impl EditorPanel {
         self.dirty
     }
 
-    fn set_dirty(&mut self, value: bool, sender: &ComponentSender<Self>) {
-        self.dirty = value;
-        sender.output(EditorOutput::UpdateDirty).unwrap();
+    pub fn can_undo(&self) -> bool {
+        self.data.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.data.can_redo()
     }
 }
 
@@ -110,11 +116,15 @@ impl SimpleComponent for EditorPanel {
                             add_css_class: "linked",
                             gtk::Button {
                                 set_icon_name: "edit-undo",
-                                set_sensitive: false,
+                                #[watch]
+                                set_sensitive: model.can_undo(),
+                                connect_clicked => EditorInput::UndoClicked,
                             },
                             gtk::Button {
                                 set_icon_name: "edit-redo",
-                                set_sensitive: false,
+                                #[watch]
+                                set_sensitive: model.can_redo(),
+                                connect_clicked => EditorInput::RedoClicked,
                             },
                         },
                         pack_end = &gtk::Box {
@@ -203,7 +213,8 @@ impl SimpleComponent for EditorPanel {
             } => {
                 self.file_name = file_name;
                 self.data = AppState::new(data);
-                self.set_dirty(dirty, &sender);
+                self.dirty = dirty;
+                sender.output(EditorOutput::UpdateActions).unwrap();
             }
             EditorInput::SaveClicked => match &self.file_name {
                 Some(path) => {
@@ -229,6 +240,8 @@ impl SimpleComponent for EditorPanel {
                     .unwrap();
             }
             EditorInput::SaveCurrentFileAs(_path) => {}
+            EditorInput::UndoClicked => {}
+            EditorInput::RedoClicked => {}
         }
     }
 }

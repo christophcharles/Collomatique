@@ -87,7 +87,9 @@ pub enum AppInput {
     CloseFile,
     RequestSave,
     RequestSaveAs,
-    UpdateDirty,
+    RequestUndo,
+    RequestRedo,
+    UpdateActions,
 }
 
 relm4::new_action_group!(AppActionGroup, "app");
@@ -139,7 +141,7 @@ impl SimpleComponent for AppModel {
         let editor = editor::EditorPanel::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {
-                editor::EditorOutput::UpdateDirty => AppInput::UpdateDirty,
+                editor::EditorOutput::UpdateActions => AppInput::UpdateActions,
             },
         );
 
@@ -231,13 +233,15 @@ impl SimpleComponent for AppModel {
             })
         };
         let undo_action: RelmAction<UndoAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestUndo);
             })
         };
         let redo_action: RelmAction<RedoAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestRedo);
             })
         };
         let close_action: RelmAction<CloseAction> = {
@@ -440,10 +444,36 @@ impl SimpleComponent for AppModel {
                     .send(editor::EditorInput::SaveAsClicked)
                     .unwrap();
             }
-            AppInput::UpdateDirty => {
+            AppInput::RequestUndo => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::UndoClicked)
+                    .unwrap();
+            }
+            AppInput::RequestRedo => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::RedoClicked)
+                    .unwrap();
+            }
+            AppInput::UpdateActions => {
                 self.actions
                     .save_action
                     .set_enabled(self.controllers.editor.model().is_dirty());
+                self.actions
+                    .undo_action
+                    .set_enabled(self.controllers.editor.model().can_undo());
+                self.actions
+                    .redo_action
+                    .set_enabled(self.controllers.editor.model().can_redo());
             }
         }
     }
