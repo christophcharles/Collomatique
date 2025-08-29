@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn expr_display_no_constant() {
-    let expr =
-        2 * LinExpr::<String>::var("a") - 3 * LinExpr::<String>::var("b") + 4 * LinExpr::<String>::var("c");
+    let expr = 2 * LinExpr::<String>::var("a") - 3 * LinExpr::<String>::var("b")
+        + 4 * LinExpr::<String>::var("c");
     assert_eq!(format!("{}", expr), "2*a + (-3)*b + 4*c");
 }
 
@@ -84,16 +84,16 @@ fn symbol_display_equals() {
 
 #[test]
 fn constraint_display_no_constant_less_than() {
-    let expr =
-        2 * LinExpr::<String>::var("a") - 3 * LinExpr::<String>::var("b") + 4 * LinExpr::<String>::var("c");
+    let expr = 2 * LinExpr::<String>::var("a") - 3 * LinExpr::<String>::var("b")
+        + 4 * LinExpr::<String>::var("c");
     let constraint = expr.leq(&LinExpr::<String>::constant(0.0));
     assert_eq!(format!("{}", constraint), "2*a + (-3)*b + 4*c <= 0");
 }
 
 #[test]
 fn constraint_display_no_constant_equals() {
-    let expr =
-        2 * LinExpr::<String>::var("a") - 3 * LinExpr::<String>::var("b") + 4 * LinExpr::<String>::var("c");
+    let expr = 2 * LinExpr::<String>::var("a") - 3 * LinExpr::<String>::var("b")
+        + 4 * LinExpr::<String>::var("c");
     let constraint = expr.eq(&LinExpr::<String>::constant(0.0));
     assert_eq!(format!("{}", constraint), "2*a + (-3)*b + 4*c = 0");
 }
