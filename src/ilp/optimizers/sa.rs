@@ -134,7 +134,7 @@ impl<
         self.current_max_steps = self.max_steps;
         let config = Rc::new(sol);
 
-        let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
+        let config_cost = config.as_ref().eval();
 
         let acceptance = match self.previous_config {
             Some((_, old_cost)) => {
