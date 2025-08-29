@@ -1,4 +1,4 @@
-use crate::rpc::cmd_msg::MsgPeriodId;
+use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId};
 
 use super::*;
 
@@ -96,6 +96,7 @@ impl std::fmt::Display for UpdateFirstWeekError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdatePeriodWeekCountError {
     InvalidPeriodId(MsgPeriodId),
+    SubjectImpliesMinimumWeekCount(MsgSubjectId, usize),
 }
 
 impl std::fmt::Display for UpdatePeriodWeekCountError {
@@ -103,6 +104,13 @@ impl std::fmt::Display for UpdatePeriodWeekCountError {
         match self {
             UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
                 write!(f, "L'identifiant {} ne correspond à aucune période", id.0)
+            }
+            UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id, wc) => {
+                write!(
+                    f,
+                    "Le sujet numéro {} nécessite un nombre de semaines minimum de {}",
+                    id.0, wc
+                )
             }
         }
     }
@@ -113,6 +121,9 @@ impl From<crate::ops::UpdatePeriodWeekCountError> for UpdatePeriodWeekCountError
         match value {
             crate::ops::UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
                 UpdatePeriodWeekCountError::InvalidPeriodId(id.into())
+            }
+            crate::ops::UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id, wc) => {
+                UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id.into(), wc)
             }
         }
     }

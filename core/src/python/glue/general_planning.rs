@@ -100,6 +100,12 @@ impl SessionPeriods {
                 UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
+                UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id, wc) => {
+                    Err(PyValueError::new_err(format!(
+                        "Minimum week count of {} required by subject {:?}",
+                        wc, id
+                    )))
+                }
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
