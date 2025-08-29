@@ -21,6 +21,8 @@ enum GuiMessage {
     EditorMessage(editor::Message),
     DialogMessage(dialogs::Message),
     FileSelected(Option<dialogs::FileDesc>),
+    GoToWelcomeScreen,
+    Ignore,
 }
 
 impl From<welcome::Message> for GuiMessage {
@@ -53,6 +55,11 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
             }
             None => Task::none(),
         },
+        GuiMessage::GoToWelcomeScreen => {
+            *state = GuiState::Welcome;
+            Task::none()
+        }
+        GuiMessage::Ignore => Task::none(),
     }
 }
 

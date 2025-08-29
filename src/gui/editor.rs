@@ -51,7 +51,20 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             editor_state.panel = new_panel;
             Task::none()
         }
-        Message::CloseClicked => Task::none(),
+        Message::CloseClicked => Task::done(
+            super::dialogs::Message::AlertDialog(
+                "Attention".into(),
+                "Fermer le colloscope ?".into(),
+                |result| {
+                    if result {
+                        GuiMessage::GoToWelcomeScreen
+                    } else {
+                        GuiMessage::Ignore
+                    }
+                },
+            )
+            .into(),
+        ),
     }
 }
 
