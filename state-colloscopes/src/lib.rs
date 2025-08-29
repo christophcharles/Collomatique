@@ -119,11 +119,11 @@ pub enum StudentError {
 /// These errors can be returned when trying to modify [Data] with a period op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum PeriodError {
-    /// A student id is invalid
+    /// A period id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
 
-    /// The student id already exists
+    /// The period id already exists
     #[error("period id ({0:?}) already exists")]
     PeriodIdAlreadyExists(PeriodId),
 }
@@ -132,7 +132,15 @@ pub enum PeriodError {
 ///
 /// These errors can be returned when trying to modify [Data] with a subject op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SubjectError {}
+pub enum SubjectError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// The subject id already exists
+    #[error("subject id ({0:?}) already exists")]
+    SubjectIdAlreadyExists(SubjectId),
+}
 
 /// Errors for colloscopes modification
 ///
@@ -248,7 +256,7 @@ impl Data {
             assert!(ids_so_far.insert(id.inner()));
         }
 
-        for (id, _) in &self.inner_data.subjects.ordered_period_list {
+        for (id, _) in &self.inner_data.subjects.ordered_subject_list {
             assert!(ids_so_far.insert(id.inner()));
         }
 
@@ -261,7 +269,7 @@ impl Data {
     ///
     /// Checks that all the periods ids used in subjects data are valid
     fn check_subjects_data_has_correct_period_ids(&self, period_ids: &BTreeSet<PeriodId>) {
-        for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
+        for (_subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
             for period_id in &subject.excluded_periods {
                 assert!(period_ids.contains(period_id));
             }
@@ -274,7 +282,7 @@ impl Data {
     /// In particular, students per group and groups per interrogation should
     ///
     fn check_subjects_data_has_correct_ranges(&self) {
-        for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
+        for (_subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
             assert!(!subject.parameters.students_per_group.is_empty());
             assert!(!subject.parameters.groups_per_interrogation.is_empty());
         }
@@ -284,7 +292,7 @@ impl Data {
     ///
     /// checks all that subjects have valid week numbers when used
     fn check_subjects_have_valid_week_numbers(&self, week_count: usize) {
-        for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
+        for (_subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
             if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
                 weeks_at_start_of_new_block,
             } = &subject.parameters.periodicity
@@ -648,7 +656,71 @@ impl Data {
     fn build_rev_subject(
         &self,
         subject_op: &AnnotatedSubjectOp,
-    ) -> std::result::Result<AnnotatedSubjectOp, Error> {
-        todo!()
+    ) -> std::result::Result<AnnotatedSubjectOp, SubjectError> {
+        match subject_op {
+            AnnotatedSubjectOp::AddAfter(new_id, after_id, _params) => {
+                if self
+                    .inner_data
+                    .subjects
+                    .find_subject_position(*new_id)
+                    .is_some()
+                {
+                    return Err(SubjectError::SubjectIdAlreadyExists(new_id.clone()));
+                }
+
+                if let Some(id) = after_id {
+                    if self
+                        .inner_data
+                        .subjects
+                        .find_subject_position(*id)
+                        .is_none()
+                    {
+                        return Err(SubjectError::InvalidSubjectId(id.clone()));
+                    }
+                }
+
+                Ok(AnnotatedSubjectOp::Remove(new_id.clone()))
+            }
+            AnnotatedSubjectOp::Remove(subject_id) => {
+                let Some(position) = self.inner_data.subjects.find_subject_position(*subject_id)
+                else {
+                    return Err(SubjectError::InvalidSubjectId(subject_id.clone()));
+                };
+
+                let old_params = self.inner_data.subjects.ordered_subject_list[position]
+                    .1
+                    .clone();
+
+                Ok(AnnotatedSubjectOp::AddAfter(
+                    *subject_id,
+                    if position == 0 {
+                        None
+                    } else {
+                        Some(self.inner_data.subjects.ordered_subject_list[position - 1].0)
+                    },
+                    old_params.into(),
+                ))
+            }
+            AnnotatedSubjectOp::Update(subject_id, _new_params) => {
+                let Some(position) = self.inner_data.subjects.find_subject_position(*subject_id)
+                else {
+                    return Err(SubjectError::InvalidSubjectId(*subject_id));
+                };
+
+                let old_params = self.inner_data.subjects.ordered_subject_list[position]
+                    .1
+                    .clone();
+
+                Ok(AnnotatedSubjectOp::Update(*subject_id, old_params.into()))
+            }
+            AnnotatedSubjectOp::ChangePosition(subject_id, _new_pos) => {
+                let Some(old_pos) = self.inner_data.subjects.find_subject_position(*subject_id)
+                else {
+                    return Err(SubjectError::InvalidSubjectId(*subject_id));
+                };
+
+                Ok(AnnotatedSubjectOp::ChangePosition(*subject_id, old_pos))
+            }
+        }
     }
 }
