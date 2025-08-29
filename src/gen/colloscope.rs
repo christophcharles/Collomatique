@@ -134,11 +134,7 @@ impl ValidatedData {
         slot_start.week < general.week_count.get()
     }
 
-    fn validate_slot_overlap(
-        general: &GeneralData,
-        slot_start: &SlotStart,
-        duration: NonZeroU32,
-    ) -> bool {
+    fn validate_slot_overlap(slot_start: &SlotStart, duration: NonZeroU32) -> bool {
         slot_start.start_time.fit_in_day(duration.get())
     }
 
@@ -175,7 +171,7 @@ impl ValidatedData {
                             general.week_count.get(),
                         ));
                     }
-                    if !Self::validate_slot_overlap(&general, slot_start, subject.duration) {
+                    if !Self::validate_slot_overlap(slot_start, subject.duration) {
                         return Err(Error::SubjectWithSlotOverlappingNextDay(i, j, k));
                     }
                 }
@@ -191,7 +187,7 @@ impl ValidatedData {
                         general.week_count.get(),
                     ));
                 }
-                if !Self::validate_slot_overlap(&general, &slot.start, slot.duration) {
+                if !Self::validate_slot_overlap(&slot.start, slot.duration) {
                     return Err(Error::IncompatibilityWithSlotOverlappingNextDay(i, j));
                 }
             }
