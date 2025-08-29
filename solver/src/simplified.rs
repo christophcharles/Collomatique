@@ -3,14 +3,14 @@
 //! This module defines two traits: [SimpleBaseProblem] and [SimpleProblemConstraints].
 //!
 //! You can implement these traits. They rely on the [crate::tools] module and particularly
-//! the [crate::tools::AggregatedVariable] trait to provide a simplified (but more limited)
+//! the [crate::tools::AggregatedVariables] trait to provide a simplified (but more limited)
 //! interface.
 //!
 //! If you implement [SimpleBaseProblem], the trait [crate::BaseProblem] will automatically
 //! be implemented. Similarly if you implement [SimpleProblemConstraints], [crate::ProblemConstraints]
 //! will automatically be implemented.
 
-use crate::{tools::AggregatedVariableConstraintDesc, BaseProblem, BaseVariable, ExtraVariable};
+use crate::{tools::AggregatedVariablesConstraintDesc, BaseProblem, BaseVariable, ExtraVariable};
 use collomatique_ilp::{
     ConfigData, Constraint, LinExpr, Objective, ObjectiveSense, UsableData, Variable,
 };
@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 /// You should refer to [crate::BaseProblem] for further documentation on inner intracacies.
 ///
 /// [SimpleBaseProblem] is simpler to implement as long as the following restrictions are
-/// observed: all structure variables are defined through [crate::tools::AggregatedVariable].
+/// observed: all structure variables are defined through [crate::tools::AggregatedVariables].
 /// If your problem can be expressed this way, the [crate::BaseProblem::structure_variables],
 /// [crate::BaseProblem::structure_constraints] and [crate::BaseProblem::reconstruct_structure_variables]
 /// will be implemented automagically.
@@ -58,7 +58,7 @@ pub trait SimpleBaseProblem: Send + Sync {
 
     /// Definition of the aggregated variables for the problem
     ///
-    /// This is a list of variables all satisfying the [crate::tools::AggregatedVariable]
+    /// This is a list of variables all satisfying the [crate::tools::AggregatedVariables]
     /// constructed, directly or indirectly, from the main variables
     /// (returned by [SimpleBaseProblem::main_variables]).
     ///
@@ -72,7 +72,7 @@ pub trait SimpleBaseProblem: Send + Sync {
         &self,
     ) -> Vec<
         Box<
-            dyn crate::tools::AggregatedVariable<
+            dyn crate::tools::AggregatedVariables<
                 crate::generics::BaseVariable<Self::MainVariable, Self::StructureVariable>,
             >,
         >,
@@ -109,7 +109,7 @@ pub trait SimpleBaseProblem: Send + Sync {
 /// You should refer to [crate::ProblemConstraints] for further documentation on inner intracacies.
 ///
 /// [SimpleProblemConstraints] is simpler to implement as long as the following restrictions are
-/// observed: all structure variables are defined through [crate::tools::AggregatedVariable].
+/// observed: all structure variables are defined through [crate::tools::AggregatedVariables].
 /// If your problem can be expressed this way, the [crate::ProblemConstraints::extra_structure_variables],
 /// [crate::ProblemConstraints::extra_structure_constraints] and
 /// [crate::ProblemConstraints::reconstruct_extra_structure_variables] will be implemented automagically.
@@ -139,7 +139,7 @@ pub trait SimpleProblemConstraints: Send + Sync {
 
     /// Definition of the aggregated variables specific to this constraint set.
     ///
-    /// This is a list of variables all satisfying the [crate::tools::AggregatedVariable]
+    /// This is a list of variables all satisfying the [crate::tools::AggregatedVariables]
     /// constructed, directly or indirectly, from the main variables
     /// (returned by [crate::BaseProblem::main_variables]) and possibly from
     /// the base problem structure variables (returned by [crate::BaseProblem::structure_variables]).
@@ -155,7 +155,7 @@ pub trait SimpleProblemConstraints: Send + Sync {
         desc: &Self::Problem,
     ) -> Vec<
         Box<
-            dyn crate::tools::AggregatedVariable<
+            dyn crate::tools::AggregatedVariables<
                 crate::generics::ExtraVariable<
                     <Self::Problem as BaseProblem>::MainVariable,
                     <Self::Problem as BaseProblem>::StructureVariable,
@@ -206,7 +206,7 @@ pub trait SimpleProblemConstraints: Send + Sync {
 impl<T: SimpleBaseProblem> crate::BaseProblem for T {
     type MainVariable = <Self as SimpleBaseProblem>::MainVariable;
     type StructureVariable = <Self as SimpleBaseProblem>::StructureVariable;
-    type StructureConstraintDesc = AggregatedVariableConstraintDesc<
+    type StructureConstraintDesc = AggregatedVariablesConstraintDesc<
         crate::generics::BaseVariable<Self::MainVariable, Self::StructureVariable>,
     >;
     type PartialSolution = <Self as SimpleBaseProblem>::PartialSolution;
@@ -216,17 +216,18 @@ impl<T: SimpleBaseProblem> crate::BaseProblem for T {
     }
     fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable> {
         let mut output = BTreeMap::new();
-        for aggregated_var in self.aggregated_variables() {
-            let (name, desc) = aggregated_var.get_variable_def();
-            let BaseVariable::Structure(v) = name else {
-                panic!(
-                    "An aggregated variable has a main variable name: {:?}",
-                    name
-                );
-            };
+        for aggregated_vars in self.aggregated_variables() {
+            for (name, desc) in aggregated_vars.get_variables_def() {
+                let BaseVariable::Structure(v) = name else {
+                    panic!(
+                        "An aggregated variable has a main variable name: {:?}",
+                        name
+                    );
+                };
 
-            if output.insert(v.clone(), desc).is_some() {
-                panic!("Duplicated name for aggregated variable: {:?}", v);
+                if output.insert(v.clone(), desc).is_some() {
+                    panic!("Duplicated name for aggregated variable: {:?}", v);
+                }
             }
         }
         output
@@ -264,8 +265,13 @@ impl<T: SimpleBaseProblem> crate::BaseProblem for T {
         let mut temp_config = config.transmute(|x| BaseVariable::Main(x.clone()));
 
         for aggregated_var in self.aggregated_variables() {
-            if let Some(value) = aggregated_var.reconstruct_structure_variable(&temp_config) {
-                temp_config = temp_config.set(aggregated_var.get_variable_def().0, value);
+            let values = aggregated_var.reconstruct_structure_variables(&temp_config);
+            let vars = aggregated_var.get_variables_def();
+            assert_eq!(values.len(), vars.len());
+            for (v, (name, _t)) in values.into_iter().zip(vars.into_iter()) {
+                if let Some(value) = v {
+                    temp_config = temp_config.set(name, value);
+                }
             }
         }
 
@@ -284,7 +290,7 @@ impl<T: SimpleBaseProblem> crate::BaseProblem for T {
 impl<T: SimpleProblemConstraints> crate::ProblemConstraints for T {
     type Problem = <Self as SimpleProblemConstraints>::Problem;
     type StructureVariable = <Self as SimpleProblemConstraints>::StructureVariable;
-    type StructureConstraintDesc = AggregatedVariableConstraintDesc<
+    type StructureConstraintDesc = AggregatedVariablesConstraintDesc<
         crate::generics::ExtraVariable<
             <Self::Problem as BaseProblem>::MainVariable,
             <Self::Problem as BaseProblem>::StructureVariable,
@@ -302,19 +308,21 @@ impl<T: SimpleProblemConstraints> crate::ProblemConstraints for T {
     ) -> BTreeMap<Self::StructureVariable, Variable> {
         let mut output = BTreeMap::new();
 
-        for aggregated_var in self.extra_aggregated_variables(desc) {
-            let (name, var_desc) = aggregated_var.get_variable_def();
-            let ExtraVariable::Extra(v) = name else {
-                panic!(
-                    "An aggregated variable has a base problem variable name: {:?}",
-                    name
-                );
-            };
+        for aggregated_vars in self.extra_aggregated_variables(desc) {
+            for (name, var_desc) in aggregated_vars.get_variables_def() {
+                let ExtraVariable::Extra(v) = name else {
+                    panic!(
+                        "An aggregated variable has a base problem variable name: {:?}",
+                        name
+                    );
+                };
 
-            if output.insert(v.clone(), var_desc).is_some() {
-                panic!("Duplicated name for aggregated variable: {:?}", v);
+                if output.insert(v.clone(), var_desc).is_some() {
+                    panic!("Duplicated name for aggregated variable: {:?}", v);
+                }
             }
         }
+
         output
     }
     fn extra_structure_constraints(
@@ -381,8 +389,13 @@ impl<T: SimpleProblemConstraints> crate::ProblemConstraints for T {
         });
 
         for aggregated_var in self.extra_aggregated_variables(desc) {
-            if let Some(value) = aggregated_var.reconstruct_structure_variable(&temp_config) {
-                temp_config = temp_config.set(aggregated_var.get_variable_def().0, value);
+            let values = aggregated_var.reconstruct_structure_variables(&temp_config);
+            let vars = aggregated_var.get_variables_def();
+            assert_eq!(values.len(), vars.len());
+            for (v, (name, _t)) in values.into_iter().zip(vars.into_iter()) {
+                if let Some(value) = v {
+                    temp_config = temp_config.set(name, value);
+                }
             }
         }
 
