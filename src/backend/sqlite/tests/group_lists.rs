@@ -1021,3 +1021,187 @@ async fn group_lists_remove_then_add(pool: sqlx::SqlitePool) {
 
     assert_eq!(group_lists, expected_result);
 }
+
+#[sqlx::test]
+async fn group_lists_update(pool: sqlx::SqlitePool) {
+    let store = build_example_group_list(pool).await;
+
+    store
+        .group_lists_update(
+            super::super::group_lists::Id(2),
+            &GroupList {
+                name: String::from("HGG - new"),
+                groups: vec![
+                    Group {
+                        name: String::from("5bis"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("6bis"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("3+7"),
+                        extendable: false,
+                    },
+                ],
+                students_mapping: BTreeMap::from([
+                    (super::super::students::Id(13), 1),
+                    (super::super::students::Id(14), 1),
+                    (super::super::students::Id(15), 1),
+                    (super::super::students::Id(16), 0),
+                    (super::super::students::Id(17), 0),
+                    (super::super::students::Id(18), 0),
+                    (super::super::students::Id(9), 2),
+                    (super::super::students::Id(21), 2),
+                ]),
+            },
+        )
+        .await
+        .unwrap();
+
+    let group_lists = store.group_lists_get_all().await.unwrap();
+
+    let expected_result = BTreeMap::from([
+        (
+            super::super::group_lists::Id(1),
+            GroupList {
+                name: String::from("Groupes"),
+                groups: vec![
+                    Group {
+                        name: String::from("1"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("2"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("3"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("4"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("5"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("6"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("7"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("8"),
+                        extendable: false,
+                    },
+                ],
+                students_mapping: BTreeMap::from([
+                    (super::super::students::Id(1), 0),
+                    (super::super::students::Id(2), 0),
+                    (super::super::students::Id(3), 0),
+                    (super::super::students::Id(4), 1),
+                    (super::super::students::Id(5), 1),
+                    (super::super::students::Id(6), 1),
+                    (super::super::students::Id(7), 2),
+                    (super::super::students::Id(8), 2),
+                    (super::super::students::Id(9), 2),
+                    (super::super::students::Id(10), 3),
+                    (super::super::students::Id(11), 3),
+                    (super::super::students::Id(12), 3),
+                    (super::super::students::Id(13), 4),
+                    (super::super::students::Id(14), 4),
+                    (super::super::students::Id(15), 4),
+                    (super::super::students::Id(16), 5),
+                    (super::super::students::Id(17), 5),
+                    (super::super::students::Id(18), 5),
+                    (super::super::students::Id(19), 6),
+                    (super::super::students::Id(20), 6),
+                    (super::super::students::Id(21), 6),
+                    (super::super::students::Id(22), 7),
+                    (super::super::students::Id(23), 7),
+                    (super::super::students::Id(24), 7),
+                ]),
+            },
+        ),
+        (
+            super::super::group_lists::Id(3),
+            GroupList {
+                name: String::from("TP Info"),
+                groups: vec![
+                    Group {
+                        name: String::from("P"),
+                        extendable: true,
+                    },
+                    Group {
+                        name: String::from("I"),
+                        extendable: true,
+                    },
+                ],
+                students_mapping: BTreeMap::from([
+                    (super::super::students::Id(1), 1),
+                    (super::super::students::Id(2), 1),
+                    (super::super::students::Id(3), 1),
+                    (super::super::students::Id(4), 0),
+                    (super::super::students::Id(5), 0),
+                    (super::super::students::Id(6), 0),
+                    (super::super::students::Id(7), 1),
+                    (super::super::students::Id(8), 1),
+                    (super::super::students::Id(9), 1),
+                    (super::super::students::Id(10), 0),
+                    (super::super::students::Id(11), 0),
+                    (super::super::students::Id(12), 0),
+                    (super::super::students::Id(13), 1),
+                    (super::super::students::Id(14), 1),
+                    (super::super::students::Id(15), 1),
+                    (super::super::students::Id(16), 0),
+                    (super::super::students::Id(17), 0),
+                    (super::super::students::Id(18), 0),
+                    (super::super::students::Id(19), 1),
+                    (super::super::students::Id(20), 1),
+                    (super::super::students::Id(21), 1),
+                    (super::super::students::Id(22), 0),
+                    (super::super::students::Id(23), 0),
+                    (super::super::students::Id(24), 0),
+                ]),
+            },
+        ),
+        (
+            super::super::group_lists::Id(2),
+            GroupList {
+                name: String::from("HGG - new"),
+                groups: vec![
+                    Group {
+                        name: String::from("5bis"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("6bis"),
+                        extendable: false,
+                    },
+                    Group {
+                        name: String::from("3+7"),
+                        extendable: false,
+                    },
+                ],
+                students_mapping: BTreeMap::from([
+                    (super::super::students::Id(13), 1),
+                    (super::super::students::Id(14), 1),
+                    (super::super::students::Id(15), 1),
+                    (super::super::students::Id(16), 0),
+                    (super::super::students::Id(17), 0),
+                    (super::super::students::Id(18), 0),
+                    (super::super::students::Id(9), 2),
+                    (super::super::students::Id(21), 2),
+                ]),
+            },
+        ),
+    ]);
+
+    assert_eq!(group_lists, expected_result);
+}
