@@ -1042,7 +1042,7 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_dynamic_group_constraint_for_case(
+    fn build_dynamic_group_student_in_group_constraint_for_case(
         &self,
         i: usize,
         j: usize,
@@ -1064,7 +1064,7 @@ impl<'a> IlpTranslator<'a> {
         lhs.leq(&rhs)
     }
 
-    fn build_dynamic_groups_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+    fn build_dynamic_groups_student_in_group_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
@@ -1073,7 +1073,9 @@ impl<'a> IlpTranslator<'a> {
                     if !Self::is_group_fixed(group, subject) {
                         for student in subject.groups.not_assigned.iter().copied() {
                             constraints.insert(
-                                self.build_dynamic_group_constraint_for_case(i, j, k, student),
+                                self.build_dynamic_group_student_in_group_constraint_for_case(
+                                    i, j, k, student,
+                                ),
                             );
                         }
                     }
@@ -1345,7 +1347,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_one_interrogation_per_period_contraints())
             .add_constraints(self.build_students_per_group_count_constraints())
             .add_constraints(self.build_student_in_single_group_constraints())
-            .add_constraints(self.build_dynamic_groups_constraints())
+            .add_constraints(self.build_dynamic_groups_student_in_group_constraints())
             .add_constraints(self.build_one_periodicity_choice_per_student_constraints())
             .add_constraints(self.build_periodicity_constraints())
             .add_constraints(self.build_interrogations_per_week_constraints())
