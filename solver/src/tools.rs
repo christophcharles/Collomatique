@@ -245,7 +245,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
 /// variables with value 1 if a specific value is set. It takes a closure for
 /// the new variables and an initial integer variables (that should have a finite range).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UIntToBinVariable<ProblemVariable, F>
+pub struct UIntToBinVariables<ProblemVariable, F>
 where
     ProblemVariable: UsableData + 'static,
     F: Fn(u32) -> ProblemVariable + Send + Sync,
@@ -259,7 +259,7 @@ where
 }
 
 impl<ProblemVariable: UsableData + 'static, F: Fn(u32) -> ProblemVariable + Send + Sync>
-    AggregatedVariables<ProblemVariable> for UIntToBinVariable<ProblemVariable, F>
+    AggregatedVariables<ProblemVariable> for UIntToBinVariables<ProblemVariable, F>
 {
     fn get_variables_def(&self) -> Vec<(ProblemVariable, Variable)> {
         self.original_range
@@ -275,20 +275,20 @@ impl<ProblemVariable: UsableData + 'static, F: Fn(u32) -> ProblemVariable + Send
         Constraint<ProblemVariable>,
         AggregatedVariablesConstraintDesc<ProblemVariable>,
     )> {
-        let lhs1 = LinExpr::<ProblemVariable>::var(self.original_variable.clone());
-        let mut rhs1 = LinExpr::constant(0.);
+        let rhs1 = LinExpr::<ProblemVariable>::var(self.original_variable.clone());
+        let mut lhs1 = LinExpr::constant(0.);
 
         for i in self.original_range.clone() {
-            rhs1 = rhs1 + f64::from(i) * LinExpr::var((self.variable_name_builder)(i));
+            lhs1 = lhs1 + f64::from(i) * LinExpr::var((self.variable_name_builder)(i));
         }
 
         let number_constraint = lhs1.eq(&rhs1);
 
-        let lhs2 = LinExpr::<ProblemVariable>::constant(1.);
-        let mut rhs2 = LinExpr::constant(0.);
+        let rhs2 = LinExpr::<ProblemVariable>::constant(1.);
+        let mut lhs2 = LinExpr::constant(0.);
 
         for i in self.original_range.clone() {
-            rhs2 = rhs2 + LinExpr::var((self.variable_name_builder)(i));
+            lhs2 = lhs2 + LinExpr::var((self.variable_name_builder)(i));
         }
 
         let only_one_var_constraint = lhs2.eq(&rhs2);
