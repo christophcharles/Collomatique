@@ -226,6 +226,7 @@ impl SimpleComponent for Dialog {
                             set_title: "Paramètres généraux",
                             set_margin_all: 5,
                             set_hexpand: true,
+                            #[name(name_entry)]
                             adw::EntryRow {
                                 set_hexpand: true,
                                 set_title: "Nom de la matière",
@@ -748,6 +749,7 @@ impl SimpleComponent for Dialog {
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);
+            widgets.name_entry.grab_focus();
         }
     }
 }
