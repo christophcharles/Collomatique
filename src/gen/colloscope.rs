@@ -55,6 +55,8 @@ pub enum Error {
     SlotGroupingWithInvalidSlot(usize, SlotRef),
     #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
     SlotGroupingIncompatWithInvalidSlotGrouping(usize, usize),
+    #[error("The grouping incompatibility {0} has less than two ({1}) slot groupings referenced")]
+    SlotGroupingIncompatWithLessThanTwoSlotGroupings(usize, usize),
     #[error("The range {0:?} for the number of interrogations per week is empty")]
     SlotGeneralDataWithInvalidInterrogationsPerWeek(std::ops::Range<u32>),
 }
@@ -336,6 +338,13 @@ impl ValidatedData {
         }
 
         for (i, grouping_incompat) in grouping_incompats.iter().enumerate() {
+            if grouping_incompat.groupings.len() < 2 {
+                return Err(Error::SlotGroupingIncompatWithLessThanTwoSlotGroupings(
+                    i,
+                    grouping_incompat.groupings.len(),
+                ));
+            }
+
             for &grouping in &grouping_incompat.groupings {
                 if grouping >= slot_groupings.len() {
                     return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
