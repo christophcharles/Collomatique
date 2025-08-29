@@ -891,6 +891,7 @@ impl Data {
                 }
 
                 self.inner_data.periods.ordered_period_list.remove(position);
+                self.inner_data.assignments.period_map.remove(period_id);
 
                 Ok(())
             }
