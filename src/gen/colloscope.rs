@@ -1,22 +1,39 @@
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
+use super::time;
+
 #[derive(Clone, Debug)]
-pub struct Slot {}
+pub struct SlotStart {
+    week: u32,
+    weekday: time::Weekday,
+    start: time::Time,
+}
+
+#[derive(Clone, Debug)]
+pub struct Slot {
+    pub start: SlotStart,
+    pub duration: NonZeroU32,
+}
+
+#[derive(Clone, Debug)]
+pub struct Interrogation {
+    pub teacher: usize,
+    pub slots: Vec<SlotStart>,
+}
 
 #[derive(Clone, Debug)]
 pub struct Subject {
-    pub name: String,
     pub students_per_interrogation: RangeInclusive<NonZeroU32>,
     pub period: NonZeroU32,
     pub duration: NonZeroU32,
+    pub interrogations: Vec<Interrogation>,
 }
 
 pub type SubjectList = Vec<Subject>;
 
 #[derive(Clone, Debug)]
 pub struct Incompatibility {
-    pub name: String,
     pub slots: Vec<Slot>,
 }
 
@@ -26,8 +43,6 @@ use std::collections::BTreeSet;
 
 #[derive(Clone, Debug)]
 pub struct Student {
-    pub firstname: String,
-    pub surname: String,
     pub subjects: BTreeSet<usize>,
     pub incompatibilities: BTreeSet<usize>,
 }
@@ -35,28 +50,15 @@ pub struct Student {
 pub type StudentList = Vec<Student>;
 
 #[derive(Clone, Debug)]
-pub struct Teacher {
-    pub firstname: String,
-    pub surname: String,
-    pub contact: String,
+pub struct GeneralData {
+    pub teacher_count: usize,
+    pub week_count: NonZeroU32,
 }
-
-pub type TeacherList = Vec<Teacher>;
-
-#[derive(Clone, Debug)]
-pub struct Interrogation {
-    pub subject: usize,
-    pub teacher: usize,
-    pub slots: Vec<Slot>,
-}
-
-pub type InterrogationList = Vec<Interrogation>;
 
 #[derive(Clone, Debug)]
 pub struct ValidatedData {
+    general: GeneralData,
     subjects: SubjectList,
-    teachers: TeacherList,
     incompatibilities: IncompatibilityList,
     students: StudentList,
-    interrogations: InterrogationList,
 }
