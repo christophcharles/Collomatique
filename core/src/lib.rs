@@ -29,22 +29,22 @@ pub mod time;
 
 use std::collections::BTreeSet;
 
-// Description of the information pertinent to a single student
-// for the colloscope.
+/// Description of the information pertinent to a single student
+/// for the colloscope.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Student {
-    // List of times the student is not available for interrogations or tutorial
-    //
-    // Using BTreeSet garantees that there are no duplications.
+    /// List of times the student is not available for interrogations or tutorial
+    ///
+    /// Using BTreeSet garantees that there are no duplications.
     pub incompatibilities: BTreeSet<time::SlotWithDuration>,
 
-    // Whether the student can have two consecutive interrogations.
+    /// Whether the student can have two consecutive interrogations.
     pub non_consecutive_interrogations: bool,
 }
 
-// Description of all the data describing a colloscope constraints
+/// Description of all the data describing a colloscope constraints
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ColloscopeConstraints {
-    // List of students with their relevant constraints
+    /// List of students with their relevant constraints
     pub students: Vec<Student>,
 }
