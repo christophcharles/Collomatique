@@ -2,7 +2,7 @@ use super::*;
 
 use std::collections::BTreeMap;
 
-use collomatique_ilp::{ConfigData, Constraint, LinExpr, ObjectiveSense, UsableData, Variable};
+use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, UsableData, Variable};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InternalId(u64);
@@ -58,8 +58,7 @@ pub struct ProblemBuilder<
     id_issuer: IdIssuer,
     phantom_p: std::marker::PhantomData<P>,
 
-    objective_func: LinExpr<ExtraVariable<M, S, IdVariable>>,
-    objective_sense: ObjectiveSense,
+    objective: Objective<ExtraVariable<M, S, IdVariable>>,
 
     variables: BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>,
 
@@ -89,7 +88,8 @@ where
             )
             .collect::<BTreeMap<_, _>>();
 
-        let (original_objective_func, objective_sense) = base.objective();
+        let original_objective = base.objective();
+        let original_objective_func = original_objective.get_function();
         let mut objective_func = LinExpr::constant(original_objective_func.get_constant());
         for (v, value) in original_objective_func.coefficients() {
             let new_v = match v {
@@ -102,6 +102,7 @@ where
             }
             objective_func = objective_func + value * LinExpr::var(new_v);
         }
+        let objective = Objective::new(objective_func, original_objective.get_sense());
 
         let mut id_issuer = IdIssuer::new();
 
@@ -165,8 +166,7 @@ where
             base,
             id_issuer,
             phantom_p: std::marker::PhantomData,
-            objective_func,
-            objective_sense,
+            objective,
             variables,
             general_constraint_descs,
             structure_constraint_descs,
@@ -311,12 +311,12 @@ where
     ) -> Option<ObjectiveTranslator<T, E>> {
         let extra_structure_variables = extra.extra_structure_variables(&self.base);
         let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
-        let (objective_func, objective_sense) = extra.extra_objective(&self.base);
+        let objective = extra.extra_objective(&self.base);
 
         let (rev_v_map, v_map) = self.scan_variables(extra_structure_variables);
 
         if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
-            || !self.check_variables_in_expr(&objective_func, &rev_v_map)
+            || !self.check_variables_in_expr(objective.get_function(), &rev_v_map)
         {
             return None;
         }
@@ -325,12 +325,9 @@ where
         let structure_c_map =
             self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
-        let obj_func = self.update_var_in_expr(&objective_func, &rev_v_map);
-        if self.objective_sense == objective_sense {
-            self.objective_func = &self.objective_func + obj_coef * obj_func;
-        } else {
-            self.objective_func = &self.objective_func - obj_coef * obj_func;
-        }
+        let obj_func = self.update_var_in_expr(objective.get_function(), &rev_v_map);
+        self.objective =
+            &self.objective + obj_coef * Objective::new(obj_func, objective.get_sense());
 
         Some(ObjectiveTranslator {
             extra,
@@ -342,7 +339,7 @@ where
         let ilp_problem = collomatique_ilp::ProblemBuilder::new()
             .set_variables(self.variables)
             .add_constraints(self.constraints)
-            .set_objective_function(self.objective_func, self.objective_sense)
+            .set_objective(self.objective)
             .build()
             .expect("Variables good definition should have already been checked");
 

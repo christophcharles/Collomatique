@@ -1,6 +1,6 @@
 #[test]
 fn good_lp() {
-    use crate::{ConfigData, LinExpr, ObjectiveSense, ProblemBuilder, Variable};
+    use crate::{ConfigData, LinExpr, Objective, ObjectiveSense, ProblemBuilder, Variable};
 
     // We test on a simple scheduling problem.
     //
@@ -113,7 +113,7 @@ fn good_lp() {
             ),
         ])
         // Objective function : prefer group X in course 1 on week 1
-        .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
+        .set_objective(Objective::new(x11.clone(), ObjectiveSense::Maximize))
         .build()
         .unwrap();
 

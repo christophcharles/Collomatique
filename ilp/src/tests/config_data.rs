@@ -81,7 +81,7 @@ fn build_test_problem() -> Problem<String, String> {
             ),
         ])
         // Objective function : prefer group X in course 1 on week 1
-        .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
+        .set_objective(Objective::new(x11.clone(), ObjectiveSense::Maximize))
         .build()
         .unwrap();
 
