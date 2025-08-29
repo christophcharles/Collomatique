@@ -154,50 +154,10 @@ WHERE group_list_id = ?
     Ok(output)
 }
 
-async fn search_invalid_student_id(
-    pool: &SqlitePool,
-    group_list: &GroupList<super::students::Id>,
-) -> Result<Option<super::students::Id>> {
-    let students_id = sqlx::query!("SELECT student_id FROM students",)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.student_id)
-        .collect::<BTreeSet<_>>();
-
-    for (student, _group) in &group_list.students_mapping {
-        if !students_id.contains(&student.0) {
-            return Ok(Some(*student));
-        }
-    }
-
-    Ok(None)
-}
-
-fn validate_groups(group_list: &GroupList<super::students::Id>) -> bool {
-    for (_student, &group) in &group_list.students_mapping {
-        if group >= group_list.groups.len() {
-            return false;
-        }
-    }
-    true
-}
-
 pub async fn add(
     pool: &SqlitePool,
     group_list: &GroupList<super::students::Id>,
-) -> std::result::Result<
-    Id,
-    InvalidCrossError<Error, GroupList<super::students::Id>, super::students::Id>,
-> {
-    if let Some(student_id) = search_invalid_student_id(pool, group_list).await? {
-        return Err(InvalidCrossError::InvalidCrossId(student_id));
-    }
-    if !validate_groups(group_list) {
-        return Err(InvalidCrossError::InvalidData(group_list.clone()));
-    }
-
+) -> std::result::Result<Id, Error> {
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let group_list_id = sqlx::query!("INSERT INTO group_lists (name) VALUES (?)", group_list.name,)
@@ -307,17 +267,7 @@ pub async fn update(
     pool: &SqlitePool,
     index: Id,
     group_list: &GroupList<super::students::Id>,
-) -> std::result::Result<
-    (),
-    InvalidCrossIdError<Error, GroupList<super::students::Id>, Id, super::students::Id>,
-> {
-    if let Some(student_id) = search_invalid_student_id(pool, group_list).await? {
-        return Err(InvalidCrossIdError::InvalidCrossId(student_id));
-    }
-    if !validate_groups(group_list) {
-        return Err(InvalidCrossIdError::InvalidData(group_list.clone()));
-    }
-
+) -> std::result::Result<(), Error> {
     let group_list_id = index.0;
 
     let groups_to_delete = sqlx::query!(
@@ -341,11 +291,10 @@ pub async fn update(
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(InvalidCrossIdError::InternalError(
-            Error::CorruptedDatabase(format!("Multiple group_lists with id {:?}", index)),
-        ));
-    } else if rows_affected == 0 {
-        return Err(InvalidCrossIdError::InvalidId(index));
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple group_lists with id {:?}",
+            index
+        )));
     }
 
     let _ = sqlx::query!(
