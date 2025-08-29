@@ -33,6 +33,7 @@
 pub mod colloscopes;
 pub mod time;
 
+pub mod examples;
 pub mod generics;
 pub mod solver;
 
