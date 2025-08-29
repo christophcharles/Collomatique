@@ -139,7 +139,15 @@ pub enum SubjectPeriodicity {
     /// [SubjectPeriodicity::OnceForEveryBlockOfWeeks] is used *way* more often
     /// and can be represented in a simpler way on screen in a GUI.
     OnceForEveryArbitraryBlock {
-        dates_between_blocks: Vec<collomatique_time::NaiveMondayDate>,
+        /// Dates that separate blocks
+        ///
+        /// If this list is empty, there will be a single block that
+        /// starts at the first week of the first period and will end at the
+        /// last week of the last period.
+        ///
+        /// Here, we can split this single blocks by giving other dates that
+        /// separate them. So there always is `dates_between_blocks.len()+1` blocks.
+        dates_between_blocks: BTreeSet<collomatique_time::NaiveMondayDate>,
     },
 }
 
