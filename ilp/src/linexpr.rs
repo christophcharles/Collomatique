@@ -708,7 +708,7 @@ impl<V: UsableData> LinExpr<V> {
     }
 
     /// Transmute variables
-    /// 
+    ///
     /// Works like [Self::transmute] but consumes the expression
     pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, mut f: F) -> LinExpr<U> {
         let mut expr = LinExpr::constant(self.get_constant());
@@ -1316,9 +1316,9 @@ impl<V: UsableData> Constraint<V> {
     }
 
     /// Transmute variables
-    /// 
+    ///
     /// Works like [Self::transmute] but consumes the constraint.
-    /// 
+    ///
     /// For instance :
     /// ```
     /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};

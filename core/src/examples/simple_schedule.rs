@@ -25,11 +25,11 @@ use super::*;
 /// the numbers of groups, and the number of weeks.
 /// These are given by [Self::course_count], [Self::group_count] and
 /// [Self::week_count] respectively.
-/// 
+///
 /// This struct will implement [BaseConstraints]. Because the problem
 /// is so simple, there is no structure constraints, no structure variables
 /// and thus no reconstruction.
-/// 
+///
 /// We just have to implement a few general constraints. See [SimpleScheduleConstraint]
 /// to see the description of such constraints.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -132,30 +132,25 @@ impl std::fmt::Display for SimpleScheduleConstraint {
     }
 }
 
-#[derive(Clone,Debug,PartialEq,Eq)]
-pub struct SimpleScheduleSolution {
-
-}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SimpleScheduleSolution {}
 
 impl SimpleScheduleBase {
-    fn generate_at_most_one_course_per_week_for_a_given_group_constraints(&self) -> Vec<(
-        Constraint<SimpleScheduleVariable>,
-        SimpleScheduleConstraint,
-    )> {
+    fn generate_at_most_one_course_per_week_for_a_given_group_constraints(
+        &self,
+    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
         todo![]
     }
 
-    fn generate_at_most_one_group_per_course_on_a_given_week_constraints(&self) -> Vec<(
-        Constraint<SimpleScheduleVariable>,
-        SimpleScheduleConstraint,
-    )> {
+    fn generate_at_most_one_group_per_course_on_a_given_week_constraints(
+        &self,
+    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
         todo![]
     }
 
-    fn generate_each_group_should_attend_each_course_exactly_once_constraints(&self) -> Vec<(
-        Constraint<SimpleScheduleVariable>,
-        SimpleScheduleConstraint,
-    )> {
+    fn generate_each_group_should_attend_each_course_exactly_once_constraints(
+        &self,
+    ) -> Vec<(Constraint<SimpleScheduleVariable>, SimpleScheduleConstraint)> {
         todo![]
     }
 }
@@ -179,7 +174,7 @@ impl BaseConstraints for SimpleScheduleBase {
                             course_index,
                             week_index,
                         },
-                        Variable::binary()
+                        Variable::binary(),
                     );
                 }
             }
@@ -212,32 +207,17 @@ impl BaseConstraints for SimpleScheduleBase {
         output.extend(
             self.generate_at_most_one_course_per_week_for_a_given_group_constraints()
                 .into_iter()
-                .map(
-                    |(c,d)| (
-                        c.into_transmuted(|x| BaseVariable::Main(x)),
-                        d
-                    )
-                )
+                .map(|(c, d)| (c.into_transmuted(|x| BaseVariable::Main(x)), d)),
         );
         output.extend(
             self.generate_at_most_one_group_per_course_on_a_given_week_constraints()
                 .into_iter()
-                .map(
-                    |(c,d)| (
-                        c.into_transmuted(|x| BaseVariable::Main(x)),
-                        d
-                    )
-                )
+                .map(|(c, d)| (c.into_transmuted(|x| BaseVariable::Main(x)), d)),
         );
         output.extend(
             self.generate_each_group_should_attend_each_course_exactly_once_constraints()
                 .into_iter()
-                .map(
-                    |(c,d)| (
-                        c.into_transmuted(|x| BaseVariable::Main(x)),
-                        d
-                    )
-                )
+                .map(|(c, d)| (c.into_transmuted(|x| BaseVariable::Main(x)), d)),
         );
 
         output
