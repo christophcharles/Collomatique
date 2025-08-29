@@ -306,12 +306,55 @@ pub trait Storage: Send + Sync {
     async unsafe fn teachers_remove_unchecked(
         &mut self,
         index: Self::TeacherId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async fn teachers_update(
         &mut self,
         index: Self::TeacherId,
         teacher: &Teacher,
     ) -> std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>;
+    async fn teachers_check_can_remove(
+        &mut self,
+        index: Self::TeacherId,
+    ) -> std::result::Result<Vec<Self::TimeSlotId>, IdError<Self::InternalError, Self::TeacherId>>
+    {
+        async move {
+            let teachers = self.teachers_get_all().await?;
+
+            if !teachers.contains_key(&index) {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let time_slots = self.time_slots_get_all().await?;
+            for (time_slot_id, time_slot) in time_slots {
+                if time_slot.teacher_id == index {
+                    dependancies.push(time_slot_id);
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn teachers_patterns_remove(
+        &mut self,
+        index: Self::TeacherId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<Self::InternalError, Self::TeacherId, Vec<Self::TimeSlotId>>,
+    > {
+        async move {
+            let dependancies = self
+                .teachers_check_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.teachers_remove_unchecked(index) }.await?;
+            Ok(())
+        }
+    }
 
     async fn students_get_all(
         &self,

@@ -58,7 +58,7 @@ pub async fn add(pool: &SqlitePool, teacher: &Teacher) -> Result<Id> {
     Ok(teacher_id)
 }
 
-pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), Error> {
     let teacher_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -70,12 +70,10 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
         .rows_affected();
 
     if count > 1 {
-        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "Multiple teachers with id {:?}",
             index
-        ))));
-    } else if count == 0 {
-        return Err(IdError::InvalidId(index));
+        )));
     }
 
     Ok(())
