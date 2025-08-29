@@ -129,7 +129,10 @@ fn invalid_students_per_interrogation() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::InvalidStudentsPerInterrogationRange)
+        Err(Error::SubjectWithInvalidStudentsPerInterrogationRange(
+            0,
+            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(1).unwrap()
+        ))
     );
 }
 
