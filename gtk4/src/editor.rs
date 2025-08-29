@@ -1,6 +1,6 @@
 use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
-use gtk::prelude::{ButtonExt, ObjectExt, WidgetExt};
+use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
@@ -153,6 +153,14 @@ impl Component for EditorPanel {
                                 set_sensitive: model.can_redo(),
                                 connect_clicked => EditorInput::RedoClicked,
                             },
+                        },
+                        pack_end = &gtk::Separator {
+                            set_orientation: gtk::Orientation::Vertical,
+                            add_css_class: "spacer",
+                        },
+                        pack_end = &gtk::Separator {
+                            set_orientation: gtk::Orientation::Vertical,
+                            add_css_class: "spacer",
                         },
                         pack_end = &gtk::Box {
                             add_css_class: "linked",
