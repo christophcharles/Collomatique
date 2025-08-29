@@ -17,6 +17,7 @@ pub mod solver;
 pub mod tools;
 
 pub use generics::{BaseProblem, BaseVariable, ExtraVariable, ProblemConstraints, SoftConstraints};
+pub use simplified::{SimpleBaseProblem, SimpleProblemConstraints};
 pub use solver::{
     DecoratedCompleteSolution, Problem, ProblemBuilder, TimeLimitSolution, Translator,
 };
