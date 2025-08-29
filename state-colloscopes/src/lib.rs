@@ -543,6 +543,10 @@ impl Data {
         for (id, _) in &self.inner_data.teachers.teacher_map {
             assert!(ids_so_far.insert(id.inner()));
         }
+
+        for (id, _) in &self.inner_data.week_patterns.week_pattern_map {
+            assert!(ids_so_far.insert(id.inner()));
+        }
     }
 
     /// USED INTERNALLY
