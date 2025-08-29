@@ -157,6 +157,14 @@ pub enum StudentError {
         "student id {0:?} has non-default assignments for subject id {1:?} in period id ({0:?}) and cannot be removed or updated"
     )]
     StudentStillHasNonTrivialAssignments(StudentId, SubjectId, PeriodId),
+
+    /// Student is still excluded by a group list
+    #[error("student id {0:?} is still excluded by a group list {1:?}")]
+    StudentIsStillExcludedByGroupList(StudentId, GroupListId),
+
+    /// Student is still referenced by a pre-filled group list
+    #[error("student id {0:?} is still referenced by a pre-filled group list {1:?}")]
+    StudentIsStillReferencedByPrefilledGroupList(StudentId, GroupListId),
 }
 
 /// Errors for periods operations
@@ -1482,6 +1490,21 @@ impl Data {
                 let Some(current_student) = self.inner_data.students.student_map.get(id) else {
                     return Err(StudentError::InvalidStudentId(*id));
                 };
+
+                for (group_list_id, group_list) in &self.inner_data.group_lists.group_list_map {
+                    if group_list.params.excluded_students.contains(id) {
+                        return Err(StudentError::StudentIsStillExcludedByGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
+                    }
+                    if group_list.prefilled_groups.contains_key(id) {
+                        return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
+                    }
+                }
 
                 for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
                     if current_student.excluded_periods.contains(period_id) {
