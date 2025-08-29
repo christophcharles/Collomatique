@@ -1,5 +1,4 @@
 pub mod json;
-pub mod sqlite;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
