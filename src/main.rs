@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::num::NonZeroU32;
 
 #[derive(Debug, Parser)]
@@ -21,6 +21,11 @@ enum Command {
     General {
         #[command(subcommand)]
         command: GeneralCommand,
+    },
+    /// Create, remove and configure week patterns
+    WeekPatterns {
+        #[command(subcommand)]
+        command: WeekPatternCommand,
     },
     /// Try and solve the colloscope
     Solve,
@@ -61,6 +66,30 @@ enum GeneralCommand {
     GetMaxInterrogationsPerDay,
     /// Show the possible range of number of interrogations per week (show \"none\" if none is set)
     GetInterrogationsPerWeekRange,
+}
+
+#[derive(Debug, Subcommand)]
+enum WeekPatternCommand {
+    /// Create a new week pattern
+    New {
+        /// Name for the new week pattern
+        name: String,
+        /// Possible prefill of the week pattern
+        prefill: Option<WeekPatternPrefill>,
+        /// Force creating a new week pattern with an existing name
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum WeekPatternPrefill {
+    /// Fill the week pattern with every week for 0 to week_count-1
+    All,
+    /// Fill the week pattern with every even week for 0 to week_count-1
+    Even,
+    /// Fill the week pattern with every odd week for 1 to week_count-1
+    Odd,
 }
 
 use collomatique::backend::sqlite;
@@ -277,6 +306,17 @@ async fn general_command(
     Ok(())
 }
 
+async fn week_pattern_command(
+    command: WeekPatternCommand,
+    app_state: &mut AppState<sqlite::Store>,
+) -> Result<()> {
+    use collomatique::frontend::state::{Operation, UpdateError};
+
+    todo!("Week pattern commands not yet implemented");
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -286,6 +326,7 @@ async fn main() -> Result<()> {
 
     match args.command {
         Command::General { command } => general_command(command, &mut app_state).await?,
+        Command::WeekPatterns { command } => week_pattern_command(command, &mut app_state).await?,
         Command::Solve => solve_command(&mut app_state).await?,
     }
     Ok(())
