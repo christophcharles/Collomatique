@@ -12,8 +12,8 @@ pub enum Message {
 
 pub fn update(_state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     match message {
-        Message::NewClicked => Task::done(super::dialogs::Message::OpenNewFile.into()),
-        Message::OpenClicked => Task::done(super::dialogs::Message::OpenExistingFile.into()),
+        Message::NewClicked => Task::done(GuiMessage::OpenNewFile),
+        Message::OpenClicked => Task::done(GuiMessage::OpenExistingFile),
         Message::ExitRequest(id) => window::close(id),
     }
 }
