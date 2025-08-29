@@ -5,12 +5,8 @@
 //! The goal for this crate is to fulfill the role of a translator. It takes a description
 //! of a colloscope (or at least the various constraints of a colloscope) and works with
 //! [collomatique_solver] to be able to represent the problem and solve it using [collomatique_ilp].
-//!
-//! Similarly, it can translate a solution of an ILP problem into the description of
-//! an actual colloscope and conversly, it can take the description of a colloscope
-//! and turn it into an ILP configuration. This is useful to check in real time if
-//! a colloscope satisfies all the constraints and helps when constructing a colloscope
-//! incrementally.
+//! It builds on [collomatique_solver::generics] and [collomatique_solver::solver] and uses its interfaces
+//! to build a *nice-enough* interface for automatic solving of colloscopes.
 //!
 //! This crate however does not expose a user-friendly interface. The reason is, to
 //! make the translation algorithm as thin as possible, and its verification as easy as
@@ -24,8 +20,9 @@
 //! from collomatique to provide necessary utilities to make working the algorithm
 //! somewhat pleasant.
 //! 
-//! The colloscope logic itself is found in the module [colloscopes].
+//! The colloscope logic itself is found in the module [base].
 
 pub mod colloscopes_draft;
-pub mod colloscopes;
 
+pub mod base;
+pub mod constraints;
