@@ -120,10 +120,6 @@ impl<T: traits::Manager> AppSession<T> {
     /// Commits the session and returns the Manager with one aggregated op in history
     pub fn commit(mut self) -> T {
         let aggregated_op = self.session_history.build_aggregated_op();
-        if aggregated_op.inner().is_empty() {
-            // If no operation needs commiting, do not add an event for this session
-            return self.op_manager;
-        }
         // We only update the history: the state is already up to date
         self.op_manager
             .get_modification_history_mut()
