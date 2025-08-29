@@ -15,6 +15,7 @@ pub struct Dialog {
     is_running: bool,
     error_dialog: Controller<error_dialog::Dialog>,
     worker: WorkerController<process_worker::ProcessWorker>,
+    stdout: String,
 }
 
 #[derive(Debug)]
@@ -162,7 +163,8 @@ impl SimpleComponent for Dialog {
                                 set_monospace: true,
                                 #[wrap(Some)]
                                 set_buffer = &gtk::TextBuffer {
-                                    set_text: "Test",
+                                    #[watch]
+                                    set_text: &model.stdout,
                                 },
                             }
                         }
@@ -206,6 +208,7 @@ impl SimpleComponent for Dialog {
             is_running: true,
             error_dialog,
             worker,
+            stdout: String::new(),
         };
 
         let widgets = view_output!();
@@ -219,6 +222,7 @@ impl SimpleComponent for Dialog {
                 self.hidden = false;
                 self.path = path;
                 self.is_running = true;
+                self.stdout = String::new();
                 self.worker
                     .sender()
                     .send(process_worker::ProcessWorkerInput::RunScript(script))
@@ -237,7 +241,9 @@ impl SimpleComponent for Dialog {
                 self.is_running = false;
             }
             DialogInput::StdErr(_content) => {}
-            DialogInput::StdOut(_content) => {}
+            DialogInput::StdOut(content) => {
+                self.stdout += &content;
+            }
             DialogInput::Error(error) => {
                 self.error_dialog
                     .sender()
