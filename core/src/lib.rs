@@ -49,6 +49,72 @@ impl<M: UsableData, S: UsableData> std::fmt::Display for BaseVariable<M, S> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+enum ReconstructionDesc<S: UsableData, V: UsableData> {
+    Structure(S),
+    ValueFixer(V, ordered_float::OrderedFloat<f64>),
+}
+
+impl<S: UsableData, V: UsableData> std::fmt::Display for ReconstructionDesc<S, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Structure(d) => write!(f, "{}", d),
+            Self::ValueFixer(var, value) => {
+                write!(f, "Fixes variable {} to value {}", var, value.into_inner())
+            }
+        }
+    }
+}
+
+fn default_structure_variable_reconstruction<
+    V: UsableData,
+    S: UsableData,
+    C: UsableData,
+    F: FnMut(V) -> Option<S>,
+>(
+    structure_constraints: Vec<(Constraint<V>, C)>,
+    structure_variables: BTreeMap<V, Variable>,
+    main_values: ConfigData<V>,
+    mut f: F,
+) -> Option<ConfigData<S>> {
+    let ilp_problem: collomatique_ilp::Problem<V, ReconstructionDesc<C, V>> =
+        collomatique_ilp::ProblemBuilder::new()
+            .set_variables(structure_variables)
+            .set_variables(main_values.get_values().into_iter().map(
+                |(var, _value)| (var, Variable::continuous()), // We don't care about the type of variable, the value will be fixed
+            ))
+            .add_constraints(
+                structure_constraints
+                    .into_iter()
+                    .map(|(constraint, desc)| (constraint, ReconstructionDesc::Structure(desc))),
+            )
+            .add_constraints(main_values.get_values().into_iter().map(|(var, value)| {
+                let lhs = LinExpr::var(var.clone());
+                let rhs = LinExpr::constant(value);
+
+                (
+                    lhs.eq(&rhs),
+                    ReconstructionDesc::ValueFixer(var, ordered_float::OrderedFloat(value)),
+                )
+            }))
+            .build()
+            .ok()?;
+
+    use collomatique_ilp::solvers::{self, Solver};
+
+    let cbc_solver = solvers::coin_cbc::CbcSolver::new();
+    let feasable_config = cbc_solver.solve(&ilp_problem)?;
+
+    let filtered_variables = feasable_config
+        .get_values()
+        .into_iter()
+        .filter_map(|(var, value)| f(var).map(|x| (x, value)));
+
+    let config_data = ConfigData::new().set_iter(filtered_variables);
+
+    Some(config_data)
+}
+
 pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     type MainVariable: UsableData;
     type StructureVariable: UsableData;
@@ -83,7 +149,32 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     fn reconstruct_structure_variables(
         &self,
         config: &ConfigData<Self::MainVariable>,
-    ) -> ConfigData<Self::StructureVariable>;
+    ) -> Option<ConfigData<Self::StructureVariable>> {
+        let structure_constraints = self.structure_constraints();
+        let structure_variables = self
+            .structure_variables()
+            .into_iter()
+            .map(|(v_name, v_desc)| (BaseVariable::Structure(v_name), v_desc))
+            .collect();
+        let main_values = ConfigData::new().set_iter(
+            config
+                .get_values()
+                .into_iter()
+                .map(|(var, value)| (BaseVariable::Main(var), value)),
+        );
+
+        let f = |v| match v {
+            BaseVariable::Main(_) => None,
+            BaseVariable::Structure(v) => Some(v),
+        };
+
+        default_structure_variable_reconstruction(
+            structure_constraints,
+            structure_variables,
+            main_values,
+            f,
+        )
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
