@@ -683,17 +683,8 @@ impl Storage for Store {
     unsafe fn subjects_add_unchecked(
         &mut self,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            Self::SubjectId,
-            Cross3Error<
-                Self::InternalError,
-                Self::SubjectGroupId,
-                Self::IncompatId,
-                Self::GroupListId,
-            >,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<Self::SubjectId, Self::InternalError>>
+           + Send {
         subjects::add(&self.pool, subject)
     }
     unsafe fn subjects_remove_unchecked(
@@ -708,18 +699,8 @@ impl Storage for Store {
         &mut self,
         index: Self::SubjectId,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            Cross3IdError<
-                Self::InternalError,
-                Self::SubjectId,
-                Self::SubjectGroupId,
-                Self::IncompatId,
-                Self::GroupListId,
-            >,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         subjects::update(&self.pool, index, subject)
     }
 
