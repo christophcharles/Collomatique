@@ -245,9 +245,29 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks the various ranges in subjects
+    /// In particular, students per group and groups per interrogation should
+    ///
+    fn check_subjects_data_has_correct_ranges(&self) -> bool {
+        for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
+            if subject.parameters.students_per_group.is_empty() {
+                return false;
+            }
+            if subject.parameters.groups_per_interrogation.is_empty() {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// USED INTERNALLY
+    ///
     /// checks all the invariants in subject data
     fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) -> bool {
         if !self.check_subjects_data_has_correct_period_ids(period_ids) {
+            return false;
+        }
+        if !self.check_subjects_data_has_correct_ranges() {
             return false;
         }
         true
