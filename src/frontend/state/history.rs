@@ -15,7 +15,7 @@ pub enum AnnotatedGeneralOperation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedWeekPatternsOperation {
-    Add(handles::WeekPatternHandle, backend::WeekPattern),
+    Create(handles::WeekPatternHandle, backend::WeekPattern),
     Remove(handles::WeekPatternHandle),
     Update(handles::WeekPatternHandle, backend::WeekPattern),
 }
@@ -42,9 +42,9 @@ impl AnnotatedWeekPatternsOperation {
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
         match op {
-            WeekPatternsOperation::Add(pattern) => {
+            WeekPatternsOperation::Create(pattern) => {
                 let handle = handle_managers.week_patterns.create_handle();
-                AnnotatedWeekPatternsOperation::Add(handle, pattern)
+                AnnotatedWeekPatternsOperation::Create(handle, pattern)
             }
             WeekPatternsOperation::Remove(handle) => AnnotatedWeekPatternsOperation::Remove(handle),
             WeekPatternsOperation::Update(handle, pattern) => {

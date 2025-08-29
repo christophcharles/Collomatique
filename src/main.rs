@@ -139,7 +139,7 @@ enum InterrogationsPerWeekRangeCommand {
 #[derive(Debug, Subcommand)]
 enum WeekPatternCommand {
     /// Create a new week pattern
-    Add {
+    Create {
         /// Name for the new week pattern
         name: String,
         /// Possible predefined patterns
@@ -710,7 +710,7 @@ async fn week_pattern_command(
     use collomatique::frontend::state::{Operation, UpdateError, WeekPatternsOperation};
 
     match command {
-        WeekPatternCommand::Add {
+        WeekPatternCommand::Create {
             name,
             pattern,
             force,
@@ -731,7 +731,9 @@ async fn week_pattern_command(
             };
 
             if let Err(e) = app_state
-                .apply(Operation::WeekPatterns(WeekPatternsOperation::Add(pattern)))
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Create(
+                    pattern,
+                )))
                 .await
             {
                 let err = match e {
