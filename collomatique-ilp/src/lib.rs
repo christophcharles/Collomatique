@@ -64,14 +64,39 @@ pub use linexpr::{Constraint, LinExpr};
 
 use mat_repr::{ConfigRepr, ProblemRepr};
 
+/// Tolerance for 0 checking on f64
+/// 
+/// Computation with f64 can lead, because
+/// of rounding errors to small values that really should be
+/// zero.
+/// 
+/// In Collomatique, most values are integers.
+/// So, using a small threshold can solve this kind of problems
+/// 
+/// Of course, there is also a bad consequence:
+/// a configuration might be detected as valid when it isn't.
+pub const TOLERANCE : f64 = 0.00001;
+
+/// Tests for non-negativity with [TOLERANCE]].
+/// 
+/// Tests if an f64 is non-negative (positive but non-zero)
+/// but does so taking into account the [TOLERANCE].
 pub fn f64_is_non_negative(v: f64) -> bool {
-    v > 0.
+    v > TOLERANCE
 }
 
+/// Tests for zero with [TOLERANCE]].
+/// 
+/// Tests if an f64 is zero
+/// but does so taking into account the [TOLERANCE].
 pub fn f64_is_zero(v: f64) -> bool {
-    v == 0.
+    v.abs() <= TOLERANCE
 }
 
+/// Tests for equality with [TOLERANCE]].
+/// 
+/// Tests if two f64 are equals
+/// but does so taking into account the [TOLERANCE].
 pub fn f64_equals(v1: f64, v2: f64) -> bool {
     f64_is_zero(v1 - v2)
 }
