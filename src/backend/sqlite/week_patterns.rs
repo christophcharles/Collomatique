@@ -148,7 +148,7 @@ pub async fn update(
     pool: &SqlitePool,
     index: Id,
     pattern: &WeekPattern,
-) -> std::result::Result<(), IdError<Error, Id>> {
+) -> std::result::Result<(), Error> {
     let week_pattern_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -164,12 +164,10 @@ pub async fn update(
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "Multiple week_patterns with id {:?}",
             index
-        ))));
-    } else if rows_affected == 0 {
-        return Err(IdError::InvalidId(index));
+        )));
     }
 
     let _ = sqlx::query!(

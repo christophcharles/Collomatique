@@ -3,6 +3,18 @@ pub mod sqlite;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+pub enum CheckedError<T, CheckData>
+where
+    T: std::fmt::Debug + std::error::Error,
+    CheckData: std::fmt::Debug,
+{
+    #[error("Check failed. Data provided is: {0:?}")]
+    CheckFailed(CheckData),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
 pub enum IdError<T, Id>
 where
     T: std::fmt::Debug + std::error::Error,
@@ -206,7 +218,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
-    async fn general_data_set(
+    async unsafe fn general_data_set_unchecked(
         &mut self,
         general_data: &GeneralData,
     ) -> std::result::Result<(), Self::InternalError>;
@@ -219,7 +231,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         &self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<WeekPattern, IdError<Self::InternalError, Self::WeekPatternId>>;
-    async fn week_patterns_add(
+    async unsafe fn week_patterns_add_unchecked(
         &mut self,
         pattern: &WeekPattern,
     ) -> std::result::Result<Self::WeekPatternId, Self::InternalError>;
@@ -227,11 +239,11 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         &mut self,
         index: Self::WeekPatternId,
     ) -> std::result::Result<(), Self::InternalError>;
-    async fn week_patterns_update(
+    async unsafe fn week_patterns_update_unchecked(
         &mut self,
         index: Self::WeekPatternId,
         pattern: &WeekPattern,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
 
     async fn teachers_get_all(
         &self,
@@ -491,8 +503,9 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneralData {
-    interrogations_per_week: Option<std::ops::Range<u32>>,
-    max_interrogations_per_day: Option<NonZeroU32>,
+    pub interrogations_per_week: Option<std::ops::Range<u32>>,
+    pub max_interrogations_per_day: Option<NonZeroU32>,
+    pub week_count: NonZeroU32,
 }
 
 use std::collections::BTreeSet;
@@ -649,6 +662,11 @@ impl<GroupingId: OrdId> GroupingIncompat<GroupingId> {
 }
 
 #[derive(Clone, Debug)]
+pub enum GeneralDataDependancy<WeekPatternId: OrdId> {
+    WeekPattern(WeekPatternId),
+}
+
+#[derive(Clone, Debug)]
 pub enum WeekPatternDependancy<IncompatId: OrdId, TimeSlotId: OrdId> {
     Incompat(IncompatId),
     TimeSlot(TimeSlotId),
@@ -693,6 +711,41 @@ pub enum DataStatusWithIdAndInvalidState<Id: OrdId> {
     BadCrossId(Id),
 }
 
+#[derive(Debug, Error)]
+pub enum WeekPatternError<T: std::fmt::Debug + std::error::Error> {
+    #[error("Week pattern references a week number ({0}) which exceeds general_data.week_count")]
+    WeekNumberTooBig(u32),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Debug, Error)]
+pub enum WeekPatternIdError<T, Id>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+{
+    #[error("Id {0:?} is invalid")]
+    InvalidId(Id),
+    #[error("Week pattern references a week number ({0}) which exceeds general_data.week_count")]
+    WeekNumberTooBig(u32),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+impl<T, Id> WeekPatternIdError<T, Id>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id: std::fmt::Debug,
+{
+    fn from_week_pattern_error(error: WeekPatternError<T>) -> Self {
+        match error {
+            WeekPatternError::WeekNumberTooBig(id) => WeekPatternIdError::WeekNumberTooBig(id),
+            WeekPatternError::InternalError(int_err) => WeekPatternIdError::InternalError(int_err),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Logic<T: Storage> {
     storage: T,
@@ -708,8 +761,26 @@ impl<T: Storage> Logic<T> {
     pub async fn general_data_set(
         &mut self,
         general_data: &GeneralData,
-    ) -> std::result::Result<(), T::InternalError> {
-        self.storage.general_data_set(general_data).await
+    ) -> std::result::Result<
+        (),
+        CheckedError<T::InternalError, Vec<GeneralDataDependancy<T::WeekPatternId>>>,
+    > {
+        let week_patterns = self.week_patterns_get_all().await?;
+
+        let mut errors = vec![];
+        for (&week_pattern_id, week_pattern) in &week_patterns {
+            if let Some(last_week) = week_pattern.weeks.last() {
+                if last_week.0 >= general_data.week_count.get() {
+                    errors.push(GeneralDataDependancy::WeekPattern(week_pattern_id));
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(CheckedError::CheckFailed(errors));
+        }
+
+        Ok(unsafe { self.storage.general_data_set_unchecked(general_data) }.await?)
     }
     pub async fn general_data_get(&self) -> std::result::Result<GeneralData, T::InternalError> {
         self.storage.general_data_get().await
@@ -726,18 +797,49 @@ impl<T: Storage> Logic<T> {
     ) -> std::result::Result<WeekPattern, IdError<T::InternalError, T::WeekPatternId>> {
         self.storage.week_patterns_get(index).await
     }
+    pub async fn week_patterns_check_id(
+        &self,
+        index: T::WeekPatternId,
+    ) -> std::result::Result<bool, T::InternalError> {
+        let week_patterns = self.week_patterns_get_all().await?;
+
+        Ok(week_patterns.contains_key(&index))
+    }
+    pub async fn week_patterns_check_data(
+        &self,
+        pattern: &WeekPattern,
+    ) -> std::result::Result<(), WeekPatternError<T::InternalError>> {
+        let general_data = self.general_data_get().await?;
+
+        if let Some(last_week) = pattern.weeks.last() {
+            if last_week.0 >= general_data.week_count.get() {
+                return Err(WeekPatternError::WeekNumberTooBig(last_week.0));
+            }
+        }
+
+        Ok(())
+    }
     pub async fn week_patterns_add(
         &mut self,
         pattern: &WeekPattern,
-    ) -> std::result::Result<T::WeekPatternId, T::InternalError> {
-        self.storage.week_patterns_add(pattern).await
+    ) -> std::result::Result<T::WeekPatternId, WeekPatternError<T::InternalError>> {
+        self.week_patterns_check_data(pattern).await?;
+
+        Ok(unsafe { self.storage.week_patterns_add_unchecked(pattern) }.await?)
     }
     pub async fn week_patterns_update(
         &mut self,
         index: T::WeekPatternId,
         pattern: &WeekPattern,
-    ) -> std::result::Result<(), IdError<T::InternalError, T::WeekPatternId>> {
-        self.storage.week_patterns_update(index, pattern).await
+    ) -> std::result::Result<(), WeekPatternIdError<T::InternalError, T::WeekPatternId>> {
+        if !self.week_patterns_check_id(index).await? {
+            return Err(WeekPatternIdError::InvalidId(index));
+        }
+        self.week_patterns_check_data(pattern)
+            .await
+            .map_err(WeekPatternIdError::from_week_pattern_error)?;
+
+        Ok(unsafe { self.storage.week_patterns_update_unchecked(index, pattern) }.await?)
     }
     pub async fn week_patterns_check_can_remove(
         &mut self,
@@ -1860,8 +1962,6 @@ where
     StorageError(#[from] StorageError),
     #[error("Error while validating data: {0:?}")]
     ValidationError(crate::gen::colloscope::Error),
-    #[error("No weeks in storage")]
-    NoWeeks,
     #[error("Inconsistent data: bad subject id ({0:?})")]
     BadSubjectId(T::SubjectId),
     #[error("Inconsistent data: bad teacher id ({0:?})")]
@@ -1989,18 +2089,9 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
         &self,
         data: &GenColloscopeData<T>,
     ) -> GenColloscopeResult<crate::gen::colloscope::GeneralData, T> {
-        let week_count_u32 = data
-            .week_patterns
-            .iter()
-            .filter_map(|(_pattern_id, pattern)| pattern.weeks.last().map(|w| w.0 + 1))
-            .max()
-            .unwrap_or(0);
-
-        let week_count = NonZeroU32::new(week_count_u32).ok_or(GenColloscopeError::NoWeeks)?;
-
         Ok(crate::gen::colloscope::GeneralData {
             teacher_count: data.teachers.len(),
-            week_count,
+            week_count: data.general_data.week_count,
             interrogations_per_week: data.general_data.interrogations_per_week.clone(),
             max_interrogations_per_day: data.general_data.max_interrogations_per_day,
         })
