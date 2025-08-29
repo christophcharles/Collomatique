@@ -464,7 +464,7 @@ impl GenColloscopeTranslator {
         subjects: &mut crate::gen::colloscope::SubjectList,
         subject_id_map: &BTreeMap<SubjectHandle, usize>,
     ) {
-        use crate::gen::colloscope::{BalancingObject, BalancingRequirements, BalancingStrictness};
+        use crate::gen::colloscope::{BalancingRequirements, BalancingStrictness};
 
         for (&subject_id, orig_subject) in &data.subjects {
             let subject_num = subject_id_map
@@ -474,22 +474,29 @@ impl GenColloscopeTranslator {
                 .get_mut(*subject_num)
                 .expect("Every mapped subject index should be valid");
 
-            let balacing_object = match (
+            let slot_selections = match (
                 orig_subject.balancing_requirements.teachers,
                 orig_subject.balancing_requirements.timeslots,
             ) {
                 (false, false) => None,
-                (true, false) => Some(BalancingObject::teachers_from_slots(&subject.slots)),
-                (false, true) => Some(BalancingObject::timeslots_from_slots(&subject.slots)),
-                (true, true) => Some(BalancingObject::teachers_and_timeslots_from_slots(
+                (true, false) => Some(BalancingRequirements::balance_teachers_from_slots(
                     &subject.slots,
                 )),
+                (false, true) => Some(BalancingRequirements::balance_timeslots_from_slots(
+                    &subject.slots,
+                )),
+                (true, true) => Some(
+                    BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                        &subject.slots,
+                    ),
+                ),
             };
 
-            let balancing_requirements = balacing_object.map(|obj| BalancingRequirements {
-                strictness: BalancingStrictness::OverallOnly,
-                object: obj,
-            });
+            let balancing_requirements =
+                slot_selections.map(|slot_selections| BalancingRequirements {
+                    strictness: BalancingStrictness::OverallOnly,
+                    slot_selections,
+                });
 
             subject.balancing_requirements = balancing_requirements;
         }

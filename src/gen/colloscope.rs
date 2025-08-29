@@ -46,8 +46,10 @@ pub enum Error {
     SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has a larger periodicity {1} than the number of weeks {2}. A full period is needed for the algorithm to work")]
     SubjectWithPeriodicityTooBig(usize, u32, u32),
-    #[error("Subject {0} has overlapping week selections in its balacing requirements")]
-    SubjectWithOverlappingWeekSelections(usize),
+    #[error("Subject {0} has overlapping slot selections in its balacing requirements")]
+    SubjectWithOverlappingSlotsInBalancing(usize),
+    #[error("Subject {0} has an invalid slot number ({1}) in its balacing requirements")]
+    SubjectWithInvalidSlotInBalancing(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error("Incompatibility {0} references an invalid incompatibility group ({1})")]
@@ -140,22 +142,79 @@ pub enum BalancingStrictness {
     Strict,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct WeekSelection {
-    pub selection: BTreeSet<u32>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingSlotGroup {
+    pub slots: BTreeSet<usize>,
+    pub count: usize,
+}
+
+impl BalancingSlotGroup {
+    pub fn extract_weeks(&self, slots: &Vec<SlotWithTeacher>) -> Option<BTreeSet<u32>> {
+        self.slots
+            .iter()
+            .map(|&slot_num| slots.get(slot_num).map(|slot| slot.start.week))
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BalancingObject {
-    Teachers(BTreeMap<WeekSelection, BTreeMap<TeacherBalancing, usize>>),
-    Timeslots(BTreeMap<WeekSelection, BTreeMap<TimeslotBalancing, usize>>),
-    TeachersAndTimeslots(BTreeMap<WeekSelection, BTreeMap<TeacherAndTimeslotBalancing, usize>>),
+pub struct BalancingSlotSelection {
+    pub slot_groups: Vec<BalancingSlotGroup>,
 }
 
-impl BalancingObject {
-    fn build_data<T: BalancingData>(
-        slots: &Vec<SlotWithTeacher>,
-    ) -> BTreeMap<WeekSelection, BTreeMap<T, usize>> {
+impl BalancingSlotSelection {
+    pub fn contains_slot(&self, slot: usize) -> bool {
+        for slot_group in &self.slot_groups {
+            if slot_group.slots.contains(&slot) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn extract_slots(&self) -> BTreeSet<usize> {
+        self.slot_groups
+            .iter()
+            .flat_map(|slot_group| slot_group.slots.iter().copied())
+            .collect()
+    }
+
+    pub fn extract_weeks(&self, slots: &Vec<SlotWithTeacher>) -> Option<BTreeSet<u32>> {
+        let mut output = BTreeSet::new();
+
+        for slot_group in &self.slot_groups {
+            let weeks = slot_group.extract_weeks(slots)?;
+            output.extend(weeks);
+        }
+
+        Some(output)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        for slot_group in &self.slot_groups {
+            if !slot_group.slots.is_empty() {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalancingRequirements {
+    pub strictness: BalancingStrictness,
+    pub slot_selections: Vec<BalancingSlotSelection>,
+}
+
+impl BalancingRequirements {
+    pub fn extract_slots_by_selection(&self) -> Vec<BTreeSet<usize>> {
+        self.slot_selections
+            .iter()
+            .map(|slot_selection| slot_selection.extract_slots())
+            .collect()
+    }
+
+    fn build_data<T: BalancingData>(slots: &Vec<SlotWithTeacher>) -> Vec<BalancingSlotSelection> {
         let mut week_map: BTreeMap<u32, BTreeMap<T, usize>> = BTreeMap::new();
 
         for slot in slots {
@@ -176,50 +235,56 @@ impl BalancingObject {
             }
         }
 
-        let mut reverse_data: BTreeMap<BTreeMap<T, usize>, WeekSelection> = BTreeMap::new();
+        let mut slot_type_week_map: BTreeMap<BTreeMap<T, usize>, BTreeSet<u32>> = BTreeMap::new();
 
         for (week, data) in week_map {
-            match reverse_data.get_mut(&data) {
+            match slot_type_week_map.get_mut(&data) {
                 Some(value) => {
-                    value.selection.insert(week);
+                    value.insert(week);
                 }
                 None => {
-                    reverse_data.insert(
-                        data,
-                        WeekSelection {
-                            selection: BTreeSet::from([week]),
-                        },
-                    );
+                    slot_type_week_map.insert(data, BTreeSet::from([week]));
                 }
             }
         }
 
-        reverse_data
+        slot_type_week_map
             .into_iter()
-            .map(|(data, week_select)| (week_select, data))
+            .map(|(descs, weeks)| BalancingSlotSelection {
+                slot_groups: descs
+                    .into_iter()
+                    .map(|(slot_type, count)| BalancingSlotGroup {
+                        slots: slots
+                            .iter()
+                            .enumerate()
+                            .filter(|(_i, x)| {
+                                slot_type.is_slot_relevant(x) && weeks.contains(&x.start.week)
+                            })
+                            .map(|(i, _x)| i)
+                            .collect(),
+                        count,
+                    })
+                    .collect(),
+            })
             .collect()
     }
 
-    pub fn teachers_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
-        BalancingObject::Teachers(Self::build_data(slots))
+    pub fn balance_teachers_from_slots(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> Vec<BalancingSlotSelection> {
+        Self::build_data::<TeacherBalancing>(slots)
     }
 
-    pub fn timeslots_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
-        BalancingObject::Timeslots(Self::build_data(slots))
+    pub fn balance_timeslots_from_slots(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> Vec<BalancingSlotSelection> {
+        Self::build_data::<TimeslotBalancing>(slots)
     }
 
-    pub fn teachers_and_timeslots_from_slots(slots: &Vec<SlotWithTeacher>) -> Self {
-        BalancingObject::TeachersAndTimeslots(Self::build_data(slots))
-    }
-
-    fn extract_week_selections(&self) -> Vec<WeekSelection> {
-        match self {
-            BalancingObject::Teachers(map) => map.iter().map(|(ws, _)| ws.clone()).collect(),
-            BalancingObject::Timeslots(map) => map.iter().map(|(ws, _)| ws.clone()).collect(),
-            BalancingObject::TeachersAndTimeslots(map) => {
-                map.iter().map(|(ws, _)| ws.clone()).collect()
-            }
-        }
+    pub fn balance_teachers_and_timeslots_from_slots(
+        slots: &Vec<SlotWithTeacher>,
+    ) -> Vec<BalancingSlotSelection> {
+        Self::build_data::<TeacherAndTimeslotBalancing>(slots)
     }
 }
 
@@ -233,8 +298,8 @@ trait BalancingData: Clone + PartialEq + Eq + PartialOrd + Ord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TeacherBalancing {
-    pub teacher: usize,
+struct TeacherBalancing {
+    teacher: usize,
 }
 
 impl BalancingData for TeacherBalancing {
@@ -246,9 +311,9 @@ impl BalancingData for TeacherBalancing {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TimeslotBalancing {
-    pub weekday: time::Weekday,
-    pub time: time::Time,
+struct TimeslotBalancing {
+    weekday: time::Weekday,
+    time: time::Time,
 }
 
 impl BalancingData for TimeslotBalancing {
@@ -261,10 +326,10 @@ impl BalancingData for TimeslotBalancing {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TeacherAndTimeslotBalancing {
-    pub teacher: usize,
-    pub weekday: time::Weekday,
-    pub time: time::Time,
+struct TeacherAndTimeslotBalancing {
+    teacher: usize,
+    weekday: time::Weekday,
+    time: time::Time,
 }
 
 impl BalancingData for TeacherAndTimeslotBalancing {
@@ -275,12 +340,6 @@ impl BalancingData for TeacherAndTimeslotBalancing {
             time: slot.start.start_time.clone(),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BalancingRequirements {
-    pub strictness: BalancingStrictness,
-    pub object: BalancingObject,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -408,16 +467,19 @@ impl ValidatedData {
 
         for (i, subject) in subjects.iter().enumerate() {
             if let Some(balancing_requirements) = &subject.balancing_requirements {
-                let week_selection_list = balancing_requirements.object.extract_week_selections();
+                let mut used_slots = BTreeSet::new();
 
-                let mut weeks = BTreeSet::new();
-
-                for week_selection in week_selection_list {
-                    for week in week_selection.selection {
-                        if weeks.contains(&week) {
-                            return Err(Error::SubjectWithOverlappingWeekSelections(i));
+                for slot_selection in &balancing_requirements.slot_selections {
+                    for slot_group in &slot_selection.slot_groups {
+                        for &slot in &slot_group.slots {
+                            if used_slots.contains(&slot) {
+                                return Err(Error::SubjectWithOverlappingSlotsInBalancing(i));
+                            }
+                            if slot >= subject.slots.len() {
+                                return Err(Error::SubjectWithInvalidSlotInBalancing(i, slot));
+                            }
+                            used_slots.insert(slot);
                         }
-                        weeks.insert(week);
                     }
                 }
             }
@@ -815,10 +877,8 @@ impl<'a> IlpTranslator<'a> {
             .enumerate()
             .flat_map(|(i, subject)| {
                 subject.balancing_requirements.iter().flat_map(move |br| {
-                    let week_selections = br.object.extract_week_selections();
-
-                    week_selections
-                        .into_iter()
+                    br.slot_selections
+                        .iter()
                         .enumerate()
                         .flat_map(move |(j, _ws)| {
                             subject.groups.prefilled_groups.iter().enumerate().map(
@@ -840,22 +900,22 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .flat_map(|(i, subject)| {
-                let bo = BalancingObject::teachers_and_timeslots_from_slots(&subject.slots);
+                let bo = BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                    &subject.slots,
+                );
 
-                let week_selections = bo.extract_week_selections();
-
-                week_selections
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(move |(j, _ws)| {
-                        subject.groups.prefilled_groups.iter().enumerate().map(
-                            move |(k, _group)| Variable::GroupOnWeekSelectionAuto {
-                                subject: i,
-                                week_selection: j,
-                                group: k,
-                            },
-                        )
-                    })
+                bo.into_iter().enumerate().flat_map(move |(j, _ws)| {
+                    subject
+                        .groups
+                        .prefilled_groups
+                        .iter()
+                        .enumerate()
+                        .map(move |(k, _group)| Variable::GroupOnWeekSelectionAuto {
+                            subject: i,
+                            week_selection: j,
+                            group: k,
+                        })
+                })
             })
             .collect()
     }
@@ -1963,27 +2023,21 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_type<
-        T: BalancingData,
-    >(
+    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_type(
         &self,
         i: usize,
         subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
         week_span: u32,
-        slot_type: &T,
+        relevant_slots: &BTreeSet<usize>,
         count: usize,
         total_count: usize,
         k: usize,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut expr = Expr::constant(0);
 
-        for (j, slot) in subject.slots.iter().enumerate() {
-            if !slot_type.is_slot_relevant(slot) {
-                continue;
-            }
-            if !week_selection.selection.contains(&slot.start.week) {
+        for (j, _slot) in subject.slots.iter().enumerate() {
+            if !relevant_slots.contains(&j) {
                 continue;
             }
 
@@ -2021,64 +2075,41 @@ impl<'a> IlpTranslator<'a> {
         }
     }
 
-    fn build_balancing_constraints_for_subject_overall_only_internal_for_week_selection<
-        T: BalancingData,
-    >(
+    fn build_balancing_constraints_for_subject_overall_only_internal_for_week_selection(
         &self,
         i: usize,
         subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
-        week_data: &BTreeMap<T, usize>,
+        slot_selection: &BalancingSlotSelection,
     ) -> BTreeSet<Constraint<Variable>> {
-        if week_selection.selection.is_empty() {
+        if slot_selection.is_empty() {
             return BTreeSet::new();
         }
 
-        let week_min = week_selection
-            .selection
-            .first()
-            .expect("Week selection should not be empty");
-        let week_max = week_selection
-            .selection
-            .last()
-            .expect("Week selection should not be empty");
+        let weeks = slot_selection
+            .extract_weeks(&subject.slots)
+            .expect("Slot number in slot selection should be valid");
+        let first_week_in_selection = weeks.first().cloned().unwrap();
+        let last_week_in_selection = weeks.last().cloned().unwrap();
 
-        let week_span = *week_max - *week_min + 1;
+        let week_span = last_week_in_selection - first_week_in_selection + 1;
 
-        let total_count = week_data.iter().map(|(_, c)| *c).sum();
+        let total_count = slot_selection
+            .slot_groups
+            .iter()
+            .map(|slot_group| slot_group.count)
+            .sum();
 
         let mut constraints = BTreeSet::new();
 
-        for (slot_type, &count) in week_data {
+        for slot_group in &slot_selection.slot_groups {
+            let relevant_slots = &slot_group.slots;
+            let count = slot_group.count;
             for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                 constraints.extend(self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_type(
-                    i, subject, j, week_selection, week_span, slot_type, count, total_count, k
+                    i, subject, j, week_span, relevant_slots, count, total_count, k
                 ));
             }
-        }
-
-        constraints
-    }
-
-    fn build_balancing_constraints_for_subject_overall_only_internal<T: BalancingData>(
-        &self,
-        i: usize,
-        subject: &Subject,
-        data: &BTreeMap<WeekSelection, BTreeMap<T, usize>>,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (j, (week_selection, week_data)) in data.iter().enumerate() {
-            constraints.extend(
-                self.build_balancing_constraints_for_subject_overall_only_internal_for_week_selection(
-                    i,
-                    subject,
-                    j,
-                    week_selection,
-                    week_data,
-                )
-            );
         }
 
         constraints
@@ -2088,30 +2119,30 @@ impl<'a> IlpTranslator<'a> {
         &self,
         i: usize,
         subject: &Subject,
-        bo: &BalancingObject,
+        slot_selections: &Vec<BalancingSlotSelection>,
     ) -> BTreeSet<Constraint<Variable>> {
-        match &bo {
-            BalancingObject::Teachers(data) => {
-                self.build_balancing_constraints_for_subject_overall_only_internal(i, subject, data)
-            }
-            BalancingObject::Timeslots(data) => {
-                self.build_balancing_constraints_for_subject_overall_only_internal(i, subject, data)
-            }
-            BalancingObject::TeachersAndTimeslots(data) => {
-                self.build_balancing_constraints_for_subject_overall_only_internal(i, subject, data)
-            }
+        let mut constraints = BTreeSet::new();
+
+        for (j, slot_selection) in slot_selections.iter().enumerate() {
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_overall_only_internal_for_week_selection(
+                    i,
+                    subject,
+                    j,
+                    slot_selection,
+                )
+            );
         }
+
+        constraints
     }
 
-    fn build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type<
-        T: BalancingData,
-    >(
+    fn build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type(
         &self,
         i: usize,
         subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
-        slot_type: &T,
+        relevant_slots: &BTreeSet<usize>,
         count: usize,
         window_size: u32,
         range: &std::ops::Range<u32>,
@@ -2123,10 +2154,7 @@ impl<'a> IlpTranslator<'a> {
             if !range.contains(&slot.start.week) {
                 continue;
             }
-            if !week_selection.selection.contains(&slot.start.week) {
-                continue;
-            }
-            if !slot_type.is_slot_relevant(slot) {
+            if !relevant_slots.contains(&slot_num) {
                 continue;
             }
 
@@ -2192,16 +2220,19 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn generate_ranges_for_balancing<T: BalancingData>(
+    fn generate_ranges_for_balancing(
         &self,
         subject: &Subject,
-        week_selection: &WeekSelection,
-        week_data: &BTreeMap<T, usize>,
+        slot_selection: &BalancingSlotSelection,
         allow_cuts: bool,
     ) -> (Vec<std::ops::Range<u32>>, u32) {
-        assert!(!week_selection.selection.is_empty());
+        assert!(!slot_selection.is_empty());
 
-        let total_count_usize: usize = week_data.iter().map(|(_, c)| *c).sum();
+        let total_count_usize: usize = slot_selection
+            .slot_groups
+            .iter()
+            .map(|slot_group| slot_group.count)
+            .sum();
         let total_count = u32::try_from(total_count_usize)
             .expect("Number of slots for balancing data should fit in u32");
 
@@ -2215,8 +2246,11 @@ impl<'a> IlpTranslator<'a> {
 
         let rolling_ranges = self.generate_rolling_ranges(initial_ranges, window_size);
 
-        let first_week_in_selection = week_selection.selection.first().cloned().unwrap();
-        let last_week_in_selection = week_selection.selection.last().cloned().unwrap();
+        let weeks = slot_selection
+            .extract_weeks(&subject.slots)
+            .expect("Slot number in slot selection should be valid");
+        let first_week_in_selection = weeks.first().cloned().unwrap();
+        let last_week_in_selection = weeks.last().cloned().unwrap();
 
         (
             rolling_ranges
@@ -2230,36 +2264,34 @@ impl<'a> IlpTranslator<'a> {
         )
     }
 
-    fn build_balancing_constraints_for_subject_strict_internal_for_week_selection<
-        T: BalancingData,
-    >(
+    fn build_balancing_constraints_for_subject_strict_internal_for_week_selection(
         &self,
         i: usize,
         subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
-        week_data: &BTreeMap<T, usize>,
+        slot_selection: &BalancingSlotSelection,
         allow_cuts: bool,
     ) -> BTreeSet<Constraint<Variable>> {
-        if week_selection.selection.is_empty() {
+        if slot_selection.is_empty() {
             return BTreeSet::new();
         }
 
         let (ranges, window_size) =
-            self.generate_ranges_for_balancing(subject, week_selection, week_data, allow_cuts);
+            self.generate_ranges_for_balancing(subject, slot_selection, allow_cuts);
 
         let mut output = BTreeSet::new();
 
         for range in ranges {
-            for (slot_type, &count) in week_data {
+            for slot_group in &slot_selection.slot_groups {
+                let count = slot_group.count;
+                let relevant_slots = &slot_group.slots;
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                     output.insert(
                         self.build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type(
                             i,
                             subject,
                             j,
-                            week_selection,
-                            slot_type,
+                            relevant_slots,
                             count,
                             window_size,
                             &range,
@@ -2273,23 +2305,22 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
-    fn build_balancing_constraints_for_subject_strict_internal<T: BalancingData>(
+    fn build_balancing_constraints_for_subject_strict(
         &self,
         i: usize,
         subject: &Subject,
-        data: &BTreeMap<WeekSelection, BTreeMap<T, usize>>,
+        slot_selections: &Vec<BalancingSlotSelection>,
         allow_cuts: bool,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
-        for (j, (week_selection, week_data)) in data.iter().enumerate() {
+        for (j, slot_selection) in slot_selections.iter().enumerate() {
             constraints.extend(
                 self.build_balancing_constraints_for_subject_strict_internal_for_week_selection(
                     i,
                     subject,
                     j,
-                    week_selection,
-                    week_data,
+                    slot_selection,
                     allow_cuts,
                 ),
             );
@@ -2298,45 +2329,33 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_balancing_constraints_for_subject_strict(
-        &self,
-        i: usize,
-        subject: &Subject,
-        bo: &BalancingObject,
-        allow_cuts: bool,
-    ) -> BTreeSet<Constraint<Variable>> {
-        match &bo {
-            BalancingObject::Teachers(data) => self
-                .build_balancing_constraints_for_subject_strict_internal(
-                    i, subject, data, allow_cuts,
-                ),
-            BalancingObject::Timeslots(data) => self
-                .build_balancing_constraints_for_subject_strict_internal(
-                    i, subject, data, allow_cuts,
-                ),
-            BalancingObject::TeachersAndTimeslots(data) => self
-                .build_balancing_constraints_for_subject_strict_internal(
-                    i, subject, data, allow_cuts,
-                ),
-        }
-    }
-
     fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
             if let Some(br) = &subject.balancing_requirements {
-                let bo = &br.object;
+                let slot_selections = &br.slot_selections;
                 constraints.extend(match &br.strictness {
-                    BalancingStrictness::OverallOnly => {
-                        self.build_balancing_constraints_for_subject_overall_only(i, subject, bo)
-                    }
-                    BalancingStrictness::Strict => {
-                        self.build_balancing_constraints_for_subject_strict(i, subject, bo, false)
-                    }
-                    BalancingStrictness::StrictWithCuts => {
-                        self.build_balancing_constraints_for_subject_strict(i, subject, bo, true)
-                    }
+                    BalancingStrictness::OverallOnly => self
+                        .build_balancing_constraints_for_subject_overall_only(
+                            i,
+                            subject,
+                            slot_selections,
+                        ),
+                    BalancingStrictness::Strict => self
+                        .build_balancing_constraints_for_subject_strict(
+                            i,
+                            subject,
+                            slot_selections,
+                            false,
+                        ),
+                    BalancingStrictness::StrictWithCuts => self
+                        .build_balancing_constraints_for_subject_strict(
+                            i,
+                            subject,
+                            slot_selections,
+                            true,
+                        ),
                 });
             }
         }
@@ -2349,8 +2368,7 @@ impl<'a> IlpTranslator<'a> {
         i: usize,
         subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
-        slot_type: &TeacherAndTimeslotBalancing,
+        relevant_slots: &BTreeSet<usize>,
         count: usize,
         window_size: u32,
         range: &std::ops::Range<u32>,
@@ -2362,10 +2380,7 @@ impl<'a> IlpTranslator<'a> {
             if !range.contains(&slot.start.week) {
                 continue;
             }
-            if !week_selection.selection.contains(&slot.start.week) {
-                continue;
-            }
-            if !slot_type.is_slot_relevant(slot) {
+            if !relevant_slots.contains(&slot_num) {
                 continue;
             }
 
@@ -2394,28 +2409,28 @@ impl<'a> IlpTranslator<'a> {
         i: usize,
         subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
-        week_data: &BTreeMap<TeacherAndTimeslotBalancing, usize>,
+        slot_selection: &BalancingSlotSelection,
     ) -> BTreeSet<Constraint<Variable>> {
-        if week_selection.selection.is_empty() {
+        if slot_selection.is_empty() {
             return BTreeSet::new();
         }
 
         let (ranges, window_size) =
-            self.generate_ranges_for_balancing(subject, week_selection, week_data, false);
+            self.generate_ranges_for_balancing(subject, slot_selection, false);
 
         let mut output = BTreeSet::new();
 
         for range in ranges {
-            for (slot_type, &count) in week_data {
+            for slot_group in &slot_selection.slot_groups {
+                let relevant_slots = &slot_group.slots;
+                let count = slot_group.count;
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                     output.insert(
                         self.build_balancing_optimizer_for_subject_and_week_selection_range_group_and_slot_type(
                             i,
                             subject,
                             j,
-                            week_selection,
-                            slot_type,
+                            relevant_slots,
                             count,
                             window_size,
                             &range,
@@ -2433,18 +2448,17 @@ impl<'a> IlpTranslator<'a> {
         &self,
         i: usize,
         subject: &Subject,
-        data: &BTreeMap<WeekSelection, BTreeMap<TeacherAndTimeslotBalancing, usize>>,
+        data: &Vec<BalancingSlotSelection>,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
-        for (j, (week_selection, week_data)) in data.iter().enumerate() {
+        for (j, slot_selection) in data.iter().enumerate() {
             constraints.extend(
                 self.build_balancing_optimizer_for_subject_and_week_selection(
                     i,
                     subject,
                     j,
-                    week_selection,
-                    week_data,
+                    slot_selection,
                 ),
             );
         }
@@ -2456,11 +2470,8 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let bo = BalancingObject::teachers_and_timeslots_from_slots(&subject.slots);
-            let BalancingObject::TeachersAndTimeslots(data) = bo else {
-                panic!("teachers_and_timeslots_from_slots should produce BalancingObject::TeachersAndTimeslots");
-            };
-
+            let data =
+                BalancingRequirements::balance_teachers_and_timeslots_from_slots(&subject.slots);
             constraints.extend(self.build_balancing_optimizer_for_subject(i, subject, &data));
         }
 
@@ -2675,9 +2686,8 @@ impl<'a> IlpTranslator<'a> {
     fn build_group_on_week_selection_constraints_for_subject_week_selection_and_group(
         &self,
         i: usize,
-        subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
+        slot_selection: &BalancingSlotSelection,
         k: usize,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
@@ -2689,14 +2699,10 @@ impl<'a> IlpTranslator<'a> {
             group: k,
         });
 
-        for (slot_num, slot) in subject.slots.iter().enumerate() {
-            if !week_selection.selection.contains(&slot.start.week) {
-                continue;
-            }
-
+        for slot in slot_selection.extract_slots() {
             let expr_gis = Expr::var(Variable::GroupInSlot {
                 subject: i,
-                slot: slot_num,
+                slot,
                 group: k,
             });
 
@@ -2717,16 +2723,13 @@ impl<'a> IlpTranslator<'a> {
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
             if let Some(br) = &subject.balancing_requirements {
-                let week_selection_list = br.object.extract_week_selections();
-
-                for (j, week_selection) in week_selection_list.iter().enumerate() {
+                for (j, slot_selection) in br.slot_selections.iter().enumerate() {
                     for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                         constraints.extend(
                             self.build_group_on_week_selection_constraints_for_subject_week_selection_and_group(
                                 i,
-                                subject,
                                 j,
-                                week_selection,
+                                slot_selection,
                                 k
                             )
                         );
@@ -2741,9 +2744,8 @@ impl<'a> IlpTranslator<'a> {
     fn build_group_on_week_selection_auto_constraints_for_subject_week_selection_and_group(
         &self,
         i: usize,
-        subject: &Subject,
         j: usize,
-        week_selection: &WeekSelection,
+        slot_selection: &BalancingSlotSelection,
         k: usize,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
@@ -2755,14 +2757,10 @@ impl<'a> IlpTranslator<'a> {
             group: k,
         });
 
-        for (slot_num, slot) in subject.slots.iter().enumerate() {
-            if !week_selection.selection.contains(&slot.start.week) {
-                continue;
-            }
-
+        for slot in slot_selection.extract_slots() {
             let expr_gis = Expr::var(Variable::GroupInSlot {
                 subject: i,
-                slot: slot_num,
+                slot,
                 group: k,
             });
 
@@ -2782,17 +2780,15 @@ impl<'a> IlpTranslator<'a> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            let bo = BalancingObject::teachers_and_timeslots_from_slots(&subject.slots);
-            let week_selection_list = bo.extract_week_selections();
-
-            for (j, week_selection) in week_selection_list.iter().enumerate() {
+            let slot_selections =
+                BalancingRequirements::balance_teachers_and_timeslots_from_slots(&subject.slots);
+            for (j, slot_selection) in slot_selections.iter().enumerate() {
                 for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
                     constraints.extend(
                         self.build_group_on_week_selection_auto_constraints_for_subject_week_selection_and_group(
                             i,
-                            subject,
                             j,
-                            week_selection,
+                            slot_selection,
                             k
                         )
                     );
@@ -2972,10 +2968,12 @@ impl<'a> IlpTranslator<'a> {
             .map(|subject| match &subject.balancing_requirements {
                 None => vec![],
                 Some(br) => br
-                    .object
-                    .extract_week_selections()
-                    .into_iter()
-                    .map(|ws| ws.selection)
+                    .slot_selections
+                    .iter()
+                    .map(|x| {
+                        x.extract_weeks(&subject.slots)
+                            .expect("Slot numbers should be valid")
+                    })
                     .collect(),
             })
             .collect();
@@ -2984,11 +2982,17 @@ impl<'a> IlpTranslator<'a> {
             .subjects
             .iter()
             .map(|subject| {
-                let bo = BalancingObject::teachers_and_timeslots_from_slots(&subject.slots);
+                let slot_selections =
+                    BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                        &subject.slots,
+                    );
 
-                bo.extract_week_selections()
+                slot_selections
                     .into_iter()
-                    .map(|ws| ws.selection)
+                    .map(|x| {
+                        x.extract_weeks(&subject.slots)
+                            .expect("Slot numbers should be valid")
+                    })
                     .collect()
             })
             .collect();
