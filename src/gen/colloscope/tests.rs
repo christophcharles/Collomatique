@@ -8,7 +8,7 @@ fn trivial_validated_data() {
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = SubjectList::new();
@@ -51,7 +51,7 @@ fn simple_validated_data() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -211,7 +211,7 @@ fn invalid_students_per_interrogation() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -266,7 +266,7 @@ fn subject_slot_overlaps_next_day() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -318,7 +318,7 @@ fn incompatibility_slot_overlaps_next_day() {
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
     let subjects = SubjectList::new();
     let incompatibility_groups = vec![IncompatibilityGroup {
@@ -370,7 +370,7 @@ fn invalid_teacher_number() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -422,7 +422,7 @@ fn invalid_incompatibility_number() {
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = SubjectList::new();
@@ -468,7 +468,7 @@ fn slot_ref_has_invalid_subject() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -559,7 +559,7 @@ fn slot_ref_has_invalid_slot() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -650,7 +650,7 @@ fn slot_grouping_overlap() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -767,7 +767,7 @@ fn grouping_incompact_invalid_ref() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -856,7 +856,7 @@ fn invalid_interrogations_per_week() {
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: Some(10..8),
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = SubjectList::new();
@@ -892,7 +892,7 @@ fn duplicated_groups() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1006,7 +1006,7 @@ fn duplicated_student() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1129,7 +1129,7 @@ fn duplicated_student_not_assigned() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1250,7 +1250,7 @@ fn invalid_student_in_group() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1360,7 +1360,7 @@ fn invalid_student_not_assigned() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1464,7 +1464,7 @@ fn empty_group() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1591,7 +1591,7 @@ fn extensible_empty_group() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1714,7 +1714,7 @@ fn group_too_large() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1837,7 +1837,7 @@ fn non_extensible_too_small_group() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -1964,7 +1964,7 @@ fn too_few_groups() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -2086,7 +2086,7 @@ fn too_many_groups() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -2220,7 +2220,7 @@ fn no_full_period() {
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -2312,7 +2312,7 @@ fn group_in_slot_variables() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -2522,7 +2522,7 @@ fn group_on_slot_selection_variables() {
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -2710,7 +2710,7 @@ fn default_group_on_slot_selection_variables() {
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -2865,7 +2865,7 @@ fn dynamic_group_assignment_variables() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -3155,7 +3155,7 @@ fn student_in_group_variables() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -3345,7 +3345,7 @@ fn use_grouping() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -3475,7 +3475,7 @@ fn incomapt_group_for_student_variables() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -3861,7 +3861,7 @@ fn at_most_max_groups_per_slot_constraints() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -4175,7 +4175,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -4372,7 +4372,7 @@ fn one_interrogation_per_period() {
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -4643,7 +4643,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
         week_count: NonZeroU32::new(5).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -4957,7 +4957,7 @@ fn students_per_group_count() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -5148,7 +5148,7 @@ fn student_in_single_group() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -5338,7 +5338,7 @@ fn dynamic_groups_student_in_group_inequalities() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -5467,7 +5467,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -5593,7 +5593,7 @@ fn interrogations_per_week() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: Some(1..3),
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -5841,7 +5841,7 @@ fn grouping_inequalities() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -6005,7 +6005,7 @@ fn grouping_incompats() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -6222,7 +6222,7 @@ fn simple_colloscope() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -6442,7 +6442,7 @@ fn colloscope_with_dynamic_groups() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -6802,7 +6802,7 @@ fn at_most_one_interrogation_per_empty_group() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -6912,7 +6912,7 @@ fn max_interrogations_per_day() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: Some(NonZeroU32::new(1).unwrap()),
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![
@@ -7148,7 +7148,7 @@ fn balancing_teachers() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -7361,7 +7361,7 @@ fn balancing_timeslots() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -7583,7 +7583,7 @@ fn balancing_timeslots_2() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -7796,7 +7796,7 @@ fn balancing_teachers_and_timeslots() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -8018,7 +8018,7 @@ fn no_balancing() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -8163,7 +8163,7 @@ fn balancing_timeslots_with_ghost_group() {
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -8514,7 +8514,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -8815,7 +8815,7 @@ fn balancing_timeslots_with_partial_last_period() {
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -9026,7 +9026,7 @@ fn student_incompat_max_count_constraints() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -9400,7 +9400,7 @@ fn incompat_group_for_student_constraints() {
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {
@@ -9867,7 +9867,7 @@ fn group_on_slot_selection_constraints() {
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
         max_interrogations_per_day: None,
-        costs_adjustements: crate::gen::colloscope::CostsAdjustements::default(),
+        costs_adjustments: crate::gen::colloscope::CostsAdjustments::default(),
     };
 
     let subjects = vec![Subject {

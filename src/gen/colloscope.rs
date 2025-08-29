@@ -483,7 +483,7 @@ pub struct Student {
 pub type StudentList = Vec<Student>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CostsAdjustements {
+pub struct CostsAdjustments {
     pub max_interrogations_per_day_for_single_student: i32,
     pub max_interrogations_per_day_for_all_students: i32,
     pub interrogations_per_week_range_for_single_student: i32,
@@ -491,9 +491,9 @@ pub struct CostsAdjustements {
     pub balancing: i32,
 }
 
-impl Default for CostsAdjustements {
+impl Default for CostsAdjustments {
     fn default() -> Self {
-        CostsAdjustements {
+        CostsAdjustments {
             max_interrogations_per_day_for_single_student: 1,
             max_interrogations_per_day_for_all_students: 1,
             interrogations_per_week_range_for_single_student: 1,
@@ -510,7 +510,7 @@ pub struct GeneralData {
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
     pub periodicity_cuts: BTreeSet<NonZeroU32>,
-    pub costs_adjustements: CostsAdjustements,
+    pub costs_adjustments: CostsAdjustments,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2849,28 +2849,28 @@ impl<'a> IlpTranslator<'a> {
         let student_per_day_cost = f64::from(
             self.data
                 .general
-                .costs_adjustements
+                .costs_adjustments
                 .max_interrogations_per_day_for_single_student,
         );
         let student_per_week_cost = f64::from(
             self.data
                 .general
-                .costs_adjustements
+                .costs_adjustments
                 .interrogations_per_week_range_for_single_student,
         );
         let global_per_day_cost = f64::from(
             self.data
                 .general
-                .costs_adjustements
+                .costs_adjustments
                 .max_interrogations_per_day_for_all_students,
         );
         let global_per_week_cost = f64::from(
             self.data
                 .general
-                .costs_adjustements
+                .costs_adjustments
                 .interrogations_per_week_range_for_all_students,
         );
-        let balancing_cost = f64::from(self.data.general.costs_adjustements.balancing);
+        let balancing_cost = f64::from(self.data.general.costs_adjustments.balancing);
 
         let student_count_f64 = self.data.students.len() as f64;
 
