@@ -9,7 +9,6 @@ mod file_loader;
 #[derive(Debug)]
 pub enum LoadingInput {
     Load(PathBuf),
-    StopLoading,
 
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
     Failed(PathBuf, String),
@@ -102,6 +101,9 @@ impl SimpleComponent for LoadingPanel {
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             LoadingInput::Load(path) => {
+                if Some(&path) == self.path.as_ref() {
+                    return;
+                }
                 self.path = Some(path.clone());
                 let worker = file_loader::FileLoader::builder()
                     .detach_worker(())
@@ -119,13 +121,18 @@ impl SimpleComponent for LoadingPanel {
                     .unwrap();
                 self.worker = Some(worker);
             }
-            LoadingInput::StopLoading => {
-                drop(self.worker.take());
-            }
             LoadingInput::Failed(path, error) => {
+                if Some(&path) != self.path.as_ref() {
+                    return;
+                }
+                self.path = None;
                 sender.output(LoadingOutput::Failed(path, error)).unwrap();
             }
             LoadingInput::Loaded(path, data) => {
+                if Some(&path) != self.path.as_ref() {
+                    return;
+                }
+                self.path = None;
                 sender.output(LoadingOutput::Loaded(path, data)).unwrap();
             }
         }
