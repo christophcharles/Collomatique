@@ -1,6 +1,18 @@
 use super::*;
 
 #[derive(Debug)]
+pub enum WeekPatternsUpdateWarning {}
+
+impl WeekPatternsUpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> String {
+        String::new()
+    }
+}
+
+#[derive(Debug)]
 pub enum WeekPatternsUpdateOp {
     AddNewWeekPattern(collomatique_state_colloscopes::week_patterns::WeekPattern),
     UpdateWeekPattern(
@@ -43,6 +55,10 @@ impl WeekPatternsUpdateOp {
                 "Supprimer un modèle de périodicité".into()
             }
         }
+    }
+
+    pub fn get_warnings(&self) -> Vec<WeekPatternsUpdateWarning> {
+        vec![]
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(

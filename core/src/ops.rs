@@ -55,6 +55,72 @@ pub enum UpdateError {
     WeekPatterns(#[from] WeekPatternsUpdateError),
 }
 
+#[derive(Debug)]
+pub enum UpdateWarning {
+    GeneralPlanning(GeneralPlanningUpdateWarning),
+    Subjects(SubjectsUpdateWarning),
+    Teachers(TeachersUpdateWarning),
+    Students(StudentsUpdateWarning),
+    Assignments(AssignmentsUpdateWarning),
+    WeekPatterns(WeekPatternsUpdateWarning),
+}
+
+impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
+    fn from(value: GeneralPlanningUpdateWarning) -> Self {
+        UpdateWarning::GeneralPlanning(value)
+    }
+}
+
+impl From<SubjectsUpdateWarning> for UpdateWarning {
+    fn from(value: SubjectsUpdateWarning) -> Self {
+        UpdateWarning::Subjects(value)
+    }
+}
+
+impl From<TeachersUpdateWarning> for UpdateWarning {
+    fn from(value: TeachersUpdateWarning) -> Self {
+        UpdateWarning::Teachers(value)
+    }
+}
+
+impl From<StudentsUpdateWarning> for UpdateWarning {
+    fn from(value: StudentsUpdateWarning) -> Self {
+        UpdateWarning::Students(value)
+    }
+}
+
+impl From<AssignmentsUpdateWarning> for UpdateWarning {
+    fn from(value: AssignmentsUpdateWarning) -> Self {
+        UpdateWarning::Assignments(value)
+    }
+}
+
+impl From<WeekPatternsUpdateWarning> for UpdateWarning {
+    fn from(value: WeekPatternsUpdateWarning) -> Self {
+        UpdateWarning::WeekPatterns(value)
+    }
+}
+
+impl UpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        data: &T,
+    ) -> String {
+        match self {
+            UpdateWarning::GeneralPlanning(w) => w.build_desc(data),
+            UpdateWarning::Subjects(w) => w.build_desc(data),
+            UpdateWarning::Teachers(w) => w.build_desc(data),
+            UpdateWarning::Students(w) => w.build_desc(data),
+            UpdateWarning::Assignments(w) => w.build_desc(data),
+            UpdateWarning::WeekPatterns(w) => w.build_desc(data),
+        }
+    }
+
+    fn from_iter<T: Into<UpdateWarning>>(iter: impl IntoIterator<Item = T>) -> Vec<UpdateWarning> {
+        iter.into_iter().map(|x| x.into()).collect()
+    }
+}
+
 impl UpdateOp {
     pub fn get_desc(&self) -> String {
         match self {
@@ -64,6 +130,23 @@ impl UpdateOp {
             UpdateOp::Students(student_op) => student_op.get_desc(),
             UpdateOp::Assignments(assignment_op) => assignment_op.get_desc(),
             UpdateOp::WeekPatterns(week_pattern_op) => week_pattern_op.get_desc(),
+        }
+    }
+
+    pub fn get_warnings(&self) -> Vec<UpdateWarning> {
+        match self {
+            UpdateOp::GeneralPlanning(period_op) => {
+                UpdateWarning::from_iter(period_op.get_warnings())
+            }
+            UpdateOp::Subjects(subject_op) => UpdateWarning::from_iter(subject_op.get_warnings()),
+            UpdateOp::Teachers(teacher_op) => UpdateWarning::from_iter(teacher_op.get_warnings()),
+            UpdateOp::Students(student_op) => UpdateWarning::from_iter(student_op.get_warnings()),
+            UpdateOp::Assignments(assignment_op) => {
+                UpdateWarning::from_iter(assignment_op.get_warnings())
+            }
+            UpdateOp::WeekPatterns(week_pattern_op) => {
+                UpdateWarning::from_iter(week_pattern_op.get_warnings())
+            }
         }
     }
 

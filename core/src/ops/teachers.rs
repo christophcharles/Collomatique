@@ -1,6 +1,18 @@
 use super::*;
 
 #[derive(Debug)]
+pub enum TeachersUpdateWarning {}
+
+impl TeachersUpdateWarning {
+    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> String {
+        String::new()
+    }
+}
+
+#[derive(Debug)]
 pub enum TeachersUpdateOp {
     AddNewTeacher(collomatique_state_colloscopes::teachers::Teacher),
     UpdateTeacher(
@@ -47,6 +59,10 @@ impl TeachersUpdateOp {
             TeachersUpdateOp::UpdateTeacher(_id, _desc) => "Modifier un colleur".into(),
             TeachersUpdateOp::DeleteTeacher(_id) => "Supprimer un colleur".into(),
         }
+    }
+
+    pub fn get_warnings(&self) -> Vec<TeachersUpdateWarning> {
+        vec![]
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
