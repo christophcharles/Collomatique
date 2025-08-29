@@ -1017,3 +1017,1074 @@ impl Deref for ValidatedJson {
         &self.validated
     }
 }
+
+#[derive(Debug, Error)]
+pub enum InternalError {
+    #[error("Data was corrupted and we now have inconsistent ids")]
+    CorruptedData,
+    #[error("Invalid ID")]
+    InvalidId,
+}
+
+impl JsonStore {
+    fn get_id(&mut self) -> u64 {
+        let result = self.next_id;
+        self.next_id += 1;
+        result
+    }
+}
+
+impl Storage for JsonStore {
+    type WeekPatternId = WeekPatternId;
+    type TeacherId = TeacherId;
+    type StudentId = StudentId;
+    type SubjectGroupId = SubjectGroupId;
+    type IncompatId = IncompatId;
+    type GroupListId = GroupListId;
+    type SubjectId = SubjectId;
+    type TimeSlotId = TimeSlotId;
+    type GroupingId = GroupingId;
+    type GroupingIncompatId = GroupingIncompatId;
+    type ColloscopeId = ColloscopeId;
+    type SlotSelectionId = SlotSelectionId;
+
+    type InternalError = InternalError;
+
+    unsafe fn general_data_set_unchecked(
+        &mut self,
+        general_data: &GeneralData,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async {
+            self.data.validated.general_data = general_data.clone();
+            Ok(())
+        }
+    }
+    fn general_data_get(
+        &self,
+    ) -> impl core::future::Future<Output = std::result::Result<GeneralData, Self::InternalError>> + Send
+    {
+        async { Ok(self.data.validated.general_data.clone()) }
+    }
+
+    fn week_patterns_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::WeekPatternId, WeekPattern>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.week_patterns.clone()) }
+    }
+    fn week_patterns_get(
+        &self,
+        index: Self::WeekPatternId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            WeekPattern,
+            IdError<Self::InternalError, Self::WeekPatternId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.week_patterns.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn week_patterns_add_unchecked(
+        &mut self,
+        pattern: &WeekPattern,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::WeekPatternId, Self::InternalError>,
+    > + Send {
+        async {
+            let id = WeekPatternId(self.get_id());
+            if self
+                .data
+                .validated
+                .week_patterns
+                .insert(id, pattern.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn week_patterns_remove_unchecked(
+        &mut self,
+        index: Self::WeekPatternId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.week_patterns.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn week_patterns_update_unchecked(
+        &mut self,
+        index: Self::WeekPatternId,
+        pattern: &WeekPattern,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.week_patterns.get_mut(&index) {
+                Some(x) => {
+                    *x = pattern.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn teachers_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<BTreeMap<Self::TeacherId, Teacher>, Self::InternalError>,
+    > + Send {
+        async { Ok(self.data.validated.teachers.clone()) }
+    }
+    fn teachers_get(
+        &self,
+        index: Self::TeacherId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Teacher, IdError<Self::InternalError, Self::TeacherId>>,
+    > + Send {
+        async move {
+            match self.data.validated.teachers.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    fn teachers_add(
+        &mut self,
+        teacher: &Teacher,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::TeacherId, Self::InternalError>>
+           + Send {
+        async {
+            let id = TeacherId(self.get_id());
+            if self
+                .data
+                .validated
+                .teachers
+                .insert(id, teacher.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn teachers_remove_unchecked(
+        &mut self,
+        index: Self::TeacherId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.teachers.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    fn teachers_update(
+        &mut self,
+        index: Self::TeacherId,
+        teacher: &Teacher,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
+    > + Send {
+        async move {
+            match self.data.validated.teachers.get_mut(&index) {
+                Some(x) => {
+                    *x = teacher.clone();
+                    Ok(())
+                }
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+
+    fn students_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<BTreeMap<Self::StudentId, Student>, Self::InternalError>,
+    > + Send {
+        async {
+            Ok(self
+                .data
+                .validated
+                .students
+                .iter()
+                .map(|(id, x)| (*id, x.student.clone()))
+                .collect())
+        }
+    }
+    fn students_get(
+        &self,
+        index: Self::StudentId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Student, IdError<Self::InternalError, Self::StudentId>>,
+    > + Send {
+        async move {
+            match self.data.validated.students.get(&index) {
+                Some(x) => Ok(x.student.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    fn students_add(
+        &mut self,
+        student: &Student,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::StudentId, Self::InternalError>>
+           + Send {
+        async {
+            let id = StudentId(self.get_id());
+            let new_entry = JsonStudent {
+                student: student.clone(),
+                subject_groups: BTreeMap::new(),
+                incompats: BTreeSet::new(),
+            };
+            if self.data.validated.students.insert(id, new_entry).is_some() {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn students_remove_unchecked(
+        &mut self,
+        index: Self::StudentId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.students.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    fn students_update(
+        &mut self,
+        index: Self::StudentId,
+        student: &Student,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>,
+    > + Send {
+        async move {
+            match self.data.validated.students.get_mut(&index) {
+                Some(x) => {
+                    x.student = student.clone();
+                    Ok(())
+                }
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+
+    fn subject_groups_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::SubjectGroupId, SubjectGroup>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.subject_groups.clone()) }
+    }
+    fn subject_groups_get(
+        &self,
+        index: Self::SubjectGroupId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            SubjectGroup,
+            IdError<Self::InternalError, Self::SubjectGroupId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.subject_groups.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    fn subject_groups_add(
+        &mut self,
+        subject_group: &SubjectGroup,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::SubjectGroupId, Self::InternalError>,
+    > + Send {
+        async {
+            let id = SubjectGroupId(self.get_id());
+            if self
+                .data
+                .validated
+                .subject_groups
+                .insert(id, subject_group.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn subject_groups_remove_unchecked(
+        &mut self,
+        index: Self::SubjectGroupId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.subject_groups.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    fn subject_groups_update(
+        &mut self,
+        index: Self::SubjectGroupId,
+        subject_group: &SubjectGroup,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>,
+    > + Send {
+        async move {
+            match self.data.validated.subject_groups.get_mut(&index) {
+                Some(x) => {
+                    *x = subject_group.clone();
+                    Ok(())
+                }
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+
+    fn incompats_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::IncompatId, Incompat<Self::WeekPatternId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.incompats.clone()) }
+    }
+    fn incompats_get(
+        &self,
+        index: Self::IncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Incompat<Self::WeekPatternId>,
+            IdError<Self::InternalError, Self::IncompatId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.incompats.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn incompats_add_unchecked(
+        &mut self,
+        incompat: &Incompat<Self::WeekPatternId>,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::IncompatId, Self::InternalError>>
+           + Send {
+        async {
+            let id = IncompatId(self.get_id());
+            if self
+                .data
+                .validated
+                .incompats
+                .insert(id, incompat.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn incompats_remove_unchecked(
+        &mut self,
+        index: Self::IncompatId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.incompats.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn incompats_update_unchecked(
+        &mut self,
+        index: Self::IncompatId,
+        incompat: &Incompat<Self::WeekPatternId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.incompats.get_mut(&index) {
+                Some(x) => {
+                    *x = incompat.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn group_lists_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::GroupListId, GroupList<Self::StudentId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.group_lists.clone()) }
+    }
+    fn group_lists_get(
+        &self,
+        index: Self::GroupListId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            GroupList<Self::StudentId>,
+            IdError<Self::InternalError, Self::GroupListId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.group_lists.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn group_lists_add_unchecked(
+        &mut self,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::GroupListId, Self::InternalError>,
+    > + Send {
+        async {
+            let id = GroupListId(self.get_id());
+            if self
+                .data
+                .validated
+                .group_lists
+                .insert(id, group_list.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn group_lists_remove_unchecked(
+        &mut self,
+        index: Self::GroupListId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.group_lists.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn group_lists_update_unchecked(
+        &mut self,
+        index: Self::GroupListId,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.group_lists.get_mut(&index) {
+                Some(x) => {
+                    *x = group_list.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn subjects_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::SubjectId,
+                Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.subjects.clone()) }
+    }
+    fn subjects_get(
+        &self,
+        index: Self::SubjectId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+            IdError<Self::InternalError, Self::SubjectId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.subjects.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn subjects_add_unchecked(
+        &mut self,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::SubjectId, Self::InternalError>>
+           + Send {
+        async {
+            let id = SubjectId(self.get_id());
+            if self
+                .data
+                .validated
+                .subjects
+                .insert(id, subject.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn subjects_remove_unchecked(
+        &mut self,
+        index: Self::SubjectId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.subjects.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn subjects_update_unchecked(
+        &mut self,
+        index: Self::SubjectId,
+        subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.subjects.get_mut(&index) {
+                Some(x) => {
+                    *x = subject.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn time_slots_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::TimeSlotId,
+                TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.time_slots.clone()) }
+    }
+    fn time_slots_get(
+        &self,
+        index: Self::TimeSlotId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+            IdError<Self::InternalError, Self::TimeSlotId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.time_slots.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn time_slots_add_unchecked(
+        &mut self,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::TimeSlotId, Self::InternalError>>
+           + Send {
+        async {
+            let id = TimeSlotId(self.get_id());
+            if self
+                .data
+                .validated
+                .time_slots
+                .insert(id, time_slot.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn time_slots_remove_unchecked(
+        &mut self,
+        index: Self::TimeSlotId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.time_slots.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn time_slots_update_unchecked(
+        &mut self,
+        index: Self::TimeSlotId,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.time_slots.get_mut(&index) {
+                Some(x) => {
+                    *x = time_slot.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn groupings_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::GroupingId, Grouping<Self::TimeSlotId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.groupings.clone()) }
+    }
+    fn groupings_get(
+        &self,
+        index: Self::GroupingId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Grouping<Self::TimeSlotId>,
+            IdError<Self::InternalError, Self::GroupingId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.groupings.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn groupings_add_unchecked(
+        &mut self,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> impl core::future::Future<Output = std::result::Result<Self::GroupingId, Self::InternalError>>
+           + Send {
+        async {
+            let id = GroupingId(self.get_id());
+            if self
+                .data
+                .validated
+                .groupings
+                .insert(id, grouping.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn groupings_remove_unchecked(
+        &mut self,
+        index: Self::GroupingId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.groupings.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn groupings_update_unchecked(
+        &mut self,
+        index: Self::GroupingId,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.groupings.get_mut(&index) {
+                Some(x) => {
+                    *x = grouping.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn grouping_incompats_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::GroupingIncompatId, GroupingIncompat<Self::GroupingId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.grouping_incompats.clone()) }
+    }
+    fn grouping_incompats_get(
+        &self,
+        index: Self::GroupingIncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            GroupingIncompat<Self::GroupingId>,
+            IdError<Self::InternalError, Self::GroupingIncompatId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.grouping_incompats.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn grouping_incompats_add_unchecked(
+        &mut self,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::GroupingIncompatId, Self::InternalError>,
+    > + Send {
+        async {
+            let id = GroupingIncompatId(self.get_id());
+            if self
+                .data
+                .validated
+                .grouping_incompats
+                .insert(id, grouping_incompat.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn grouping_incompats_remove_unchecked(
+        &mut self,
+        index: Self::GroupingIncompatId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self
+                .data
+                .validated
+                .grouping_incompats
+                .remove(&index)
+                .is_none()
+            {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn grouping_incompats_update_unchecked(
+        &mut self,
+        index: Self::GroupingIncompatId,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.grouping_incompats.get_mut(&index) {
+                Some(x) => {
+                    *x = grouping_incompat.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn colloscopes_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::ColloscopeId,
+                Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.colloscopes.clone()) }
+    }
+    fn colloscopes_get(
+        &self,
+        index: Self::ColloscopeId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+            IdError<Self::InternalError, Self::ColloscopeId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.colloscopes.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn colloscopes_add_unchecked(
+        &mut self,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::ColloscopeId, Self::InternalError>,
+    > + Send {
+        async {
+            let id = ColloscopeId(self.get_id());
+            if self
+                .data
+                .validated
+                .colloscopes
+                .insert(id, colloscope.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn colloscopes_remove_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.colloscopes.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn colloscopes_update_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.colloscopes.get_mut(&index) {
+                Some(x) => {
+                    *x = colloscope.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    fn slot_selections_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<Self::SlotSelectionId, SlotSelection<Self::SubjectId, Self::TimeSlotId>>,
+            Self::InternalError,
+        >,
+    > + Send {
+        async { Ok(self.data.validated.slot_selections.clone()) }
+    }
+    fn slot_selections_get(
+        &self,
+        index: Self::SlotSelectionId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+            IdError<Self::InternalError, Self::SlotSelectionId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.slot_selections.get(&index) {
+                Some(x) => Ok(x.clone()),
+                None => Err(IdError::InvalidId(index)),
+            }
+        }
+    }
+    unsafe fn slot_selections_add_unchecked(
+        &mut self,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<Self::SlotSelectionId, Self::InternalError>,
+    > + Send {
+        async {
+            let id = SlotSelectionId(self.get_id());
+            if self
+                .data
+                .validated
+                .slot_selections
+                .insert(id, slot_selection.clone())
+                .is_some()
+            {
+                return Err(InternalError::CorruptedData);
+            }
+            Ok(id)
+        }
+    }
+    unsafe fn slot_selections_remove_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            if self.data.validated.slot_selections.remove(&index).is_none() {
+                return Err(InternalError::InvalidId);
+            }
+            Ok(())
+        }
+    }
+    unsafe fn slot_selections_update_unchecked(
+        &mut self,
+        index: Self::SlotSelectionId,
+        slot_selection: &SlotSelection<Self::SubjectId, Self::TimeSlotId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.slot_selections.get_mut(&index) {
+                Some(x) => {
+                    *x = slot_selection.clone();
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+
+    unsafe fn subject_group_for_student_set_unchecked(
+        &mut self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+        subject_id: Option<Self::SubjectId>,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.students.get_mut(&student_id) {
+                Some(json_student) => {
+                    match subject_id {
+                        Some(id) => {
+                            json_student.subject_groups.insert(subject_group_id, id);
+                        }
+                        None => {
+                            json_student.subject_groups.remove(&subject_group_id);
+                        }
+                    }
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+    fn subject_group_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Option<Self::SubjectId>,
+            Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.students.get(&student_id) {
+                Some(json_student) => {
+                    Ok(json_student.subject_groups.get(&subject_group_id).copied())
+                }
+                None => Err(Id2Error::InvalidId1(student_id)),
+            }
+        }
+    }
+
+    unsafe fn incompat_for_student_set_unchecked(
+        &mut self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+        enabled: bool,
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
+        async move {
+            match self.data.validated.students.get_mut(&student_id) {
+                Some(json_student) => {
+                    if enabled {
+                        json_student.incompats.insert(incompat_id);
+                    } else {
+                        json_student.incompats.remove(&incompat_id);
+                    }
+                    Ok(())
+                }
+                None => Err(InternalError::InvalidId),
+            }
+        }
+    }
+    fn incompat_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            bool,
+            Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>,
+        >,
+    > + Send {
+        async move {
+            match self.data.validated.students.get(&student_id) {
+                Some(json_student) => Ok(json_student.incompats.contains(&incompat_id)),
+                None => Err(Id2Error::InvalidId1(student_id)),
+            }
+        }
+    }
+}
+
+/*pub trait Storage: Send + Sync + std::fmt::Debug {
+
+    async unsafe fn subject_group_for_student_set_unchecked(
+        &mut self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+        subject_id: Option<Self::SubjectId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn subject_group_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+    ) -> std::result::Result<
+        Option<Self::SubjectId>,
+        Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
+    >;
+
+    async unsafe fn incompat_for_student_set_unchecked(
+        &mut self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+        enabled: bool,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn incompat_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+    ) -> std::result::Result<bool, Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
+}
+*/
