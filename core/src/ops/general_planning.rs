@@ -593,7 +593,8 @@ impl GeneralPlanningUpdateOp {
                     _ => panic!("Unexpected result! {:?}", result),
                 };
 
-                let ordered_subject_list = data.get_data().get_subjects().ordered_subject_list.clone();
+                let ordered_subject_list =
+                    data.get_data().get_subjects().ordered_subject_list.clone();
                 for (subject_id, subject) in &ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         let mut new_subject = subject.clone();

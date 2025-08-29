@@ -220,7 +220,7 @@ pub struct RecApplyResult {
 
 pub struct DryResult<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>> {
     pub rec_apply_result: RecApplyResult,
-    pub session: collomatique_state::AppSession<T, (OpCategory, String)>,
+    pub new_state: T,
 }
 
 impl UpdateOp {
@@ -355,23 +355,8 @@ impl UpdateOp {
 
         Ok(DryResult {
             rec_apply_result,
-            session,
+            new_state: session.commit(self.get_desc()),
         })
-    }
-
-    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
-        &self,
-        data: &T,
-    ) -> Vec<UpdateWarning> {
-        match self.dry_apply(data) {
-            Ok(dry_result) => dry_result
-                .rec_apply_result
-                .warnings
-                .into_iter()
-                .map(|x| x.0)
-                .collect(),
-            Err(_) => vec![],
-        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -380,7 +365,7 @@ impl UpdateOp {
     ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {
         let dry_result = self.dry_apply(data)?;
 
-        *data = dry_result.session.commit(self.get_desc());
+        *data = dry_result.new_state;
 
         Ok(dry_result.rec_apply_result.new_id)
     }
