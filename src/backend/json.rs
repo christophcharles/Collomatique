@@ -613,6 +613,8 @@ impl JsonStore {
 pub enum FromJsonError {
     #[error("Error while reading json: {0}")]
     JsonError(#[from] serde_json::Error),
+    #[error("Possible malicious (or corrupted) file: last id exceeds 2^63")]
+    EndOfTheUniverseReached,
 }
 
 pub type FromJsonResult<T> = std::result::Result<T, FromJsonError>;
@@ -641,7 +643,13 @@ impl JsonStore {
         let data = serde_json::from_str::<JsonData>(content)?;
 
         let next_id = match data.find_last_id() {
-            Some(last) => last + 1,
+            Some(last) => {
+                if last >= (1u64 << 63) {
+                    return Err(FromJsonError::EndOfTheUniverseReached);
+                } else {
+                    last + 1
+                }
+            }
             None => 0,
         };
 
