@@ -255,8 +255,17 @@ impl Students {
     fn update_filter_droplist(&mut self) {
         let mut list = vec!["Toutes les périodes".into(), "Aucune période".into()];
 
-        for i in 0..self.periods.ordered_period_list.len() {
-            list.push(format!("La période {}", i + 1));
+        let mut first_week_num = 0usize;
+        for (index, (_id, period)) in self.periods.ordered_period_list.iter().enumerate() {
+            list.push(super::generate_week_succession_title(
+                "La période",
+                &self.periods.first_week,
+                index,
+                first_week_num,
+                period.len(),
+            ));
+
+            first_week_num += period.len();
         }
 
         let num = match self.current_filter {
