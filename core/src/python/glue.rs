@@ -4,10 +4,10 @@ use pyo3::prelude::*;
 
 use crate::rpc::{
     error_msg::{
-        AddNewSubjectError, CutPeriodError, DeletePeriodError, DeleteSubjectError,
-        GeneralPlanningError, MergeWithPreviousPeriodError, MoveDownError, MoveUpError,
-        SubjectsError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSubjectError,
-        UpdateWeekStatusError,
+        AddNewSubjectError, AddNewTeacherError, CutPeriodError, DeletePeriodError,
+        DeleteSubjectError, DeleteTeacherError, GeneralPlanningError, MergeWithPreviousPeriodError,
+        MoveDownError, MoveUpError, SubjectsError, TeachersError, UpdatePeriodStatusError,
+        UpdatePeriodWeekCountError, UpdateSubjectError, UpdateTeacherError, UpdateWeekStatusError,
     },
     ErrorMsg, ResultMsg,
 };
@@ -21,6 +21,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<subjects::Subject>()?;
     m.add_class::<subjects::SubjectParameters>()?;
     m.add_class::<subjects::SubjectPeriodicity>()?;
+    m.add_class::<teachers::Teacher>()?;
     m.add_class::<time::NaiveMondayDate>()?;
     m.add_class::<time::NaiveDate>()?;
 
@@ -449,6 +450,77 @@ impl Session {
                 parameters: data.parameters.clone().into(),
             })
             .collect()
+    }
+
+    fn teachers_add(self_: PyRef<'_, Self>, teacher: teachers::Teacher) -> PyResult<TeacherId> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Teachers(
+                    crate::rpc::cmd_msg::TeachersCmdMsg::AddNewTeacher(teacher.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::TeacherId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::Teachers(TeachersError::AddNewTeacher(e))) => match e {
+                AddNewTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn teachers_update(
+        self_: PyRef<'_, Self>,
+        id: TeacherId,
+        new_teacher: teachers::Teacher,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Teachers(
+                    crate::rpc::cmd_msg::TeachersCmdMsg::UpdateTeacher(
+                        id.into(),
+                        new_teacher.into(),
+                    ),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Teachers(TeachersError::UpdateTeacher(e))) => {
+                match e {
+                    UpdateTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(
+                        format!("Invalid teacher id {:?}", id),
+                    )),
+                    UpdateTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn teachers_delete(self_: PyRef<'_, Self>, id: TeacherId) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Teachers(
+                    crate::rpc::cmd_msg::TeachersCmdMsg::DeleteTeacher(id.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::Teachers(TeachersError::DeleteTeacher(e))) => match e {
+                DeleteTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid teacher id {:?}",
+                    id
+                ))),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
     }
 
     fn teachers_get_list(self_: PyRef<'_, Self>) -> BTreeMap<TeacherId, Teacher> {
