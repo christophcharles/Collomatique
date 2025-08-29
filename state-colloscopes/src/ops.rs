@@ -6,7 +6,7 @@
 //! The main type is [Op] which defines all possible modification operations
 //! that can be done on the data.
 //!
-//! [AnnotatedOp] is the corresponding annotated type. See [crate::history]
+//! [AnnotatedOp] is the corresponding annotated type. See [collomatique_state::history]
 //! for a full discussion of annotation.
 
 use super::*;
@@ -42,7 +42,7 @@ pub enum StudentOp {
 /// meaning the operation has been annotated to contain
 /// all the necessary data to make it *reproducible*.
 ///
-/// See [super::history] for a complete discussion of the problem.
+/// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedOp {
     /// Operation on the student list
@@ -55,7 +55,7 @@ pub enum AnnotatedOp {
 /// meaning the operation has been annotated to contain
 /// all the necessary data to make it *reproducible*.
 ///
-/// See [super::history] for a complete discussion of the problem.
+/// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedStudentOp {
     /// Add a new student (with fixed id)
