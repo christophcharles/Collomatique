@@ -3,13 +3,6 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id(pub(super) i64);
 
-impl std::fmt::Display for Id {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)?;
-        Ok(())
-    }
-}
-
 pub async fn get(pool: &SqlitePool, index: Id) -> std::result::Result<Teacher, IdError<Error, Id>> {
     let teacher_id = index.0;
 

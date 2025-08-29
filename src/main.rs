@@ -106,11 +106,22 @@ async fn general_command(
                 todo!("Force flag for \"general set-week-count\"");
             }
 
-            app_state.apply(Operation::GeneralSetWeekCount(week_count)).await.map_err(
-                |e| match e {
-                    UpdateError::CannotSetWeekCountWeekPatternsNeedTruncating(week_patterns) => {
-                        let week_pattern_list = week_patterns.into_iter().map(
-                            |week_pattern| week_pattern.to_string()
+            if let Err(e) = app_state
+                .apply(Operation::GeneralSetWeekCount(week_count))
+                .await
+            {
+                let err = match e {
+                    UpdateError::CannotSetWeekCountWeekPatternsNeedTruncating(
+                        week_patterns_to_truncate,
+                    ) => {
+                        let week_patterns = app_state
+                            .get_backend_logic()
+                            .week_patterns_get_all()
+                            .await?;
+
+                        let week_pattern_list = week_patterns_to_truncate.into_iter().map(
+                            |week_pattern| week_patterns.get(&week_pattern).expect("Week pattern id should be valid as it is taken from a dependancy")
+                                .name.clone()
                         ).collect::<Vec<_>>().join(", ");
 
                         anyhow!(
@@ -120,13 +131,10 @@ async fn general_command(
                             )
                         )
                     }
-                    UpdateError::InternalError(int_err) => anyhow!(
-                        format!(
-                            "/!\\ Internal error in sqlite backend. The following error was issued:\n{:?}", int_err
-                        )
-                    ),
-                }
-            )?;
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                };
+                return Err(err);
+            }
         }
     }
 

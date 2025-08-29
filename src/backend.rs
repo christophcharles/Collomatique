@@ -191,21 +191,11 @@ where
 }
 
 pub trait OrdId:
-    std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy + std::fmt::Display
+    std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy
 {
 }
-impl<
-        T: std::fmt::Debug
-            + Clone
-            + PartialEq
-            + Eq
-            + PartialOrd
-            + Ord
-            + Send
-            + Sync
-            + Copy
-            + std::fmt::Display,
-    > OrdId for T
+impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy> OrdId
+    for T
 {
 }
 
