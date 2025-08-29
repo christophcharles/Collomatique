@@ -118,15 +118,12 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
         config: &Config<'a, V>,
         origin: Option<&FeasableConfig<'a, V>>,
     ) -> Option<FeasableConfig<'a, V>> {
-        let trivialized_variables = config.get_problem().get_trivialized_variables();
         let mut available_variables = match origin {
             Some(o) => config
                 .get_problem()
                 .get_variables()
                 .iter()
-                .filter(|var| {
-                    (config.get(var) == o.get(var)) && !(trivialized_variables.contains_key(*var))
-                })
+                .filter(|var| config.get(var) == o.get(var))
                 .cloned()
                 .collect(),
             None => config.get_problem().get_variables().clone(),
