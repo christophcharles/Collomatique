@@ -9,13 +9,14 @@ use crate::rpc::{
     },
     error_msg::{
         AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
-        AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError, AssignmentsError,
-        CutPeriodError, DeleteGroupListError, DeleteIncompatError, DeletePeriodError,
-        DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
-        DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningError,
-        GroupListsError, IncompatibilitiesError, MergeWithPreviousPeriodError, MoveDownError,
-        MoveSlotDownError, MoveSlotUpError, MoveUpError, PrefillGroupListError, SlotsError,
-        StudentsError, SubjectsError, TeachersError, UpdateGroupListError, UpdateIncompatError,
+        AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
+        AssignGroupListToSubjectError, AssignmentsError, CutPeriodError, DeleteGroupListError,
+        DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
+        DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
+        DuplicatePreviousPeriodError, GeneralPlanningError, GroupListsError,
+        IncompatibilitiesError, MergeWithPreviousPeriodError, MoveDownError, MoveSlotDownError,
+        MoveSlotUpError, MoveUpError, PrefillGroupListError, SlotsError, StudentsError,
+        SubjectsError, TeachersError, UpdateGroupListError, UpdateIncompatError,
         UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError,
         UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
         WeekPatternsError,
@@ -1329,6 +1330,89 @@ impl Session {
                 )
             })
             .collect()
+    }
+
+    fn group_lists_set_association(
+        self_: PyRef<'_, Self>,
+        period_id: general_planning::PeriodId,
+        subject_id: subjects::SubjectId,
+        group_list_id: Option<group_lists::GroupListId>,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GroupLists(
+                crate::rpc::cmd_msg::GroupListsCmdMsg::AssignGroupListToSubject(
+                    period_id.into(),
+                    subject_id.into(),
+                    group_list_id.map(|x| x.into()),
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::AssignGroupListToSubject(
+                e,
+            ))) => match e {
+                AssignGroupListToSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                    format!("Invalid subject id {:?}", id),
+                )),
+                AssignGroupListToSubjectError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                AssignGroupListToSubjectError::InvalidGroupListId(id) => Err(
+                    PyValueError::new_err(format!("Invalid group list id {:?}", id)),
+                ),
+                AssignGroupListToSubjectError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Subject {:?} does not run on period {:?}",
+                        subject_id, period_id
+                    )))
+                }
+                AssignGroupListToSubjectError::SubjectHasNoInterrogation(subject_id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Subject id {:?} does not have interrogations",
+                        subject_id
+                    )))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn group_lists_get_association(
+        self_: PyRef<'_, Self>,
+        period_id: general_planning::PeriodId,
+        subject_id: subjects::SubjectId,
+    ) -> PyResult<Option<group_lists::GroupListId>> {
+        let current_data = self_.token.get_data();
+
+        let Some(period_id) =
+            current_data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid period id {:?}",
+                period_id
+            )));
+        };
+
+        let Some(subject_id) =
+            current_data.validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
+        else {
+            return Err(PyValueError::new_err(format!(
+                "Invalid subject id {:?}",
+                subject_id
+            )));
+        };
+
+        let subject_map = current_data
+            .get_group_lists()
+            .subjects_associations
+            .get(&period_id)
+            .expect("Period id should be valid at this point");
+
+        let group_list_id = subject_map.get(&subject_id);
+
+        Ok(group_list_id.map(|x| MsgGroupListId::from(*x).into()))
     }
 }
 
