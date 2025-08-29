@@ -819,6 +819,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "collomatique-ilp",
+ "ordered-float",
  "serde",
  "thiserror",
 ]
