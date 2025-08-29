@@ -2612,12 +2612,12 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_upper_bound_interrogation_per_day_constraints_for_student_week_and_day(
+    fn build_interrogations_per_day_objective_terms_for_student_week_and_day(
         &self,
         student_num: usize,
         week: u32,
         day: crate::time::Weekday,
-    ) -> Constraint<Variable> {
+    ) -> Expr<Variable> {
         let mut lhs = Expr::<Variable>::constant(0);
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
@@ -2660,260 +2660,114 @@ impl<'a> IlpTranslator<'a> {
             }
         }
 
-        /*lhs.leq(&Expr::var(Variable::UpperBoundInterrogationPerDay {
-            student: student_num,
-        }))*/
-        todo!()
+        lhs
     }
 
-    fn build_upper_bound_interrogation_per_day_constraints(
+    fn build_interrogations_per_day_objective_terms(
         &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
+        cost: f64,
+    ) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let mut output = Vec::new();
 
         let week_count = self.data.general.week_count.get();
 
         for (student_num, _student) in self.data.students.iter().enumerate() {
+            let mut obj_term = crate::ilp::ObjectiveTerm {
+                coef: cost,
+                exprs: BTreeSet::new(),
+            };
+
             for week in 0..week_count {
                 for day in crate::time::Weekday::iter() {
-                    output.insert(
-                        self.build_upper_bound_interrogation_per_day_constraints_for_student_week_and_day(
+                    let expr = self
+                        .build_interrogations_per_day_objective_terms_for_student_week_and_day(
                             student_num,
                             week,
                             day,
-                        )
+                        );
+
+                    obj_term.exprs.insert(expr);
+                }
+            }
+
+            output.push(obj_term);
+        }
+
+        output
+    }
+
+    fn build_upper_bound_interrogations_per_week_objective_terms_for_student_and_week(
+        &self,
+        student_num: usize,
+        week: u32,
+    ) -> Expr<Variable> {
+        let mut lhs = Expr::<Variable>::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
+                if slot.start.week != week {
+                    continue;
+                }
+
+                if subject.groups.not_assigned.contains(&student_num) {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if Self::is_group_fixed(group, subject) {
+                            continue;
+                        }
+
+                        let new_var = Variable::DynamicGroupAssignment {
+                            subject: i,
+                            slot: j,
+                            group: k,
+                            student: student_num,
+                        };
+
+                        lhs = lhs + Expr::var(new_var);
+                    }
+                } else {
+                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        if group.students.contains(&student_num) {
+                            let new_var = Variable::GroupInSlot {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                            };
+
+                            lhs = lhs + Expr::var(new_var);
+                        }
+                    }
+                }
+            }
+        }
+
+        lhs
+    }
+
+    fn build_upper_bound_interrogations_per_week_objective_terms(
+        &self,
+        cost: f64,
+    ) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
+        let mut output = Vec::new();
+
+        let week_count = self.data.general.week_count.get();
+
+        for (student_num, _student) in self.data.students.iter().enumerate() {
+            let mut obj_term = crate::ilp::ObjectiveTerm {
+                coef: cost,
+                exprs: BTreeSet::new(),
+            };
+
+            for week in 0..week_count {
+                let expr = self
+                    .build_upper_bound_interrogations_per_week_objective_terms_for_student_and_week(
+                        student_num,
+                        week,
                     );
-                }
+
+                obj_term.exprs.insert(expr);
             }
-        }
 
-        output
-    }
-
-    fn build_upper_bound_interrogation_per_week_constraints_for_student_and_week(
-        &self,
-        student_num: usize,
-        week: u32,
-    ) -> Constraint<Variable> {
-        let mut lhs = Expr::<Variable>::constant(0);
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
-                if slot.start.week != week {
-                    continue;
-                }
-
-                if subject.groups.not_assigned.contains(&student_num) {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if Self::is_group_fixed(group, subject) {
-                            continue;
-                        }
-
-                        let new_var = Variable::DynamicGroupAssignment {
-                            subject: i,
-                            slot: j,
-                            group: k,
-                            student: student_num,
-                        };
-
-                        lhs = lhs + Expr::var(new_var);
-                    }
-                } else {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if group.students.contains(&student_num) {
-                            let new_var = Variable::GroupInSlot {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                            };
-
-                            lhs = lhs + Expr::var(new_var);
-                        }
-                    }
-                }
-            }
-        }
-
-        /*lhs.leq(&Expr::var(Variable::UpperBoundInterrogationPerWeek {
-            student: student_num,
-        }))*/
-        todo!()
-    }
-
-    fn build_upper_bound_interrogation_per_week_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
-
-        let week_count = self.data.general.week_count.get();
-
-        for (student_num, _student) in self.data.students.iter().enumerate() {
-            for week in 0..week_count {
-                output.insert(
-                    self.build_upper_bound_interrogation_per_week_constraints_for_student_and_week(
-                        student_num,
-                        week,
-                    ),
-                );
-            }
-        }
-
-        output
-    }
-
-    fn build_lower_bound_interrogation_per_week_constraints_for_student_and_week(
-        &self,
-        student_num: usize,
-        week: u32,
-    ) -> Constraint<Variable> {
-        let mut lhs = Expr::<Variable>::constant(0);
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots_information.slots.iter().enumerate() {
-                if slot.start.week != week {
-                    continue;
-                }
-
-                if subject.groups.not_assigned.contains(&student_num) {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if Self::is_group_fixed(group, subject) {
-                            continue;
-                        }
-
-                        let new_var = Variable::DynamicGroupAssignment {
-                            subject: i,
-                            slot: j,
-                            group: k,
-                            student: student_num,
-                        };
-
-                        lhs = lhs + Expr::var(new_var);
-                    }
-                } else {
-                    for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                        if group.students.contains(&student_num) {
-                            let new_var = Variable::GroupInSlot {
-                                subject: i,
-                                slot: j,
-                                group: k,
-                            };
-
-                            lhs = lhs + Expr::var(new_var);
-                        }
-                    }
-                }
-            }
-        }
-
-        /*lhs.geq(&Expr::var(Variable::LowerBoundInterrogationPerWeek {
-            student: student_num,
-        }))*/
-        todo!()
-    }
-
-    fn build_lower_bound_interrogation_per_week_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
-
-        let week_count = self.data.general.week_count.get();
-
-        for (student_num, _student) in self.data.students.iter().enumerate() {
-            for week in 0..week_count {
-                output.insert(
-                    self.build_lower_bound_interrogation_per_week_constraints_for_student_and_week(
-                        student_num,
-                        week,
-                    ),
-                );
-            }
-        }
-
-        output
-    }
-
-    fn build_upper_bound_interrogation_per_day_global_constraints_for_student(
-        &self,
-        student_num: usize,
-    ) -> Constraint<Variable> {
-        /*let lhs = Expr::var(Variable::UpperBoundInterrogationPerDay {
-            student: student_num,
-        });
-        let rhs = Expr::var(Variable::UpperBoundInterrogationPerDayGlobal);
-
-        lhs.leq(&rhs)*/
-        todo!()
-    }
-
-    fn build_upper_bound_interrogation_per_day_global_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
-
-        for (student_num, _student) in self.data.students.iter().enumerate() {
-            output.insert(
-                self.build_upper_bound_interrogation_per_day_global_constraints_for_student(
-                    student_num,
-                ),
-            );
-        }
-
-        output
-    }
-
-    fn build_upper_bound_interrogation_per_week_global_constraints_for_student(
-        &self,
-        student_num: usize,
-    ) -> Constraint<Variable> {
-        /*let lhs = Expr::var(Variable::UpperBoundInterrogationPerWeek {
-            student: student_num,
-        });
-        let rhs = Expr::var(Variable::UpperBoundInterrogationPerWeekGlobal);
-
-        lhs.leq(&rhs)*/
-        todo!()
-    }
-
-    fn build_upper_bound_interrogation_per_week_global_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
-
-        for (student_num, _student) in self.data.students.iter().enumerate() {
-            output.insert(
-                self.build_upper_bound_interrogation_per_week_global_constraints_for_student(
-                    student_num,
-                ),
-            );
-        }
-
-        output
-    }
-
-    fn build_lower_bound_interrogation_per_week_global_constraints_for_student(
-        &self,
-        student_num: usize,
-    ) -> Constraint<Variable> {
-        /*let lhs = Expr::var(Variable::LowerBoundInterrogationPerWeek {
-            student: student_num,
-        });
-        let rhs = Expr::var(Variable::LowerBoundInterrogationPerWeekGlobal);
-
-        lhs.geq(&rhs)*/
-        todo!()
-    }
-
-    fn build_lower_bound_interrogation_per_week_global_constraints(
-        &self,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
-
-        for (student_num, _student) in self.data.students.iter().enumerate() {
-            output.insert(
-                self.build_lower_bound_interrogation_per_week_global_constraints_for_student(
-                    student_num,
-                ),
-            );
+            output.push(obj_term);
         }
 
         output
@@ -2970,66 +2824,86 @@ impl<'a> IlpTranslator<'a> {
     }
 
     fn build_objective_terms(&self) -> Vec<crate::ilp::ObjectiveTerm<Variable>> {
-        const STUDENT_PER_DAY_COST: i32 = 1;
-        const STUDENT_PER_WEEK_COST: i32 = 1;
-        const GLOBAL_PER_DAY_COST: i32 = 1;
-        const GLOBAL_PER_WEEK_COST: i32 = 1;
-        const BALANCING_COST: i32 = 1;
+        const STUDENT_PER_DAY_COST: f64 = 1.0;
+        const STUDENT_PER_WEEK_COST: f64 = 1.0;
+        const GLOBAL_PER_DAY_COST: f64 = 1.0;
+        const GLOBAL_PER_WEEK_COST: f64 = 1.0;
+        const BALANCING_COST: f64 = 1.0;
+
+        let student_count_f64 = self.data.students.len() as f64;
 
         let mut output = Vec::new();
 
         // Number of interrogations per day
-        /*for (student_num, _student) in self.data.students.iter().enumerate() {
-            expr = expr
-                + STUDENT_PER_DAY_COST
-                    * Expr::var(Variable::UpperBoundInterrogationPerDay {
-                        student: student_num,
-                    });
-        }*/
+        let interrogations_per_day_objective_terms =
+            self.build_interrogations_per_day_objective_terms(STUDENT_PER_DAY_COST);
+        output.extend(interrogations_per_day_objective_terms.clone());
 
         // Global number of interrogations per day
-        /*expr = expr
-        + student_count_i32
-            * GLOBAL_PER_DAY_COST
-            * Expr::var(Variable::UpperBoundInterrogationPerDayGlobal);*/
+        output.push(crate::ilp::ObjectiveTerm {
+            coef: GLOBAL_PER_DAY_COST * student_count_f64,
+            exprs: interrogations_per_day_objective_terms
+                .into_iter()
+                .flat_map(|obj_term| obj_term.exprs)
+                .collect(),
+        });
 
         // Stable number of interrogations per week
-        /*for (student_num, _student) in self.data.students.iter().enumerate() {
-            let range = Expr::var(Variable::UpperBoundInterrogationPerWeek {
-                student: student_num,
-            }) - Expr::var(Variable::LowerBoundInterrogationPerWeek {
-                student: student_num,
-            });
-            expr = expr + STUDENT_PER_WEEK_COST * range;
-        }*/
+        let upper_bound_interrogations_per_week_objective_terms =
+            self.build_upper_bound_interrogations_per_week_objective_terms(STUDENT_PER_WEEK_COST);
+        output.extend(upper_bound_interrogations_per_week_objective_terms.clone());
+
+        let lower_bound_interrogations_per_week_objective_terms: Vec<_> =
+            upper_bound_interrogations_per_week_objective_terms
+                .iter()
+                .map(|obj_term| crate::ilp::ObjectiveTerm {
+                    coef: obj_term.coef,
+                    exprs: obj_term.exprs.iter().map(|e| -e).collect(),
+                })
+                .collect();
+        output.extend(lower_bound_interrogations_per_week_objective_terms.clone());
 
         // Global stable number of interrogations per week
-        /*let range_global = Expr::var(Variable::UpperBoundInterrogationPerWeekGlobal)
-            - Expr::var(Variable::LowerBoundInterrogationPerWeekGlobal);
-        expr = expr + student_count_i32 * GLOBAL_PER_WEEK_COST * range_global;*/
+        output.push(crate::ilp::ObjectiveTerm {
+            coef: GLOBAL_PER_WEEK_COST * student_count_f64,
+            exprs: upper_bound_interrogations_per_week_objective_terms
+                .into_iter()
+                .flat_map(|obj_term| obj_term.exprs)
+                .collect(),
+        });
+
+        output.push(crate::ilp::ObjectiveTerm {
+            coef: GLOBAL_PER_WEEK_COST * student_count_f64,
+            exprs: lower_bound_interrogations_per_week_objective_terms
+                .into_iter()
+                .flat_map(|obj_term| obj_term.exprs)
+                .collect(),
+        });
 
         // Soft constraints
         let soft_constraints = self.build_soft_constraints();
-        /*for (i, _constraint) in soft_constraints.iter().enumerate() {
-            expr = expr + BALANCING_COST * Expr::var(Variable::SoftConstraint { num: i });
-        }*/
 
-        output
-    }
+        for constraint in soft_constraints.into_iter() {
+            let exprs = match constraint.get_sign() {
+                crate::ilp::linexpr::Sign::Equals => {
+                    let expr = constraint.get_lhs().clone();
 
-    fn build_soft_constraints_upper_bound_constraints(
-        &self,
-        soft_constraints: &BTreeSet<Constraint<Variable>>,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let mut output = BTreeSet::new();
+                    BTreeSet::from([expr.clone(), -expr])
+                }
+                crate::ilp::linexpr::Sign::LessThan => {
+                    let expr = constraint.get_lhs().clone();
 
-        /*for (num, constraint) in soft_constraints.iter().enumerate() {
-            let lhs_expr = constraint.get_lhs();
-            let rhs = Expr::var(Variable::SoftConstraint { num });
+                    BTreeSet::from([expr.clone(), -expr]) //[expr])
+                }
+            };
 
-            output.insert(lhs_expr.leq(&rhs));
-            output.insert(lhs_expr.geq(&(-rhs)));
-        }*/
+            let obj_term = crate::ilp::ObjectiveTerm {
+                coef: BALANCING_COST,
+                exprs,
+            };
+
+            output.push(obj_term);
+        }
 
         output
     }
