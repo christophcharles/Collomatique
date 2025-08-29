@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_main_variables() {
-    let example_problem = SimpleScheduleBase {
+    let example_problem = SimpleScheduleDesc {
         course_count: 3,
         week_count: 4,
         group_count: 2,

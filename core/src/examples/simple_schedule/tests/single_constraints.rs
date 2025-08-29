@@ -5,13 +5,13 @@ use super::*;
 #[test]
 fn simple_test_for_generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(
 ) {
-    let example_problem = SimpleScheduleBase {
+    let example_problem = SimpleScheduleDesc {
         course_count: 3,
         week_count: 4,
         group_count: 2,
     };
 
-    let (c, d) = example_problem.generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(1, 2);
+    let (c, d) = SimpleScheduleConstraints::generate_at_most_one_course_per_week_for_a_given_group_constraint_for_specific_group_and_week(&example_problem, 1, 2);
 
     let lhs = LinExpr::var(SimpleScheduleVariable {
         group: 1,
@@ -40,13 +40,13 @@ fn simple_test_for_generate_at_most_one_course_per_week_for_a_given_group_constr
 #[test]
 fn simple_test_for_generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(
 ) {
-    let example_problem = SimpleScheduleBase {
+    let example_problem = SimpleScheduleDesc {
         course_count: 3,
         week_count: 4,
         group_count: 2,
     };
 
-    let (c, d) = example_problem.generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(2, 2);
+    let (c, d) = SimpleScheduleConstraints::generate_at_most_one_group_per_course_on_a_given_week_constraint_for_specific_week_and_course(&example_problem, 2, 2);
 
     let lhs = LinExpr::var(SimpleScheduleVariable {
         group: 0,
@@ -71,13 +71,13 @@ fn simple_test_for_generate_at_most_one_group_per_course_on_a_given_week_constra
 #[test]
 fn simple_test_for_generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(
 ) {
-    let example_problem = SimpleScheduleBase {
+    let example_problem = SimpleScheduleDesc {
         course_count: 3,
         week_count: 4,
         group_count: 2,
     };
 
-    let (c, d) = example_problem.generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(1, 2);
+    let (c, d) = SimpleScheduleConstraints::generate_each_group_should_attend_each_course_exactly_once_constraint_for_specific_group_and_course(&example_problem, 1, 2);
 
     let lhs = LinExpr::var(SimpleScheduleVariable {
         group: 1,

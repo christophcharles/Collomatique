@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_partial_solution_to_configuration() {
-    let problem = SimpleScheduleBase {
+    let problem = SimpleScheduleDesc {
         group_count: 3,
         week_count: 4,
         course_count: 3,
@@ -256,7 +256,7 @@ fn test_partial_solution_to_configuration() {
 
 #[test]
 fn test_configuration_to_partial_solution() {
-    let problem = SimpleScheduleBase {
+    let problem = SimpleScheduleDesc {
         group_count: 3,
         week_count: 4,
         course_count: 3,
