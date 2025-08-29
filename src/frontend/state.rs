@@ -6,11 +6,12 @@ pub mod update;
 
 use crate::backend;
 use history::{
-    AnnotatedGroupListsOperation, AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation,
-    AnnotatedIncompatsOperation, AnnotatedOperation, AnnotatedRegisterStudentOperation,
-    AnnotatedStudentsOperation, AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation,
-    AnnotatedTeachersOperation, AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation,
-    ModificationHistory, ReversibleOperation,
+    AnnotatedColloscopesOperation, AnnotatedGroupListsOperation,
+    AnnotatedGroupingIncompatsOperation, AnnotatedGroupingsOperation, AnnotatedIncompatsOperation,
+    AnnotatedOperation, AnnotatedRegisterStudentOperation, AnnotatedStudentsOperation,
+    AnnotatedSubjectGroupsOperation, AnnotatedSubjectsOperation, AnnotatedTeachersOperation,
+    AnnotatedTimeSlotsOperation, AnnotatedWeekPatternsOperation, ModificationHistory,
+    ReversibleOperation,
 };
 use update::private::ManagerInternal;
 
@@ -37,6 +38,7 @@ pub enum Operation {
     Groupings(GroupingsOperation),
     GroupingIncompats(GroupingIncompatsOperation),
     RegisterStudent(RegisterStudentOperation),
+    Colloscopes(ColloscopesOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -122,6 +124,16 @@ pub enum GroupingIncompatsOperation {
 pub enum RegisterStudentOperation {
     InSubjectGroup(StudentHandle, SubjectGroupHandle, Option<SubjectHandle>),
     InIncompat(StudentHandle, IncompatHandle, bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ColloscopesOperation {
+    Create(backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>),
+    Remove(ColloscopeHandle),
+    Update(
+        ColloscopeHandle,
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
 }
 
 #[derive(Debug)]

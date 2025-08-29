@@ -16,6 +16,7 @@ pub enum AnnotatedOperation {
     Groupings(AnnotatedGroupingsOperation),
     GroupingIncompats(AnnotatedGroupingIncompatsOperation),
     RegisterStudent(AnnotatedRegisterStudentOperation),
+    Colloscopes(AnnotatedColloscopesOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -120,6 +121,19 @@ pub enum AnnotatedRegisterStudentOperation {
         Option<handles::SubjectHandle>,
     ),
     InIncompat(handles::StudentHandle, handles::IncompatHandle, bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedColloscopesOperation {
+    Create(
+        handles::ColloscopeHandle,
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
+    Remove(handles::ColloscopeHandle),
+    Update(
+        handles::ColloscopeHandle,
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -332,6 +346,24 @@ impl AnnotatedRegisterStudentOperation {
     }
 }
 
+impl AnnotatedColloscopesOperation {
+    fn annotate<T: backend::Storage>(
+        op: ColloscopesOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            ColloscopesOperation::Create(colloscope) => {
+                let handle = handle_managers.colloscopes.create_handle();
+                AnnotatedColloscopesOperation::Create(handle, colloscope)
+            }
+            ColloscopesOperation::Remove(handle) => AnnotatedColloscopesOperation::Remove(handle),
+            ColloscopesOperation::Update(handle, colloscope) => {
+                AnnotatedColloscopesOperation::Update(handle, colloscope)
+            }
+        }
+    }
+}
+
 impl AnnotatedOperation {
     pub fn annotate<T: backend::Storage>(
         op: Operation,
@@ -371,6 +403,9 @@ impl AnnotatedOperation {
             ),
             Operation::RegisterStudent(op) => AnnotatedOperation::RegisterStudent(
                 AnnotatedRegisterStudentOperation::annotate(op, handle_managers),
+            ),
+            Operation::Colloscopes(op) => AnnotatedOperation::Colloscopes(
+                AnnotatedColloscopesOperation::annotate(op, handle_managers),
             ),
         }
     }

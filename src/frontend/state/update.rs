@@ -87,6 +87,12 @@ pub enum UpdateError<IntError: std::error::Error> {
     RegisterStudentBadSubject(SubjectGroupHandle, SubjectHandle),
     #[error("Colloscope corresponding to handle {0:?} was previously removed")]
     ColloscopeRemoved(ColloscopeHandle),
+    #[error("Colloscope references a bad teacher (probably removed) of id {0:?}")]
+    ColloscopeBadTeacher(TeacherHandle),
+    #[error("Colloscope references a bad subject (probably removed) of id {0:?}")]
+    ColloscopeBadSubject(SubjectHandle),
+    #[error("Colloscope references a bad student (probably removed) of id {0:?}")]
+    ColloscopeBadStudent(StudentHandle),
 }
 
 #[derive(Debug, Error)]
@@ -3208,6 +3214,130 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_colloscopes_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedColloscopesOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedColloscopesOperation::Create(colloscope_handle, colloscope) => {
+                let colloscope_backend = match convert_colloscope_from_handles(
+                    colloscope.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId3::Ok => {
+                            panic!("DataStatusWithId3::Ok is not an error")
+                        }
+                        backend::DataStatusWithId3::BadCrossId1(teacher_handle) => {
+                            return Err(UpdateError::ColloscopeBadTeacher(teacher_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId2(subject_handle) => {
+                            return Err(UpdateError::ColloscopeBadSubject(subject_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId3(student_handle) => {
+                            return Err(UpdateError::ColloscopeBadStudent(student_handle))
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .colloscopes_add(&colloscope_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross3Error::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::Cross3Error::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3Error::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3Error::InvalidCrossId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .colloscopes
+                    .update_handle(*colloscope_handle, Some(new_id));
+                Ok(ReturnHandle::Colloscope(*colloscope_handle))
+            }
+            AnnotatedColloscopesOperation::Remove(colloscope_handle) => {
+                let colloscope_id = manager
+                    .get_handle_managers()
+                    .colloscopes
+                    .get_id(*colloscope_handle)
+                    .ok_or(UpdateError::ColloscopeRemoved(*colloscope_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .colloscopes_remove(colloscope_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => UpdateError::Internal(int_err),
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .colloscopes
+                    .update_handle(*colloscope_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedColloscopesOperation::Update(colloscope_handle, colloscope) => {
+                let colloscope_backend = match convert_colloscope_from_handles(
+                    colloscope.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId3::Ok => {
+                            panic!("DataStatusWithId3::Ok is not an error")
+                        }
+                        backend::DataStatusWithId3::BadCrossId1(teacher_handle) => {
+                            return Err(UpdateError::ColloscopeBadTeacher(teacher_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId2(subject_handle) => {
+                            return Err(UpdateError::ColloscopeBadSubject(subject_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId3(student_handle) => {
+                            return Err(UpdateError::ColloscopeBadStudent(student_handle))
+                        }
+                    },
+                };
+                let colloscope_id = manager
+                    .get_handle_managers()
+                    .colloscopes
+                    .get_id(*colloscope_handle)
+                    .ok_or(UpdateError::ColloscopeRemoved(*colloscope_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .colloscopes_update(colloscope_id, &colloscope_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross3IdError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::Cross3IdError::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdError::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdError::InvalidCrossId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -3229,6 +3359,7 @@ pub(super) mod private {
             AnnotatedOperation::RegisterStudent(op) => {
                 update_register_student_state(manager, op).await
             }
+            AnnotatedOperation::Colloscopes(op) => update_colloscopes_state(manager, op).await,
         }
     }
 
@@ -3914,6 +4045,63 @@ pub(super) mod private {
         Ok(backward)
     }
 
+    pub async fn build_backward_colloscopes_op<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedColloscopesOperation,
+    ) -> Result<
+        AnnotatedColloscopesOperation,
+        RevError<<T::Storage as backend::Storage>::InternalError>,
+    > {
+        let backward = match op {
+            AnnotatedColloscopesOperation::Create(handle, _colloscope) => {
+                AnnotatedColloscopesOperation::Remove(*handle)
+            }
+            AnnotatedColloscopesOperation::Remove(handle) => {
+                let colloscope_id = manager
+                    .get_handle_managers()
+                    .colloscopes
+                    .get_id(*handle)
+                    .ok_or(RevError::ColloscopeRemoved(*handle))?;
+                let colloscope = manager
+                    .get_backend_logic()
+                    .colloscopes_get(colloscope_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedColloscopesOperation::Create(
+                    *handle,
+                    convert_colloscope_to_handles(colloscope, manager.get_handle_managers_mut()),
+                )
+            }
+            AnnotatedColloscopesOperation::Update(handle, _new_colloscope) => {
+                let colloscope_id = manager
+                    .get_handle_managers()
+                    .colloscopes
+                    .get_id(*handle)
+                    .ok_or(RevError::ColloscopeRemoved(*handle))?;
+                let colloscope = manager
+                    .get_backend_logic()
+                    .colloscopes_get(colloscope_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::IdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::IdError::InternalError(int_err) => int_err,
+                    })?;
+                AnnotatedColloscopesOperation::Update(
+                    *handle,
+                    convert_colloscope_to_handles(colloscope, manager.get_handle_managers_mut()),
+                )
+            }
+        };
+        Ok(backward)
+    }
+
     pub async fn build_rev_op<T: ManagerInternal>(
         manager: &mut T,
         op: Operation,
@@ -3957,6 +4145,9 @@ pub(super) mod private {
             AnnotatedOperation::RegisterStudent(op) => AnnotatedOperation::RegisterStudent(
                 build_backward_register_student_op(manager, op).await?,
             ),
+            AnnotatedOperation::Colloscopes(op) => {
+                AnnotatedOperation::Colloscopes(build_backward_colloscopes_op(manager, op).await?)
+            }
         };
         let rev_op = ReversibleOperation { forward, backward };
         Ok(rev_op)
