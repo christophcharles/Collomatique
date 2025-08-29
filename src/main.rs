@@ -454,14 +454,64 @@ async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError};
+    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError, AppSession, WeekPatternsOperation};
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
             if force {
-                return Err(anyhow!(
-                    "Force flag for \"general set-week-count\" not yet implemented"
-                ));
+                let mut session = AppSession::new(app_state);
+
+                let week_patterns = session.get_backend_logic().week_patterns_get_all().await?;
+
+                for (wp_id, mut wp) in week_patterns {
+                    let handle = session.get_week_pattern_handle(wp_id);
+
+                    wp.weeks = wp
+                        .weeks
+                        .into_iter()
+                        .filter(|w| w.get() < week_count.get())
+                        .collect();
+
+                    if let Err(e) = session
+                        .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                            handle,
+                            wp,
+                        )))
+                        .await
+                    {
+                        session.cancel().await;
+
+                        let err = match e {
+                            UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                            UpdateError::WeekNumberTooBig(_week) => {
+                                panic!("The week pattern should be valid as it was checked beforehand")
+                            }
+                            _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                        };
+                        return Err(err);
+                    }
+                }
+
+                if let Err(e) = session
+                    .apply(Operation::General(GeneralOperation::SetWeekCount(
+                        week_count,
+                    )))
+                    .await
+                {
+                    session.cancel().await;
+
+                    let err = match e {
+                        UpdateError::WeekPatternsNeedTruncating(_week_patterns_to_truncate) => {
+                            panic!("Week patterns should not need truncating as they were automatically cut.")
+                        }
+                        UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                        _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                    };
+                    return Err(err);
+                }
+
+                session.commit();
+                return Ok(None);
             }
 
             if let Err(e) = app_state
