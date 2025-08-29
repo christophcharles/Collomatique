@@ -10,8 +10,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
-    #[error("Subject has an empty range for students_per_interrogation")]
-    InvalidStudentsPerInterrogationRange,
+    #[error("Subject {0} has empty students_per_interrogation: {1:?}")]
+    SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroU32>),
     #[error("Interrogation slot is too long to fit in a day")]
     SlotOverlapsNextDay,
     #[error("Teacher number is invalid")]
@@ -137,9 +137,12 @@ impl ValidatedData {
         slot_groupings: SlotGroupingList,
         grouping_incompats: GroupingIncompatSet,
     ) -> Result<ValidatedData> {
-        for subject in &subjects {
+        for (i, subject) in subjects.iter().enumerate() {
             if subject.students_per_interrogation.is_empty() {
-                return Err(Error::InvalidStudentsPerInterrogationRange);
+                return Err(Error::SubjectWithInvalidStudentsPerInterrogationRange(
+                    i,
+                    subject.students_per_interrogation.clone(),
+                ));
             }
 
             for interrogation in &subject.interrogations {
