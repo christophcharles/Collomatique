@@ -2574,3 +2574,57 @@ impl<T: Storage> Logic<T> {
         }
     }
 }
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupWeekPatternId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupTeacherId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupStudentId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupSubjectGroupId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupIncompatId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupGroupListId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupSubjectId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupTimeSlotId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupGroupingId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupGroupingIncompatId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupColloscopeId(u64);
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackupSlotSelectionId(u64);
+
+pub struct BackupAssignments {
+    pub subject_groups: BTreeMap<BackupSubjectGroupId, BackupSubjectId>,
+    pub incompats: BTreeSet<BackupIncompatId>,
+}
+
+pub struct BackupData {
+    pub next_id: u64,
+    pub general_data: GeneralData,
+    pub week_patterns: BTreeMap<BackupWeekPatternId, WeekPattern>,
+    pub teachers: BTreeMap<BackupTeacherId, Teacher>,
+    pub students: BTreeMap<BackupStudentId, Student>,
+    pub subject_groups: BTreeMap<BackupSubjectGroupId, SubjectGroup>,
+    pub incompats: BTreeMap<BackupIncompatId, Incompat<BackupWeekPatternId>>,
+    pub group_lists: BTreeMap<BackupGroupListId, GroupList<BackupStudentId>>,
+    pub subjects: BTreeMap<
+        BackupSubjectId,
+        Subject<BackupSubjectGroupId, BackupIncompatId, BackupGroupListId>,
+    >,
+    pub time_slots:
+        BTreeMap<BackupTimeSlotId, TimeSlot<BackupSubjectId, BackupTeacherId, BackupWeekPatternId>>,
+    pub groupings: BTreeMap<BackupGroupingId, Grouping<BackupTimeSlotId>>,
+    pub grouping_incompats: BTreeMap<BackupGroupingIncompatId, GroupingIncompat<BackupGroupingId>>,
+    pub colloscopes:
+        BTreeMap<BackupColloscopeId, Colloscope<BackupTeacherId, BackupSubjectId, BackupStudentId>>,
+    pub slot_selections:
+        BTreeMap<BackupSlotSelectionId, SlotSelection<BackupSubjectId, BackupTimeSlotId>>,
+    pub student_assignments: BTreeMap<BackupStudentId, BackupAssignments>,
+}
