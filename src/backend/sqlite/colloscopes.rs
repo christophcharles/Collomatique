@@ -97,7 +97,7 @@ pub async fn get(
                 if group_list
                     .students_mapping
                     .insert(super::students::Id(group_item.student_id), group_num)
-                    .is_none()
+                    .is_some()
                 {
                     return Err(Error::CorruptedDatabase(
                         format!(
@@ -195,7 +195,7 @@ pub async fn get(
                 if new_time_slot
                     .group_assignments
                     .insert(Week(week_num), group_assignments)
-                    .is_none()
+                    .is_some()
                 {
                     return Err(Error::CorruptedDatabase(format!(
                         "Database references week {} multiple times for collo_time_slot_id {}",
@@ -216,7 +216,7 @@ pub async fn get(
         if output
             .subjects
             .insert(super::subjects::Id(subject.subject_id), new_subject)
-            .is_none()
+            .is_some()
         {
             return Err(Error::CorruptedDatabase(format!(
                 "Multiple occurences of subject {} in colloscope {}",
