@@ -55,10 +55,19 @@ use super::UsableData;
 /// assert_eq!(expr.get("B"), Some(-3.0)); // The coefficient for "B" is -3
 /// assert_eq!(expr.get_constant(), -42.0); // The constant is -42.0
 /// ```
-#[derive(Debug, Clone, Default, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq)]
 pub struct LinExpr<V: UsableData> {
     coefs: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
     constant: ordered_float::OrderedFloat<f64>,
+}
+
+impl<V: UsableData> Default for LinExpr<V> {
+    fn default() -> Self {
+        LinExpr {
+            coefs: BTreeMap::default(),
+            constant: ordered_float::OrderedFloat::default(),
+        }
+    }
 }
 
 /// [EqSymbol] represents an equality or inequality symbol.
