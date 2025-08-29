@@ -8,6 +8,8 @@ use crate::ilp::random::RandomGen;
 use crate::ilp::solvers::FeasabilitySolver;
 use crate::ilp::{Config, FeasableConfig};
 
+use super::MutationPolicy;
+
 pub type TemperatureFn = Debuggable<dyn Fn(usize) -> f64>;
 
 impl Default for TemperatureFn {
@@ -50,11 +52,12 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
         self.init_max_steps = init_max_steps;
     }
 
-    pub fn iterate<R: RandomGen, S: FeasabilitySolver<V, P>>(
+    pub fn iterate<R: RandomGen, S: FeasabilitySolver<V, P>, M: MutationPolicy<V, P>>(
         &self,
         solver: S,
         random_gen: R,
-    ) -> OptimizerIterator<'a, V, P, R, S> {
+        mutation_policy: M,
+    ) -> OptimizerIterator<'a, V, P, R, S, M> {
         OptimizerIterator {
             random_gen,
             solver,
@@ -64,6 +67,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>> Optimizer<'a, V, P> {
             temp_profile: self.temp_profile.clone(),
             max_steps: self.max_steps.clone(),
             current_max_steps: self.init_max_steps.clone(),
+            mutation_policy,
         }
     }
 }
@@ -77,6 +81,7 @@ pub struct OptimizerIterator<
     P: ProblemRepr<V>,
     R: RandomGen,
     S: FeasabilitySolver<V, P>,
+    M: MutationPolicy<V, P>,
 > {
     solver: S,
     random_gen: R,
@@ -88,10 +93,17 @@ pub struct OptimizerIterator<
     temp_profile: TemperatureFn,
     max_steps: Option<usize>,
     current_max_steps: Option<usize>,
+    mutation_policy: M,
 }
 
-impl<'a, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<V, P>> Iterator
-    for OptimizerIterator<'a, V, P, R, S>
+impl<
+        'a,
+        V: VariableName,
+        P: ProblemRepr<V>,
+        R: RandomGen,
+        S: FeasabilitySolver<V, P>,
+        M: MutationPolicy<V, P>,
+    > Iterator for OptimizerIterator<'a, V, P, R, S, M>
 {
     type Item = (Rc<FeasableConfig<'a, V, P>>, f64);
 
@@ -131,7 +143,7 @@ impl<'a, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<
         };
         self.k += 1;
 
-        if let Some(neighbour) = config.as_ref().inner().random_neighbour(&self.random_gen) {
+        if let Some(neighbour) = self.mutation_policy.mutate(config.as_ref()) {
             self.current_config = neighbour;
             if acceptance >= self.random_gen.random() {
                 self.previous_config = Some((config, config_cost));
@@ -143,8 +155,14 @@ impl<'a, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<
     }
 }
 
-impl<'a, V: VariableName, P: ProblemRepr<V>, R: RandomGen, S: FeasabilitySolver<V, P>>
-    OptimizerIterator<'a, V, P, R, S>
+impl<
+        'a,
+        V: VariableName,
+        P: ProblemRepr<V>,
+        R: RandomGen,
+        S: FeasabilitySolver<V, P>,
+        M: MutationPolicy<V, P>,
+    > OptimizerIterator<'a, V, P, R, S, M>
 {
     pub fn best_in(self, max_iter: usize) -> Option<(Rc<FeasableConfig<'a, V, P>>, f64)> {
         self.take(max_iter)
