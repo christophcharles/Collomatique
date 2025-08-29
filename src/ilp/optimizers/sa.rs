@@ -44,9 +44,10 @@ impl<'a, S: FeasabilitySolver> Optimizer<'a, S> {
                 return Some(config);
             }
         };
+        let mut config_cost = eval_fn(&config);
 
         let mut lowest_config = config.clone();
-        let mut lowest_cost = eval_fn(&config);
+        let mut lowest_cost = config_cost;
 
         for k in 0..self.max_iter {
             let temp = self.temp_profile(k);
@@ -63,7 +64,6 @@ impl<'a, S: FeasabilitySolver> Optimizer<'a, S> {
                 None => return Some(config), // No other feasable solution? We found the optimal one!
             };
 
-            let config_cost = eval_fn(&config);
             let neighbour_cost = eval_fn(&neighbour);
 
             if neighbour_cost < lowest_cost {
@@ -75,6 +75,7 @@ impl<'a, S: FeasabilitySolver> Optimizer<'a, S> {
 
             if acceptance > random_gen.random() {
                 config = neighbour;
+                config_cost = neighbour_cost;
             }
         }
 
