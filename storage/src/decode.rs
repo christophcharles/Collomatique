@@ -167,6 +167,7 @@ struct PreData {
 
 mod assignment_map;
 mod period_list;
+mod slot_list;
 mod student_list;
 mod subject_list;
 mod teacher_list;
@@ -199,6 +200,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::WeekPatternList(week_pattern_list) => {
                 week_pattern_list::decode_entry(week_pattern_list, &mut pre_data)?;
             }
+            ValidEntry::SlotList(slot_list) => {
+                slot_list::decode_entry(slot_list, &mut pre_data)?;
+            }
         }
     }
 
@@ -223,6 +227,7 @@ pub enum EntryTag {
     TeacherList,
     AssignmentMap,
     WeekPatternList,
+    SlotList,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -234,6 +239,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::TeacherList(_) => EntryTag::TeacherList,
             ValidEntry::AssignmentMap(_) => EntryTag::AssignmentMap,
             ValidEntry::WeekPatternList(_) => EntryTag::WeekPatternList,
+            ValidEntry::SlotList(_) => EntryTag::SlotList,
         }
     }
 }

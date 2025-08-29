@@ -6,4 +6,4 @@ authors.workspace = true
 
 [dependencies]
 serde.workspace = true
-chrono = { workspace = true, features = [ "serde", "clock" ] }
+chrono = { workspace = true, features = [ "clock" ] }

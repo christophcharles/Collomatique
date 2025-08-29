@@ -97,6 +97,7 @@ pub struct Entry {
 pub mod assignment_map;
 pub mod common;
 pub mod period_list;
+pub mod slot_list;
 pub mod student_list;
 pub mod subject_list;
 pub mod teacher_list;
@@ -132,6 +133,7 @@ pub enum ValidEntry {
     TeacherList(teacher_list::List),
     AssignmentMap(assignment_map::Map),
     WeekPatternList(week_pattern_list::List),
+    SlotList(slot_list::List),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
@@ -145,6 +147,7 @@ impl ValidEntry {
             ValidEntry::TeacherList(_) => 1,
             ValidEntry::AssignmentMap(_) => 1,
             ValidEntry::WeekPatternList(_) => 1,
+            ValidEntry::SlotList(_) => 1,
         }
     }
 
@@ -156,6 +159,7 @@ impl ValidEntry {
             ValidEntry::TeacherList(_) => true,
             ValidEntry::AssignmentMap(_) => true,
             ValidEntry::WeekPatternList(_) => true,
+            ValidEntry::SlotList(_) => true,
         }
     }
 }
