@@ -203,7 +203,7 @@ impl<'scope> SessionConnection<'scope> {
                         UpdateError::InterrogationsPerWeekRangeIsEmpty => {
                             PyValueError::new_err("Interrogations per week range is empty")
                         }
-                        UpdateError::WeekPatternsNeedTruncating(week_patterns) => {
+                        UpdateError::WeekPatternsNeedTruncating(_week_patterns) => {
                             PyValueError::new_err("Some wwek patterns need truncating")
                         }
                         _ => panic!("Unexpected error!"),
