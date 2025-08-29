@@ -10,8 +10,6 @@ use group_lists::GroupLists;
 use group_lists::GroupListsExternalData;
 use incompats::Incompats;
 use incompats::IncompatsExternalData;
-use ops::AnnotatedGroupListOp;
-use ops::AnnotatedRuleOp;
 use periods::{Periods, PeriodsExternalData};
 use rules::Rules;
 use rules::RulesExternalData;
@@ -32,12 +30,13 @@ pub use ids::{
 };
 pub mod ops;
 use ops::{
-    AnnotatedAssignmentOp, AnnotatedIncompatOp, AnnotatedPeriodOp, AnnotatedSlotOp,
-    AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekPatternOp,
+    AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPeriodOp,
+    AnnotatedRuleOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
+    AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, GroupListOp, IncompatOp, Op, PeriodOp, SlotOp, StudentOp, SubjectOp,
-    TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, GroupListOp, IncompatOp, Op, PeriodOp, RuleOp, SlotOp, StudentOp,
+    SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
