@@ -19,6 +19,7 @@ pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
 pub mod periods;
 pub mod subjects;
+pub mod teachers;
 
 /// Description of a person with contacts
 ///
