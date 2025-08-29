@@ -1,8 +1,9 @@
-//! Collomatique-rpc crate
+//! rpc module
 //!
-//! This crate contains the code to run an rpc server
+//! This module contains the code to run an rpc server
 //! as well as the necessary RCP messages
 
+use anyhow::anyhow;
 use std::io::Write;
 
 use serde::{Deserialize, Serialize};
@@ -107,4 +108,62 @@ pub fn wait_for_init_msg() -> Result<InitMsg, String> {
 pub fn send_exit() {
     print!("{}\r\n", CompleteCmdMsg::GracefulExit.into_text_msg());
     std::io::stdout().flush().expect("no error on flush");
+}
+
+/// Main RPC Engine function
+///
+/// Runs the RPC engine through stdin/stdout
+pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
+    eprintln!("Waiting for initial payload...");
+    let init_msg = match wait_for_init_msg() {
+        Ok(x) => x,
+        Err(e) => return Err(anyhow!("Unknown initial payload: {}", e)),
+    };
+    eprintln!("Payload received!");
+
+    match init_msg {
+        InitMsg::RpcTest => run_rpc_test()?,
+        InitMsg::RunPythonScript(script) => crate::python::run_python_script(script)?,
+    }
+
+    eprintln!("Exiting...");
+    send_exit();
+
+    Ok(())
+}
+
+fn run_rpc_test() -> Result<(), anyhow::Error> {
+    eprintln!("Running RPC test...");
+    for i in 1..=100 {
+        eprintln!("Msg {}", i);
+        match i % 3 {
+            1 => match send_rpc(CmdMsg::Success) {
+                Ok(rep) => {
+                    if rep != OutMsg::Ack {
+                        return Err(anyhow!("Invalid response to valid command!"));
+                    }
+                }
+                Err(e) => return Err(anyhow!("Invalid response: {}", e)),
+            },
+            2 => match send_rpc(CmdMsg::Warning) {
+                Ok(rep) => {
+                    if rep != OutMsg::Ack {
+                        return Err(anyhow!("Invalid response to valid command!"));
+                    }
+                }
+                Err(e) => return Err(anyhow!("Invalid response: {}", e)),
+            },
+            _ => match send_raw_msg("This is not a valid command...") {
+                Ok(rep) => {
+                    if rep != OutMsg::Invalid {
+                        return Err(anyhow!("Ack response to invalid command!"));
+                    }
+                }
+                Err(e) => return Err(anyhow!("Invalid response: {}", e)),
+            },
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    eprintln!("End of RPC test");
+    Ok(())
 }

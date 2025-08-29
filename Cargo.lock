@@ -343,14 +343,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pyo3",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "collomatique-gtk4"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "collomatique-python",
- "collomatique-rpc",
+ "collomatique-core",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
@@ -373,22 +382,6 @@ dependencies = [
  "ordered-float",
  "sprs",
  "thiserror",
-]
-
-[[package]]
-name = "collomatique-python"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "pyo3",
-]
-
-[[package]]
-name = "collomatique-rpc"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
