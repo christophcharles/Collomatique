@@ -54,15 +54,15 @@ VALUES (1,1,1,600,60), (2,1,0,720,60), (2, 1, 3, 720, 120), (3, 1, 0, 480, 120),
 INSERT INTO subjects
 (name, subject_group_id, incompat_id, group_list_id,
 duration, min_students_per_group, max_students_per_group, period, period_is_strict,
-is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots)
+is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections)
 VALUES
 ("HGG", 1, NULL, 2, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("ESH", 1, 1, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("Lettres-Philo", 5, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("LV2 - Espagnol", 2, 2, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("LV2 - Allemand", 2, 3, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("TP Info", 6, NULL, 3, 120, 10, 19, 2, 0, 1, 1, 0, 0);
 
 INSERT INTO teachers (surname, firstname, contact)

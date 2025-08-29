@@ -67,15 +67,15 @@ async fn prepare_example_db(pool: sqlx::SqlitePool) -> Store {
 INSERT INTO subjects
 (name, subject_group_id, incompat_id, group_list_id,
 duration, min_students_per_group, max_students_per_group, period, period_is_strict,
-is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots)
+is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections)
 VALUES
 ("HGG", 1, NULL, 2, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("ESH", 1, 1, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("Lettres-Philo", 5, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("LV2 - Espagnol", 2, 2, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
 ("LV2 - Allemand", 2, 3, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
-("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 3, 0),
 ("TP Info", 6, NULL, 3, 120, 10, 19, 2, 0, 1, 1, 0, 0);
         "#
     )
@@ -99,9 +99,9 @@ struct SubjectDb {
     period_is_strict: i64,
     is_tutorial: i64,
     max_groups_per_slot: i64,
-    balance_teachers: i64,
-    balance_timeslots: i64,
     group_list_id: Option<i64>,
+    balancing_constraints: i64,
+    balancing_slot_selections: i64,
 }
 
 #[sqlx::test]
@@ -120,8 +120,8 @@ async fn subjects_add_one_1(pool: sqlx::SqlitePool) {
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: false,
-                timeslots: false,
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(2)),
         })
@@ -148,9 +148,9 @@ async fn subjects_add_one_1(pool: sqlx::SqlitePool) {
         period_is_strict: 0,
         is_tutorial: 0,
         max_groups_per_slot: 1,
-        balance_teachers: 0,
-        balance_timeslots: 0,
         group_list_id: Some(2),
+        balancing_constraints: 0,
+        balancing_slot_selections: 0,
     }];
 
     assert_eq!(subjects, subjects_expected);
@@ -172,8 +172,8 @@ async fn subjects_add_one_2(pool: sqlx::SqlitePool) {
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: false,
-                timeslots: false,
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(1)),
         })
@@ -200,9 +200,9 @@ async fn subjects_add_one_2(pool: sqlx::SqlitePool) {
         period_is_strict: 0,
         is_tutorial: 0,
         max_groups_per_slot: 1,
-        balance_teachers: 0,
-        balance_timeslots: 0,
         group_list_id: Some(1),
+        balancing_constraints: 0,
+        balancing_slot_selections: 0,
     }];
 
     assert_eq!(subjects, subjects_expected);
@@ -224,8 +224,8 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: false,
-                timeslots: false,
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(2)),
         })
@@ -247,8 +247,8 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: false,
-                timeslots: false,
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(1)),
         })
@@ -270,8 +270,8 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: false,
-                timeslots: false,
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(1)),
         })
@@ -293,8 +293,8 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             is_tutorial: true,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: false,
-                timeslots: false,
+                constraints: BalancingConstraints::OptimizeOnly,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(3)),
         })
@@ -322,9 +322,9 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             period_is_strict: 0,
             is_tutorial: 0,
             max_groups_per_slot: 1,
-            balance_teachers: 0,
-            balance_timeslots: 0,
             group_list_id: Some(2),
+            balancing_constraints: 0,
+            balancing_slot_selections: 0,
         },
         SubjectDb {
             subject_id: 2,
@@ -338,9 +338,9 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             period_is_strict: 0,
             is_tutorial: 0,
             max_groups_per_slot: 1,
-            balance_teachers: 0,
-            balance_timeslots: 0,
             group_list_id: Some(1),
+            balancing_constraints: 0,
+            balancing_slot_selections: 0,
         },
         SubjectDb {
             subject_id: 3,
@@ -354,9 +354,9 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             period_is_strict: 0,
             is_tutorial: 0,
             max_groups_per_slot: 1,
-            balance_teachers: 0,
-            balance_timeslots: 0,
             group_list_id: Some(1),
+            balancing_constraints: 0,
+            balancing_slot_selections: 0,
         },
         SubjectDb {
             subject_id: 4,
@@ -370,9 +370,9 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
             period_is_strict: 0,
             is_tutorial: 1,
             max_groups_per_slot: 1,
-            balance_teachers: 0,
-            balance_timeslots: 0,
             group_list_id: Some(3),
+            balancing_constraints: 0,
+            balancing_slot_selections: 0,
         },
     ];
 
@@ -399,8 +399,8 @@ async fn subjects_get_one_1(pool: sqlx::SqlitePool) {
         is_tutorial: false,
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: false,
+            constraints: BalancingConstraints::OptimizeOnly,
+            slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
         },
         group_list_id: Some(super::super::group_lists::Id(2)),
     };
@@ -428,8 +428,8 @@ async fn subjects_get_one_2(pool: sqlx::SqlitePool) {
         is_tutorial: false,
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: false,
+            constraints: BalancingConstraints::OptimizeOnly,
+            slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
         },
         group_list_id: Some(super::super::group_lists::Id(1)),
     };
@@ -457,8 +457,8 @@ async fn subjects_get_one_3(pool: sqlx::SqlitePool) {
         is_tutorial: false,
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: false,
+            constraints: BalancingConstraints::OptimizeOnly,
+            slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
         },
         group_list_id: Some(super::super::group_lists::Id(1)),
     };
@@ -486,8 +486,8 @@ async fn subjects_get_one_4(pool: sqlx::SqlitePool) {
         is_tutorial: true,
         max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         balancing_requirements: BalancingRequirements {
-            teachers: false,
-            timeslots: false,
+            constraints: BalancingConstraints::OptimizeOnly,
+            slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
         },
         group_list_id: Some(super::super::group_lists::Id(3)),
     };
@@ -515,8 +515,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(2)),
             },
@@ -534,8 +534,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -553,8 +553,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -572,8 +572,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -591,8 +591,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -610,8 +610,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -629,8 +629,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -648,8 +648,8 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
                 is_tutorial: true,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(3)),
             },
@@ -686,8 +686,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -705,8 +705,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -724,8 +724,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -743,8 +743,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -762,8 +762,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -781,8 +781,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -800,8 +800,8 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
                 is_tutorial: true,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(3)),
             },
@@ -838,8 +838,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(2)),
             },
@@ -857,8 +857,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -876,8 +876,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -895,8 +895,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -914,8 +914,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -933,8 +933,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -952,8 +952,8 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
                 is_tutorial: true,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(3)),
             },
@@ -985,8 +985,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
             is_tutorial: false,
             max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             balancing_requirements: BalancingRequirements {
-                teachers: true,
-                timeslots: true,
+                constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
             },
             group_list_id: Some(super::super::group_lists::Id(1)),
         })
@@ -1011,8 +1011,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(2)),
             },
@@ -1030,8 +1030,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1049,8 +1049,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1068,8 +1068,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1087,8 +1087,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1106,8 +1106,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1125,8 +1125,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: true,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(3)),
             },
@@ -1144,8 +1144,8 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1175,8 +1175,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                     is_tutorial: false,
                     max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                     balancing_requirements: BalancingRequirements {
-                        teachers: false,
-                        timeslots: false,
+                        constraints: BalancingConstraints::OptimizeOnly,
+                        slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                     },
                     group_list_id: None,
                 },
@@ -1201,8 +1201,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(2)),
             },
@@ -1220,8 +1220,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1239,8 +1239,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1258,8 +1258,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: None,
             },
@@ -1277,8 +1277,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1296,8 +1296,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1315,8 +1315,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: false,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: true,
-                    timeslots: true,
+                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(1)),
             },
@@ -1334,8 +1334,8 @@ async fn subjects_update(pool: sqlx::SqlitePool) {
                 is_tutorial: true,
                 max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
                 balancing_requirements: BalancingRequirements {
-                    teachers: false,
-                    timeslots: false,
+                    constraints: BalancingConstraints::OptimizeOnly,
+                    slot_selections: BalancingSlotSelections::TeachersAndTimeSlots,
                 },
                 group_list_id: Some(super::super::group_lists::Id(3)),
             },

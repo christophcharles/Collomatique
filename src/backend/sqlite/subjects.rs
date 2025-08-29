@@ -12,7 +12,7 @@ pub async fn get_all(
     let records = sqlx::query!(
         r#"
 SELECT subject_id, name, subject_group_id, incompat_id, group_list_id, duration,
-min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots
+min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections
 FROM subjects
         "#
     )
@@ -79,6 +79,29 @@ FROM subjects
                 record.duration
             )))?;
 
+        let balancing_constraints = match record.balancing_constraints {
+            0 => Ok(BalancingConstraints::OptimizeOnly),
+            1 => Ok(BalancingConstraints::OverallOnly),
+            2 => Ok(BalancingConstraints::StrictWithCuts),
+            3 => Ok(BalancingConstraints::StrictWithCutsAndOverall),
+            4 => Ok(BalancingConstraints::Strict),
+            _ => Err(Error::CorruptedDatabase(format!(
+                "invalid balancing_constraints ({}) stored in database",
+                record.balancing_constraints
+            ))),
+        }?;
+
+        let balancing_slot_selections = match record.balancing_slot_selections {
+            0 => Ok(BalancingSlotSelections::TeachersAndTimeSlots),
+            1 => Ok(BalancingSlotSelections::Teachers),
+            2 => Ok(BalancingSlotSelections::Timeslots),
+            3 => Ok(BalancingSlotSelections::Manual),
+            _ => Err(Error::CorruptedDatabase(format!(
+                "invalid balancing_slot_selections ({}) stored in database",
+                record.balancing_slot_selections
+            ))),
+        }?;
+
         output.insert(
             Id(record.subject_id),
             Subject {
@@ -93,8 +116,8 @@ FROM subjects
                 is_tutorial: record.is_tutorial != 0,
                 max_groups_per_slot,
                 balancing_requirements: BalancingRequirements {
-                    teachers: record.balance_teachers != 0,
-                    timeslots: record.balance_timeslots != 0,
+                    constraints: balancing_constraints,
+                    slot_selections: balancing_slot_selections,
                 },
             },
         );
@@ -113,7 +136,7 @@ pub async fn get(
     let record_opt = sqlx::query!(
         r#"
 SELECT name, subject_group_id, incompat_id, group_list_id, duration,
-min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots
+min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections
 FROM subjects WHERE subject_id = ?
         "#,
         index.0
@@ -180,6 +203,29 @@ FROM subjects WHERE subject_id = ?
             record.duration
         )))?;
 
+    let balancing_constraints = match record.balancing_constraints {
+        0 => Ok(BalancingConstraints::OptimizeOnly),
+        1 => Ok(BalancingConstraints::OverallOnly),
+        2 => Ok(BalancingConstraints::StrictWithCuts),
+        3 => Ok(BalancingConstraints::StrictWithCutsAndOverall),
+        4 => Ok(BalancingConstraints::Strict),
+        _ => Err(Error::CorruptedDatabase(format!(
+            "invalid balancing_constraints ({}) stored in database",
+            record.balancing_constraints
+        ))),
+    }?;
+
+    let balancing_slot_selections = match record.balancing_slot_selections {
+        0 => Ok(BalancingSlotSelections::TeachersAndTimeSlots),
+        1 => Ok(BalancingSlotSelections::Teachers),
+        2 => Ok(BalancingSlotSelections::Timeslots),
+        3 => Ok(BalancingSlotSelections::Manual),
+        _ => Err(Error::CorruptedDatabase(format!(
+            "invalid balancing_slot_selections ({}) stored in database",
+            record.balancing_slot_selections
+        ))),
+    }?;
+
     let output = Subject {
         name: record.name,
         subject_group_id: subject_groups::Id(record.subject_group_id),
@@ -192,8 +238,8 @@ FROM subjects WHERE subject_id = ?
         is_tutorial: record.is_tutorial != 0,
         max_groups_per_slot,
         balancing_requirements: BalancingRequirements {
-            teachers: record.balance_teachers != 0,
-            timeslots: record.balance_timeslots != 0,
+            constraints: balancing_constraints,
+            slot_selections: balancing_slot_selections,
         },
     };
 
@@ -234,15 +280,18 @@ pub async fn add(
     let period = subject.period.get();
     let period_is_strict = if subject.period_is_strict { 1 } else { 0 };
     let is_tutorial = if subject.is_tutorial { 1 } else { 0 };
-    let balance_teachers = if subject.balancing_requirements.teachers {
-        1
-    } else {
-        0
+    let balancing_constraints = match subject.balancing_requirements.constraints {
+        BalancingConstraints::OptimizeOnly => 0,
+        BalancingConstraints::OverallOnly => 1,
+        BalancingConstraints::StrictWithCuts => 2,
+        BalancingConstraints::StrictWithCutsAndOverall => 3,
+        BalancingConstraints::Strict => 4,
     };
-    let balance_timeslots = if subject.balancing_requirements.timeslots {
-        1
-    } else {
-        0
+    let balancing_slot_selections = match subject.balancing_requirements.slot_selections {
+        BalancingSlotSelections::TeachersAndTimeSlots => 0,
+        BalancingSlotSelections::Teachers => 1,
+        BalancingSlotSelections::Timeslots => 2,
+        BalancingSlotSelections::Manual => 3,
     };
 
     let subject_id = sqlx::query!(
@@ -250,7 +299,7 @@ pub async fn add(
 INSERT INTO subjects
 (name, subject_group_id, incompat_id, group_list_id,
 duration, min_students_per_group, max_students_per_group, period, period_is_strict,
-is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots)
+is_tutorial, max_groups_per_slot, balancing_constraints, balancing_slot_selections)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13);
         "#,
         subject.name,
@@ -264,8 +313,8 @@ VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13);
         period_is_strict,
         is_tutorial,
         max_groups_per_slot,
-        balance_teachers,
-        balance_timeslots,
+        balancing_constraints,
+        balancing_slot_selections,
     )
     .execute(&mut *conn)
     .await
@@ -333,15 +382,18 @@ pub async fn update(
     let period = subject.period.get();
     let period_is_strict = if subject.period_is_strict { 1 } else { 0 };
     let is_tutorial = if subject.is_tutorial { 1 } else { 0 };
-    let balance_teachers = if subject.balancing_requirements.teachers {
-        1
-    } else {
-        0
+    let balancing_constraints = match subject.balancing_requirements.constraints {
+        BalancingConstraints::OptimizeOnly => 0,
+        BalancingConstraints::OverallOnly => 1,
+        BalancingConstraints::StrictWithCuts => 2,
+        BalancingConstraints::StrictWithCutsAndOverall => 3,
+        BalancingConstraints::Strict => 4,
     };
-    let balance_timeslots = if subject.balancing_requirements.timeslots {
-        1
-    } else {
-        0
+    let balancing_slot_selections = match subject.balancing_requirements.slot_selections {
+        BalancingSlotSelections::TeachersAndTimeSlots => 0,
+        BalancingSlotSelections::Teachers => 1,
+        BalancingSlotSelections::Timeslots => 2,
+        BalancingSlotSelections::Manual => 3,
     };
 
     let rows_affected = sqlx::query!(
@@ -349,7 +401,7 @@ pub async fn update(
 UPDATE subjects
 SET name = ?1, subject_group_id = ?2, incompat_id = ?3, group_list_id = ?4,
 duration = ?5, min_students_per_group = ?6, max_students_per_group = ?7, period = ?8, period_is_strict = ?9,
-is_tutorial = ?10, max_groups_per_slot = ?11, balance_teachers = ?12, balance_timeslots = ?13
+is_tutorial = ?10, max_groups_per_slot = ?11, balancing_constraints = ?12, balancing_slot_selections = ?13
 WHERE subject_id = ?14
         "#,
         subject.name,
@@ -363,8 +415,8 @@ WHERE subject_id = ?14
         period_is_strict,
         is_tutorial,
         max_groups_per_slot,
-        balance_teachers,
-        balance_timeslots,
+        balancing_constraints,
+        balancing_slot_selections,
         subject_id,
     )
     .execute(&mut *conn)

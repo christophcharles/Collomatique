@@ -660,10 +660,27 @@ impl<StudentId: OrdId> GroupList<StudentId> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BalancingConstraints {
+    OptimizeOnly,
+    OverallOnly,
+    StrictWithCuts,
+    StrictWithCutsAndOverall,
+    Strict,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BalancingSlotSelections {
+    TeachersAndTimeSlots,
+    Teachers,
+    Timeslots,
+    Manual,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BalancingRequirements {
-    pub teachers: bool,
-    pub timeslots: bool,
+    pub constraints: BalancingConstraints,
+    pub slot_selections: BalancingSlotSelections,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -689,6 +706,18 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
     pub week_pattern_id: WeekPatternId,
     pub room: String,
     pub cost: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotGroup<TimeSlotId: OrdId> {
+    pub slots: BTreeSet<TimeSlotId>,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotSelection<SubjectId: OrdId, TimeSlotId: OrdId> {
+    pub subject_id: SubjectId,
+    pub slot_groups: Vec<SlotGroup<TimeSlotId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -474,29 +474,36 @@ impl GenColloscopeTranslator {
                 .get_mut(*subject_num)
                 .expect("Every mapped subject index should be valid");
 
-            let slot_selections = match (
-                orig_subject.balancing_requirements.teachers,
-                orig_subject.balancing_requirements.timeslots,
-            ) {
-                (false, false) => None,
-                (true, false) => Some(BalancingRequirements::balance_teachers_from_slots(
-                    &subject.slots,
-                )),
-                (false, true) => Some(BalancingRequirements::balance_timeslots_from_slots(
-                    &subject.slots,
-                )),
-                (true, true) => Some(
-                    BalancingRequirements::balance_teachers_and_timeslots_from_slots(
-                        &subject.slots,
-                    ),
-                ),
+            let slot_selections = match orig_subject.balancing_requirements.slot_selections {
+                BalancingSlotSelections::Manual => {
+                    todo!("BalancingSlotSelections::Manual unsupported for now")
+                }
+                BalancingSlotSelections::Teachers => {
+                    BalancingRequirements::balance_teachers_from_slots(&subject.slots)
+                }
+                BalancingSlotSelections::Timeslots => {
+                    BalancingRequirements::balance_timeslots_from_slots(&subject.slots)
+                }
+                BalancingSlotSelections::TeachersAndTimeSlots => {
+                    BalancingRequirements::balance_teachers_and_timeslots_from_slots(&subject.slots)
+                }
             };
 
-            let balancing_requirements =
-                slot_selections.map(|slot_selections| BalancingRequirements {
-                    constraints: BalancingConstraints::StrictWithCutsAndOverall,
-                    slot_selections,
-                });
+            use crate::backend::BalancingConstraints as BC;
+            let constraints = match orig_subject.balancing_requirements.constraints {
+                BC::OptimizeOnly => None,
+                BC::OverallOnly => Some(BalancingConstraints::OverallOnly),
+                BC::StrictWithCuts => Some(BalancingConstraints::StrictWithCuts),
+                BC::StrictWithCutsAndOverall => {
+                    Some(BalancingConstraints::StrictWithCutsAndOverall)
+                }
+                BC::Strict => Some(BalancingConstraints::Strict),
+            };
+
+            let balancing_requirements = constraints.map(|constraints| BalancingRequirements {
+                constraints,
+                slot_selections,
+            });
 
             subject.balancing_requirements = balancing_requirements;
         }
