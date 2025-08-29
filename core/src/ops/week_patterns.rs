@@ -1,14 +1,49 @@
 use super::*;
 
 #[derive(Debug)]
-pub enum WeekPatternsUpdateWarning {}
+pub enum WeekPatternsUpdateWarning {
+    LooseInterrogationSlot(collomatique_state_colloscopes::SlotId),
+}
 
 impl WeekPatternsUpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> String {
-        String::new()
+        match self {
+            WeekPatternsUpdateWarning::LooseInterrogationSlot(slot_id) => {
+                let Some((subject_id, position)) = data
+                    .get_data()
+                    .get_slots()
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return String::new();
+                };
+                let slot = &data
+                    .get_data()
+                    .get_slots()
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid at this point")
+                    .ordered_slots[position]
+                    .1;
+                let Some(teacher) = data
+                    .get_data()
+                    .get_teachers()
+                    .teacher_map
+                    .get(&slot.teacher_id)
+                else {
+                    return String::new();
+                };
+                let Some(subject) = data.get_data().get_subjects().find_subject(subject_id) else {
+                    return String::new();
+                };
+                format!(
+                    "Pertes du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {}",
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time,
+                )
+            }
+        }
     }
 }
 
@@ -59,9 +94,26 @@ impl WeekPatternsUpdateOp {
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Vec<WeekPatternsUpdateWarning> {
-        vec![]
+        match self {
+            Self::AddNewWeekPattern(_) => vec![],
+            Self::UpdateWeekPattern(_, _) => vec![],
+            Self::DeleteWeekPattern(week_pattern_id) => {
+                let mut output = vec![];
+
+                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern == Some(*week_pattern_id) {
+                            output
+                                .push(WeekPatternsUpdateWarning::LooseInterrogationSlot(*slot_id));
+                        }
+                    }
+                }
+
+                output
+            }
+        }
     }
 
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
@@ -119,6 +171,23 @@ impl WeekPatternsUpdateOp {
             }
             Self::DeleteWeekPattern(week_pattern_id) => {
                 let mut session = collomatique_state::AppSession::new(data.clone());
+
+                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern == Some(*week_pattern_id) {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Slot(
+                                        collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
+                                    ),
+                                    "Suppression d'un créneau de colle utilisant le modèle".into(),
+                                )
+                                .expect("All data should be valid at this point");
+
+                            assert!(result.is_none());
+                        }
+                    }
+                }
 
                 let result = session
                     .apply(
