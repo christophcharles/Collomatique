@@ -76,6 +76,7 @@ impl Solver {
         init_config: &Config<'_, V, P>,
         minimize_distance_to_init_config: bool,
     ) -> HighsProblem {
+        use crate::ilp::VariableType;
         use highs::RowProblem;
         use std::collections::BTreeMap;
 
@@ -84,24 +85,29 @@ impl Solver {
         let cols: BTreeMap<_, _> = problem
             .get_variables()
             .iter()
-            .map(|var| {
-                let value = if init_config.get(var).expect("Variable should be valid") {
-                    1.
-                } else {
-                    0.
-                };
-                // Try minimizing the number of changes with respect to the config
-                // So if a variable is true in the config, false should be penalized
-                // And if a variable is false in the config, true should be penalized
-                // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-                let col_factor = if minimize_distance_to_init_config {
-                    1. - 2. * value
-                } else {
-                    0.
-                };
+            .map(|(var, var_type)| {
+                match var_type {
+                    VariableType::Bool => {
+                        let value = if init_config.get_bool(var).expect("Variable should be valid")
+                        {
+                            1.
+                        } else {
+                            0.
+                        };
+                        // Try minimizing the number of changes with respect to the config
+                        // So if a variable is true in the config, false should be penalized
+                        // And if a variable is false in the config, true should be penalized
+                        // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+                        let col_factor = if minimize_distance_to_init_config {
+                            1. - 2. * value
+                        } else {
+                            0.
+                        };
 
-                let col = highs_problem.add_integer_column(col_factor, 0..=1);
-                (var.clone(), col)
+                        let col = highs_problem.add_integer_column(col_factor, 0..=1);
+                        (var.clone(), col)
+                    }
+                }
             })
             .collect();
 
@@ -134,8 +140,9 @@ impl Solver {
         problem: &'a Problem<V, P>,
         solved_model: &'b highs::SolvedModel,
     ) -> Option<FeasableConfig<'a, V, P>> {
+        use crate::ilp::VariableType;
         use highs::HighsModelStatus;
-        use std::collections::BTreeSet;
+        use std::collections::BTreeMap;
 
         if solved_model.status() != HighsModelStatus::Optimal {
             return None;
@@ -143,21 +150,20 @@ impl Solver {
         let solution = solved_model.get_solution();
         let columns = solution.columns();
 
-        let vars: BTreeSet<_> = problem
+        let bool_vars: BTreeMap<_, _> = problem
             .get_variables()
             .iter()
             .enumerate()
-            .filter_map(|(i, var)| {
-                if columns[i] == 1. {
-                    Some(var.clone())
-                } else {
-                    None
+            .filter_map(|(i, (var, var_type))| {
+                if *var_type != VariableType::Bool {
+                    return None;
                 }
+                Some((var.clone(), columns[i] == 1.))
             })
             .collect();
 
         let config = problem
-            .config_from(&vars)
+            .config_from(bool_vars)
             .expect("Variables should be valid");
         Some(
             config
