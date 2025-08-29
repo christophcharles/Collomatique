@@ -19,8 +19,8 @@ impl Entry {
     fn generate_icon_name(&self) -> String {
         match &self.data {
             EntryData::Success(_) => "emblem-success".into(),
-            EntryData::Invalid(_) => "emblem-warning".into(),
-            EntryData::Failed(_) => "emblem-error".into(),
+            EntryData::Invalid(_) => "emblem-error".into(),
+            EntryData::Failed(_) => "emblem-warning".into(),
         }
     }
 
@@ -48,8 +48,8 @@ impl FactoryComponent for Entry {
             set_orientation: gtk::Orientation::Horizontal,
             add_css_class: match &self.data {
                 EntryData::Success(_) => "success",
-                EntryData::Invalid(_) => "warning",
-                EntryData::Failed(_) => "error",
+                EntryData::Invalid(_) => "error",
+                EntryData::Failed(_) => "warning",
             },
             gtk::Image {
                 set_margin_end: 5,
