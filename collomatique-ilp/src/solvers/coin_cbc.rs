@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::{ConfigData, FeasableConfig, Problem, UsableData, VariableType, linexpr::EqSymbol, ObjectiveSense};
 use super::{SolverWithTimeLimit, ProblemRepr};
 
@@ -59,6 +62,8 @@ impl CbcSolver {
 
         let mut cbc_model = self.build_model(problem);
 
+        Self::add_objective_func(&mut cbc_model, problem);
+
         if let Some(time_limit) = time_limit_in_seconds {
             cbc_model.model.set_parameter("timeMode", "elapsed");
             cbc_model
@@ -67,8 +72,6 @@ impl CbcSolver {
         }
 
         let sol = cbc_model.model.solve();
-
-        Self::add_objective_func(&mut cbc_model, problem);
 
         Self::reconstruct_config(problem, &sol, &cbc_model.cols)
     }
@@ -87,20 +90,52 @@ impl CbcSolver {
             .iter()
             .map(|(var, desc)| {
                 let col = match desc.get_type() {
-                    VariableType::Binary => model.add_binary(),
-                    VariableType::Integer => model.add_integer(),
-                    VariableType::Continuous => model.add_col(),
+                    VariableType::Binary => {
+                        let col = model.add_integer();
+
+                        match desc.get_min() {
+                            Some(m) => model.set_col_lower(col, m.max(0.0)),
+                            None => model.set_col_lower(col, 0.0),
+                        }
+        
+                        match desc.get_max() {
+                            Some(m) => model.set_col_upper(col, m.min(1.0)),
+                            None => model.set_col_upper(col, 1.0),
+                        }
+
+                        col
+                    }
+                    VariableType::Integer => {
+                        let col = model.add_integer();
+
+                        match desc.get_min() {
+                            Some(m) => model.set_col_lower(col, m),
+                            None => model.set_col_lower(col, -f64::INFINITY),
+                        }
+        
+                        match desc.get_max() {
+                            Some(m) => model.set_col_upper(col, m),
+                            None => model.set_col_upper(col, f64::INFINITY),
+                        }
+
+                        col
+                    }
+                    VariableType::Continuous => {
+                        let col = model.add_col();
+
+                        match desc.get_min() {
+                            Some(m) => model.set_col_lower(col, m),
+                            None => model.set_col_lower(col, -f64::INFINITY),
+                        }
+        
+                        match desc.get_max() {
+                            Some(m) => model.set_col_upper(col, m),
+                            None => model.set_col_upper(col, f64::INFINITY),
+                        }
+
+                        col
+                    }
                 };
-
-                match desc.get_min() {
-                    Some(m) => model.set_col_lower(col, m),
-                    None => model.set_col_lower(col, -f64::INFINITY),
-                }
-
-                match desc.get_max() {
-                    Some(m) => model.set_col_upper(col, m),
-                    None => model.set_col_upper(col, f64::INFINITY),
-                }
 
                 (var.clone(), col)
             })
@@ -157,8 +192,7 @@ impl CbcSolver {
         let config_data = ConfigData::new()
             .set_iter(cols.iter().map(|(v, col)| (v.clone(), sol.col(*col))));
 
-        let config = problem.build_config(config_data)
-            .expect("Variables should be valid");
+        let config = problem.build_config(config_data).ok()?;
         
         config.into_feasable()
     }
