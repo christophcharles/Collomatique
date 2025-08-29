@@ -60,18 +60,19 @@ fn main() {
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
         // eval func
-        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1.0 } else { 0.0 }))
+        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1000.0 } else { 0.0 }))
         .build();
 
-    let dijkstra_solver = collomatique::ilp::solvers::dijkstra::Solver::new(&pb);
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb, dijkstra_solver);
+    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb);
 
     let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
     sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
-    sa_optimizer.set_max_iter(10);
 
-    let solution = sa_optimizer.optimize(&mut random_gen);
+    let dijkstra_solver = collomatique::ilp::solvers::dijkstra::Solver::new(&pb);
+    let iterator = sa_optimizer.iterate(dijkstra_solver, &mut random_gen);
 
-    println!("{:?}", Config::from(solution.unwrap()));
+    for (i, (sol, cost)) in iterator.enumerate() {
+        println!("{}: {} - {:?}", i, cost, Config::from(sol));
+    }
 }

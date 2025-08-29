@@ -63,30 +63,36 @@ fn test_sa() {
         .add((&y11 + &y12).eq(&one))
         .add((&y21 + &y22).eq(&one))
         // eval func
-        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1.0 } else { 0.0 }))
+        .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1000.0 } else { 0.0 }))
         .build();
 
-    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
-    let mut sa_optimizer = super::Optimizer::new(&pb, dijkstra_solver);
+    let mut sa_optimizer = super::Optimizer::new(&pb);
 
     let config = Config::from_iter(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
     sa_optimizer.set_init_config(config);
-    sa_optimizer.set_max_iter(1); // There are only two solutions so only one iteration should even be enough to find the optimal one
 
     let mut random_gen = crate::ilp::random::DefaultRndGen::new();
-    let solution = sa_optimizer.optimize(&mut random_gen);
+    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
+    let solution = sa_optimizer
+        .iterate(dijkstra_solver, &mut random_gen)
+        .best_in(2);
+    // There are only two solutions so only two iterations should even be enough to find the optimal one
 
     assert_eq!(
-        Config::from(solution.expect("Solution found")),
+        Config::from(solution.expect("Solution found").0),
         Config::from_iter(["x12", "y11", "y22", "x21"])
     );
 
     let config = Config::from_iter(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
     sa_optimizer.set_init_config(config);
-    let solution = sa_optimizer.optimize(&mut random_gen);
+
+    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
+    let solution = sa_optimizer
+        .iterate(dijkstra_solver, &mut random_gen)
+        .best_in(2);
 
     assert_eq!(
-        Config::from(solution.expect("Solution found")),
+        Config::from(solution.expect("Solution found").0),
         Config::from_iter(["x12", "y11", "y22", "x21"])
     );
 }
