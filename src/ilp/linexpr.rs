@@ -17,8 +17,25 @@ impl PartialEq for Expr {
 
 impl Eq for Expr {}
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Config {
     values: BTreeMap<String, bool>,
+}
+
+impl Config {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set<T: Into<String>>(&mut self, var: T, val: bool) {
+        self.values.insert(var.into(), val);
+    }
+
+    pub fn get<T: Into<String>>(&mut self, var: T) -> Option<bool> {
+        let val = self.values.get(&var.into())?;
+
+        Some(*val)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
