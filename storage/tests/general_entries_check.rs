@@ -1,7 +1,7 @@
 use collomatique_state_colloscopes::{
     assignments::AssignmentsExternalData, group_lists::GroupListsExternalData,
-    incompats::IncompatsExternalData, periods::PeriodsExternalData, slots::SlotsExternalData,
-    subjects::SubjectsExternalData, teachers::TeachersExternalData,
+    incompats::IncompatsExternalData, periods::PeriodsExternalData, rules::RulesExternalData,
+    slots::SlotsExternalData, subjects::SubjectsExternalData, teachers::TeachersExternalData,
     week_patterns::WeekPatternsExternalData,
 };
 use collomatique_storage::*;
@@ -150,6 +150,7 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
         SlotsExternalData::default(),
         IncompatsExternalData::default(),
         GroupListsExternalData::default(),
+        RulesExternalData::default(),
     )
     .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);

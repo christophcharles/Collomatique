@@ -12,6 +12,8 @@ use incompats::Incompats;
 use incompats::IncompatsExternalData;
 use ops::AnnotatedGroupListOp;
 use periods::{Periods, PeriodsExternalData};
+use rules::Rules;
+use rules::RulesExternalData;
 use slots::{Slots, SlotsExternalData};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -24,7 +26,8 @@ use week_patterns::WeekPatternsExternalData;
 pub mod ids;
 use ids::IdIssuer;
 pub use ids::{
-    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
+    GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId, TeacherId,
+    WeekPatternId,
 };
 pub mod ops;
 use ops::{
@@ -43,6 +46,7 @@ pub mod assignments;
 pub mod group_lists;
 pub mod incompats;
 pub mod periods;
+pub mod rules;
 pub mod slots;
 pub mod students;
 pub mod subjects;
@@ -105,6 +109,7 @@ struct InnerData {
     slots: slots::Slots,
     incompats: incompats::Incompats,
     group_lists: group_lists::GroupLists,
+    rules: rules::Rules,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -492,6 +497,8 @@ pub enum FromDataError {
     InconsistentSlots,
     #[error("Inconsistent group lists")]
     InconsistentGroupLists,
+    #[error("Inconsistent rules")]
+    InconsistentRules,
 }
 
 /// Potential new id returned by annotation
@@ -505,6 +512,7 @@ pub enum NewId {
     SlotId(SlotId),
     IncompatId(IncompatId),
     GroupListId(GroupListId),
+    RuleId(RuleId),
 }
 
 impl From<StudentId> for NewId {
@@ -552,6 +560,12 @@ impl From<IncompatId> for NewId {
 impl From<GroupListId> for NewId {
     fn from(value: GroupListId) -> Self {
         NewId::GroupListId(value)
+    }
+}
+
+impl From<RuleId> for NewId {
+    fn from(value: RuleId) -> Self {
+        NewId::RuleId(value)
     }
 }
 
@@ -1442,6 +1456,7 @@ impl Data {
             SlotsExternalData::default(),
             IncompatsExternalData::default(),
             GroupListsExternalData::default(),
+            RulesExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -1460,6 +1475,7 @@ impl Data {
         slots: slots::SlotsExternalData,
         incompats: incompats::IncompatsExternalData,
         group_lists: group_lists::GroupListsExternalData,
+        rules: rules::RulesExternalData,
     ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
@@ -1474,6 +1490,7 @@ impl Data {
             });
         let incompat_ids = incompats.incompat_map.keys().copied();
         let group_list_ids = group_lists.group_list_map.keys().copied();
+        let rule_ids = rules.rule_map.keys().copied();
         let id_issuer = IdIssuer::new(
             student_ids,
             period_ids,
@@ -1483,6 +1500,7 @@ impl Data {
             slot_ids,
             incompat_ids,
             group_list_ids,
+            rule_ids,
         )?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
@@ -1498,6 +1516,13 @@ impl Data {
             .map(|(id, _)| *id)
             .collect();
         let student_ids = students.student_map.keys().copied().collect();
+        let slot_ids = slots
+            .subject_map
+            .iter()
+            .flat_map(|(_subject_id, subject_slots)| {
+                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
+            })
+            .collect();
         if !subjects.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId.into());
         }
@@ -1519,6 +1544,9 @@ impl Data {
         if !group_lists.validate_all(&subjects, &student_ids, &period_ids) {
             return Err(FromDataError::InconsistentGroupLists);
         }
+        if !rules.validate_all(&period_ids, &slot_ids) {
+            return Err(FromDataError::InconsistentRules);
+        }
 
         // Ids have been validated
         let students = unsafe { Students::from_external_data(students) };
@@ -1530,6 +1558,7 @@ impl Data {
         let slots = unsafe { Slots::from_external_data(slots) };
         let incompats = unsafe { Incompats::from_external_data(incompats) };
         let group_lists = unsafe { GroupLists::from_external_data(group_lists) };
+        let rules = unsafe { Rules::from_external_data(rules) };
 
         let data = Data {
             id_issuer,
@@ -1543,6 +1572,7 @@ impl Data {
                 slots,
                 incompats,
                 group_lists,
+                rules,
             },
         };
 
