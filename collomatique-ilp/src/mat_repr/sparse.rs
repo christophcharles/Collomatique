@@ -69,12 +69,12 @@ impl<V: UsableData> ProblemRepr<V> for SprsProblem<V> {
             for (var, val) in c.coefficients() {
                 let j = variable_map[var];
                 mat_tri.add_triplet(i, j, val);
+            }
 
-                let constant = c.get_constant();
-                if !f64_is_zero(constant) {
-                    constants_indices.push(i);
-                    constants_data.push(constant);
-                }
+            let constant = c.get_constant();
+            if !f64_is_zero(constant) {
+                constants_indices.push(i);
+                constants_data.push(constant);
             }
         }
 
@@ -199,7 +199,7 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for SprsConfig<'a, V> {
     fn unsatisfied_constraints(&self) -> BTreeSet<usize> {
         let column = &self.pb_repr.mat * &self.values + &self.pb_repr.constants;
 
-        assert_eq!(self.values.dim(), self.pb_repr.constraint_symbols.len());
+        assert_eq!(column.dim(), self.pb_repr.constraint_symbols.len());
 
         let mut result = BTreeSet::new();
 
