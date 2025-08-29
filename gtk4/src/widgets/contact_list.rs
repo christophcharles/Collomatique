@@ -5,9 +5,15 @@ use relm4::FactorySender;
 use relm4::{gtk, Component};
 use relm4::{ComponentParts, ComponentSender};
 
-pub trait Identifier: Clone + std::fmt::Debug + PartialEq + Eq + Send + Sync + 'static {}
+pub trait Identifier:
+    Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Send + Sync + 'static
+{
+}
 
-impl<T: Clone + std::fmt::Debug + PartialEq + Eq + Send + Sync + 'static> Identifier for T {}
+impl<T: Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Send + Sync + 'static>
+    Identifier for T
+{
+}
 
 #[derive(Debug, Clone)]
 pub struct ContactInfo<Id: Identifier> {
