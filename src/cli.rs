@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use collomatique::backend::{json, Logic};
+use collomatique::json::{json, Logic};
 use collomatique::frontend::shell::CliCommand;
 use collomatique::frontend::state::{AppState, Manager};
 

@@ -335,13 +335,13 @@ pub enum PythonCommand {
     },
 }
 
-use crate::backend::json;
+use crate::json::json;
 use crate::frontend::state::{AppSession, AppState};
 
 fn is_colloscope_name_used(
     colloscopes: &std::collections::BTreeMap<
         crate::frontend::state::ColloscopeHandle,
-        crate::backend::Colloscope<
+        crate::json::Colloscope<
             crate::frontend::state::TeacherHandle,
             crate::frontend::state::SubjectHandle,
             crate::frontend::state::StudentHandle,
@@ -360,7 +360,7 @@ fn is_colloscope_name_used(
 fn find_colloscope_name(
     colloscopes: &std::collections::BTreeMap<
         crate::frontend::state::ColloscopeHandle,
-        crate::backend::Colloscope<
+        crate::json::Colloscope<
             crate::frontend::state::TeacherHandle,
             crate::frontend::state::SubjectHandle,
             crate::frontend::state::StudentHandle,
@@ -725,7 +725,7 @@ fn general_command(
     }
 }
 
-fn week_pattern_to_string(week_pattern: &crate::backend::WeekPattern) -> String {
+fn week_pattern_to_string(week_pattern: &crate::json::WeekPattern) -> String {
     week_pattern
         .weeks
         .iter()
@@ -740,7 +740,7 @@ fn get_week_pattern(
     week_pattern_number: Option<NonZeroUsize>,
 ) -> Result<(
     crate::frontend::state::WeekPatternHandle,
-    crate::backend::WeekPattern,
+    crate::json::WeekPattern,
 )> {
     use crate::frontend::state::Manager;
 
@@ -779,8 +779,8 @@ fn get_week_pattern(
 fn predefined_week_pattern_weeks(
     filling: WeekPatternFilling,
     week_count: NonZeroU32,
-) -> BTreeSet<crate::backend::Week> {
-    use crate::backend::Week;
+) -> BTreeSet<crate::json::Week> {
+    use crate::json::Week;
     let weeks = (0..week_count.get()).into_iter();
     match filling {
         WeekPatternFilling::All => weeks.map(|w| Week::new(w)).collect(),
@@ -811,7 +811,7 @@ fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::backend::WeekPattern;
+    use crate::json::WeekPattern;
     use crate::frontend::state::{Manager, Operation, UpdateError, WeekPatternsOperation};
 
     match command {
@@ -855,7 +855,7 @@ fn week_pattern_command(
             week_pattern_number,
             force,
         } => {
-            use crate::backend::IdError;
+            use crate::json::IdError;
 
             let (handle, _week_pattern) = get_week_pattern(app_state, &name, week_pattern_number)?;
             let dependancies =
@@ -1009,7 +1009,7 @@ fn week_pattern_command(
             week_pattern_number,
             weeks,
         } => {
-            use crate::backend::Week;
+            use crate::json::Week;
 
             let general_data = app_state.general_data_get()?;
             for week in &weeks {
@@ -1045,7 +1045,7 @@ fn week_pattern_command(
             week_pattern_number,
             weeks,
         } => {
-            use crate::backend::Week;
+            use crate::json::Week;
 
             let (handle, mut week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number)?;
@@ -1083,7 +1083,7 @@ fn get_colloscope(
     colloscope_number: Option<NonZeroUsize>,
 ) -> Result<(
     crate::frontend::state::ColloscopeHandle,
-    crate::backend::Colloscope<
+    crate::json::Colloscope<
         crate::frontend::state::TeacherHandle,
         crate::frontend::state::SubjectHandle,
         crate::frontend::state::StudentHandle,
@@ -1142,7 +1142,7 @@ fn colloscope_command(
     command: ColloscopeCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
-    use crate::backend::Colloscope;
+    use crate::json::Colloscope;
     use crate::frontend::state::{ColloscopesOperation, Manager, Operation, UpdateError};
 
     match command {

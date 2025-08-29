@@ -4,7 +4,7 @@ use super::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedOperation {
-    GeneralData(backend::GeneralData),
+    GeneralData(json::GeneralData),
     WeekPatterns(AnnotatedWeekPatternsOperation),
     Teachers(AnnotatedTeachersOperation),
     Students(AnnotatedStudentsOperation),
@@ -22,62 +22,62 @@ pub enum AnnotatedOperation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedWeekPatternsOperation {
-    Create(handles::WeekPatternHandle, backend::WeekPattern),
+    Create(handles::WeekPatternHandle, json::WeekPattern),
     Remove(handles::WeekPatternHandle),
-    Update(handles::WeekPatternHandle, backend::WeekPattern),
+    Update(handles::WeekPatternHandle, json::WeekPattern),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedTeachersOperation {
-    Create(handles::TeacherHandle, backend::Teacher),
+    Create(handles::TeacherHandle, json::Teacher),
     Remove(handles::TeacherHandle),
-    Update(handles::TeacherHandle, backend::Teacher),
+    Update(handles::TeacherHandle, json::Teacher),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedStudentsOperation {
-    Create(handles::StudentHandle, backend::Student),
+    Create(handles::StudentHandle, json::Student),
     Remove(handles::StudentHandle),
-    Update(handles::StudentHandle, backend::Student),
+    Update(handles::StudentHandle, json::Student),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedSubjectGroupsOperation {
-    Create(handles::SubjectGroupHandle, backend::SubjectGroup),
+    Create(handles::SubjectGroupHandle, json::SubjectGroup),
     Remove(handles::SubjectGroupHandle),
-    Update(handles::SubjectGroupHandle, backend::SubjectGroup),
+    Update(handles::SubjectGroupHandle, json::SubjectGroup),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedIncompatsOperation {
     Create(
         handles::IncompatHandle,
-        backend::Incompat<WeekPatternHandle>,
+        json::Incompat<WeekPatternHandle>,
     ),
     Remove(handles::IncompatHandle),
     Update(
         handles::IncompatHandle,
-        backend::Incompat<WeekPatternHandle>,
+        json::Incompat<WeekPatternHandle>,
     ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedGroupListsOperation {
-    Create(handles::GroupListHandle, backend::GroupList<StudentHandle>),
+    Create(handles::GroupListHandle, json::GroupList<StudentHandle>),
     Remove(handles::GroupListHandle),
-    Update(handles::GroupListHandle, backend::GroupList<StudentHandle>),
+    Update(handles::GroupListHandle, json::GroupList<StudentHandle>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedSubjectsOperation {
     Create(
         handles::SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     ),
     Remove(handles::SubjectHandle),
     Update(
         handles::SubjectHandle,
-        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+        json::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
     ),
 }
 
@@ -85,32 +85,32 @@ pub enum AnnotatedSubjectsOperation {
 pub enum AnnotatedTimeSlotsOperation {
     Create(
         handles::TimeSlotHandle,
-        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
     ),
     Remove(handles::TimeSlotHandle),
     Update(
         handles::TimeSlotHandle,
-        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+        json::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
     ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedGroupingsOperation {
-    Create(handles::GroupingHandle, backend::Grouping<TimeSlotHandle>),
+    Create(handles::GroupingHandle, json::Grouping<TimeSlotHandle>),
     Remove(handles::GroupingHandle),
-    Update(handles::GroupingHandle, backend::Grouping<TimeSlotHandle>),
+    Update(handles::GroupingHandle, json::Grouping<TimeSlotHandle>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedGroupingIncompatsOperation {
     Create(
         handles::GroupingIncompatHandle,
-        backend::GroupingIncompat<GroupingHandle>,
+        json::GroupingIncompat<GroupingHandle>,
     ),
     Remove(handles::GroupingIncompatHandle),
     Update(
         handles::GroupingIncompatHandle,
-        backend::GroupingIncompat<GroupingHandle>,
+        json::GroupingIncompat<GroupingHandle>,
     ),
 }
 
@@ -128,12 +128,12 @@ pub enum AnnotatedRegisterStudentOperation {
 pub enum AnnotatedColloscopesOperation {
     Create(
         handles::ColloscopeHandle,
-        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+        json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
     ),
     Remove(handles::ColloscopeHandle),
     Update(
         handles::ColloscopeHandle,
-        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+        json::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
     ),
 }
 
@@ -141,17 +141,17 @@ pub enum AnnotatedColloscopesOperation {
 pub enum AnnotatedSlotSelectionsOperation {
     Create(
         handles::SlotSelectionHandle,
-        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+        json::SlotSelection<SubjectHandle, TimeSlotHandle>,
     ),
     Remove(handles::SlotSelectionHandle),
     Update(
         handles::SlotSelectionHandle,
-        backend::SlotSelection<SubjectHandle, TimeSlotHandle>,
+        json::SlotSelection<SubjectHandle, TimeSlotHandle>,
     ),
 }
 
 impl AnnotatedWeekPatternsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: WeekPatternsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -169,7 +169,7 @@ impl AnnotatedWeekPatternsOperation {
 }
 
 impl AnnotatedTeachersOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: TeachersOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -187,7 +187,7 @@ impl AnnotatedTeachersOperation {
 }
 
 impl AnnotatedStudentsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: StudentsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -205,7 +205,7 @@ impl AnnotatedStudentsOperation {
 }
 
 impl AnnotatedSubjectGroupsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: SubjectGroupsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -225,7 +225,7 @@ impl AnnotatedSubjectGroupsOperation {
 }
 
 impl AnnotatedIncompatsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: IncompatsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -243,7 +243,7 @@ impl AnnotatedIncompatsOperation {
 }
 
 impl AnnotatedGroupListsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: GroupListsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -261,7 +261,7 @@ impl AnnotatedGroupListsOperation {
 }
 
 impl AnnotatedSubjectsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: SubjectsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -279,7 +279,7 @@ impl AnnotatedSubjectsOperation {
 }
 
 impl AnnotatedTimeSlotsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: TimeSlotsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -297,7 +297,7 @@ impl AnnotatedTimeSlotsOperation {
 }
 
 impl AnnotatedGroupingsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: GroupingsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -315,7 +315,7 @@ impl AnnotatedGroupingsOperation {
 }
 
 impl AnnotatedGroupingIncompatsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: GroupingIncompatsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -335,7 +335,7 @@ impl AnnotatedGroupingIncompatsOperation {
 }
 
 impl AnnotatedRegisterStudentOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: RegisterStudentOperation,
         _handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -361,7 +361,7 @@ impl AnnotatedRegisterStudentOperation {
 }
 
 impl AnnotatedColloscopesOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: ColloscopesOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -379,7 +379,7 @@ impl AnnotatedColloscopesOperation {
 }
 
 impl AnnotatedSlotSelectionsOperation {
-    fn annotate<T: backend::Storage>(
+    fn annotate<T: json::Storage>(
         op: SlotSelectionsOperation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
@@ -399,7 +399,7 @@ impl AnnotatedSlotSelectionsOperation {
 }
 
 impl AnnotatedOperation {
-    pub fn annotate<T: backend::Storage>(
+    pub fn annotate<T: json::Storage>(
         op: Operation,
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
