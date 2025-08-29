@@ -174,9 +174,13 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
         Self::GeneralConstraintDesc,
     )>;
 
-    fn objective_func(&self) -> LinExpr<BaseVariable<Self::MainVariable, Self::StructureVariable>>;
-    fn objective_sense(&self) -> ObjectiveSense {
-        ObjectiveSense::Minimize
+    fn objective(
+        &self,
+    ) -> (
+        LinExpr<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
+        ObjectiveSense,
+    ) {
+        (LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
 
     fn solution_to_configuration(&self, sol: &Self::Solution) -> ConfigData<Self::MainVariable>;
@@ -308,13 +312,13 @@ pub trait ExtraObjective<T: BaseConstraints> {
         Self::StructureConstraintDesc,
     )>;
 
-    fn objective_func(
+    fn extra_objective(
         &self,
         base: &T,
-    ) -> LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>;
-    fn objective_sense(&self, _base: &T) -> ObjectiveSense {
-        ObjectiveSense::Minimize
-    }
+    ) -> (
+        LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        ObjectiveSense,
+    );
 
     fn reconstruct_extra_structure_variables(
         &self,
@@ -472,11 +476,13 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
             .collect()
     }
 
-    fn objective_func(
+    fn extra_objective(
         &self,
         base: &T,
-    ) -> LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
-    {
+    ) -> (
+        LinExpr<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        ObjectiveSense,
+    ) {
         let mut new_obj = LinExpr::constant(0.0);
 
         for (i, (_c, desc)) in self
@@ -489,11 +495,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraObjective<T> for SoftConst
             new_obj = new_obj + LinExpr::var(v);
         }
 
-        new_obj
-    }
-
-    fn objective_sense(&self, _base: &T) -> ObjectiveSense {
-        ObjectiveSense::Minimize
+        (new_obj, ObjectiveSense::Minimize)
     }
 
     fn reconstruct_extra_structure_variables(
@@ -639,7 +641,7 @@ where
             )
             .collect::<BTreeMap<_, _>>();
 
-        let original_objective_func = base.objective_func();
+        let (original_objective_func, objective_sense) = base.objective();
         let mut objective_func = LinExpr::constant(original_objective_func.get_constant());
         for (v, value) in original_objective_func.coefficients() {
             let new_v = match v {
@@ -652,8 +654,6 @@ where
             }
             objective_func = objective_func + value * LinExpr::var(new_v);
         }
-
-        let objective_sense = base.objective_sense();
 
         let mut id_issuer = IdIssuer::new();
 
@@ -863,7 +863,7 @@ where
     ) -> Option<ObjectiveTranslator<T, E>> {
         let extra_structure_variables = extra.extra_structure_variables(&self.base);
         let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
-        let objective_func = extra.objective_func(&self.base);
+        let (objective_func, objective_sense) = extra.extra_objective(&self.base);
 
         let (rev_v_map, v_map) = self.scan_variables(extra_structure_variables);
 
@@ -878,7 +878,7 @@ where
             self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
         let obj_func = self.update_var_in_expr(&objective_func, &rev_v_map);
-        if self.objective_sense == extra.objective_sense(&self.base) {
+        if self.objective_sense == objective_sense {
             self.objective_func = &self.objective_func + obj_coef * obj_func;
         } else {
             self.objective_func = &self.objective_func - obj_coef * obj_func;
