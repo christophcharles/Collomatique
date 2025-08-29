@@ -1,1 +1,1 @@
-pub mod linalg;
+pub mod linexpr;
