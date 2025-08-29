@@ -15,6 +15,16 @@ pub struct GeneralData {
     week_count: NonZeroU32,
     #[pyo3(get, set)]
     periodicity_cuts: BTreeSet<NonZeroU32>,
+    #[pyo3(get, set)]
+    max_interrogations_per_day_for_single_student_cost: i32,
+    #[pyo3(get, set)]
+    max_interrogations_per_day_for_all_students_cost: i32,
+    #[pyo3(get, set)]
+    interrogations_per_week_range_for_single_student_cost: i32,
+    #[pyo3(get, set)]
+    interrogations_per_week_range_for_all_students_cost: i32,
+    #[pyo3(get, set)]
+    balancing_cost: i32,
 }
 
 #[pymethods]
@@ -26,12 +36,22 @@ impl GeneralData {
             max_interrogations_per_day: None,
             week_count,
             periodicity_cuts: BTreeSet::new(),
+            max_interrogations_per_day_for_single_student_cost: 1,
+            max_interrogations_per_day_for_all_students_cost: 1,
+            interrogations_per_week_range_for_single_student_cost: 1,
+            interrogations_per_week_range_for_all_students_cost: 1,
+            balancing_cost: 1,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let periodicity_cuts_strings: Vec<_> = self_
+            .periodicity_cuts
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
         let output = format!(
-            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {} }}",
+            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {}, periodicity_cuts = [{}], max_interrogations_per_day_for_single_student_cost = {}, max_interrogations_per_day_for_all_students_cost = {}, interrogations_per_week_range_for_single_student_cost = {}, interrogations_per_week_range_for_all_students_cost = {}, balancing_cost = {} }}",
             match self_.interrogations_per_week_range {
                 Some(val) => format!("{}..{}", val.0, val.1 as i64),
                 None => String::from("none"),
@@ -41,6 +61,12 @@ impl GeneralData {
                 None => String::from("none"),
             },
             self_.week_count,
+            periodicity_cuts_strings.join(","),
+            self_.max_interrogations_per_day_for_single_student_cost,
+            self_.max_interrogations_per_day_for_all_students_cost,
+            self_.interrogations_per_week_range_for_single_student_cost,
+            self_.interrogations_per_week_range_for_all_students_cost,
+            self_.balancing_cost,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -57,6 +83,19 @@ impl From<&backend::GeneralData> for GeneralData {
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
             periodicity_cuts: value.periodicity_cuts.clone(),
+            max_interrogations_per_day_for_single_student_cost: value
+                .costs_adjustements
+                .max_interrogations_per_day_for_single_student,
+            max_interrogations_per_day_for_all_students_cost: value
+                .costs_adjustements
+                .max_interrogations_per_day_for_all_students,
+            interrogations_per_week_range_for_single_student_cost: value
+                .costs_adjustements
+                .interrogations_per_week_range_for_single_student,
+            interrogations_per_week_range_for_all_students_cost: value
+                .costs_adjustements
+                .interrogations_per_week_range_for_all_students,
+            balancing_cost: value.costs_adjustements.balancing,
         }
     }
 }
@@ -76,7 +115,17 @@ impl From<&GeneralData> for backend::GeneralData {
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
             periodicity_cuts: value.periodicity_cuts.clone(),
-            costs_adjustements: backend::CostsAdjustements::default(),
+            costs_adjustements: backend::CostsAdjustements {
+                max_interrogations_per_day_for_single_student: value
+                    .max_interrogations_per_day_for_single_student_cost,
+                max_interrogations_per_day_for_all_students: value
+                    .max_interrogations_per_day_for_all_students_cost,
+                interrogations_per_week_range_for_single_student: value
+                    .interrogations_per_week_range_for_single_student_cost,
+                interrogations_per_week_range_for_all_students: value
+                    .interrogations_per_week_range_for_all_students_cost,
+                balancing: value.balancing_cost,
+            },
         }
     }
 }
