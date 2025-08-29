@@ -133,9 +133,8 @@ pub struct GroupsDesc {
     pub not_assigned: BTreeSet<usize>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BalancingStrictness {
-    #[default]
     OverallOnly,
     StrictWithCuts,
     Strict,
@@ -1928,47 +1927,27 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn build_max_min_balancing_from_expr(
-        &self,
-        subject: &Subject,
-        count: usize,
-        expr: Expr<Variable>,
-    ) -> BTreeSet<Constraint<Variable>> {
-        let group_count = subject.groups.prefilled_groups.len();
-        let week_count = usize::try_from(self.data.general.week_count.get()).unwrap();
-        let period = usize::try_from(subject.period.get()).unwrap();
-        let needed_slots = (group_count * week_count) as f64 / (period as f64);
-
-        let updated_count = (count as f64) * needed_slots / (subject.slots.len() as f64);
-
-        let expected_use_per_group = updated_count / (group_count as f64);
-
-        let max_use = expected_use_per_group.ceil() as i32;
-        let min_use = expected_use_per_group.floor() as i32;
-
-        if max_use == min_use {
-            BTreeSet::from([expr.eq(&Expr::constant(max_use))])
-        } else {
-            BTreeSet::from([
-                expr.leq(&Expr::constant(max_use)),
-                expr.geq(&Expr::constant(min_use)),
-            ])
-        }
-    }
-
-    fn build_balancing_constraints_for_subject_and_group<T: BalancingData>(
+    fn build_balancing_constraints_for_subject_overall_only_internal_for_slot_type<
+        T: BalancingData,
+    >(
         &self,
         i: usize,
         subject: &Subject,
+        j: usize,
+        week_selection: &WeekSelection,
+        week_span: u32,
         slot_type: &T,
         count: usize,
+        total_count: usize,
         k: usize,
-        _group: &GroupDesc,
     ) -> BTreeSet<Constraint<Variable>> {
         let mut expr = Expr::constant(0);
 
         for (j, slot) in subject.slots.iter().enumerate() {
             if !slot_type.is_slot_relevant(slot) {
+                continue;
+            }
+            if !week_selection.selection.contains(&slot.start.week) {
                 continue;
             }
 
@@ -1980,34 +1959,65 @@ impl<'a> IlpTranslator<'a> {
                 });
         }
 
-        self.build_max_min_balancing_from_expr(subject, count, expr)
+        let period_count = (week_span as f64) / (subject.period.get() as f64);
+        let period_count_min = period_count.floor();
+        let period_count_max = period_count.ceil();
+
+        let expected_use_per_group_min = (count as f64) / (total_count as f64) * period_count_min;
+        let expected_use_per_group_max = (count as f64) / (total_count as f64) * period_count_max;
+
+        let max_use = expected_use_per_group_max.ceil() as i32;
+        let min_use = expected_use_per_group_min.floor() as i32;
+
+        let rhs_cond = Expr::var(Variable::GroupOnWeekSelection {
+            subject: i,
+            week_selection: j,
+            group: k,
+        });
+
+        if max_use == min_use {
+            BTreeSet::from([expr.eq(&(max_use * &rhs_cond))])
+        } else {
+            BTreeSet::from([
+                expr.leq(&(max_use * &rhs_cond)),
+                expr.geq(&(min_use * &rhs_cond)),
+            ])
+        }
     }
 
-    fn build_balancing_constraints_for_subject<T: BalancingData>(
+    fn build_balancing_constraints_for_subject_overall_only_internal_for_week_selection<
+        T: BalancingData,
+    >(
         &self,
         i: usize,
         subject: &Subject,
+        j: usize,
+        week_selection: &WeekSelection,
+        week_data: &BTreeMap<T, usize>,
     ) -> BTreeSet<Constraint<Variable>> {
-        let mut counts = BTreeMap::<T, usize>::new();
-
-        for slot in &subject.slots {
-            let data = T::from_subject_slot(slot);
-            match counts.get_mut(&data) {
-                Some(c) => {
-                    *c += 1;
-                }
-                None => {
-                    counts.insert(data, 1);
-                }
-            }
+        if week_selection.selection.is_empty() {
+            return BTreeSet::new();
         }
+
+        let week_min = week_selection
+            .selection
+            .first()
+            .expect("Week selection should not be empty");
+        let week_max = week_selection
+            .selection
+            .last()
+            .expect("Week selection should not be empty");
+
+        let week_span = *week_max - *week_min + 1;
+
+        let total_count = week_data.iter().map(|(_, c)| *c).sum();
 
         let mut constraints = BTreeSet::new();
 
-        for (slot_type, count) in counts {
-            for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                constraints.extend(self.build_balancing_constraints_for_subject_and_group(
-                    i, subject, &slot_type, count, k, group,
+        for (slot_type, &count) in week_data {
+            for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                constraints.extend(self.build_balancing_constraints_for_subject_overall_only_internal_for_slot_type(
+                    i, subject, j, week_selection, week_span, slot_type, count, total_count, k
                 ));
             }
         }
@@ -2015,23 +2025,75 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_balancing_constraints_for_subject_overall_only_internal<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+        data: &BTreeMap<WeekSelection, BTreeMap<T, usize>>,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (j, (week_selection, week_data)) in data.iter().enumerate() {
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_overall_only_internal_for_week_selection(
+                    i,
+                    subject,
+                    j,
+                    week_selection,
+                    week_data,
+                )
+            );
+        }
+
+        constraints
+    }
+
+    fn build_balancing_constraints_for_subject_overall_only(
+        &self,
+        i: usize,
+        subject: &Subject,
+        bo: &BalancingObject,
+    ) -> BTreeSet<Constraint<Variable>> {
+        match &bo {
+            BalancingObject::Teachers(data) => {
+                self.build_balancing_constraints_for_subject_overall_only_internal(i, subject, data)
+            }
+            BalancingObject::Timeslots(data) => {
+                self.build_balancing_constraints_for_subject_overall_only_internal(i, subject, data)
+            }
+            BalancingObject::TeachersAndTimeslots(data) => {
+                self.build_balancing_constraints_for_subject_overall_only_internal(i, subject, data)
+            }
+        }
+    }
+
+    fn build_balancing_constraints_for_subject_strict(
+        &self,
+        _i: usize,
+        _subject: &Subject,
+        _bo: &BalancingObject,
+        _allow_cuts: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        todo!()
+    }
+
     fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
         let mut constraints = BTreeSet::new();
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
-            match &subject.balancing_requirements {
-                None => {} // ignore, no balancing needed
-                Some(value) => match &value.object {
-                    BalancingObject::Teachers(_) => constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TeacherBalancing>(i, subject),
-                    ),
-                    BalancingObject::Timeslots(_) => constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TimeslotBalancing>(i, subject),
-                    ),
-                    BalancingObject::TeachersAndTimeslots(_) => constraints.extend(
-                        self.build_balancing_constraints_for_subject::<TeacherAndTimeslotBalancing>(i, subject),
-                    ),
-                }
+            if let Some(br) = &subject.balancing_requirements {
+                let bo = &br.object;
+                constraints.extend(match &br.strictness {
+                    BalancingStrictness::OverallOnly => {
+                        self.build_balancing_constraints_for_subject_overall_only(i, subject, bo)
+                    }
+                    BalancingStrictness::Strict => {
+                        self.build_balancing_constraints_for_subject_strict(i, subject, bo, false)
+                    }
+                    BalancingStrictness::StrictWithCuts => {
+                        self.build_balancing_constraints_for_subject_strict(i, subject, bo, true)
+                    }
+                });
             }
         }
 
