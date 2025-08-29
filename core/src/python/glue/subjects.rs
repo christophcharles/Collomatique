@@ -1,7 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -143,6 +143,7 @@ impl SubjectParameters {
 pub enum SubjectPeriodicity {
     OnceForEveryBlockOfWeeks {
         weeks_per_block: NonZeroU32,
+        minimum_week_separation: NonZeroU32,
     },
     ExactlyPeriodic {
         periodicity_in_weeks: NonZeroU32,
@@ -153,6 +154,7 @@ pub enum SubjectPeriodicity {
         minimum_week_separation: u32,
     },
     OnceForEveryArbitraryBlock {
+        minimum_week_separation: u32,
         blocks: Vec<SubjectWeekBlock>,
     },
 }
@@ -161,9 +163,13 @@ pub enum SubjectPeriodicity {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectWeekBlock {
     #[pyo3(set, get)]
-    pub delay_in_weeks: usize,
+    pub delay_in_weeks: u32,
     #[pyo3(set, get)]
-    pub size_in_weeks: NonZeroUsize,
+    pub size_in_weeks: NonZeroU32,
+    #[pyo3(set, get)]
+    pub interrogation_count_in_block_min: u32,
+    #[pyo3(set, get)]
+    pub interrogation_count_in_block_max: u32,
 }
 
 impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodicity {
@@ -171,7 +177,11 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
         match value {
             collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block,
-            } => SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block },
+                minimum_week_separation,
+            } => SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
             collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => SubjectPeriodicity::ExactlyPeriodic {
@@ -185,9 +195,11 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
                 interrogation_count_in_year_max: interrogation_count_in_year.end().clone(),
                 minimum_week_separation,
             },
-            collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+            collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 blocks,
+                minimum_week_separation,
             } => SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                minimum_week_separation,
                 blocks: blocks.into_iter().map(|b| b.into()).collect(),
             },
         }
@@ -198,9 +210,13 @@ impl From<SubjectPeriodicity> for crate::rpc::cmd_msg::subjects::SubjectPeriodic
     fn from(value: SubjectPeriodicity) -> Self {
         use crate::rpc::cmd_msg::subjects::SubjectPeriodicityMsg;
         match value {
-            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block } => {
-                SubjectPeriodicityMsg::OnceForEveryBlockOfWeeks { weeks_per_block }
-            }
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            } => SubjectPeriodicityMsg::OnceForEveryBlockOfWeeks {
+                weeks_per_block,
+                minimum_week_separation,
+            },
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => SubjectPeriodicityMsg::ExactlyPeriodic {
@@ -215,11 +231,13 @@ impl From<SubjectPeriodicity> for crate::rpc::cmd_msg::subjects::SubjectPeriodic
                     ..=interrogation_count_in_year_max,
                 minimum_week_separation,
             },
-            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => {
-                SubjectPeriodicityMsg::OnceForEveryArbitraryBlock {
-                    blocks: blocks.into_iter().map(|b| b.into()).collect(),
-                }
-            }
+            SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation,
+            } => SubjectPeriodicityMsg::AmountForEveryArbitraryBlock {
+                minimum_week_separation,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
+            },
         }
     }
 }
@@ -237,6 +255,8 @@ impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBl
         SubjectWeekBlock {
             delay_in_weeks: value.delay_in_weeks,
             size_in_weeks: value.size_in_weeks,
+            interrogation_count_in_block_min: value.interrogation_count_in_block.start().clone(),
+            interrogation_count_in_block_max: value.interrogation_count_in_block.end().clone(),
         }
     }
 }
@@ -247,6 +267,8 @@ impl From<SubjectWeekBlock> for crate::rpc::cmd_msg::subjects::SubjectWeekBlock 
         SubjectWeekBlock {
             delay: value.delay_in_weeks,
             size: value.size_in_weeks,
+            interrogation_count: value.interrogation_count_in_block_min
+                ..=value.interrogation_count_in_block_max,
         }
     }
 }

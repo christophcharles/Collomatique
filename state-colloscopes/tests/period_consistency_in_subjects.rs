@@ -3,10 +3,7 @@ use collomatique_state_colloscopes::{
     subjects::WeekBlock, Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters,
     SubjectPeriodicity,
 };
-use std::{
-    collections::BTreeSet,
-    num::{NonZeroU32, NonZeroUsize},
-};
+use std::{collections::BTreeSet, num::NonZeroU32};
 
 #[test]
 fn add_subject_referencing_period_then_remove_period() {
@@ -179,15 +176,18 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
                         ..=NonZeroU32::new(1).unwrap(),
                     duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
                     take_duration_into_account: true,
-                    periodicity: SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                    periodicity: SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                        minimum_week_separation: 1,
                         blocks: vec![
                             WeekBlock {
                                 delay_in_weeks: 0,
-                                size_in_weeks: NonZeroUsize::new(3).unwrap(),
+                                size_in_weeks: NonZeroU32::new(3).unwrap(),
+                                interrogation_count_in_block: 1..=1,
                             },
                             WeekBlock {
                                 delay_in_weeks: 0,
-                                size_in_weeks: NonZeroUsize::new(2).unwrap(),
+                                size_in_weeks: NonZeroU32::new(2).unwrap(),
+                                interrogation_count_in_block: 1..=1,
                             },
                         ],
                     },

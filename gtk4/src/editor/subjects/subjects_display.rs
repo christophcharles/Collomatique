@@ -104,14 +104,25 @@ impl Entry {
                     periodicity_in_weeks,
                 )
             }
-            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block } => {
-                format!(
-                    "<b>Périodicité :</b> {} semaines (par bloc)",
-                    weeks_per_block,
-                )
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks { weeks_per_block, minimum_week_separation } => {
+                match minimum_week_separation.get() {
+                    1 => format!(
+                        "<b>Périodicité :</b> {} semaines (par bloc)",
+                        weeks_per_block,
+                    ),
+                    _ => format!(
+                        "<b>Périodicité :</b> {} semaines (par bloc - séparation de {} semaines minimum)",
+                        weeks_per_block,
+                        minimum_week_separation.get(),
+                    )
+                }
             }
-            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks: _ } => {
-                "<b>Périodicité :</b> découpage en blocs".into()
+            SubjectPeriodicity::AmountForEveryArbitraryBlock { blocks: _ , minimum_week_separation} => {
+                match *minimum_week_separation {
+                    0 => "<b>Périodicité :</b> découpage en blocs".into(),
+                    1 => "<b>Périodicité :</b> découpage en blocs (séparation de 1 semaine minimum) ".into(),
+                    _ => format!("<b>Périodicité :</b> découpage en blocs (séparation de {} semaines minimum)", *minimum_week_separation),
+                }
             }
         }
     }

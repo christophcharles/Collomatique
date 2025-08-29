@@ -2,10 +2,7 @@
 //!
 //! This module defines the relevant types to describes the subjects
 
-use std::{
-    collections::BTreeSet,
-    num::{NonZeroU32, NonZeroUsize},
-};
+use std::{collections::BTreeSet, num::NonZeroU32};
 
 use crate::ids::{PeriodId, SubjectId};
 
@@ -97,6 +94,12 @@ pub enum SubjectPeriodicity {
     OnceForEveryBlockOfWeeks {
         /// Number of weeks per block
         weeks_per_block: NonZeroU32,
+        /// Minimum of weeks between two interrogations for the same student
+        ///
+        /// Note that `0` is not a valid possibility:
+        /// because there is at most one interrogation per block, there can't
+        /// be two interrogations the same week
+        minimum_week_separation: NonZeroU32,
     },
     /// The interrogation must happen every week or every other week
     /// and the periodicity must be *strict*.
@@ -144,8 +147,8 @@ pub enum SubjectPeriodicity {
     /// size. We distinguish between them for practical purposes:
     /// [SubjectPeriodicity::OnceForEveryBlockOfWeeks] is used *way* more often
     /// and can be represented in a simpler way on screen in a GUI.
-    OnceForEveryArbitraryBlock {
-        /// Description of the blocks that should each have one interrogation
+    AmountForEveryArbitraryBlock {
+        /// Description of the blocks that should each have a number of interrogations
         ///
         /// Blocks are in order and described by a [WeekBlock] structure.
         ///
@@ -156,6 +159,11 @@ pub enum SubjectPeriodicity {
         /// any actual interrogations planned in them. But of course, no consistent
         /// colloscope will be found for this.
         blocks: Vec<WeekBlock>,
+        /// Minimum of weeks between two interrogations for the same student
+        ///
+        /// Note that `0` is a valid possibility: it might be possible to have
+        /// two interrogations during the same week!
+        minimum_week_separation: u32,
     },
 }
 
@@ -175,11 +183,17 @@ pub struct WeekBlock {
     ///
     /// If this is the first block, this is the delay between the start of the schedule
     /// and the first block.
-    pub delay_in_weeks: usize,
+    pub delay_in_weeks: u32,
     /// Number of weeks in the block.
     ///
     /// This can't be zero.
-    pub size_in_weeks: NonZeroUsize,
+    pub size_in_weeks: NonZeroU32,
+    /// Total number of interrogations that should happen during this block
+    ///
+    /// This is described by a range and it is technically possible
+    /// The total amount can be in a range
+    /// to have a minimum of zero interrogations
+    pub interrogation_count_in_block: std::ops::RangeInclusive<u32>,
 }
 
 impl Default for SubjectParameters {
