@@ -28,6 +28,7 @@ pub enum GeneralPlanningInput {
     EditPeriodClicked(collomatique_state_colloscopes::PeriodId),
     CutPeriodClicked(collomatique_state_colloscopes::PeriodId),
     DeletePeriodClicked(collomatique_state_colloscopes::PeriodId),
+    MergePeriodClicked(collomatique_state_colloscopes::PeriodId),
     WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
@@ -46,6 +47,7 @@ pub enum GeneralPlanningUpdateOp {
     UpdatePeriodWeekCount(collomatique_state_colloscopes::PeriodId, usize),
     DeletePeriod(collomatique_state_colloscopes::PeriodId),
     CutPeriod(collomatique_state_colloscopes::PeriodId, usize),
+    MergeWithPreviousPeriod(collomatique_state_colloscopes::PeriodId),
     UpdateWeekStatus(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
@@ -115,6 +117,36 @@ impl GeneralPlanningUpdateOp {
                 ))?;
                 session.apply(collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, new_desc),
+                ))?;
+
+                session.commit();
+                Ok(())
+            }
+            GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .expect("period id should be valid");
+                assert!(pos >= 1);
+                let previous_id = data.get_data().get_periods().ordered_period_list[pos - 1].0;
+
+                let mut prev_desc = data.get_data().get_periods().ordered_period_list[pos - 1]
+                    .1
+                    .clone();
+                let desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                prev_desc.extend(desc);
+
+                let mut session = collomatique_state::AppSession::new(data);
+
+                session.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::Update(previous_id, prev_desc),
+                ))?;
+                session.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
                 ))?;
 
                 session.commit();
@@ -292,6 +324,9 @@ impl Component for GeneralPlanning {
                 periods_display::EntryOutput::DeleteClicked(period_id) => {
                     GeneralPlanningInput::DeletePeriodClicked(period_id)
                 }
+                periods_display::EntryOutput::MergeClicked(period_id) => {
+                    GeneralPlanningInput::MergePeriodClicked(period_id)
+                }
                 periods_display::EntryOutput::WeekStatusUpdated(period_id, num, state) => {
                     GeneralPlanningInput::WeekStatusUpdated(period_id, num, state)
                 }
@@ -404,6 +439,9 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::DeletePeriodClicked(period_id) => sender
                 .output(GeneralPlanningUpdateOp::DeletePeriod(period_id))
+                .unwrap(),
+            GeneralPlanningInput::MergePeriodClicked(period_id) => sender
+                .output(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id))
                 .unwrap(),
             GeneralPlanningInput::WeekStatusUpdated(period_id, week_num, state) => sender
                 .output(GeneralPlanningUpdateOp::UpdateWeekStatus(
