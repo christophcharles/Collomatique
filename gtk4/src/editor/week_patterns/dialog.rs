@@ -45,7 +45,7 @@ impl SimpleComponent for Dialog {
             #[watch]
             set_visible: !model.hidden,
             set_title: Some("Configuration du modèle"),
-            set_size_request: (500, 300),
+            set_size_request: (500, 700),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -147,8 +147,15 @@ impl SimpleComponent for Dialog {
                         Some(PeriodData {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
-                            desc: desc.clone(),
+                            period_desc: desc.clone(),
                             period_id: id.clone(),
+                            weeks_in_pattern: (current_first_week
+                                ..(current_first_week + desc.len()))
+                                .into_iter()
+                                .map(|index| {
+                                    self.week_pattern.weeks.get(index).cloned().unwrap_or(true)
+                                })
+                                .collect(),
                         })
                     })
                     .collect::<Vec<_>>();
@@ -190,8 +197,9 @@ impl SimpleComponent for Dialog {
 struct PeriodData {
     global_first_week: Option<collomatique_time::NaiveMondayDate>,
     first_week_num: usize,
-    desc: Vec<bool>,
+    period_desc: Vec<bool>,
     period_id: collomatique_state_colloscopes::PeriodId,
+    weeks_in_pattern: Vec<bool>,
 }
 
 #[derive(Debug)]
@@ -199,11 +207,23 @@ struct PeriodEntry {
     data: PeriodData,
     index: DynamicIndex,
     should_redraw: bool,
+    week_entries: FactoryVecDeque<WeekEntry>,
 }
 
 #[derive(Debug, Clone)]
 enum PeriodInput {
     UpdateData(PeriodData),
+}
+
+impl PeriodEntry {
+    fn generate_period_title(&self) -> String {
+        super::super::generate_period_title(
+            &self.data.global_first_week,
+            self.index.current_index(),
+            self.data.first_week_num,
+            self.data.period_desc.len(),
+        )
+    }
 }
 
 #[relm4::factory]
@@ -216,22 +236,125 @@ impl FactoryComponent for PeriodEntry {
 
     view! {
         #[root]
-        adw::PreferencesGroup {
-            set_title: "Période 42 (semaines 2 à 4)",
-            set_margin_all: 5,
+        gtk::Box {
             set_hexpand: true,
-            adw::SwitchRow {
+            #[local_ref]
+            week_entries_widget -> adw::PreferencesGroup {
+                #[watch]
+                set_title: &self.generate_period_title(),
+                set_margin_all: 5,
                 set_hexpand: true,
-                set_title: "Semaine 2",
             },
-            adw::SwitchRow {
-                set_hexpand: true,
-                set_title: "Semaine 3",
-            },
-            adw::SwitchRow {
-                set_hexpand: true,
-                set_title: "Semaine 4",
-            },
+        },
+    }
+
+    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        let week_entries = FactoryVecDeque::builder()
+            .launch(adw::PreferencesGroup::default())
+            .detach();
+
+        let mut model = Self {
+            data,
+            index: index.clone(),
+            should_redraw: false,
+            week_entries,
+        };
+
+        model.update_factory();
+
+        model
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        _sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let week_entries_widget = self.week_entries.widget();
+        let widgets = view_output!();
+
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+        self.should_redraw = false;
+        match msg {
+            PeriodInput::UpdateData(new_data) => {
+                self.data = new_data;
+                self.should_redraw = true;
+
+                self.update_factory();
+            }
+        }
+    }
+}
+
+impl PeriodEntry {
+    fn update_factory(&mut self) {
+        assert_eq!(
+            self.data.weeks_in_pattern.len(),
+            self.data.period_desc.len()
+        );
+        crate::tools::factories::update_vec_deque(
+            &mut self.week_entries,
+            self.data
+                .weeks_in_pattern
+                .iter()
+                .enumerate()
+                .map(|(index, status_in_pattern)| WeekData {
+                    global_first_week: self.data.global_first_week.clone(),
+                    first_week_num: self.data.first_week_num,
+                    status_in_period: self.data.period_desc[index],
+                    status_in_pattern: *status_in_pattern,
+                }),
+            |data| WeekInput::UpdateData(data),
+        );
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WeekData {
+    global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    first_week_num: usize,
+    status_in_period: bool,
+    status_in_pattern: bool,
+}
+
+#[derive(Debug)]
+struct WeekEntry {
+    data: WeekData,
+    index: DynamicIndex,
+    should_redraw: bool,
+}
+
+#[derive(Debug, Clone)]
+enum WeekInput {
+    UpdateData(WeekData),
+}
+
+impl WeekEntry {
+    fn generate_week_title(&self) -> String {
+        let week_number = self.data.first_week_num + self.index.current_index();
+        super::super::generate_week_title(&self.data.global_first_week, week_number)
+    }
+}
+
+#[relm4::factory]
+impl FactoryComponent for WeekEntry {
+    type Init = WeekData;
+    type Input = WeekInput;
+    type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = adw::PreferencesGroup;
+
+    view! {
+        #[root]
+        root_widget = adw::SwitchRow {
+            set_hexpand: true,
+            #[watch]
+            set_title: &self.generate_week_title(),
         },
     }
 
@@ -248,20 +371,32 @@ impl FactoryComponent for PeriodEntry {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        sender: FactorySender<Self>,
+        _sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
+
+        if !self.data.status_in_period {
+            root.add_css_class("dimmed");
+        }
 
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
         self.should_redraw = false;
         match msg {
-            PeriodInput::UpdateData(new_data) => {
+            WeekInput::UpdateData(new_data) => {
                 self.data = new_data;
                 self.should_redraw = true;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.data.status_in_period {
+            widgets.root_widget.remove_css_class("dimmed");
+        } else {
+            widgets.root_widget.add_css_class("dimmed");
         }
     }
 }
