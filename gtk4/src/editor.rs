@@ -656,8 +656,24 @@ fn generate_period_title(
     first_week_num: usize,
     week_count: usize,
 ) -> String {
+    generate_week_succession_title(
+        "Période",
+        global_first_week,
+        index,
+        first_week_num,
+        week_count,
+    )
+}
+
+fn generate_week_succession_title(
+    name: &str,
+    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    index: usize,
+    first_week_num: usize,
+    week_count: usize,
+) -> String {
     if week_count == 0 {
-        return format!("Période {} (vide)", index + 1);
+        return format!("{} {} (vide)", name, index + 1);
     }
 
     let start_week = first_week_num + 1;
@@ -674,7 +690,8 @@ fn generate_period_title(
                 .expect("Valid end date");
             if start_week != end_week {
                 format!(
-                    "Période {} du {} au {} (semaines {} à {})",
+                    "{} {} du {} au {} (semaines {} à {})",
+                    name,
                     index + 1,
                     start_date.format("%d/%m/%Y").to_string(),
                     end_date.format("%d/%m/%Y").to_string(),
@@ -683,7 +700,8 @@ fn generate_period_title(
                 )
             } else {
                 format!(
-                    "Période {} du {} au {} (semaine {})",
+                    "{} {} du {} au {} (semaine {})",
+                    name,
                     index + 1,
                     start_date.format("%d/%m/%Y").to_string(),
                     end_date.format("%d/%m/%Y").to_string(),
@@ -694,13 +712,14 @@ fn generate_period_title(
         None => {
             if start_week != end_week {
                 format!(
-                    "Période {} (semaines {} à {})",
+                    "{} {} (semaines {} à {})",
+                    name,
                     index + 1,
                     start_week,
                     end_week,
                 )
             } else {
-                format!("Période {} (semaine {})", index + 1, start_week,)
+                format!("{} {} (semaine {})", name, index + 1, start_week,)
             }
         }
     }

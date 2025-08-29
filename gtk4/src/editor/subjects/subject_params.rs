@@ -2,6 +2,9 @@ use adw::prelude::{
     ActionRowExt, ComboRowExt, EditableExt, PreferencesGroupExt, PreferencesRowExt,
 };
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::factory::FactoryView;
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
+use relm4::FactorySender;
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
@@ -17,6 +20,7 @@ pub struct Dialog {
     once_for_every_block_of_weeks_params: NonZeroU32,
     amount_in_year_params: AmountInYearParams,
     once_for_every_arbitrary_block_params: Vec<collomatique_state_colloscopes::subjects::WeekBlock>,
+    blocks: FactoryVecDeque<Block>,
 }
 
 pub struct AmountInYearParams {
@@ -55,6 +59,9 @@ pub enum DialogInput {
     UpdateAmountInYearCountMaximum(u32),
     UpdateAmountInYearWeekSeparation(u32),
     AddArbitraryBlock,
+    UpdateEmptyWeeksBeforeBlock(usize, usize),
+    UpdateDurationInWeeksOfGivenBlock(usize, NonZeroUsize),
+    DeleteBlock(usize),
 }
 
 #[derive(Debug)]
@@ -152,6 +159,26 @@ impl Dialog {
             SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => blocks.clone(),
             _ => vec![],
         }
+    }
+
+    fn synchronize_block_factory(&mut self) {
+        let params: Vec<_> = self
+            .once_for_every_arbitrary_block_params
+            .iter()
+            .scan(0usize, |first_available_week, block_params| {
+                let new_block = BlockData {
+                    global_first_week: self.global_first_week.clone(),
+                    first_available_week: *first_available_week,
+                    block_params: block_params.clone(),
+                };
+                *first_available_week +=
+                    block_params.delay_in_weeks + block_params.size_in_weeks.get();
+                Some(new_block)
+            })
+            .collect();
+        crate::tools::factories::update_vec_deque(&mut self.blocks, params.into_iter(), |x| {
+            BlockInput::UpdateData(x)
+        });
     }
 }
 
@@ -481,99 +508,12 @@ impl SimpleComponent for Dialog {
                                 },
                             },
                         },
-                        gtk::Box {
+                        #[local_ref]
+                        block_list -> gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
                             #[watch]
                             set_visible: (model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock) &&
                                 (!model.once_for_every_arbitrary_block_params.is_empty()),
-                            adw::PreferencesGroup {
-                                set_margin_all: 5,
-                                set_hexpand: true,
-                                adw::ActionRow {
-                                    set_hexpand: true,
-                                    set_title: "Bloc 1 du 01/09/2025 au 14/09/2025 (semaines 1 à 2)",
-                                    add_suffix = &gtk::Button {
-                                        add_css_class: "flat",
-                                        set_icon_name: "edit-delete",
-                                    },
-                                },
-                                adw::SpinRow {
-                                    set_hexpand: true,
-                                    set_title: "Semaines vides qui précèdent",
-                                    #[wrap(Some)]
-                                    set_adjustment = &gtk::Adjustment {
-                                        set_lower: 0.,
-                                        set_upper: 255.,
-                                        set_step_increment: 1.,
-                                        set_page_increment: 5.,
-                                    },
-                                    set_wrap: false,
-                                    set_snap_to_ticks: true,
-                                    set_numeric: true,
-                                    set_value: 0.,
-                                    // connect_value_notify[sender] => move |widget| {},
-                                },
-                                adw::SpinRow {
-                                    set_hexpand: true,
-                                    set_title: "Durée du bloc (en semaines)",
-                                    #[wrap(Some)]
-                                    set_adjustment = &gtk::Adjustment {
-                                        set_lower: 1.,
-                                        set_upper: 255.,
-                                        set_step_increment: 1.,
-                                        set_page_increment: 5.,
-                                    },
-                                    set_wrap: false,
-                                    set_snap_to_ticks: true,
-                                    set_numeric: true,
-                                    set_value: 2.,
-                                    // connect_value_notify[sender] => move |widget| {},
-                                },
-                            },
-                            adw::PreferencesGroup {
-                                set_margin_all: 5,
-                                set_hexpand: true,
-                                adw::ActionRow {
-                                    set_hexpand: true,
-                                    set_title: "Bloc 2 du 21/09/2025 au 27/09/2025 (semaine 4)",
-                                    add_suffix = &gtk::Button {
-                                        add_css_class: "flat",
-                                        set_icon_name: "edit-delete",
-                                    },
-                                },
-                                adw::SpinRow {
-                                    set_hexpand: true,
-                                    set_title: "Semaines vides qui précèdent",
-                                    #[wrap(Some)]
-                                    set_adjustment = &gtk::Adjustment {
-                                        set_lower: 0.,
-                                        set_upper: 255.,
-                                        set_step_increment: 1.,
-                                        set_page_increment: 5.,
-                                    },
-                                    set_wrap: false,
-                                    set_snap_to_ticks: true,
-                                    set_numeric: true,
-                                    set_value: 1.,
-                                    // connect_value_notify[sender] => move |widget| {},
-                                },
-                                adw::SpinRow {
-                                    set_hexpand: true,
-                                    set_title: "Durée du bloc (en semaines)",
-                                    #[wrap(Some)]
-                                    set_adjustment = &gtk::Adjustment {
-                                        set_lower: 1.,
-                                        set_upper: 255.,
-                                        set_step_increment: 1.,
-                                        set_page_increment: 5.,
-                                    },
-                                    set_wrap: false,
-                                    set_snap_to_ticks: true,
-                                    set_numeric: true,
-                                    set_value: 1.,
-                                    // connect_value_notify[sender] => move |widget| {},
-                                },
-                            },
                         },
                         adw::PreferencesGroup {
                             set_margin_all: 5,
@@ -601,7 +541,20 @@ impl SimpleComponent for Dialog {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let params = collomatique_state_colloscopes::SubjectParameters::default();
-        let model = Dialog {
+
+        let blocks = FactoryVecDeque::builder()
+            .launch(gtk::Box::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                BlockOutput::UpdateEmptyWeeks(block_num, new_count) => {
+                    DialogInput::UpdateEmptyWeeksBeforeBlock(block_num, new_count)
+                }
+                BlockOutput::UpdateDurationInWeeks(block_num, new_duration) => {
+                    DialogInput::UpdateDurationInWeeksOfGivenBlock(block_num, new_duration)
+                }
+                BlockOutput::DeleteBlock(block_num) => DialogInput::DeleteBlock(block_num),
+            });
+
+        let mut model = Dialog {
             hidden: true,
             should_redraw: false,
             params: params.clone(),
@@ -612,8 +565,12 @@ impl SimpleComponent for Dialog {
             amount_in_year_params: Self::amount_in_year_params_from_params(&params),
             once_for_every_arbitrary_block_params:
                 Self::once_for_every_arbitrary_block_params_from_params(&params),
+            blocks,
         };
 
+        model.synchronize_block_factory();
+
+        let block_list = model.blocks.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -633,6 +590,7 @@ impl SimpleComponent for Dialog {
                     Self::once_for_every_arbitrary_block_params_from_params(&params);
                 self.params = params;
                 self.global_first_week = global_first_week;
+                self.synchronize_block_factory();
             }
             DialogInput::Cancel => {
                 self.hidden = true;
@@ -771,6 +729,17 @@ impl SimpleComponent for Dialog {
                         size_in_weeks: NonZeroUsize::new(1).unwrap(),
                     },
                 );
+                self.synchronize_block_factory();
+            }
+            DialogInput::UpdateEmptyWeeksBeforeBlock(block_num, new_count) => {
+                self.once_for_every_arbitrary_block_params[block_num].delay_in_weeks = new_count;
+            }
+            DialogInput::UpdateDurationInWeeksOfGivenBlock(block_num, new_duration) => {
+                self.once_for_every_arbitrary_block_params[block_num].size_in_weeks = new_duration;
+            }
+            DialogInput::DeleteBlock(block_num) => {
+                self.once_for_every_arbitrary_block_params.remove(block_num);
+                self.synchronize_block_factory();
             }
         }
     }
@@ -779,6 +748,181 @@ impl SimpleComponent for Dialog {
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockData {
+    pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
+    pub first_available_week: usize,
+    pub block_params: collomatique_state_colloscopes::subjects::WeekBlock,
+}
+
+#[derive(Debug)]
+pub struct Block {
+    data: BlockData,
+    index: DynamicIndex,
+    should_redraw: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum BlockInput {
+    UpdateData(BlockData),
+
+    DeleteBlock,
+    UpdateEmptyWeeks(usize),
+    UpdateDurationInWeeks(NonZeroUsize),
+}
+
+#[derive(Debug)]
+pub enum BlockOutput {
+    UpdateEmptyWeeks(usize, usize),
+    UpdateDurationInWeeks(usize, NonZeroUsize),
+    DeleteBlock(usize),
+}
+
+impl Block {
+    fn generate_title_text(&self) -> String {
+        let week_count = self.data.block_params.size_in_weeks.get();
+        let first_week_num = self.data.first_available_week + self.data.block_params.delay_in_weeks;
+
+        super::super::generate_week_succession_title(
+            "Bloc",
+            &self.data.global_first_week,
+            self.index.current_index(),
+            first_week_num,
+            week_count,
+        )
+    }
+}
+
+#[relm4::factory(pub)]
+impl FactoryComponent for Block {
+    type Init = BlockData;
+    type Input = BlockInput;
+    type Output = BlockOutput;
+    type CommandOutput = ();
+    type ParentWidget = gtk::Box;
+
+    view! {
+        #[root]
+        root_widget = adw::PreferencesGroup {
+            set_margin_all: 5,
+            set_hexpand: true,
+            adw::ActionRow {
+                set_hexpand: true,
+                #[watch]
+                set_title: &self.generate_title_text(),
+                add_suffix = &gtk::Button {
+                    add_css_class: "flat",
+                    set_icon_name: "edit-delete",
+                    connect_clicked[sender] => move |_widget| {
+                        sender.input(BlockInput::DeleteBlock);
+                    }
+                },
+            },
+            adw::SpinRow {
+                set_hexpand: true,
+                set_title: "Semaines vides qui précèdent",
+                #[wrap(Some)]
+                set_adjustment = &gtk::Adjustment {
+                    set_lower: 0.,
+                    set_upper: usize::MAX as f64,
+                    set_step_increment: 1.,
+                    set_page_increment: 5.,
+                },
+                set_wrap: false,
+                set_snap_to_ticks: true,
+                set_numeric: true,
+                #[track(self.should_redraw)]
+                set_value: self.data.block_params.delay_in_weeks as f64,
+                connect_value_notify[sender] => move |widget| {
+                    let value_usize = widget.value() as usize;
+                    sender.input(
+                        BlockInput::UpdateEmptyWeeks(value_usize)
+                    );
+                },
+            },
+            adw::SpinRow {
+                set_hexpand: true,
+                set_title: "Durée du bloc (en semaines)",
+                #[wrap(Some)]
+                set_adjustment = &gtk::Adjustment {
+                    set_lower: 1.,
+                    set_upper: usize::MAX as f64,
+                    set_step_increment: 1.,
+                    set_page_increment: 5.,
+                },
+                set_wrap: false,
+                set_snap_to_ticks: true,
+                set_numeric: true,
+                #[track(self.should_redraw)]
+                set_value: self.data.block_params.size_in_weeks.get() as f64,
+                connect_value_notify[sender] => move |widget| {
+                    let value_usize = widget.value() as usize;
+                    let value = NonZeroUsize::new(value_usize).unwrap();
+                    sender.input(
+                        BlockInput::UpdateDurationInWeeks(value)
+                    );
+                },
+            },
+        }
+    }
+
+    fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self {
+            data,
+            index: index.clone(),
+            should_redraw: false,
+        }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        self.should_redraw = false;
+        match msg {
+            BlockInput::UpdateData(new_data) => {
+                self.data = new_data;
+                self.should_redraw = true;
+            }
+            BlockInput::DeleteBlock => {
+                sender
+                    .output_sender()
+                    .send(BlockOutput::DeleteBlock(self.index.current_index()))
+                    .unwrap();
+            }
+            BlockInput::UpdateDurationInWeeks(new_duration) => {
+                self.data.block_params.size_in_weeks = new_duration;
+                sender
+                    .output_sender()
+                    .send(BlockOutput::UpdateDurationInWeeks(
+                        self.index.current_index(),
+                        new_duration,
+                    ))
+                    .unwrap();
+            }
+            BlockInput::UpdateEmptyWeeks(new_count) => {
+                self.data.block_params.delay_in_weeks = new_count;
+                sender
+                    .output_sender()
+                    .send(BlockOutput::UpdateEmptyWeeks(
+                        self.index.current_index(),
+                        new_count,
+                    ))
+                    .unwrap();
+            }
         }
     }
 }
