@@ -293,21 +293,20 @@ pub struct Assignments {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonData {
-    pub next_id: u64,
-    pub general_data: GeneralData,
-    pub week_patterns: BTreeMap<WeekPatternId, WeekPattern>,
-    pub teachers: BTreeMap<TeacherId, Teacher>,
-    pub students: BTreeMap<StudentId, Student>,
-    pub subject_groups: BTreeMap<SubjectGroupId, SubjectGroup>,
-    pub incompats: BTreeMap<IncompatId, Incompat<WeekPatternId>>,
-    pub group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
-    pub subjects: BTreeMap<SubjectId, Subject<SubjectGroupId, IncompatId, GroupListId>>,
-    pub time_slots: BTreeMap<TimeSlotId, TimeSlot<SubjectId, TeacherId, WeekPatternId>>,
-    pub groupings: BTreeMap<GroupingId, Grouping<TimeSlotId>>,
-    pub grouping_incompats: BTreeMap<GroupingIncompatId, GroupingIncompat<GroupingId>>,
-    pub colloscopes: BTreeMap<ColloscopeId, Colloscope<TeacherId, SubjectId, StudentId>>,
-    pub slot_selections: BTreeMap<SlotSelectionId, SlotSelection<SubjectId, TimeSlotId>>,
-    pub student_assignments: BTreeMap<StudentId, Assignments>,
+    general_data: GeneralData,
+    week_patterns: BTreeMap<WeekPatternId, WeekPattern>,
+    teachers: BTreeMap<TeacherId, Teacher>,
+    students: BTreeMap<StudentId, Student>,
+    subject_groups: BTreeMap<SubjectGroupId, SubjectGroup>,
+    incompats: BTreeMap<IncompatId, Incompat<WeekPatternId>>,
+    group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
+    subjects: BTreeMap<SubjectId, Subject<SubjectGroupId, IncompatId, GroupListId>>,
+    time_slots: BTreeMap<TimeSlotId, TimeSlot<SubjectId, TeacherId, WeekPatternId>>,
+    groupings: BTreeMap<GroupingId, Grouping<TimeSlotId>>,
+    grouping_incompats: BTreeMap<GroupingIncompatId, GroupingIncompat<GroupingId>>,
+    colloscopes: BTreeMap<ColloscopeId, Colloscope<TeacherId, SubjectId, StudentId>>,
+    slot_selections: BTreeMap<SlotSelectionId, SlotSelection<SubjectId, TimeSlotId>>,
+    student_assignments: BTreeMap<StudentId, Assignments>,
 }
 
 #[derive(Debug, Error)]
@@ -320,10 +319,16 @@ pub enum FromLogicError<T: std::fmt::Debug + std::error::Error> {
 
 pub type FromLogicResult<T, E> = std::result::Result<T, FromLogicError<E>>;
 
-impl JsonData {
+#[derive(Debug, Clone)]
+pub struct JsonStore {
+    next_id: u64,
+    data: JsonData,
+}
+
+impl JsonStore {
     pub async fn from_logic<T: Storage>(
         logic: &Logic<T>,
-    ) -> FromLogicResult<JsonData, T::InternalError> {
+    ) -> FromLogicResult<JsonStore, T::InternalError> {
         let mut next_id = 0;
         let general_data = logic.general_data_get().await?;
 
@@ -536,22 +541,28 @@ impl JsonData {
             );
         }
 
-        Ok(JsonData {
+        Ok(JsonStore {
             next_id,
-            general_data,
-            week_patterns,
-            teachers,
-            students,
-            subject_groups,
-            incompats,
-            group_lists,
-            subjects,
-            time_slots,
-            groupings,
-            grouping_incompats,
-            colloscopes,
-            slot_selections,
-            student_assignments,
+            data: JsonData {
+                general_data,
+                week_patterns,
+                teachers,
+                students,
+                subject_groups,
+                incompats,
+                group_lists,
+                subjects,
+                time_slots,
+                groupings,
+                grouping_incompats,
+                colloscopes,
+                slot_selections,
+                student_assignments,
+            },
         })
+    }
+
+    pub fn get_data(&self) -> &JsonData {
+        &self.data
     }
 }
