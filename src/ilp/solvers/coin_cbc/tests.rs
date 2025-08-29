@@ -1,5 +1,5 @@
 #[test]
-fn test_backtracking() {
+fn coin_cbc() {
     use crate::ilp::linexpr::Expr;
     use crate::ilp::ProblemBuilder;
 
@@ -78,7 +78,7 @@ fn test_backtracking() {
         .build();
     let config = pb.default_config();
 
-    let solver = super::Solver::new(super::heuristics::Connolly1992::default());
+    let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
@@ -94,7 +94,7 @@ fn test_backtracking() {
 }
 
 #[test]
-fn test_backtracking_2() {
+fn coin_cbc_2() {
     use crate::ilp::linexpr::Expr;
     use crate::ilp::ProblemBuilder;
 
@@ -173,7 +173,7 @@ fn test_backtracking_2() {
         .build();
     let config = pb.config_from(["y21", "y22", "x11"]).unwrap();
 
-    let solver = super::Solver::new(super::heuristics::Connolly1992::default());
+    let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 
@@ -189,7 +189,7 @@ fn test_backtracking_2() {
 }
 
 #[test]
-fn impossible_backtracking() {
+fn coin_cbc_impossible() {
     use crate::ilp::linexpr::Expr;
     use crate::ilp::ProblemBuilder;
 
@@ -214,7 +214,7 @@ fn impossible_backtracking() {
         .build();
     let config = pb.config_from(["x11"]).unwrap();
 
-    let solver = super::Solver::new(super::heuristics::Connolly1992::default());
+    let solver = super::Solver::new();
 
     use crate::ilp::solvers::FeasabilitySolver;
 

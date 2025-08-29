@@ -46,9 +46,11 @@ fn simple_validated_data() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -188,9 +190,11 @@ fn invalid_students_per_interrogation() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 0,
@@ -235,9 +239,11 @@ fn subject_slot_overlaps_next_day() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 0,
@@ -313,9 +319,11 @@ fn invalid_teacher_number() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 1,
@@ -396,9 +404,11 @@ fn slot_ref_has_invalid_subject() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -414,9 +424,11 @@ fn slot_ref_has_invalid_subject() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -477,9 +489,11 @@ fn slot_ref_has_invalid_slot() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -495,9 +509,11 @@ fn slot_ref_has_invalid_slot() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -558,9 +574,11 @@ fn slot_grouping_overlap() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -586,9 +604,11 @@ fn slot_grouping_overlap() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -664,9 +684,11 @@ fn grouping_incompact_invalid_ref() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -682,9 +704,11 @@ fn grouping_incompact_invalid_ref() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -771,9 +795,11 @@ fn duplicated_groups() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -874,9 +900,11 @@ fn duplicated_student() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -986,9 +1014,11 @@ fn duplicated_student_not_assigned() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1096,9 +1126,11 @@ fn invalid_student_in_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1195,9 +1227,11 @@ fn invalid_student_not_assigned() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1288,9 +1322,11 @@ fn empty_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1404,9 +1440,11 @@ fn extensible_empty_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1516,9 +1554,11 @@ fn group_too_large() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1628,9 +1668,11 @@ fn non_extensible_too_small_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1744,9 +1786,11 @@ fn too_few_groups() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1855,9 +1899,11 @@ fn too_many_groups() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1978,9 +2024,11 @@ fn no_full_period() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2061,9 +2109,11 @@ fn group_in_slot_variables() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2256,9 +2306,11 @@ fn dynamic_group_assignment_variables() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2531,9 +2583,11 @@ fn student_in_group_variables() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2708,9 +2762,11 @@ fn with_student_not_in_last_period_variables() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2769,9 +2825,11 @@ fn with_student_not_in_last_period_variables() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2927,9 +2985,11 @@ fn without_student_not_in_last_period_variables() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2988,9 +3048,11 @@ fn without_student_not_in_last_period_variables() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3120,9 +3182,11 @@ fn mixed_case_for_student_not_in_last_period_variables() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3181,9 +3245,11 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3326,9 +3392,11 @@ fn periodicity_variables_for_strict_period() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3513,9 +3581,11 @@ fn periodicity_variables_for_loose_unfinished_period() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3700,9 +3770,11 @@ fn without_periodicity_variables_for_loose_complete_period() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3861,9 +3933,11 @@ fn use_grouping() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3969,106 +4043,149 @@ fn use_grouping() {
 }
 
 #[test]
-fn at_most_one_group_per_slot_constraints() {
+fn at_most_max_groups_per_slot_constraints() {
     let general = GeneralData {
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
     };
 
-    let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
-        period: NonZeroU32::new(2).unwrap(),
-        period_is_strict: true,
-        duration: NonZeroU32::new(60).unwrap(),
-        slots: vec![
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
+    let subjects = vec![
+        Subject {
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
+            is_tutorial: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 0,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 0,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Monday,
-                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
                 },
-            },
-            SlotWithTeacher {
-                teacher: 1,
-                start: SlotStart {
-                    week: 1,
-                    weekday: time::Weekday::Tuesday,
-                    start_time: time::Time::from_hm(17, 0).unwrap(),
-                },
-            },
-        ],
-        groups: GroupsDesc {
-            prefilled_groups: vec![
-                GroupDesc {
-                    students: BTreeSet::from([0, 1, 2]),
-                    can_be_extended: false,
-                },
-                GroupDesc {
-                    students: BTreeSet::from([3, 4, 5]),
-                    can_be_extended: false,
-                },
-                GroupDesc {
-                    students: BTreeSet::new(),
-                    can_be_extended: true,
-                },
-                GroupDesc {
-                    students: BTreeSet::new(),
-                    can_be_extended: true,
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(17, 0).unwrap(),
+                    },
                 },
             ],
-            not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::new(),
+                        can_be_extended: true,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::new(),
+                        can_be_extended: true,
+                    },
+                ],
+                not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
+            },
         },
-    }];
+        Subject {
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(2).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
+            is_tutorial: false,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Thursday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Thursday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                ],
+                not_assigned: BTreeSet::new(),
+            },
+        },
+    ];
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -4122,8 +4239,8 @@ fn at_most_one_group_per_slot_constraints() {
     .unwrap();
 
     let ilp_translator = data.ilp_translator();
-    let at_most_one_group_per_slot_constraints =
-        ilp_translator.build_at_most_one_group_per_slot_constraints();
+    let at_most_max_groups_per_slot_constraints =
+        ilp_translator.build_at_most_max_groups_per_slot_constraints();
 
     use crate::ilp::linexpr::Expr;
 
@@ -4200,6 +4317,15 @@ fn at_most_one_group_per_slot_constraints() {
     let gis_7_3 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 7, group: 3 });
 
     #[rustfmt::skip]
+    let gis_1_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 0, group: 0 });
+    #[rustfmt::skip]
+    let gis_1_0_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 0, group: 1 });
+    #[rustfmt::skip]
+    let gis_1_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 0 });
+    #[rustfmt::skip]
+    let gis_1_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 1 });
+
+    #[rustfmt::skip]
     let expected_result = BTreeSet::from([
         (gis_0_0 + gis_0_1 + gis_0_2 + gis_0_3).leq(&Expr::constant(1)),
         (gis_1_0 + gis_1_1 + gis_1_2 + gis_1_3).leq(&Expr::constant(1)),
@@ -4209,9 +4335,11 @@ fn at_most_one_group_per_slot_constraints() {
         (gis_5_0 + gis_5_1 + gis_5_2 + gis_5_3).leq(&Expr::constant(1)),
         (gis_6_0 + gis_6_1 + gis_6_2 + gis_6_3).leq(&Expr::constant(1)),
         (gis_7_0 + gis_7_1 + gis_7_2 + gis_7_3).leq(&Expr::constant(1)),
+        (gis_1_0_0 + gis_1_0_1).leq(&Expr::constant(2)),
+        (gis_1_1_0 + gis_1_1_1).leq(&Expr::constant(2)),
     ]);
 
-    assert_eq!(at_most_one_group_per_slot_constraints, expected_result);
+    assert_eq!(at_most_max_groups_per_slot_constraints, expected_result);
 }
 
 #[test]
@@ -4224,9 +4352,11 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4261,9 +4391,11 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4408,9 +4540,11 @@ fn one_interrogation_per_period() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4461,9 +4595,11 @@ fn one_interrogation_per_period() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4657,9 +4793,11 @@ fn one_interrogation_per_period_with_incomplete_period() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4702,9 +4840,11 @@ fn one_interrogation_per_period_with_incomplete_period() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4903,9 +5043,11 @@ fn students_per_group_count() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5083,9 +5225,11 @@ fn student_in_single_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5262,9 +5406,11 @@ fn dynamic_groups_student_in_group_inequalities() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5382,9 +5528,11 @@ fn dynamic_groups_group_in_slot_inequalities() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5500,9 +5648,11 @@ fn one_periodicity_choice_per_student() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5545,9 +5695,11 @@ fn one_periodicity_choice_per_student() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5590,9 +5742,11 @@ fn one_periodicity_choice_per_student() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5773,9 +5927,11 @@ fn periodicity_inequalities() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5818,9 +5974,11 @@ fn periodicity_inequalities() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5863,9 +6021,11 @@ fn periodicity_inequalities() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6146,9 +6306,11 @@ fn interrogations_per_week() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6183,9 +6345,11 @@ fn interrogations_per_week() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6201,6 +6365,45 @@ fn interrogations_per_week() {
                     start: SlotStart {
                         week: 1,
                         weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                prefilled_groups: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::new(),
+                        can_be_extended: true,
+                    },
+                ],
+                not_assigned: BTreeSet::from([0, 1, 2]),
+            },
+        },
+        Subject {
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(8).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
+            is_tutorial: true,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Friday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 1,
+                        weekday: time::Weekday::Friday,
                         start_time: time::Time::from_hm(8, 0).unwrap(),
                     },
                 },
@@ -6338,9 +6541,11 @@ fn grouping_inequalities() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6488,9 +6693,11 @@ fn grouping_incompats() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6618,9 +6825,11 @@ fn students_incompats() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6839,9 +7048,11 @@ fn simple_colloscope() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6876,9 +7087,11 @@ fn simple_colloscope() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7000,9 +7213,11 @@ fn colloscope_with_dynamic_groups() {
 
     let subjects = vec![
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7037,9 +7252,11 @@ fn colloscope_with_dynamic_groups() {
             },
         },
         Subject {
-            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7300,9 +7517,11 @@ fn at_most_one_interrogation_per_empty_group() {
     };
 
     let subjects = vec![Subject {
-        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {

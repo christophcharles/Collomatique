@@ -46,7 +46,7 @@ fn test_sa() {
 
     let one = Expr::<String>::constant(1);
 
-    let pb = ProblemBuilder::new()
+    let pb = ProblemBuilder::<String>::new()
         .add_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_variables(["y11", "y12", "y21", "y22"])
@@ -86,14 +86,18 @@ fn test_sa() {
         }))
         .build();
 
-    let mut sa_optimizer = super::Optimizer::new(&pb);
-
     let config = pb.config_from(["x11", "y12", "y21"]).unwrap(); // We choose a starting closer to the "bad" (high cost) solution
-    sa_optimizer.set_init_config(config);
+    let mut sa_optimizer = super::Optimizer::new(config);
 
-    let mut random_gen = crate::ilp::random::DefaultRndGen::new();
+    let random_gen = crate::ilp::random::DefaultRndGen::new();
     let solver = crate::ilp::solvers::a_star::Solver::new();
-    let solution = sa_optimizer.iterate(solver, &mut random_gen).best_in(2);
+    let solution = sa_optimizer
+        .iterate(
+            solver,
+            random_gen.clone(),
+            super::super::NeighbourMutationPolicy::new(random_gen.clone()),
+        )
+        .best_in(2);
     // There are only two solutions so only two iterations should even be enough to find the optimal one
 
     assert_eq!(
@@ -105,7 +109,13 @@ fn test_sa() {
     sa_optimizer.set_init_config(config);
 
     let solver = crate::ilp::solvers::a_star::Solver::new();
-    let solution = sa_optimizer.iterate(solver, &mut random_gen).best_in(2);
+    let solution = sa_optimizer
+        .iterate(
+            solver,
+            random_gen.clone(),
+            super::super::NeighbourMutationPolicy::new(random_gen),
+        )
+        .best_in(2);
 
     assert_eq!(
         solution.expect("Solution found").0.inner().clone(),

@@ -1,17 +1,21 @@
 pub mod dbg;
+pub mod initializers;
 pub mod linexpr;
 pub mod optimizers;
 pub mod random;
 pub mod solvers;
 
-mod ndtools;
+pub mod mat_repr;
 
 #[cfg(test)]
 mod tests;
 
+use std::sync::RwLock;
+
 use thiserror::Error;
 
 use linexpr::VariableName;
+use mat_repr::{ConfigRepr, ProblemRepr};
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error<V: VariableName> {
@@ -23,18 +27,20 @@ pub enum Error<V: VariableName> {
 
 pub type Result<T, V> = std::result::Result<T, Error<V>>;
 
-pub type EvalFn<V> = dbg::Debuggable<dyn Fn(&FeasableConfig<V>) -> f64>;
+pub type EvalFn<V, P> = dbg::Debuggable<dyn Sync + Send + Fn(&FeasableConfig<V, P>) -> f64>;
 
-impl<V: VariableName> Default for EvalFn<V> {
+impl<V: VariableName, P: ProblemRepr<V>> Default for EvalFn<V, P> {
     fn default() -> Self {
         crate::debuggable!(|_x| 0.)
     }
 }
 
+pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
+
 #[derive(Debug, Clone)]
-pub struct ProblemBuilder<V: VariableName> {
+pub struct ProblemBuilder<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
-    eval_fn: EvalFn<V>,
+    eval_fn: EvalFn<V, P>,
     variables: BTreeSet<V>,
     constants: BTreeMap<V, bool>,
 }
@@ -57,7 +63,7 @@ pub enum ConstraintError<V: VariableName> {
 
 pub type ConstraintResult<T, V> = std::result::Result<T, ConstraintError<V>>;
 
-impl<V: VariableName> Default for ProblemBuilder<V> {
+impl<V: VariableName, P: ProblemRepr<V>> Default for ProblemBuilder<V, P> {
     fn default() -> Self {
         ProblemBuilder {
             constraints: BTreeSet::new(),
@@ -68,7 +74,7 @@ impl<V: VariableName> Default for ProblemBuilder<V> {
     }
 }
 
-impl<V: VariableName> ProblemBuilder<V> {
+impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -100,7 +106,7 @@ impl<V: VariableName> ProblemBuilder<V> {
         Ok(self)
     }
 
-    pub fn eval_fn(mut self, func: EvalFn<V>) -> Self {
+    pub fn eval_fn(mut self, func: EvalFn<V, P>) -> Self {
         self.eval_fn = func;
         self
     }
@@ -154,14 +160,18 @@ impl<V: VariableName> ProblemBuilder<V> {
         Ok(self)
     }
 
-    pub fn build(self) -> Problem<V> {
+    pub fn get_variables(&self) -> &BTreeSet<V> {
+        &self.variables
+    }
+
+    pub fn build(self) -> Problem<V, P> {
         let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
         let mut variables_lookup = BTreeMap::new();
         for (i, var) in variables_vec.iter().enumerate() {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let nd_problem = ndtools::NdProblem::new(&variables_vec, &self.constraints);
+        let nd_problem = P::new(&variables_vec, &self.constraints);
 
         Problem {
             variables: self.variables,
@@ -170,11 +180,11 @@ impl<V: VariableName> ProblemBuilder<V> {
             constraints: self.constraints,
             constants: self.constants,
             eval_fn: self.eval_fn,
-            nd_problem,
+            pb_repr: nd_problem,
         }
     }
 
-    pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V> {
+    pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V, P> {
         let (constraints, constants) = Self::iterate_simplify(&self.constraints);
 
         let variables: BTreeSet<_> = self
@@ -191,9 +201,34 @@ impl<V: VariableName> ProblemBuilder<V> {
             constants,
         }
     }
+
+    pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V, P>
+    where
+        F: FnMut(&V) -> bool,
+    {
+        use linexpr::Constraint;
+        let constraints = self
+            .constraints
+            .into_iter()
+            .filter(|c: &Constraint<V>| c.variables().iter().all(&mut predicate))
+            .collect();
+        let variables = self.variables.into_iter().filter(&mut predicate).collect();
+        let constants = self
+            .constants
+            .into_iter()
+            .filter(|(v, _val)| predicate(v))
+            .collect();
+
+        ProblemBuilder {
+            constraints,
+            eval_fn: self.eval_fn,
+            variables,
+            constants,
+        }
+    }
 }
 
-impl<V: VariableName> ProblemBuilder<V> {
+impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
     fn simple_simplify(
         constraints: &mut BTreeSet<linexpr::Constraint<V>>,
     ) -> linexpr::SimpleSolution<V> {
@@ -251,17 +286,17 @@ impl<V: VariableName> ProblemBuilder<V> {
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
-pub struct Problem<V: VariableName> {
+pub struct Problem<V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
     variables: BTreeSet<V>,
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
     constraints: BTreeSet<linexpr::Constraint<V>>,
     constants: BTreeMap<V, bool>,
-    eval_fn: EvalFn<V>,
-    nd_problem: ndtools::NdProblem<V>,
+    eval_fn: EvalFn<V, P>,
+    pb_repr: P,
 }
 
-impl<V: VariableName> std::fmt::Display for Problem<V> {
+impl<V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Problem<V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "variables : [")?;
         for v in &self.variables {
@@ -289,37 +324,48 @@ impl<V: VariableName> std::fmt::Display for Problem<V> {
     }
 }
 
-impl<V: VariableName> Problem<V> {
-    pub fn default_config<'a>(&'a self) -> Config<'a, V> {
-        Config {
-            problem: self,
-            nd_config: self.nd_problem.default_nd_config(),
+impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
+    pub fn into_builder(self) -> ProblemBuilder<V, P> {
+        ProblemBuilder {
+            constraints: self.constraints,
+            eval_fn: self.eval_fn,
+            variables: self.variables,
+            constants: self.constants,
         }
+    }
+
+    pub fn default_config<'a>(&'a self) -> Config<'a, V, P> {
+        self.config_from(&[])
+            .expect("Valid variables as no variables are used")
     }
 
     pub fn config_from<'a, 'b, U, T: IntoIterator<Item = &'b U>>(
         &'a self,
         vars: T,
-    ) -> Result<Config<'a, V>, V>
+    ) -> Result<Config<'a, V, P>, V>
     where
         V: std::borrow::Borrow<U>,
         U: Ord + ?Sized + 'b,
         &'b U: Into<V>,
     {
-        let mut config = self.default_config();
+        let mut vars_repr = BTreeSet::new();
 
         for v in vars {
-            config.set(v, true)?;
+            match self.variables_lookup.get(v) {
+                Some(num) => {
+                    vars_repr.insert(*num);
+                }
+                None => {
+                    return Err(Error::InvalidVariable(v.into()));
+                }
+            }
         }
 
-        Ok(config)
-    }
-
-    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config<'_, V> {
-        Config {
+        Ok(Config {
             problem: self,
-            nd_config: self.nd_problem.random_nd_config(random_gen),
-        }
+            cfg_repr: self.pb_repr.config_from(&vars_repr),
+            precomputation: RwLock::new(None),
+        })
     }
 
     pub fn get_constraints(&self) -> &BTreeSet<linexpr::Constraint<V>> {
@@ -329,18 +375,46 @@ impl<V: VariableName> Problem<V> {
     pub fn get_variables(&self) -> &BTreeSet<V> {
         &self.variables
     }
+
+    pub fn get_constants(&self) -> impl Iterator<Item = &V> {
+        self.constants.keys()
+    }
 }
 
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
-pub struct Config<'a, V: VariableName> {
-    problem: &'a Problem<V>,
-    nd_config: ndtools::NdConfig,
+struct Precomputation<V: VariableName, P: ProblemRepr<V>> {
+    data: <P::Config as mat_repr::ConfigRepr<V>>::Precomputation,
+    invalidated_vars: BTreeSet<usize>,
 }
 
-impl<'a, V: VariableName> Config<'a, V> {
-    pub fn get_problem(&self) -> &Problem<V> {
+#[derive(Debug)]
+pub struct Config<'a, V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>> {
+    problem: &'a Problem<V, P>,
+    cfg_repr: P::Config,
+    precomputation: RwLock<Option<Precomputation<V, P>>>,
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
+    fn clone_precomputation(&self) -> RwLock<Option<Precomputation<V, P>>> {
+        let guard = self.precomputation.read().unwrap();
+        RwLock::new(guard.clone())
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Clone for Config<'a, V, P> {
+    fn clone(&self) -> Self {
+        Config {
+            problem: self.problem,
+            cfg_repr: self.cfg_repr.clone(),
+            precomputation: self.clone_precomputation(),
+        }
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
+    pub fn get_problem(&self) -> &'a Problem<V, P> {
         self.problem
     }
 
@@ -358,7 +432,7 @@ impl<'a, V: VariableName> Config<'a, V> {
             Some(i) => i,
             None => return Err(Error::InvalidVariable(var.into())),
         };
-        Ok(unsafe { self.nd_config.get_unchecked(*i) == 1 })
+        Ok(unsafe { self.cfg_repr.get_unchecked(*i) == 1 })
     }
 
     pub fn set<'b, T>(&mut self, var: &'b T, val: bool) -> Result<(), V>
@@ -376,50 +450,66 @@ impl<'a, V: VariableName> Config<'a, V> {
             None => return Err(Error::InvalidVariable(var.into())),
         };
         unsafe {
-            self.nd_config.set_unchecked(*i, if val { 1 } else { 0 });
+            self.cfg_repr.set_unchecked(*i, if val { 1 } else { 0 });
         }
+        self.invalidate_precomputation(*i);
         Ok(())
+    }
+
+    pub fn neighbour(&self, i: usize) -> Config<'a, V, P> {
+        assert!(i < self.problem.variables.len());
+
+        let cfg_repr = self.cfg_repr.neighbour(i);
+        let precomputation = self.clone_precomputation();
+
+        let mut output = Config {
+            problem: self.problem,
+            cfg_repr,
+            precomputation,
+        };
+
+        output.invalidate_precomputation(i);
+
+        output
     }
 
     pub fn random_neighbour<T: random::RandomGen>(
         &self,
-        random_gen: &mut T,
-    ) -> Option<Config<'a, V>> {
+        random_gen: &T,
+    ) -> Option<Config<'a, V, P>> {
         if self.problem.variables.is_empty() {
             return None;
         }
 
-        Some(Config {
-            problem: self.problem,
-            nd_config: self.nd_config.random_neighbour(random_gen),
-        })
+        let i = random_gen.rand_in_range(0..self.problem.variables.len());
+        Some(self.neighbour(i))
     }
 
-    pub fn neighbours(&self) -> Vec<Config<'a, V>> {
-        self.nd_config
-            .neighbours()
+    pub fn neighbours(&self) -> Vec<Config<'a, V, P>> {
+        (0..self.problem.variables.len())
             .into_iter()
-            .map(|x| Config {
-                problem: self.problem,
-                nd_config: x,
-            })
+            .map(|x| self.neighbour(x))
             .collect()
     }
 
     pub fn max_distance_to_constraint(&self) -> f32 {
-        self.nd_config
-            .max_distance_to_constraint(&self.problem.nd_problem)
+        self.cfg_repr
+            .max_distance_to_constraint(&self.problem.pb_repr)
     }
 
     pub fn compute_lhs(&self) -> BTreeMap<linexpr::Constraint<V>, i32> {
-        self.nd_config.compute_lhs(&self.problem.nd_problem)
+        let precomputation = self.get_precomputation();
+        self.cfg_repr
+            .compute_lhs(&self.problem.pb_repr, &*precomputation)
     }
 
     pub fn is_feasable(&self) -> bool {
-        self.nd_config.is_feasable(&self.problem.nd_problem)
+        let precomputation = self.get_precomputation();
+        self.cfg_repr
+            .is_feasable(&self.problem.pb_repr, &*precomputation)
     }
 
-    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V>> {
+    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V, P>> {
         if !self.is_feasable() {
             return None;
         }
@@ -427,12 +517,63 @@ impl<'a, V: VariableName> Config<'a, V> {
         Some(unsafe { self.into_feasable_unchecked() })
     }
 
-    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V> {
+    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, P> {
         FeasableConfig(self)
     }
 }
 
-impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
+// MappedRwLockReadGuard is still in nightly...
+pub struct PrecomputationGuard<'a, V: VariableName, P: ProblemRepr<V>> {
+    guard: std::sync::RwLockReadGuard<'a, Option<Precomputation<V, P>>>,
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::ops::Deref for PrecomputationGuard<'a, V, P> {
+    type Target = <P::Config as mat_repr::ConfigRepr<V>>::Precomputation;
+    fn deref(&self) -> &Self::Target {
+        let opt = self.guard.deref();
+        &opt.as_ref().unwrap().data
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Config<'a, V, P> {
+    fn get_precomputation(&self) -> PrecomputationGuard<'_, V, P> {
+        let mut write_guard = self.precomputation.write().unwrap();
+        match write_guard.as_ref() {
+            Some(x) => {
+                if !x.invalidated_vars.is_empty() {
+                    write_guard.as_mut().map(|y| {
+                        self.cfg_repr.update_precomputation(
+                            &self.problem.pb_repr,
+                            &mut y.data,
+                            &y.invalidated_vars,
+                        );
+                        y.invalidated_vars.clear();
+                    });
+                }
+            }
+            None => {
+                let data = self.cfg_repr.precompute(&self.problem.pb_repr);
+                *write_guard = Some(Precomputation {
+                    data,
+                    invalidated_vars: BTreeSet::new(),
+                });
+            }
+        }
+        std::mem::drop(write_guard);
+        let guard = self.precomputation.read().unwrap();
+        PrecomputationGuard { guard }
+    }
+
+    fn invalidate_precomputation(&mut self, i: usize) {
+        let mut b = self.precomputation.write().unwrap();
+
+        b.as_mut().map(|x| {
+            x.invalidated_vars.insert(i);
+        });
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::fmt::Display for Config<'a, V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut variables: BTreeMap<_, _> = self
             .problem
@@ -445,7 +586,7 @@ impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
                 .variables_vec
                 .iter()
                 .enumerate()
-                .map(|(i, var)| (var.clone(), unsafe { self.nd_config.get_unchecked(i) })),
+                .map(|(i, var)| (var.clone(), unsafe { self.cfg_repr.get_unchecked(i) })),
         );
 
         write!(f, "[ ")?;
@@ -460,56 +601,82 @@ impl<'a, V: VariableName> std::fmt::Display for Config<'a, V> {
     }
 }
 
-impl<'a, V: VariableName> PartialEq for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialEq for Config<'a, V, P> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a, V: VariableName> Eq for Config<'a, V> {}
+impl<'a, V: VariableName, P: ProblemRepr<V>> Eq for Config<'a, V, P> {}
 
-impl<'a, V: VariableName> Ord for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> Ord for Config<'a, V, P> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let p1: *const Problem<V> = &*self.problem;
-        let p2: *const Problem<V> = &*other.problem;
+        let p1: *const Problem<V, P> = &*self.problem;
+        let p2: *const Problem<V, P> = &*other.problem;
 
         let problem_ord = p1.cmp(&p2);
         if problem_ord != std::cmp::Ordering::Equal {
             return problem_ord;
         }
 
-        return self.nd_config.cmp(&other.nd_config);
+        return self.cfg_repr.cmp(&other.cfg_repr);
     }
 }
 
-impl<'a, V: VariableName> PartialOrd for Config<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialOrd for Config<'a, V, P> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FeasableConfig<'a, V: VariableName>(Config<'a, V>);
+#[derive(Debug, Clone)]
+pub struct FeasableConfig<'a, V: VariableName, P: ProblemRepr<V> = DefaultRepr<V>>(
+    Config<'a, V, P>,
+);
 
-impl<'a, V: VariableName> FeasableConfig<'a, V> {
-    pub fn into_inner(self) -> Config<'a, V> {
-        self.0
-    }
-
-    pub fn inner(&self) -> &Config<'a, V> {
-        &self.0
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialEq for FeasableConfig<'a, V, P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a, V: VariableName> std::ops::Deref for FeasableConfig<'a, V> {
-    type Target = Config<'a, V>;
+impl<'a, V: VariableName, P: ProblemRepr<V>> Eq for FeasableConfig<'a, V, P> {}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> Ord for FeasableConfig<'a, V, P> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner().cmp(other.inner())
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> PartialOrd for FeasableConfig<'a, V, P> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> FeasableConfig<'a, V, P> {
+    pub fn into_inner(self) -> Config<'a, V, P> {
+        self.0
+    }
+
+    pub fn inner(&self) -> &Config<'a, V, P> {
+        &self.0
+    }
+
+    pub fn eval(&self) -> f64 {
+        (self.0.problem.eval_fn)(self)
+    }
+}
+
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::ops::Deref for FeasableConfig<'a, V, P> {
+    type Target = Config<'a, V, P>;
 
     fn deref(&self) -> &Self::Target {
         self.inner()
     }
 }
 
-impl<'a, V: VariableName> std::fmt::Display for FeasableConfig<'a, V> {
+impl<'a, V: VariableName, P: ProblemRepr<V>> std::fmt::Display for FeasableConfig<'a, V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner().fmt(f)
     }

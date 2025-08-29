@@ -12,6 +12,8 @@ pub trait VariableName:
     + Eq
     + Clone
     + for<'a> From<&'a Self>
+    + Send
+    + Sync
 {
 }
 
@@ -23,7 +25,9 @@ impl<
             + PartialEq
             + Eq
             + Clone
-            + for<'a> From<&'a T>,
+            + for<'a> From<&'a T>
+            + Send
+            + Sync,
     > VariableName for T
 {
 }
@@ -66,6 +70,10 @@ impl<V: VariableName> Expr<V> {
 }
 
 impl<V: VariableName> Expr<V> {
+    pub fn coefs(&self) -> &BTreeMap<V, i32> {
+        &self.coefs
+    }
+
     pub fn variables(&self) -> BTreeSet<V> {
         self.coefs.keys().cloned().collect()
     }
@@ -154,6 +162,10 @@ impl<V: VariableName> Expr<V> {
 impl<V: VariableName> Constraint<V> {
     pub fn variables(&self) -> BTreeSet<V> {
         self.expr.variables()
+    }
+
+    pub fn coefs(&self) -> &BTreeMap<V, i32> {
+        self.expr.coefs()
     }
 
     pub fn get_var<T: Into<V>>(&self, var: T) -> Option<i32> {
