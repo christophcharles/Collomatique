@@ -19,30 +19,6 @@ impl<H: heuristics::Heuristic> Solver<H> {
         Solver { heuristic }
     }
 
-    fn choose_variable<'a, V: VariableName>(
-        &self,
-        config: &Config<'a, V>,
-        available_variables: &BTreeSet<V>,
-        previous_var: Option<&V>,
-    ) -> Option<V> {
-        let guess_list = self
-            .heuristic
-            .compute_guess_list(config, available_variables);
-
-        match previous_var {
-            Some(var) => {
-                let mut iterator = guess_list.iter();
-                while let Some(v) = iterator.next() {
-                    if *v == *var {
-                        break;
-                    }
-                }
-                iterator.next().cloned()
-            }
-            None => guess_list.first().cloned(),
-        }
-    }
-
     fn compute_next_step<'a, V: VariableName>(
         &self,
         config: &Config<'a, V>,
@@ -52,18 +28,26 @@ impl<H: heuristics::Heuristic> Solver<H> {
             return NextStep::Solved;
         }
 
-        match self.choose_variable(config, available_variables, None) {
-            Some(var) => NextStep::StepInto(var),
-            None => NextStep::Backtrack,
+        let vars = self
+            .heuristic
+            .compute_guess_list(config, available_variables);
+        if vars.is_empty() {
+            NextStep::Backtrack
+        } else {
+            NextStep::StepInto(vars)
         }
     }
 
     fn select_variable<'a, V: VariableName>(
         config: &mut Config<'a, V>,
         available_variables: &mut BTreeSet<V>,
-        choice_stack: &mut Vec<V>,
-        var: V,
+        guess_list_stack: &Vec<(Vec<V>, usize)>,
     ) {
+        let (vars, num) = guess_list_stack
+            .last()
+            .expect("There should be a guess to select");
+        let var = vars.get(*num).expect("guess_list cursor should be valid");
+
         let current_val = config
             .get(&var)
             .expect("Variable should be available to get");
@@ -71,41 +55,46 @@ impl<H: heuristics::Heuristic> Solver<H> {
             .set(&var, !current_val)
             .expect("Variable should be available to set");
         available_variables.remove(&var);
-        choice_stack.push(var);
     }
 
     fn unselect_variable<'a, V: VariableName>(
         config: &mut Config<'a, V>,
         available_variables: &mut BTreeSet<V>,
-        var: V,
+        guess_list_stack: &Vec<(Vec<V>, usize)>,
     ) {
+        let (vars, num) = guess_list_stack
+            .last()
+            .expect("There should be a guess to unselect");
+        let var = vars.get(*num).expect("guess_list cursor should be valid");
+
         let current_val = config
             .get(&var)
             .expect("Variable should be available to get");
         config
             .set(&var, !current_val)
             .expect("Variable should be available to set");
-        available_variables.insert(var);
+        available_variables.insert(var.clone());
     }
 
     fn backtrack<'a, V: VariableName>(
         &self,
         config: &mut Config<'a, V>,
         available_variables: &mut BTreeSet<V>,
-        choice_stack: &mut Vec<V>,
+        guess_list_stack: &mut Vec<(Vec<V>, usize)>,
     ) -> bool {
         loop {
-            match choice_stack.pop() {
-                Some(old_var) => {
-                    Self::unselect_variable(config, available_variables, old_var.clone());
+            match guess_list_stack.last() {
+                Some((guess_list, current_num)) => {
+                    Self::unselect_variable(config, available_variables, &*guess_list_stack);
 
-                    if let Some(new_var) =
-                        self.choose_variable(config, available_variables, Some(&old_var))
-                    {
-                        Self::select_variable(config, available_variables, choice_stack, new_var);
+                    assert!(*current_num < guess_list.len());
+                    if *current_num != guess_list.len() - 1 {
+                        guess_list_stack.last_mut().unwrap().1 += 1;
+                        Self::select_variable(config, available_variables, guess_list_stack);
                         return true;
+                    } else {
+                        guess_list_stack.pop();
                     }
-                    // No else clause: if no more variables, we loop and backtrack further
                 }
                 None => {
                     return false;
@@ -116,7 +105,7 @@ impl<H: heuristics::Heuristic> Solver<H> {
 }
 
 enum NextStep<V: VariableName> {
-    StepInto(V),
+    StepInto(Vec<V>),
     Backtrack,
     Solved,
 }
@@ -142,7 +131,7 @@ impl<V: VariableName, H: heuristics::Heuristic> FeasabilitySolver<V> for Solver<
         };
 
         let mut temp_config = config.clone();
-        let mut choice_stack = vec![];
+        let mut guess_list_stack = vec![];
         loop {
             if let Some(ms) = max_steps {
                 if ms == 0 {
@@ -153,19 +142,21 @@ impl<V: VariableName, H: heuristics::Heuristic> FeasabilitySolver<V> for Solver<
             }
             match self.compute_next_step(&temp_config, &available_variables) {
                 NextStep::Solved => return Some(unsafe { temp_config.into_feasable_unchecked() }),
-                NextStep::StepInto(var) => {
+                NextStep::StepInto(vars) => {
+                    assert!(!vars.is_empty());
+
+                    guess_list_stack.push((vars, 0));
                     Self::select_variable(
                         &mut temp_config,
                         &mut available_variables,
-                        &mut choice_stack,
-                        var,
+                        &guess_list_stack,
                     );
                 }
                 NextStep::Backtrack => {
                     if !self.backtrack(
                         &mut temp_config,
                         &mut available_variables,
-                        &mut choice_stack,
+                        &mut guess_list_stack,
                     ) {
                         return None;
                     }
