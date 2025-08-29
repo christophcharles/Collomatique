@@ -306,12 +306,111 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
 }
 
 pub async fn update(
-    _pool: &SqlitePool,
-    _index: Id,
-    _group_list: &GroupList<super::students::Id>,
+    pool: &SqlitePool,
+    index: Id,
+    group_list: &GroupList<super::students::Id>,
 ) -> std::result::Result<
     (),
     InvalidCrossIdError<Error, GroupList<super::students::Id>, Id, super::students::Id>,
 > {
-    todo!()
+    if let Some(student_id) = search_invalid_student_id(pool, group_list).await? {
+        return Err(InvalidCrossIdError::InvalidCrossId(student_id));
+    }
+    if !validate_groups(group_list) {
+        return Err(InvalidCrossIdError::InvalidData(group_list.clone()));
+    }
+
+    let group_list_id = index.0;
+
+    let groups_to_delete = sqlx::query!(
+        "SELECT group_id FROM group_list_items WHERE group_list_id = ?",
+        group_list_id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Error::from)?;
+
+    let mut conn = pool.acquire().await.map_err(Error::from)?;
+
+    let rows_affected = sqlx::query!(
+        "UPDATE group_lists SET name = ?1 WHERE group_list_id = ?2",
+        group_list.name,
+        group_list_id,
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
+    if rows_affected > 1 {
+        return Err(InvalidCrossIdError::InternalError(
+            Error::CorruptedDatabase(format!("Multiple group_lists with id {:?}", index)),
+        ));
+    } else if rows_affected == 0 {
+        return Err(InvalidCrossIdError::InvalidId(index));
+    }
+
+    let _ = sqlx::query!(
+        "DELETE FROM group_items WHERE group_list_id = ?",
+        group_list_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    let _ = sqlx::query!(
+        "DELETE FROM group_list_items WHERE group_list_id = ?",
+        group_list_id
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(Error::from)?;
+
+    for group in groups_to_delete {
+        let _ = sqlx::query!("DELETE FROM groups WHERE group_id = ?", group.group_id)
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::from)?;
+    }
+
+    let mut group_ids = Vec::with_capacity(group_list.groups.len());
+    for group in &group_list.groups {
+        let extendable = if group.extendable { 1 } else { 0 };
+        let group_id = sqlx::query!(
+            "INSERT INTO groups (name, extendable) VALUES (?1, ?2)",
+            group.name,
+            extendable,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?
+        .last_insert_rowid();
+
+        group_ids.push(group_id);
+
+        let _ = sqlx::query!(
+            "INSERT INTO group_list_items (group_list_id, group_id) VALUES (?1, ?2)",
+            group_list_id,
+            group_id,
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?;
+    }
+
+    for (&student_id, &group_num) in &group_list.students_mapping {
+        let group_id = group_ids[group_num];
+
+        let _ = sqlx::query!(
+            "INSERT INTO group_items (group_list_id, group_id, student_id) VALUES (?1, ?2, ?3)",
+            group_list_id,
+            group_id,
+            student_id.0
+        )
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::from)?;
+    }
+
+    Ok(())
 }
