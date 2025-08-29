@@ -88,6 +88,7 @@ pub enum AppInput {
     ),
     ColloscopeLoadingFailed(PathBuf, String),
     ColloscopeSavingFailed(PathBuf, String),
+    PythonLoadingFailed(PathBuf, String),
     RequestOpenExistingColloscopeWithDialog,
     OpenExistingColloscopeWithDialog,
     RequestQuit,
@@ -169,6 +170,9 @@ impl Component for AppModel {
                 editor::EditorOutput::UpdateActions => AppInput::UpdateActions,
                 editor::EditorOutput::SaveError(path, error) => {
                     AppInput::ColloscopeSavingFailed(path, error)
+                }
+                editor::EditorOutput::PythonLoadingError(path, error) => {
+                    AppInput::PythonLoadingFailed(path, error)
                 }
             },
         );
@@ -423,6 +427,17 @@ impl Component for AppModel {
                     .sender()
                     .send(dialogs::file_error::DialogInput::Show(
                         dialogs::file_error::Type::Save,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
+            }
+            AppInput::PythonLoadingFailed(path, error) => {
+                self.controllers
+                    .file_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Open,
                         path,
                         error,
                     ))

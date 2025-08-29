@@ -15,6 +15,7 @@ use collomatique_state_colloscopes::Data;
 use crate::tools;
 
 mod general_planning;
+mod run_script;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -30,6 +31,7 @@ pub enum EditorInput {
     UndoClicked,
     RedoClicked,
     UpdateOp(EditorUpdateOp),
+    RunScriptClicked,
 }
 
 #[derive(Debug)]
@@ -41,6 +43,7 @@ pub enum EditorUpdateOp {
 pub enum EditorOutput {
     UpdateActions,
     SaveError(PathBuf, String),
+    PythonLoadingError(PathBuf, String),
 }
 
 #[derive(Debug)]
@@ -49,6 +52,10 @@ pub enum EditorCommandOutput {
     FileChosen(PathBuf),
     SaveSuccessful(PathBuf),
     SaveFailed(PathBuf, String),
+    ScriptChosen(PathBuf),
+    ScriptNotChosen,
+    ScriptLoaded(String),
+    ScriptLoadingFailed(PathBuf, String),
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -78,6 +85,7 @@ pub struct EditorPanel {
     show_particular_panel: Option<PanelNumbers>,
 
     general_planning: Controller<general_planning::GeneralPlanning>,
+    run_script_dialog: Controller<run_script::Dialog>,
 }
 
 impl EditorPanel {
@@ -187,14 +195,14 @@ impl Component for EditorPanel {
                         gtk::Button {
                             set_hexpand: true,
                             set_size_request: (-1,50),
-                            set_sensitive: false,
                             add_css_class: "frame",
                             add_css_class: "warning",
                             set_margin_all: 5,
                             adw::ButtonContent {
                                 set_icon_name: "text-x-script",
                                 set_label: "Exécuter un script",
-                            }
+                            },
+                            connect_clicked => EditorInput::RunScriptClicked,
                         },
                     },
                 },
@@ -307,6 +315,10 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(EditorUpdateOp::GeneralPlanning(op))
             });
 
+        let run_script_dialog = run_script::Dialog::builder()
+            .launch(())
+            .forward(sender.input_sender(), |_| EditorInput::Ignore);
+
         let pages_names = vec!["general_planning", "test2", "test3"];
         let pages_titles_map = BTreeMap::from([
             ("general_planning", "Planning général"),
@@ -323,6 +335,7 @@ impl Component for EditorPanel {
             pages_titles_map,
             show_particular_panel: None,
             general_planning,
+            run_script_dialog,
         };
         let widgets = view_output!();
 
@@ -432,6 +445,14 @@ impl Component for EditorPanel {
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
             }
+            EditorInput::RunScriptClicked => {
+                sender.oneshot_command(async move {
+                    match tools::open_save::open_python_dialog().await {
+                        Some(path) => EditorCommandOutput::ScriptChosen(path),
+                        None => EditorCommandOutput::ScriptNotChosen,
+                    }
+                });
+            }
         }
     }
 
@@ -460,6 +481,26 @@ impl Component for EditorPanel {
                 self.dirty = true;
                 sender.output(EditorOutput::UpdateActions).unwrap();
                 sender.output(EditorOutput::SaveError(path, error)).unwrap();
+            }
+            EditorCommandOutput::ScriptChosen(path) => {
+                sender.oneshot_command(async move {
+                    match tokio::fs::read_to_string(&path).await {
+                        Ok(text) => EditorCommandOutput::ScriptLoaded(text),
+                        Err(e) => EditorCommandOutput::ScriptLoadingFailed(path, e.to_string()),
+                    }
+                });
+            }
+            EditorCommandOutput::ScriptNotChosen => {}
+            EditorCommandOutput::ScriptLoaded(text) => {
+                self.run_script_dialog
+                    .sender()
+                    .send(run_script::DialogInput::Show(text))
+                    .unwrap();
+            }
+            EditorCommandOutput::ScriptLoadingFailed(path, error) => {
+                sender
+                    .output(EditorOutput::PythonLoadingError(path, error))
+                    .unwrap();
             }
         }
     }
