@@ -224,14 +224,6 @@ async fn generate_general_data(
     })
 }
 
-async fn generate_subjects(
-    _db_conn: &SqlitePool,
-) -> Result<collomatique::gen::colloscope::SubjectList> {
-    use collomatique::gen::colloscope::*;
-
-    Ok(SubjectList::new())
-}
-
 #[derive(Clone, Debug)]
 struct CourseIncompatRecord {
     id: i64,
@@ -257,7 +249,8 @@ fn generate_incompatibility(
                 start: SlotStart {
                     week: u32::try_from(x.week)?,
                     weekday: Weekday::try_from(usize::try_from(x.start_day)?)?,
-                    start_time: Time::new(u32::try_from(x.start_time)?).ok_or(anyhow!(""))?,
+                    start_time: Time::new(u32::try_from(x.start_time)?)
+                        .ok_or(anyhow!("Invalid time"))?,
                 },
                 duration: NonZeroU32::new(u32::try_from(x.duration)?)
                     .ok_or(anyhow!("Invalid duration"))?,
@@ -273,12 +266,12 @@ fn generate_incompatibility(
 }
 
 #[derive(Clone, Debug)]
-struct Incompatibilities {
+struct IncompatibilitiesData {
     list: collomatique::gen::colloscope::IncompatibilityList,
     id_map: std::collections::BTreeMap<i64, usize>,
 }
 
-async fn generate_incompatibilies(db_conn: &SqlitePool) -> Result<Incompatibilities> {
+async fn generate_incompatibilies(db_conn: &SqlitePool) -> Result<IncompatibilitiesData> {
     let ids = sqlx::query!("SELECT course_incompat_id AS id FROM course_incompats")
         .fetch_all(db_conn)
         .await?;
@@ -302,13 +295,13 @@ FROM course_incompat_items NATURAL JOIN weeks
         list.push(generate_incompatibility(x.id, &course_incompats_data)?);
     }
 
-    Ok(Incompatibilities { list, id_map })
+    Ok(IncompatibilitiesData { list, id_map })
 }
 
 #[derive(Clone, Debug)]
 struct StudentRecord {
     student_id: i64,
-    course_incompat_id: i64,
+    course_incompat_id: Option<i64>,
 }
 
 fn generate_student(
@@ -321,10 +314,13 @@ fn generate_student(
     let incompatibilities: BTreeSet<_> = student_data
         .iter()
         .filter(|x| x.student_id == student_id)
-        .map(|x| {
-            *course_incompat_id_map
-                .get(&x.course_incompat_id)
-                .expect("Valid course_incompat_id")
+        .filter_map(|x| {
+            let course_incompat_id = x.course_incompat_id?;
+            Some(
+                *course_incompat_id_map
+                    .get(&course_incompat_id)
+                    .expect("Valid course_incompat_id"),
+            )
         })
         .collect();
 
@@ -332,7 +328,7 @@ fn generate_student(
 }
 
 #[derive(Clone, Debug)]
-struct Students {
+struct StudentsData {
     list: collomatique::gen::colloscope::StudentList,
     id_map: std::collections::BTreeMap<i64, usize>,
 }
@@ -340,7 +336,7 @@ struct Students {
 async fn generate_students(
     db_conn: &SqlitePool,
     course_incompat_id_map: &std::collections::BTreeMap<i64, usize>,
-) -> Result<Students> {
+) -> Result<StudentsData> {
     let ids = sqlx::query!("SELECT student_id AS id FROM students")
         .fetch_all(db_conn)
         .await?;
@@ -349,7 +345,12 @@ async fn generate_students(
 
     let students_data = sqlx::query_as!(
         StudentRecord,
-        "SELECT student_id, course_incompat_id FROM student_incompats"
+        "
+SELECT student_id, course_incompat_id FROM student_incompats
+UNION
+SELECT student_id, course_incompat_id FROM student_subjects NATURAL JOIN subjects
+WHERE course_incompat_id IS NOT NULL
+        "
     )
     .fetch_all(db_conn)
     .await?;
@@ -365,7 +366,158 @@ async fn generate_students(
         )?);
     }
 
-    Ok(Students { list, id_map })
+    Ok(StudentsData { list, id_map })
+}
+
+struct SubjectsData {
+    list: collomatique::gen::colloscope::SubjectList,
+    slot_map: std::collections::BTreeMap<i64, collomatique::gen::colloscope::SlotRef>,
+}
+
+async fn generate_subjects(
+    db_conn: &SqlitePool,
+    student_id_map: &std::collections::BTreeMap<i64, usize>,
+) -> Result<SubjectsData> {
+    let subject_data = sqlx::query!("SELECT subject_id AS id, duration, min_students_per_slot, max_students_per_slot, period, period_is_strict FROM subjects")
+        .fetch_all(db_conn)
+        .await?;
+    let slots_data_req = sqlx::query!(
+        "
+SELECT time_slot_id AS id, subject_id, teacher_id, start_day, start_time, week
+FROM time_slots NATURAL JOIN weeks"
+    )
+    .fetch_all(db_conn);
+    let teachers_data_req =
+        sqlx::query!("SELECT teacher_id AS id FROM teachers").fetch_all(db_conn);
+    let student_subjects_req =
+        sqlx::query!("SELECT student_id, subject_id FROM student_subjects").fetch_all(db_conn);
+
+    let id_map: BTreeMap<_, _> = subject_data
+        .iter()
+        .enumerate()
+        .map(|(i, x)| (x.id, i))
+        .collect();
+
+    use collomatique::gen::colloscope::SubjectList;
+    let mut list: SubjectList = subject_data
+        .iter()
+        .map(|x| {
+            use collomatique::gen::colloscope::{GroupsDesc, Subject};
+            use std::collections::BTreeSet;
+            use std::num::{NonZeroU32, NonZeroUsize};
+
+            let min = usize::try_from(x.min_students_per_slot)
+                .expect("Valid usize for minimum students per slot");
+            let max = usize::try_from(x.max_students_per_slot)
+                .expect("Valid usize for maximum students per slot");
+
+            let non_zero_min = NonZeroUsize::new(min).expect("Non zero minimum students per slot");
+            let non_zero_max = NonZeroUsize::new(max).expect("Non zero maximum students per slot");
+
+            let students_per_slot = non_zero_min..=non_zero_max;
+
+            Subject {
+                students_per_slot,
+                period: NonZeroU32::new(
+                    u32::try_from(x.period).expect("Valid u32 for subject period"),
+                )
+                .expect("Valid non-zero period for subject"),
+                period_is_strict: x.period_is_strict != 0,
+                duration: NonZeroU32::new(
+                    u32::try_from(x.duration).expect("Valid u32 for subject duration"),
+                )
+                .expect("Valid non-zero duration for subject"),
+                slots: Vec::new(),
+                groups: GroupsDesc {
+                    prefilled_groups: Vec::new(),
+                    not_assigned: BTreeSet::new(),
+                },
+            }
+        })
+        .collect();
+
+    use std::collections::BTreeMap;
+    let mut slot_map = BTreeMap::new();
+
+    let slots_data = slots_data_req.await?;
+    let teachers_data = teachers_data_req.await?;
+    let teacher_id_map: BTreeMap<_, _> = teachers_data
+        .iter()
+        .enumerate()
+        .map(|(i, x)| (x.id, i))
+        .collect();
+
+    for slot in &slots_data {
+        use collomatique::gen::colloscope::{SlotRef, SlotStart, SlotWithTeacher};
+        use collomatique::gen::time::{Time, Weekday};
+
+        let subject_index = id_map[&slot.subject_id];
+
+        slot_map.insert(
+            slot.id,
+            SlotRef {
+                subject: subject_index,
+                slot: list[subject_index].slots.len(),
+            },
+        );
+
+        list[subject_index].slots.push(SlotWithTeacher {
+            teacher: teacher_id_map[&slot.teacher_id],
+            start: SlotStart {
+                week: u32::try_from(slot.week)?,
+                weekday: Weekday::try_from(usize::try_from(slot.start_day)?)?,
+                start_time: Time::new(u32::try_from(slot.start_time)?)
+                    .ok_or(anyhow!("Invalid time"))?,
+            },
+        });
+    }
+
+    let student_subjects_data = student_subjects_req.await?;
+
+    for x in &student_subjects_data {
+        let subject_index = id_map[&x.subject_id];
+        let student_index = student_id_map[&x.student_id];
+
+        list[subject_index]
+            .groups
+            .not_assigned
+            .insert(student_index);
+    }
+
+    for subject in list.iter_mut() {
+        if subject.groups.not_assigned.len() < subject.students_per_slot.start().get() {
+            return Err(anyhow!("Not enough students to assign into groups"));
+        }
+        let full_group_count =
+            subject.groups.not_assigned.len() / subject.students_per_slot.end().get();
+        let remaining_students =
+            subject.groups.not_assigned.len() % subject.students_per_slot.end().get();
+        let group_count = if remaining_students != 0 {
+            if remaining_students < subject.students_per_slot.start().get() {
+                let students_to_distribute =
+                    remaining_students + subject.students_per_slot.end().get();
+                let extra_groups_count =
+                    students_to_distribute / subject.students_per_slot.start().get();
+                full_group_count + extra_groups_count - 1
+            } else {
+                full_group_count + 1
+            }
+        } else {
+            full_group_count
+        };
+
+        for _i in 0..group_count {
+            use collomatique::gen::colloscope::GroupDesc;
+            use std::collections::BTreeSet;
+
+            subject.groups.prefilled_groups.push(GroupDesc {
+                students: BTreeSet::new(),
+                can_be_extended: true,
+            });
+        }
+    }
+
+    Ok(SubjectsData { list, slot_map })
 }
 
 async fn generate_slot_groupings(
@@ -390,17 +542,17 @@ async fn generate_colloscope_data(
     use collomatique::gen::colloscope::*;
 
     let general = generate_general_data(db_conn);
-    let subjects = generate_subjects(db_conn);
     let incompatibilities = generate_incompatibilies(db_conn).await?;
-    let students = generate_students(db_conn, &incompatibilities.id_map);
+    let students = generate_students(db_conn, &incompatibilities.id_map).await?;
+    let subjects = generate_subjects(db_conn, &students.id_map);
     let slot_groupings = generate_slot_groupings(db_conn);
     let grouping_incompats = generate_grouping_incompats(db_conn);
 
     Ok(ValidatedData::new(
         general.await?,
-        subjects.await?,
+        subjects.await?.list,
         incompatibilities.list,
-        students.await?.list,
+        students.list,
         slot_groupings.await?,
         grouping_incompats.await?,
     )?)
