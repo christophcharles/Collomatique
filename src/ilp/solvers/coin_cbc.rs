@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::{Config, FeasableConfig, Problem};
+use crate::ilp::{Config, FeasableConfig, Problem, VariableType};
 
 #[derive(Debug, Clone)]
 pub struct Solver {
@@ -85,21 +85,36 @@ impl Solver {
         let cols: BTreeMap<_, _> = problem
             .get_variables()
             .iter()
-            .map(|(v, t)| {
-                use crate::ilp::VariableType;
-                match t {
-                    VariableType::Bool => (v.clone(), model.add_binary()),
+            .map(|(v, t)| match t {
+                VariableType::Bool => (v.clone(), model.add_binary()),
+                VariableType::Integer(range) => {
+                    let col = model.add_integer();
+                    model.set_col_lower(col, *range.start() as f64);
+                    model.set_col_upper(col, *range.end() as f64);
+                    (v.clone(), col)
                 }
             })
             .collect();
 
         for (var, col) in &cols {
-            let value = if init_config.get_bool(var).expect("Variable should be valid") {
-                1.
-            } else {
-                0.
-            };
-            model.set_col_initial_solution(*col, value);
+            match problem
+                .get_variables()
+                .get(var)
+                .expect("Variable should be valid")
+            {
+                VariableType::Bool => {
+                    let value = if init_config.get_bool(var).expect("Variable should be valid") {
+                        1.
+                    } else {
+                        0.
+                    };
+                    model.set_col_initial_solution(*col, value);
+                }
+                VariableType::Integer(_range) => {
+                    let value = init_config.get_i32(var).expect("Variable should be valid") as f64;
+                    model.set_col_initial_solution(*col, value);
+                }
+            }
         }
 
         for constraint in problem.get_constraints() {
@@ -135,16 +150,28 @@ impl Solver {
         use coin_cbc::Sense;
         cbc_model.model.set_obj_sense(Sense::Minimize);
         for (var, col) in &cbc_model.cols {
-            let value = if init_config.get_bool(var).expect("Variable should be valid") {
-                1.
-            } else {
-                0.
-            };
-            // Try minimizing the number of changes with respect to the config
-            // So if a variable is true in the config, false should be penalized
-            // And if a variable is false in the config, true should be penalized
-            // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-            cbc_model.model.set_obj_coeff(*col, 1. - 2. * value);
+            match init_config
+                .get_problem()
+                .get_variables()
+                .get(var)
+                .expect("Variable should be valid")
+            {
+                VariableType::Bool => {
+                    let value = if init_config.get_bool(var).expect("Variable should be valid") {
+                        1.
+                    } else {
+                        0.
+                    };
+                    // Try minimizing the number of changes with respect to the config
+                    // So if a variable is true in the config, false should be penalized
+                    // And if a variable is false in the config, true should be penalized
+                    // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+                    cbc_model.model.set_obj_coeff(*col, 1. - 2. * value);
+                }
+                VariableType::Integer(_range) => {
+                    // We have to ignore...
+                }
+            }
         }
     }
 
@@ -153,7 +180,6 @@ impl Solver {
         sol: &'b coin_cbc::Solution,
         cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        use crate::ilp::VariableType;
         use coin_cbc::raw::{SecondaryStatus, Status};
         use std::collections::BTreeMap;
 
@@ -178,7 +204,7 @@ impl Solver {
             .collect();
 
         let config = problem
-            .config_from(bool_vars)
+            .config_from_bools(bool_vars)
             .expect("Variables should be valid");
         Some(
             config
