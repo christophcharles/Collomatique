@@ -16,26 +16,28 @@ enum Objective {
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn find_closest_solution<'a>(
+    fn find_closest_solution_with_time_limit<'a>(
         &self,
         config: &Config<'a, V, P>,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        self.solve_internal(config, Objective::MinimumDistance)
+        self.solve_internal(config, Objective::MinimumDistance, time_limit_in_seconds)
     }
 
     fn solve<'a>(
         &self,
-        problem: &'a Problem<V, P>,
+        config_hint: &Config<'a, V, P>,
         minimize_objective: bool,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        let init_config = problem.default_config();
         self.solve_internal(
-            &init_config,
+            config_hint,
             if minimize_objective {
                 Objective::MinimumObjectiveFn
             } else {
                 Objective::None
             },
+            time_limit_in_seconds,
         )
     }
 }
@@ -65,6 +67,7 @@ impl Solver {
         &self,
         init_config: &Config<'a, V, P>,
         objective: Objective,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
         // When everything is solved for some reason this is sometimes an issue...
         if let Some(result) = init_config.clone().into_feasable() {
@@ -79,6 +82,10 @@ impl Solver {
         let mut model = highs_problem.problem.try_optimise(Sense::Minimise).ok()?;
         if self.disable_logging {
             model.make_quiet();
+        }
+
+        if let Some(time_limit) = time_limit_in_seconds {
+            model.set_option("time_limit", f64::from(time_limit));
         }
 
         let solved_problem = model.try_solve().ok()?;
@@ -183,12 +190,8 @@ impl Solver {
         solved_model: &'b highs::SolvedModel,
     ) -> Option<FeasableConfig<'a, V, P>> {
         use crate::ilp::VariableType;
-        use highs::HighsModelStatus;
         use std::collections::BTreeMap;
 
-        if solved_model.status() != HighsModelStatus::Optimal {
-            return None;
-        }
         let solution = solved_model.get_solution();
         let columns = solution.columns();
 
@@ -219,10 +222,6 @@ impl Solver {
         let config = problem
             .config_from(bool_vars, i32_vars)
             .expect("Variables should be valid");
-        Some(
-            config
-                .into_feasable()
-                .expect("Config from highs should be feasable"),
-        )
+        config.into_feasable()
     }
 }

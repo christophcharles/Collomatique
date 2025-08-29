@@ -16,26 +16,28 @@ enum Objective {
 
 use super::{FeasabilitySolver, ProblemRepr, VariableName};
 impl<V: VariableName, P: ProblemRepr<V>> FeasabilitySolver<V, P> for Solver {
-    fn find_closest_solution<'a>(
+    fn find_closest_solution_with_time_limit<'a>(
         &self,
         config: &Config<'a, V, P>,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        self.solve_internal(config, Objective::MinimumDistance)
+        self.solve_internal(config, Objective::MinimumDistance, time_limit_in_seconds)
     }
 
     fn solve<'a>(
         &self,
-        problem: &'a Problem<V, P>,
+        config_hint: &Config<'a, V, P>,
         minimize_objective: bool,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        let init_config = problem.default_config();
         self.solve_internal(
-            &init_config,
+            config_hint,
             if minimize_objective {
                 Objective::MinimumObjectiveFn
             } else {
                 Objective::None
             },
+            time_limit_in_seconds,
         )
     }
 }
@@ -66,6 +68,7 @@ impl Solver {
         &self,
         init_config: &Config<'a, V, P>,
         objective: Objective,
+        time_limit_in_seconds: Option<u32>,
     ) -> Option<FeasableConfig<'a, V, P>> {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
@@ -86,6 +89,13 @@ impl Solver {
             }
             Objective::MinimumObjectiveFn => self.add_objective_fn(&mut cbc_model, problem),
             Objective::None => {}
+        }
+
+        if let Some(time_limit) = time_limit_in_seconds {
+            cbc_model.model.set_parameter("timeMode", "elapsed");
+            cbc_model
+                .model
+                .set_parameter("seconds", &time_limit.to_string());
         }
 
         let sol = cbc_model.model.solve();
@@ -223,15 +233,7 @@ impl Solver {
         sol: &'b coin_cbc::Solution,
         cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        use coin_cbc::raw::{SecondaryStatus, Status};
         use std::collections::BTreeMap;
-
-        if sol.raw().status() != Status::Finished {
-            return None;
-        }
-        if sol.raw().secondary_status() != SecondaryStatus::HasSolution {
-            return None;
-        }
 
         let var_types = problem.get_variables();
         let bool_vars: BTreeMap<_, _> = cols
@@ -261,10 +263,6 @@ impl Solver {
         let config = problem
             .config_from(bool_vars, i32_vars)
             .expect("Variables should be valid");
-        Some(
-            config
-                .into_feasable()
-                .expect("Config from coin_cbc should be feasable"),
-        )
+        config.into_feasable()
     }
 }
