@@ -875,12 +875,8 @@ impl Storage for Store {
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
         enabled: bool,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         incompat_for_student::set(&self.pool, student_id, incompat_id, enabled)
     }
     fn incompat_for_student_get(
