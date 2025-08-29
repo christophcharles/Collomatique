@@ -259,26 +259,7 @@ pub enum WeekOutput {
 impl Week {
     fn generate_title_text(&self) -> String {
         let week_number = self.data.first_week_in_period + self.data.week_num_in_period;
-        match &self.data.global_first_week {
-            Some(global_start_date) => {
-                let start_date = global_start_date
-                    .inner()
-                    .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
-                    .expect("Valid start date");
-                let end_date = start_date
-                    .checked_add_days(chrono::Days::new(6))
-                    .expect("Valid end date");
-                format!(
-                    "Semaine {} du {} au {}",
-                    week_number + 1,
-                    start_date.format("%d/%m/%Y").to_string(),
-                    end_date.format("%d/%m/%Y").to_string(),
-                )
-            }
-            None => {
-                format!("Semaine {}", week_number + 1)
-            }
-        }
+        super::super::generate_week_title(&self.data.global_first_week, week_number)
     }
 }
 

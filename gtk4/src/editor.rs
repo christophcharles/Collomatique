@@ -805,6 +805,32 @@ impl EditorPanel {
     }
 }
 
+fn generate_week_title(
+    global_first_week: &Option<collomatique_time::NaiveMondayDate>,
+    week_number: usize,
+) -> String {
+    match global_first_week {
+        Some(global_start_date) => {
+            let start_date = global_start_date
+                .inner()
+                .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
+                .expect("Valid start date");
+            let end_date = start_date
+                .checked_add_days(chrono::Days::new(6))
+                .expect("Valid end date");
+            format!(
+                "Semaine {} du {} au {}",
+                week_number + 1,
+                start_date.format("%d/%m/%Y").to_string(),
+                end_date.format("%d/%m/%Y").to_string(),
+            )
+        }
+        None => {
+            format!("Semaine {}", week_number + 1)
+        }
+    }
+}
+
 fn generate_period_title(
     global_first_week: &Option<collomatique_time::NaiveMondayDate>,
     index: usize,
