@@ -33,6 +33,7 @@ rustPlatform.buildRustPackage rec {
         python3
         pkg-config
         makeBinaryWrapper
+        cbc # We need it for tests
     ];
 
     buildInputs = [
