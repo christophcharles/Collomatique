@@ -47,7 +47,11 @@ enum ShellExtraCommand {
 
 fn open_collomatique_file(create: bool, path: &std::path::Path) -> Result<json::JsonStore> {
     if create {
-        Ok(json::JsonStore::new())
+        if path.try_exists()? {
+            Err(anyhow!("Cannot create file - it already exists"))
+        } else {
+            Ok(json::JsonStore::new())
+        }
     } else {
         Ok(json::JsonStore::from_json_file(path)?)
     }
