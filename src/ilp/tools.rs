@@ -108,4 +108,18 @@ impl<'a, 'b: 'a> ConfigRepr<'a, 'b> {
         }
         true
     }
+
+    pub fn neighbours(&self) -> Vec<ConfigRepr> {
+        let mut output = vec![];
+
+        for i in 0..self.values.len() {
+            let mut neighbour = self.clone();
+
+            neighbour.values[i] = 1 - neighbour.values[i];
+
+            output.push(neighbour);
+        }
+
+        output
+    }
 }
