@@ -144,7 +144,7 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp,
         >,
     ) -> Option<PanelNumbers> {
-        let first_op = aggregated_op.inner().first()?;
+        let first_op = aggregated_op.inner().last()?;
         Self::inner_op_to_panel_number(first_op.inner())
     }
 }
