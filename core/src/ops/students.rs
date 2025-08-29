@@ -128,9 +128,126 @@ impl StudentsUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<PreCleaningOp<StudentsUpdateWarning>> {
-        todo!()
+        match self {
+            Self::AddNewStudent(_student) => None,
+            Self::DeleteStudent(student_id) => {
+                let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return None;
+                };
+
+                for (group_list_id, group_list) in &data.get_data().get_group_lists().group_list_map
+                {
+                    if group_list.prefilled_groups.contains_student(*student_id) {
+                        let new_prefilled_groups = collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                            groups: group_list.prefilled_groups.groups.iter().map(
+                                |g| collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                                    sealed: g.sealed,
+                                    students: g.students.iter().copied().filter(|id| *id != *student_id).collect(),
+                                }
+                            ).collect(),
+                        };
+                        return Some(PreCleaningOp {
+                            warning: StudentsUpdateWarning::LoosePrefilledGroup(
+                                *student_id,
+                                *group_list_id,
+                            ),
+                            ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::PrefillGroupList(
+                                *group_list_id,
+                                new_prefilled_groups,
+                            ))],
+                        });
+                    }
+                    if group_list.params.excluded_students.contains(student_id) {
+                        let mut new_params = group_list.params.clone();
+                        new_params.excluded_students.remove(student_id);
+                        return Some(PreCleaningOp {
+                            warning: StudentsUpdateWarning::LooseExclusionFromGroupList(
+                                *student_id,
+                                *group_list_id,
+                            ),
+                            ops: vec![UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
+                                *group_list_id,
+                                new_params,
+                            ))],
+                        });
+                    }
+                }
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if old_student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let mut ops = vec![];
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(student_id) {
+                            ops.push(UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                *period_id,
+                                *student_id,
+                                *subject_id,
+                                false,
+                            )));
+                        }
+                    }
+
+                    if !ops.is_empty() {
+                        return Some(PreCleaningOp {
+                            warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                                *student_id,
+                                *period_id,
+                            ),
+                            ops,
+                        });
+                    }
+                }
+
+                None
+            }
+            Self::UpdateStudent(student_id, student) => {
+                let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
+                else {
+                    return None;
+                };
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if old_student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    if !student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let mut ops = vec![];
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(student_id) {
+                            ops.push(UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                *period_id,
+                                *student_id,
+                                *subject_id,
+                                false,
+                            )));
+                        }
+                    }
+
+                    if !ops.is_empty() {
+                        return Some(PreCleaningOp {
+                            warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                                *student_id,
+                                *period_id,
+                            ),
+                            ops,
+                        });
+                    }
+                }
+
+                None
+            }
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
@@ -139,7 +256,110 @@ impl StudentsUpdateOp {
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::StudentId>, StudentsUpdateError> {
-        todo!()
+        match self {
+            Self::AddNewStudent(student) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Student(
+                            collomatique_state_colloscopes::StudentOp::Add(student.clone()),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Student(se) = e {
+                            match se {
+                                collomatique_state_colloscopes::StudentError::InvalidPeriodId(
+                                    period_id,
+                                ) => AddNewStudentError::InvalidPeriodId(period_id),
+                                _ => panic!(
+                                    "Unexpected student error during AddNewStudent: {:?}",
+                                    se
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during AddNewStudent: {:?}", e);
+                        }
+                    })?;
+                let Some(collomatique_state_colloscopes::NewId::StudentId(new_id)) = result else {
+                    panic!("Unexpected result from StudentOp::Add");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateStudent(student_id, student) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Student(
+                            collomatique_state_colloscopes::StudentOp::Update(
+                                *student_id,
+                                student.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Student(se) = e {
+                            match se {
+                                collomatique_state_colloscopes::StudentError::InvalidStudentId(
+                                    id,
+                                ) => UpdateStudentError::InvalidStudentId(id),
+                                collomatique_state_colloscopes::StudentError::InvalidPeriodId(
+                                    id,
+                                ) => UpdateStudentError::InvalidPeriodId(id),
+                                collomatique_state_colloscopes::StudentError::StudentStillHasNonTrivialAssignments(_, _, _) => {
+                                    panic!("Assignments should be cleaned before updating students");
+                                }
+                                _ => panic!(
+                                    "Unexpected student error during UpdateStudent: {:?}",
+                                    se
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during UpdateStudent: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteStudent(student_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Student(
+                            collomatique_state_colloscopes::StudentOp::Remove(*student_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Student(se) = e {
+                            match se {
+                                collomatique_state_colloscopes::StudentError::InvalidStudentId(
+                                    id,
+                                ) => DeleteStudentError::InvalidStudentId(id),
+                                collomatique_state_colloscopes::StudentError::StudentIsStillExcludedByGroupList(_, _) => {
+                                    panic!("Group lists should be cleaned before removing students");
+                                }
+                                collomatique_state_colloscopes::StudentError::StudentIsStillReferencedByPrefilledGroupList(_, _) => {
+                                    panic!("Prefilled group lists should be cleaned before removing students");
+                                }
+                                collomatique_state_colloscopes::StudentError::StudentStillHasNonTrivialAssignments(_, _, _) => {
+                                    panic!("Assignments should be cleaned before removing students");
+                                }
+                                _ => panic!(
+                                    "Unexpected teacher error during DeleteStudent: {:?}",
+                                    se
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteStudent: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
