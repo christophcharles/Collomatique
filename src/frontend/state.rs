@@ -1,14 +1,18 @@
 use std::num::NonZeroU32;
 use thiserror::Error;
 
-pub mod handles;
+mod handles;
 mod history;
+pub mod update;
 
 use crate::backend;
 use history::{
     AnnotatedGeneralOperation, AnnotatedOperation, AnnotatedWeekPatternsOperation,
     ModificationHistory, ReversibleOperation,
 };
+use update::private::ManagerInternal;
+
+pub use update::{Manager, UpdateError};
 
 use self::history::AggregatedOperations;
 
@@ -79,367 +83,104 @@ impl<T: backend::Storage> AppState<T> {
         self.mod_history.get_max_history_size()
     }
 
-    pub fn get_backend_logic(&self) -> &backend::Logic<T> {
-        &self.backend_logic
-    }
-
-    pub fn get_week_pattern_handle(&mut self, id: T::WeekPatternId) -> handles::WeekPatternHandle {
-        self.handle_managers.week_patterns.get_handle(id)
-    }
-
     pub fn set_max_history_size(&mut self, max_history_size: Option<usize>) {
         self.mod_history.set_max_history_size(max_history_size);
     }
+}
 
-    pub async fn apply(&mut self, op: Operation) -> Result<(), UpdateError<T>> {
-        let rev_op = self.build_rev_op(op).await?;
+impl<S: backend::Storage> update::private::ManagerInternal for AppState<S> {
+    type Storage = S;
 
-        self.update_internal_state(&rev_op.forward).await?;
-
-        let aggregated_ops = AggregatedOperations::new(vec![rev_op]);
-        self.mod_history.apply(aggregated_ops);
-
-        Ok(())
+    fn get_backend_logic(&self) -> &backend::Logic<S> {
+        &self.backend_logic
+    }
+    fn get_backend_logic_mut(&mut self) -> &mut backend::Logic<S> {
+        &mut self.backend_logic
     }
 
-    pub fn can_undo(&self) -> bool {
-        self.mod_history.can_undo()
+    fn get_handle_managers(&self) -> &handles::ManagerCollection<S> {
+        &self.handle_managers
+    }
+    fn get_handle_managers_mut(&mut self) -> &mut handles::ManagerCollection<S> {
+        &mut self.handle_managers
     }
 
-    pub fn can_redo(&self) -> bool {
-        self.mod_history.can_redo()
+    fn get_history(&self) -> &ModificationHistory {
+        &self.mod_history
     }
-
-    pub async fn undo(&mut self) -> Result<(), UndoError<T::InternalError>> {
-        match self.mod_history.undo() {
-            Some(aggregated_ops) => {
-                self.update_internal_state_with_aggregated(&aggregated_ops).await.map_err(
-                    |e| match e {
-                        UpdateError::Internal(int_err) => UndoError::InternalError(int_err),
-                        _ => panic!("Data should be consistent as it was automatically build from previous state"),
-                    }
-                )?;
-                Ok(())
-            }
-            None => Err(UndoError::HistoryDepleted),
-        }
-    }
-
-    pub async fn redo(&mut self) -> Result<(), RedoError<T::InternalError>> {
-        match self.mod_history.redo() {
-            Some(aggregated_ops) => {
-                self.update_internal_state_with_aggregated(&aggregated_ops).await.map_err(
-                    |e| match e {
-                        UpdateError::Internal(int_err) => RedoError::InternalError(int_err),
-                        _ => panic!("Data should be consistent as it was automatically build from previous state"),
-                    }
-                )?;
-                Ok(())
-            }
-            None => Err(RedoError::HistoryFullyRewounded),
-        }
+    fn get_history_mut(&mut self) -> &mut ModificationHistory {
+        &mut self.mod_history
     }
 }
 
-#[derive(Debug, Error)]
-pub enum UpdateError<T: backend::Storage, IntError = <T as backend::Storage>::InternalError>
-where
-    IntError: std::fmt::Debug + std::error::Error,
-{
-    #[error("Error in storage backend: {0:?}")]
-    Internal(#[from] IntError),
-    #[error("Cannot set week_count: some week_patterns must be truncated")]
-    WeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
-    #[error("Cannot set interrogations_per_week range: the range must be non-empty")]
-    InterrogationsPerWeekRangeIsEmpty,
-    #[error("Cannot add the week pattern: it references weeks beyond week_count")]
-    WeekNumberTooBig(u32),
-    #[error("Cannot remove the week pattern: it is referenced by the database")]
-    WeekPatternDependanciesRemaining(
-        Vec<backend::WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
-    ),
+#[derive(Debug)]
+
+pub struct AppSession<'a, T: update::Manager> {
+    op_manager: &'a mut T,
+    session_history: ModificationHistory,
 }
 
-impl<T: backend::Storage> AppState<T> {
-    async fn build_backward_general_op(
-        &mut self,
-        op: &AnnotatedGeneralOperation,
-    ) -> Result<AnnotatedGeneralOperation, T::InternalError> {
-        let backward = match op {
-            AnnotatedGeneralOperation::SetWeekCount(_new_week_count) => {
-                let general_data = self.backend_logic.general_data_get().await?;
-                AnnotatedGeneralOperation::SetWeekCount(general_data.week_count)
-            }
-            AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(_max_interrogations_per_day) => {
-                let general_data = self.backend_logic.general_data_get().await?;
-                AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(
-                    general_data.max_interrogations_per_day,
-                )
-            }
-            AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(_interrogations_per_week) => {
-                let general_data = self.backend_logic.general_data_get().await?;
-                AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(
-                    general_data.interrogations_per_week,
-                )
-            }
-        };
-        Ok(backward)
+impl<'a, T: update::Manager> AppSession<'a, T> {
+    pub fn new(op_manager: &'a mut T) -> Self {
+        AppSession {
+            op_manager,
+            session_history: ModificationHistory::new(),
+        }
     }
 
-    async fn build_backward_week_patterns_op(
-        &mut self,
-        op: &AnnotatedWeekPatternsOperation,
-    ) -> Result<AnnotatedWeekPatternsOperation, T::InternalError> {
-        let backward = match op {
-            AnnotatedWeekPatternsOperation::Create(handle, _pattern) => {
-                AnnotatedWeekPatternsOperation::Remove(*handle)
-            }
-            AnnotatedWeekPatternsOperation::Remove(handle) => {
-                let week_pattern_id = self
-                    .handle_managers
-                    .week_patterns
-                    .get_id(*handle)
-                    .expect("week pattern to remove should exist");
-                let pattern = self
-                    .backend_logic
-                    .week_patterns_get(week_pattern_id)
-                    .await
-                    .map_err(|e| match e {
-                        backend::IdError::InvalidId(id) => {
-                            panic!("id ({:?}) from the handle manager should be valid", id)
-                        }
-                        backend::IdError::InternalError(int_err) => int_err,
-                    })?;
-                AnnotatedWeekPatternsOperation::Create(*handle, pattern)
-            }
-            AnnotatedWeekPatternsOperation::Update(handle, _new_pattern) => {
-                let week_pattern_id = self
-                    .handle_managers
-                    .week_patterns
-                    .get_id(*handle)
-                    .expect("week pattern to update should exist");
-                let pattern = self
-                    .backend_logic
-                    .week_patterns_get(week_pattern_id)
-                    .await
-                    .map_err(|e| match e {
-                        backend::IdError::InvalidId(id) => {
-                            panic!("id ({:?}) from the handle manager should be valid", id)
-                        }
-                        backend::IdError::InternalError(int_err) => int_err,
-                    })?;
-                AnnotatedWeekPatternsOperation::Update(*handle, pattern)
-            }
-        };
-        Ok(backward)
+    pub fn commit(mut self) {
+        self.commit_internal()
     }
 
-    async fn build_rev_op(
-        &mut self,
-        op: Operation,
-    ) -> Result<ReversibleOperation, T::InternalError> {
-        let forward = AnnotatedOperation::annotate(op, &mut self.handle_managers);
-        let backward = match &forward {
-            AnnotatedOperation::General(op) => {
-                AnnotatedOperation::General(self.build_backward_general_op(op).await?)
-            }
-            AnnotatedOperation::WeekPatterns(op) => {
-                AnnotatedOperation::WeekPatterns(self.build_backward_week_patterns_op(op).await?)
-            }
-        };
-        let rev_op = ReversibleOperation { forward, backward };
-        Ok(rev_op)
-    }
+    pub async fn cancel(mut self) {
+        while self.can_undo() {
+            let Err(e) = self.undo().await else {
+                continue;
+            };
 
-    async fn update_general_state(
-        &mut self,
-        op: &AnnotatedGeneralOperation,
-    ) -> Result<(), UpdateError<T>> {
-        match op {
-            AnnotatedGeneralOperation::SetWeekCount(new_week_count) => {
-                let mut general_data = self.backend_logic.general_data_get().await?;
-                general_data.week_count = *new_week_count;
-                self.backend_logic
-                    .general_data_set(&general_data)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedError::CheckFailed(data) => {
-                            UpdateError::WeekPatternsNeedTruncating(data)
-                        }
-                        backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                Ok(())
-            }
-            AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(
-                new_max_interrogations_per_day,
-            ) => {
-                let mut general_data = self.backend_logic.general_data_get().await?;
-                general_data.max_interrogations_per_day = *new_max_interrogations_per_day;
-                self.backend_logic
-                    .general_data_set(&general_data)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedError::CheckFailed(_data) => {
-                            panic!("General data should be valid as modifying max_interrogations_per_day has no dependancy")
-                        }
-                        backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                Ok(())
-            }
-            AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(
-                new_interrogations_per_week,
-            ) => {
-                if let Some(range) = new_interrogations_per_week {
-                    if range.is_empty() {
-                        return Err(UpdateError::InterrogationsPerWeekRangeIsEmpty);
-                    }
-                }
-                let mut general_data = self.backend_logic.general_data_get().await?;
-                general_data.interrogations_per_week = new_interrogations_per_week.clone();
-                self.backend_logic
-                    .general_data_set(&general_data)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedError::CheckFailed(_data) => {
-                            panic!("General data should be valid as modifying interrogations_per_week has no dependancy")
-                        }
-                        backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                Ok(())
+            match e {
+                UndoError::HistoryDepleted => panic!("can_undo call should have garanteed that history is not depleted"),
+                UndoError::InternalError(int_err) => panic!(
+                    "Error while cancelling session. Backend end might be in an inconsistant state.\n{}",
+                    int_err
+                ),
             }
         }
     }
 
-    async fn update_week_patterns_state(
-        &mut self,
-        op: &AnnotatedWeekPatternsOperation,
-    ) -> Result<(), UpdateError<T>> {
-        match op {
-            AnnotatedWeekPatternsOperation::Create(week_pattern_handle, pattern) => {
-                let new_id = self
-                    .backend_logic
-                    .week_patterns_add(pattern)
-                    .await
-                    .map_err(|e| match e {
-                        backend::WeekPatternError::WeekNumberTooBig(week_number) => {
-                            UpdateError::WeekNumberTooBig(week_number)
-                        }
-                        backend::WeekPatternError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                    })?;
-                self.handle_managers
-                    .week_patterns
-                    .update_handle(*week_pattern_handle, Some(new_id));
-                Ok(())
-            }
-            AnnotatedWeekPatternsOperation::Remove(week_pattern_handle) => {
-                let week_pattern_id = self
-                    .handle_managers
-                    .week_patterns
-                    .get_id(*week_pattern_handle)
-                    .expect("week pattern to remove should exist");
-                self.backend_logic
-                    .week_patterns_remove(week_pattern_id)
-                    .await
-                    .map_err(|e| match e {
-                        backend::CheckedIdError::InvalidId(id) => {
-                            panic!("id ({:?}) from the handle manager should be valid", id)
-                        }
-                        backend::CheckedIdError::InternalError(int_err) => {
-                            UpdateError::Internal(int_err)
-                        }
-                        backend::CheckedIdError::CheckFailed(dependancies) => {
-                            UpdateError::WeekPatternDependanciesRemaining(dependancies)
-                        }
-                    })?;
-                self.handle_managers
-                    .week_patterns
-                    .update_handle(*week_pattern_handle, None);
-                Ok(())
-            }
-            AnnotatedWeekPatternsOperation::Update(week_pattern_handle, pattern) => {
-                let week_pattern_id = self
-                    .handle_managers
-                    .week_patterns
-                    .get_id(*week_pattern_handle)
-                    .expect("week pattern to update should exist");
-                self.backend_logic
-                    .week_patterns_update(week_pattern_id, pattern)
-                    .await
-                    .map_err(|e| match e {
-                        backend::WeekPatternIdError::WeekNumberTooBig(week_number) => {
-                            UpdateError::WeekNumberTooBig(week_number)
-                        }
-                        backend::WeekPatternIdError::InternalError(int_error) => {
-                            UpdateError::Internal(int_error)
-                        }
-                        backend::WeekPatternIdError::InvalidId(id) => {
-                            panic!("id ({:?}) from the handle manager should be valid", id)
-                        }
-                    })?;
-                Ok(())
-            }
-        }
+    fn commit_internal(&mut self) {
+        let aggregated_ops = self.session_history.build_aggregated_ops();
+        self.op_manager.get_history_mut().apply(aggregated_ops);
+    }
+}
+
+impl<'a, T: update::Manager> Drop for AppSession<'a, T> {
+    fn drop(&mut self) {
+        self.commit_internal()
+    }
+}
+
+impl<'a, T: update::Manager> ManagerInternal for AppSession<'a, T> {
+    type Storage = T::Storage;
+
+    fn get_backend_logic(&self) -> &backend::Logic<Self::Storage> {
+        <T as ManagerInternal>::get_backend_logic(&self.op_manager)
+    }
+    fn get_backend_logic_mut(&mut self) -> &mut backend::Logic<Self::Storage> {
+        self.op_manager.get_backend_logic_mut()
     }
 
-    async fn update_internal_state(
-        &mut self,
-        op: &AnnotatedOperation,
-    ) -> Result<(), UpdateError<T>> {
-        match op {
-            AnnotatedOperation::General(op) => self.update_general_state(op).await?,
-            AnnotatedOperation::WeekPatterns(op) => self.update_week_patterns_state(op).await?,
-        }
-        Ok(())
+    fn get_handle_managers(&self) -> &handles::ManagerCollection<Self::Storage> {
+        self.op_manager.get_handle_managers()
+    }
+    fn get_handle_managers_mut(&mut self) -> &mut handles::ManagerCollection<Self::Storage> {
+        self.op_manager.get_handle_managers_mut()
     }
 
-    async fn update_internal_state_with_aggregated(
-        &mut self,
-        aggregated_ops: &AggregatedOperations,
-    ) -> Result<(), UpdateError<T>> {
-        let ops = aggregated_ops.inner();
-
-        let mut error = None;
-        let mut count = 0;
-
-        for rev_op in ops {
-            let result = self.update_internal_state(&rev_op.forward).await;
-
-            if let Err(err) = result {
-                error = Some(err);
-                break;
-            }
-
-            count += 1;
-        }
-
-        let Some(err) = error else {
-            return Ok(());
-        };
-
-        let skip_size = ops.len() - count;
-        for rev_op in ops.iter().rev().skip(skip_size) {
-            let result = self.update_internal_state(&rev_op.backward).await;
-
-            if let Err(e) = result {
-                panic!(
-                    r#"Failed to reverse failed aggregated operations.
-Initial failed op: {:?}
-Initial error: {:?}
-Problematic op to reverse: {:?}
-Error in reversing: {:?}"#,
-                    ops[count], err, rev_op, e,
-                );
-            }
-        }
-
-        Err(err)
+    fn get_history(&self) -> &ModificationHistory {
+        &self.session_history
+    }
+    fn get_history_mut(&mut self) -> &mut ModificationHistory {
+        &mut self.session_history
     }
 }
