@@ -43,12 +43,22 @@ pub enum UpdateError<IntError: std::error::Error> {
     GroupListRemoved(GroupListHandle),
     #[error("Group list has inconsistent student mapping")]
     GroupListWithInconsistentStudentMapping,
-    #[error("GRoup list references a bad student (probably removed) of id {0:?}")]
+    #[error("Group list references a bad student (probably removed) of id {0:?}")]
     GroupListBadStudent(StudentHandle),
     #[error("Cannot remove incompat: it is referenced by the database")]
     GroupListDependanciesRemaining(Vec<SubjectHandle>),
     #[error("Subject corresponding to handle {0:?} was previously removed")]
     SubjectRemoved(SubjectHandle),
+    #[error("Subject references a bad subject group (probably removed) of id {0:?}")]
+    SubjectBadSubjectGroup(SubjectGroupHandle),
+    #[error("Subject references a bad incompat (probably removed) of id {0:?}")]
+    SubjectBadIncompat(IncompatHandle),
+    #[error("Subject references a bad group list (probably removed) of id {0:?}")]
+    SubjectBadGroupList(GroupListHandle),
+    #[error("Cannot remove subject: it is referenced by the database")]
+    SubjectDependanciesRemaining(Vec<backend::SubjectDependancy<TimeSlotHandle, StudentHandle>>),
+    #[error("Cannot update subject: a student is still registerd")]
+    SubjectWithStudentRegistered(StudentHandle),
     #[error("Time slot corresponding to handle {0:?} was previously removed")]
     TimeSlotRemoved(TimeSlotHandle),
     #[error("Grouping corresponding to handle {0:?} was previously removed")]
@@ -112,6 +122,7 @@ pub enum ReturnHandle {
     SubjectGroup(SubjectGroupHandle),
     Incompat(IncompatHandle),
     GroupList(GroupListHandle),
+    Subject(SubjectHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -1639,7 +1650,8 @@ impl<T: ManagerInternal> Manager for T {
 
 pub(super) mod private {
     use self::backend::{
-        DataStatusWithId, DataStatusWithIdAndInvalidState, SubjectGroupDependancy,
+        DataStatusWithId, DataStatusWithIdAndInvalidState, SubjectDependancy,
+        SubjectGroupDependancy,
     };
 
     use super::*;
@@ -2259,6 +2271,151 @@ pub(super) mod private {
         }
     }
 
+    pub async fn update_subjects_state<T: ManagerInternal>(
+        manager: &mut T,
+        op: &AnnotatedSubjectsOperation,
+    ) -> Result<ReturnHandle, UpdateError<<T::Storage as backend::Storage>::InternalError>> {
+        match op {
+            AnnotatedSubjectsOperation::Create(subject_handle, subject) => {
+                let subject_backend = match convert_subject_from_handles(
+                    subject.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId3::Ok => {
+                            panic!("DataStatusWithIdAndInvalidState::Ok is not an error")
+                        }
+                        backend::DataStatusWithId3::BadCrossId1(subject_group_handle) => {
+                            return Err(UpdateError::SubjectBadSubjectGroup(subject_group_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId2(incompat_handle) => {
+                            return Err(UpdateError::SubjectBadIncompat(incompat_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId3(group_list_handle) => {
+                            return Err(UpdateError::SubjectBadGroupList(group_list_handle))
+                        }
+                    },
+                };
+                let new_id = manager
+                    .get_backend_logic_mut()
+                    .subjects_add(&subject_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross3Error::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::Cross3Error::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3Error::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3Error::InvalidCrossId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .subjects
+                    .update_handle(*subject_handle, Some(new_id));
+                Ok(ReturnHandle::Subject(*subject_handle))
+            }
+            AnnotatedSubjectsOperation::Remove(subject_handle) => {
+                let subject_id = manager
+                    .get_handle_managers()
+                    .subjects
+                    .get_id(*subject_handle)
+                    .ok_or(UpdateError::SubjectRemoved(*subject_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .subjects_remove(subject_id)
+                    .await
+                    .map_err(|e| match e {
+                        backend::CheckedIdError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::CheckedIdError::InternalError(int_err) => {
+                            UpdateError::Internal(int_err)
+                        }
+                        backend::CheckedIdError::CheckFailed(dependancies) => {
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| match dep {
+                                    SubjectDependancy::Student(id) => SubjectDependancy::Student(
+                                        manager.get_handle_managers_mut().students.get_handle(id),
+                                    ),
+                                    SubjectDependancy::TimeSlot(id) => SubjectDependancy::TimeSlot(
+                                        manager.get_handle_managers_mut().time_slots.get_handle(id),
+                                    ),
+                                })
+                                .collect();
+                            UpdateError::SubjectDependanciesRemaining(new_dependancies)
+                        }
+                    })?;
+                manager
+                    .get_handle_managers_mut()
+                    .subjects
+                    .update_handle(*subject_handle, None);
+                Ok(ReturnHandle::NoHandle)
+            }
+            AnnotatedSubjectsOperation::Update(subject_handle, subject) => {
+                let subject_backend = match convert_subject_from_handles(
+                    subject.clone(),
+                    manager.get_handle_managers(),
+                ) {
+                    Ok(val) => val,
+                    Err(err) => match err {
+                        backend::DataStatusWithId3::Ok => {
+                            panic!("DataStatusWithIdAndInvalidState::Ok is not an error")
+                        }
+                        backend::DataStatusWithId3::BadCrossId1(subject_group_handle) => {
+                            return Err(UpdateError::SubjectBadSubjectGroup(subject_group_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId2(incompat_handle) => {
+                            return Err(UpdateError::SubjectBadIncompat(incompat_handle))
+                        }
+                        backend::DataStatusWithId3::BadCrossId3(group_list_handle) => {
+                            return Err(UpdateError::SubjectBadGroupList(group_list_handle))
+                        }
+                    },
+                };
+                let subject_id = manager
+                    .get_handle_managers()
+                    .subjects
+                    .get_id(*subject_handle)
+                    .ok_or(UpdateError::SubjectRemoved(*subject_handle))?;
+                manager
+                    .get_backend_logic_mut()
+                    .subjects_update(subject_id, &subject_backend)
+                    .await
+                    .map_err(|e| match e {
+                        backend::Cross3IdWithDepError::InternalError(int_error) => {
+                            UpdateError::Internal(int_error)
+                        }
+                        backend::Cross3IdWithDepError::InvalidCrossId1(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdWithDepError::InvalidCrossId2(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdWithDepError::InvalidCrossId3(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdWithDepError::InvalidId(id) => {
+                            panic!("id ({:?}) from the handle manager should be valid", id)
+                        }
+                        backend::Cross3IdWithDepError::BlockingDependancy(id) => {
+                            UpdateError::SubjectWithStudentRegistered(
+                                manager.get_handle_managers_mut().students.get_handle(id),
+                            )
+                        }
+                    })?;
+                Ok(ReturnHandle::NoHandle)
+            }
+        }
+    }
+
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
@@ -2271,7 +2428,7 @@ pub(super) mod private {
             AnnotatedOperation::SubjectGroups(op) => update_subject_groups_state(manager, op).await,
             AnnotatedOperation::Incompats(op) => update_incompats_state(manager, op).await,
             AnnotatedOperation::GroupLists(op) => update_group_lists_state(manager, op).await,
-            AnnotatedOperation::Subjects(_op) => todo!(),
+            AnnotatedOperation::Subjects(op) => update_subjects_state(manager, op).await,
             AnnotatedOperation::TimeSlots(_op) => todo!(),
             AnnotatedOperation::Groupings(_op) => todo!(),
             AnnotatedOperation::GroupingIncompats(_op) => todo!(),
