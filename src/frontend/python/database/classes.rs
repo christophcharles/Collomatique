@@ -78,6 +78,32 @@ pub struct WeekPatternHandle {
     pub handle: state::WeekPatternHandle,
 }
 
+impl From<&state::WeekPatternHandle> for WeekPatternHandle {
+    fn from(value: &state::WeekPatternHandle) -> Self {
+        WeekPatternHandle {
+            handle: value.clone(),
+        }
+    }
+}
+
+impl From<state::WeekPatternHandle> for WeekPatternHandle {
+    fn from(value: state::WeekPatternHandle) -> Self {
+        WeekPatternHandle::from(&value)
+    }
+}
+
+impl From<&WeekPatternHandle> for state::WeekPatternHandle {
+    fn from(value: &WeekPatternHandle) -> Self {
+        value.handle.clone()
+    }
+}
+
+impl From<WeekPatternHandle> for state::WeekPatternHandle {
+    fn from(value: WeekPatternHandle) -> Self {
+        state::WeekPatternHandle::from(&value)
+    }
+}
+
 #[pyclass(eq)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeekPattern {
