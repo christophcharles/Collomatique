@@ -258,7 +258,7 @@ pub struct Problem<V: VariableName> {
     constraints: BTreeSet<linexpr::Constraint<V>>,
     constants: BTreeMap<V, bool>,
     eval_fn: EvalFn<V>,
-    nd_problem: ndtools::NdProblem,
+    nd_problem: ndtools::NdProblem<V>,
 }
 
 impl<V: VariableName> std::fmt::Display for Problem<V> {
@@ -409,6 +409,10 @@ impl<'a, V: VariableName> Config<'a, V> {
     pub fn max_distance_to_constraint(&self) -> f32 {
         self.nd_config
             .max_distance_to_constraint(&self.problem.nd_problem)
+    }
+
+    pub fn compute_lhs(&self) -> BTreeMap<linexpr::Constraint<V>, i32> {
+        self.nd_config.compute_lhs(&self.problem.nd_problem)
     }
 
     pub fn is_feasable(&self) -> bool {

@@ -5,19 +5,27 @@ use super::*;
 
 use ndarray::{Array, Array1, Array2, ArrayView};
 
+use linexpr::VariableName;
 #[derive(Debug, Clone, Default)]
-pub struct NdProblem {
+pub struct NdProblem<V: VariableName> {
     leq_mat: Array2<i32>,
     leq_constants: Array1<i32>,
     eq_mat: Array2<i32>,
     eq_constants: Array1<i32>,
+    constraints_map: BTreeMap<linexpr::Constraint<V>, ConstraintRef>,
 }
 
-impl NdProblem {
-    pub fn new<'a, V: linexpr::VariableName, I: IntoIterator<Item = &'a linexpr::Constraint<V>>>(
+#[derive(Debug, Clone)]
+enum ConstraintRef {
+    Leq(usize),
+    Eq(usize),
+}
+
+impl<V: VariableName> NdProblem<V> {
+    pub fn new<'a, I: IntoIterator<Item = &'a linexpr::Constraint<V>>>(
         variables_vec: &'a Vec<V>,
         constraints: I,
-    ) -> NdProblem {
+    ) -> NdProblem<V> {
         let p = variables_vec.len();
 
         let mut leq_mat = Array2::zeros((0, p));
@@ -25,6 +33,8 @@ impl NdProblem {
 
         let mut leq_constants_vec = vec![];
         let mut eq_constants_vec = vec![];
+
+        let mut constraints_map = BTreeMap::new();
 
         for c in constraints {
             let mut current_row = Array::zeros(p);
@@ -38,10 +48,12 @@ impl NdProblem {
             match c.get_sign() {
                 linexpr::Sign::Equals => {
                     eq_mat.push_row(ArrayView::from(&current_row)).unwrap();
+                    constraints_map.insert(c.clone(), ConstraintRef::Eq(eq_constants_vec.len()));
                     eq_constants_vec.push(cst);
                 }
                 linexpr::Sign::LessThan => {
                     leq_mat.push_row(ArrayView::from(&current_row)).unwrap();
+                    constraints_map.insert(c.clone(), ConstraintRef::Leq(leq_constants_vec.len()));
                     leq_constants_vec.push(cst);
                 }
             }
@@ -55,6 +67,7 @@ impl NdProblem {
             leq_constants,
             eq_mat,
             eq_constants,
+            constraints_map,
         }
     }
 
@@ -116,7 +129,7 @@ impl PartialOrd for NdConfig {
 }
 
 impl NdConfig {
-    pub fn max_distance_to_constraint(&self, nd_problem: &NdProblem) -> f32 {
+    pub fn max_distance_to_constraint<V: VariableName>(&self, nd_problem: &NdProblem<V>) -> f32 {
         let mut max_dist = 0.0f32;
         let p = nd_problem.leq_mat.shape()[1];
 
@@ -151,7 +164,27 @@ impl NdConfig {
         max_dist
     }
 
-    pub fn is_feasable(&self, nd_problem: &NdProblem) -> bool {
+    pub fn compute_lhs<V: VariableName>(
+        &self,
+        nd_problem: &NdProblem<V>,
+    ) -> BTreeMap<linexpr::Constraint<V>, i32> {
+        let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
+        let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
+
+        let mut output = BTreeMap::new();
+
+        for (c, r) in &nd_problem.constraints_map {
+            let val = match r {
+                ConstraintRef::Eq(num) => eq_column[*num],
+                ConstraintRef::Leq(num) => leq_column[*num],
+            };
+            output.insert(c.clone(), val);
+        }
+
+        output
+    }
+
+    pub fn is_feasable<V: VariableName>(&self, nd_problem: &NdProblem<V>) -> bool {
         let leq_column = nd_problem.leq_mat.dot(&self.values) + &nd_problem.leq_constants;
         let eq_column = nd_problem.eq_mat.dot(&self.values) + &nd_problem.eq_constants;
 
