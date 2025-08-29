@@ -183,7 +183,8 @@ impl<V: UsableData> Objective<V> {
     /// Returns the reversed objective.
     ///
     /// This keeps the same expression but reverses the sense of optimization.
-    /// Beware ! This is almost always *not* what you want to do.
+    /// 
+    /// **Beware !** This is almost always *not* what you want to do.
     ///
     /// ```
     /// # use collomatique_ilp::{LinExpr, Objective, ObjectiveSense};
