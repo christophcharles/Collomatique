@@ -79,7 +79,7 @@ fn test_sa() {
     sa_optimizer.set_init_config(config);
 
     let mut random_gen = crate::ilp::random::DefaultRndGen::new();
-    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
+    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new();
     let solution = sa_optimizer
         .iterate(dijkstra_solver, &mut random_gen)
         .best_in(2);
@@ -87,19 +87,19 @@ fn test_sa() {
 
     assert_eq!(
         solution.expect("Solution found").0.inner().clone(),
-        pb.config_from(["x12", "y11", "y22", "x21"])
+        pb.config_from(["x12", "y11", "y22", "x21"]).repr()
     );
 
     let config = pb.config_from(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
     sa_optimizer.set_init_config(config);
 
-    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
+    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new();
     let solution = sa_optimizer
         .iterate(dijkstra_solver, &mut random_gen)
         .best_in(2);
 
     assert_eq!(
         solution.expect("Solution found").0.inner().clone(),
-        pb.config_from(["x12", "y11", "y22", "x21"])
+        pb.config_from(["x12", "y11", "y22", "x21"]).repr()
     );
 }

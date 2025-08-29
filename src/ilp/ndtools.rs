@@ -118,13 +118,19 @@ impl<'a> PartialOrd for ConfigRepr<'a> {
     }
 }
 
-impl<'a> From<ConfigRepr<'a>> for Config<'a> {
-    fn from(value: ConfigRepr<'a>) -> Self {
+impl<'a> From<&ConfigRepr<'a>> for Config<'a> {
+    fn from(value: &ConfigRepr<'a>) -> Self {
         let mut config = value.problem.default_config();
         for (i, var) in value.problem.variables.iter().enumerate() {
             *config.get_mut(var).expect("Variable declared in config") = value.values[i] == 1;
         }
         config
+    }
+}
+
+impl<'a> From<ConfigRepr<'a>> for Config<'a> {
+    fn from(value: ConfigRepr<'a>) -> Self {
+        Config::from(&value)
     }
 }
 
@@ -173,6 +179,15 @@ impl<'a> ConfigRepr<'a> {
 
         output
     }
+
+    pub fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> ConfigRepr<'a> {
+        let mut output = self.clone();
+
+        let i = random_gen.rand_in_range(0..self.values.len());
+        output.values[i] = 1 - output.values[i];
+
+        output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -185,5 +200,17 @@ impl<'a> FeasableConfigRepr<'a> {
 
     pub fn inner(&self) -> &ConfigRepr<'a> {
         &self.0
+    }
+}
+
+impl<'a> From<&FeasableConfigRepr<'a>> for FeasableConfig<'a> {
+    fn from(value: &FeasableConfigRepr<'a>) -> Self {
+        unsafe { Config::from(value.inner()).into_feasable_unchecked() }
+    }
+}
+
+impl<'a> From<FeasableConfigRepr<'a>> for FeasableConfig<'a> {
+    fn from(value: FeasableConfigRepr<'a>) -> Self {
+        FeasableConfig::from(&value)
     }
 }
