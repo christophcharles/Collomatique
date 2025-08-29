@@ -28,7 +28,7 @@ pub mod teachers;
 /// Each student and teacher has its own card with name and contacts.
 /// There are not used for the colloscope solving process
 /// but can help produce a nice colloscope output with contact info.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct PersonWithContact {
     /// Surname of the person
     ///

@@ -8,6 +8,8 @@ use relm4::{
 
 use collomatique_core::ops::TeachersUpdateOp;
 
+mod dialog;
+
 #[derive(Debug)]
 pub enum TeachersInput {
     Update(
@@ -18,6 +20,7 @@ pub enum TeachersInput {
     DeleteTeacherClicked(collomatique_state_colloscopes::TeacherId),
     AddTeacherClicked,
     FilterChanged(usize),
+    TeacherEditResult(collomatique_state_colloscopes::teachers::Teacher),
 }
 
 #[derive(Debug)]
@@ -47,6 +50,8 @@ pub struct Teachers {
         Controller<crate::widgets::contact_list::Widget<collomatique_state_colloscopes::TeacherId>>,
 
     filter_dropdown: Controller<crate::widgets::droplist::Widget>,
+
+    dialog: Controller<dialog::Dialog>,
 }
 
 impl Teachers {
@@ -146,6 +151,14 @@ impl Component for Teachers {
                     TeachersInput::FilterChanged(num)
                 }
             });
+        let dialog = dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialog::DialogOutput::Accepted(teacher_data) => {
+                    TeachersInput::TeacherEditResult(teacher_data)
+                }
+            });
         let model = Teachers {
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
@@ -154,6 +167,7 @@ impl Component for Teachers {
             current_list: vec![],
             contact_list,
             filter_dropdown,
+            dialog,
         };
         let contact_list_widget = model.contact_list.widget();
         let widgets = view_output!();
@@ -175,9 +189,28 @@ impl Component for Teachers {
             }
             TeachersInput::EditTeacherClicked(id) => {
                 self.teacher_modification_reason = TeacherModificationReason::Edit(id);
+                let teacher_data = self
+                    .teachers
+                    .teacher_map
+                    .get(&id)
+                    .expect("Teacher id should be valid on edit");
+                self.dialog
+                    .sender()
+                    .send(dialog::DialogInput::Show(
+                        self.subjects.clone(),
+                        teacher_data.clone(),
+                    ))
+                    .unwrap();
             }
             TeachersInput::AddTeacherClicked => {
                 self.teacher_modification_reason = TeacherModificationReason::New;
+                self.dialog
+                    .sender()
+                    .send(dialog::DialogInput::Show(
+                        self.subjects.clone(),
+                        collomatique_state_colloscopes::teachers::Teacher::default(),
+                    ))
+                    .unwrap();
             }
             TeachersInput::FilterChanged(num) => {
                 self.current_filter = match num {
@@ -191,6 +224,18 @@ impl Component for Teachers {
                     }
                 };
                 self.update_current_list();
+            }
+            TeachersInput::TeacherEditResult(teacher_data) => {
+                sender
+                    .output(match self.teacher_modification_reason {
+                        TeacherModificationReason::New => {
+                            TeachersUpdateOp::AddNewTeacher(teacher_data)
+                        }
+                        TeacherModificationReason::Edit(teacher_id) => {
+                            TeachersUpdateOp::UpdateTeacher(teacher_id, teacher_data)
+                        }
+                    })
+                    .unwrap();
             }
         }
     }
