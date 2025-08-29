@@ -49,31 +49,26 @@ impl From<PeriodId> for crate::rpc::cmd_msg::MsgPeriodId {
 }
 
 #[pyclass]
-pub struct SessionPeriods {}
-
-impl SessionPeriods {
-    fn get_data() -> collomatique_state_colloscopes::Data {
-        let result =
-            crate::rpc::send_rpc(crate::rpc::CmdMsg::GetData).expect("No error for getting data");
-        let ResultMsg::Data(serialized_data) = result else {
-            panic!("Unexpected response to GetData");
-        };
-        collomatique_state_colloscopes::Data::from(serialized_data)
-    }
+pub struct SessionPeriods {
+    pub(super) token: super::Token,
 }
 
 #[pymethods]
 impl SessionPeriods {
-    fn get_first_week(_self: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
-        Self::get_data()
+    fn get_first_week(self_: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
+        self_
+            .token
+            .get_data()
             .get_periods()
             .first_week
             .as_ref()
             .map(|x| x.clone().into())
     }
 
-    fn get_periods(_self: PyRef<'_, Self>) -> Vec<Period> {
-        Self::get_data()
+    fn get_periods(self_: PyRef<'_, Self>) -> Vec<Period> {
+        self_
+            .token
+            .get_data()
             .get_periods()
             .ordered_period_list
             .iter()
@@ -84,29 +79,27 @@ impl SessionPeriods {
             .collect()
     }
 
-    fn set_first_week(_self: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+    fn set_first_week(self_: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(match first_week {
                 Some(week) => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateFirstWeek(
                     collomatique_time::NaiveMondayDate::from(week).into_inner(),
                 ),
                 None => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeleteFirstWeek,
             }),
-        ))
-        .expect("Valid result message");
+        ));
 
         if result != ResultMsg::Ack(None) {
             panic!("Unexpected result: {:?}", result)
         }
     }
 
-    fn add(_self: PyRef<'_, Self>, week_count: usize) -> PeriodId {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+    fn add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::AddNewPeriod(week_count),
             ),
-        ))
-        .expect("Valid result message");
+        ));
 
         match result {
             ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(id))) => id.into(),
@@ -114,16 +107,15 @@ impl SessionPeriods {
         }
     }
 
-    fn update(_self: PyRef<'_, Self>, id: PeriodId, new_week_count: usize) -> PyResult<()> {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+    fn update(self_: PyRef<'_, Self>, id: PeriodId, new_week_count: usize) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdatePeriodWeekCount(
                     id.into(),
                     new_week_count,
                 ),
             ),
-        ))
-        .expect("Valid result message");
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -138,13 +130,12 @@ impl SessionPeriods {
         }
     }
 
-    fn delete(_self: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+    fn delete(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeletePeriod(id.into()),
             ),
-        ))
-        .expect("Valid result message");
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -159,13 +150,12 @@ impl SessionPeriods {
         }
     }
 
-    fn cut(_self: PyRef<'_, Self>, id: PeriodId, remaining_weeks: usize) -> PyResult<PeriodId> {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+    fn cut(self_: PyRef<'_, Self>, id: PeriodId, remaining_weeks: usize) -> PyResult<PeriodId> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::CutPeriod(id.into(), remaining_weeks),
             ),
-        ))
-        .expect("Valid result message");
+        ));
 
         match result {
             ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(new_id))) => Ok(new_id.into()),
@@ -183,13 +173,12 @@ impl SessionPeriods {
         }
     }
 
-    fn merge_with_previous(_self: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+    fn merge_with_previous(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::MergeWithPreviousPeriod(id.into()),
             ),
-        ))
-        .expect("Valid result message");
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -208,12 +197,12 @@ impl SessionPeriods {
     }
 
     fn update_week_status(
-        _self: PyRef<'_, Self>,
+        self_: PyRef<'_, Self>,
         id: PeriodId,
         week: usize,
         new_status: bool,
     ) -> PyResult<()> {
-        let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateWeekStatus(
                     id.into(),
@@ -221,8 +210,7 @@ impl SessionPeriods {
                     new_status,
                 ),
             ),
-        ))
-        .expect("Valid result message");
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
