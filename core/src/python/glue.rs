@@ -14,10 +14,11 @@ use crate::rpc::{
         DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
         DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningError,
         GroupListsError, IncompatibilitiesError, MergeWithPreviousPeriodError, MoveDownError,
-        MoveSlotDownError, MoveSlotUpError, MoveUpError, SlotsError, StudentsError, SubjectsError,
-        TeachersError, UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
-        UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError, UpdateSubjectError,
-        UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError, WeekPatternsError,
+        MoveSlotDownError, MoveSlotUpError, MoveUpError, PrefillGroupListError, SlotsError,
+        StudentsError, SubjectsError, TeachersError, UpdateGroupListError, UpdateIncompatError,
+        UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError,
+        UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
+        WeekPatternsError,
     },
     ErrorMsg, GuiAnswer, ResultMsg,
 };
@@ -1268,6 +1269,44 @@ impl Session {
                     DeleteGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                         format!("Invalid group list id {:?}", id),
                     )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn group_lists_prefill(
+        self_: PyRef<'_, Self>,
+        id: group_lists::GroupListId,
+        prefilled_groups: Vec<group_lists::PrefilledGroup>,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GroupLists(
+                crate::rpc::cmd_msg::GroupListsCmdMsg::PrefillGroupList(
+                    id.into(),
+                    crate::rpc::cmd_msg::GroupListPrefilledGroupsMsg {
+                        groups: prefilled_groups.into_iter().map(|x| x.into()).collect(),
+                    },
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::PrefillGroupList(e))) => {
+                match e {
+                    PrefillGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                        format!("Invalid group list id {:?}", id),
+                    )),
+                    PrefillGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                        format!("Invalid student id {:?}", id),
+                    )),
+                    PrefillGroupListError::StudentIsExcluded(group_list_id, student_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Student id {:?} is excluded from group list {:?}",
+                            student_id, group_list_id
+                        )))
+                    }
                 }
             }
             _ => panic!("Unexpected result: {:?}", result),
