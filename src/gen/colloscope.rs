@@ -2067,14 +2067,222 @@ impl<'a> IlpTranslator<'a> {
         }
     }
 
+    fn build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type<
+        T: BalancingData,
+    >(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        week_selection: &WeekSelection,
+        slot_type: &T,
+        count: usize,
+        window_size: u32,
+        range: &std::ops::Range<u32>,
+        k: usize,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for (slot_num, slot) in subject.slots.iter().enumerate() {
+            if !range.contains(&slot.start.week) {
+                continue;
+            }
+            if !week_selection.selection.contains(&slot.start.week) {
+                continue;
+            }
+            if !slot_type.is_slot_relevant(slot) {
+                continue;
+            }
+
+            expr = expr
+                + Expr::var(Variable::GroupInSlot {
+                    subject: i,
+                    slot: slot_num,
+                    group: k,
+                });
+        }
+
+        let current_range_length = range.end - range.start;
+
+        assert!(current_range_length <= window_size);
+        let count_i32 = i32::try_from(count).expect("Slot count for balancing should fit in i32");
+        let gows = Expr::var(Variable::GroupOnWeekSelection {
+            subject: i,
+            week_selection: j,
+            group: k,
+        });
+        if current_range_length < window_size {
+            expr.leq(&(count_i32 * gows))
+        } else {
+            expr.eq(&(count_i32 * gows))
+        }
+    }
+
+    fn generate_cuts_ranges(&self) -> Vec<std::ops::Range<u32>> {
+        let mut output = Vec::new();
+
+        let mut prev = 0;
+        for cut in &self.data.general.periodicity_cuts {
+            output.push(prev..cut.get());
+            prev = cut.get();
+        }
+
+        output.push(prev..self.data.general.week_count.get());
+
+        output
+    }
+
+    fn generate_rolling_ranges(
+        &self,
+        initial_ranges: Vec<std::ops::Range<u32>>,
+        window_size: u32,
+    ) -> Vec<std::ops::Range<u32>> {
+        let mut output = Vec::new();
+
+        for range in initial_ranges {
+            let range_size = range.end - range.start;
+            if window_size >= range_size {
+                output.push(range);
+                continue;
+            }
+
+            let start = range.start;
+            let end = range.end - window_size;
+            for i in start..end {
+                output.push(i..(i + window_size));
+            }
+        }
+
+        output
+    }
+
+    fn generate_ranges_for_balancing<T: BalancingData>(
+        &self,
+        subject: &Subject,
+        week_selection: &WeekSelection,
+        week_data: &BTreeMap<T, usize>,
+        allow_cuts: bool,
+    ) -> (Vec<std::ops::Range<u32>>, u32) {
+        assert!(!week_selection.selection.is_empty());
+
+        let total_count_usize: usize = week_data.iter().map(|(_, c)| *c).sum();
+        let total_count = u32::try_from(total_count_usize)
+            .expect("Number of slots for balancing data should fit in u32");
+
+        let window_size = total_count * subject.period.get();
+
+        let initial_ranges = if allow_cuts {
+            self.generate_cuts_ranges()
+        } else {
+            vec![0..self.data.general.week_count.get()]
+        };
+
+        let rolling_ranges = self.generate_rolling_ranges(initial_ranges, window_size);
+
+        let first_week_in_selection = week_selection.selection.first().cloned().unwrap();
+        let last_week_in_selection = week_selection.selection.last().cloned().unwrap();
+
+        (
+            rolling_ranges
+                .into_iter()
+                .filter(|range| {
+                    (range.start >= first_week_in_selection)
+                        && (range.end <= last_week_in_selection + 1)
+                })
+                .collect(),
+            window_size,
+        )
+    }
+
+    fn build_balancing_constraints_for_subject_strict_internal_for_week_selection<
+        T: BalancingData,
+    >(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        week_selection: &WeekSelection,
+        week_data: &BTreeMap<T, usize>,
+        allow_cuts: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        if week_selection.selection.is_empty() {
+            return BTreeSet::new();
+        }
+
+        let (ranges, window_size) =
+            self.generate_ranges_for_balancing(subject, week_selection, week_data, allow_cuts);
+
+        let mut output = BTreeSet::new();
+
+        for range in ranges {
+            for (slot_type, &count) in week_data {
+                for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                    output.insert(
+                        self.build_balancing_constraints_for_subject_strict_internal_for_range_group_and_slot_type(
+                            i,
+                            subject,
+                            j,
+                            week_selection,
+                            slot_type,
+                            count,
+                            window_size,
+                            &range,
+                            k,
+                        )
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
+    fn build_balancing_constraints_for_subject_strict_internal<T: BalancingData>(
+        &self,
+        i: usize,
+        subject: &Subject,
+        data: &BTreeMap<WeekSelection, BTreeMap<T, usize>>,
+        allow_cuts: bool,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (j, (week_selection, week_data)) in data.iter().enumerate() {
+            constraints.extend(
+                self.build_balancing_constraints_for_subject_strict_internal_for_week_selection(
+                    i,
+                    subject,
+                    j,
+                    week_selection,
+                    week_data,
+                    allow_cuts,
+                ),
+            );
+        }
+
+        constraints
+    }
+
     fn build_balancing_constraints_for_subject_strict(
         &self,
-        _i: usize,
-        _subject: &Subject,
-        _bo: &BalancingObject,
-        _allow_cuts: bool,
+        i: usize,
+        subject: &Subject,
+        bo: &BalancingObject,
+        allow_cuts: bool,
     ) -> BTreeSet<Constraint<Variable>> {
-        todo!()
+        match &bo {
+            BalancingObject::Teachers(data) => self
+                .build_balancing_constraints_for_subject_strict_internal(
+                    i, subject, data, allow_cuts,
+                ),
+            BalancingObject::Timeslots(data) => self
+                .build_balancing_constraints_for_subject_strict_internal(
+                    i, subject, data, allow_cuts,
+                ),
+            BalancingObject::TeachersAndTimeslots(data) => self
+                .build_balancing_constraints_for_subject_strict_internal(
+                    i, subject, data, allow_cuts,
+                ),
+        }
     }
 
     fn build_balancing_constraints(&self) -> BTreeSet<Constraint<Variable>> {
