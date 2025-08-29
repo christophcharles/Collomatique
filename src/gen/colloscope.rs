@@ -1451,6 +1451,10 @@ impl<'a> IlpTranslator<'a> {
         let mut expr = Expr::constant(0);
 
         for (i, subject) in self.data.subjects.iter().enumerate() {
+            if subject.is_tutorial {
+                // ignore tutorial sessions for interrogation count
+                continue;
+            }
             for (j, slot) in subject.slots.iter().enumerate() {
                 if slot.start.week != week {
                     continue;
