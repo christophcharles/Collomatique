@@ -78,6 +78,8 @@ pub enum AppInput {
     Quit,
     RequestCloseFile,
     CloseFile,
+    RequestSave,
+    RequestSaveAs,
 }
 
 relm4::new_action_group!(AppActionGroup, "app");
@@ -213,13 +215,15 @@ impl SimpleComponent for AppModel {
             })
         };
         let save_action: RelmAction<SaveAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestSave);
             })
         };
         let save_as_action: RelmAction<SaveAsAction> = {
+            let sender = sender.clone();
             RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
+                sender.input(AppInput::RequestSaveAs);
             })
         };
         let undo_action: RelmAction<UndoAction> = {
@@ -396,6 +400,26 @@ impl SimpleComponent for AppModel {
                     .loading
                     .sender()
                     .send(loading::LoadingInput::StopLoading)
+                    .unwrap();
+            }
+            AppInput::RequestSave => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::SaveClicked)
+                    .unwrap();
+            }
+            AppInput::RequestSaveAs => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::SaveAsClicked)
                     .unwrap();
             }
         }

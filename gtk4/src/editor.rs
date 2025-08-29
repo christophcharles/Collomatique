@@ -1,25 +1,33 @@
 use adw::prelude::NavigationPageExt;
 use gtk::prelude::{ButtonExt, WidgetExt};
+use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
-use relm4::{ComponentParts, ComponentSender, SimpleComponent};
+use relm4::{Component, ComponentParts, ComponentSender, Controller, SimpleComponent};
 use std::path::PathBuf;
 
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
+use crate::dialogs;
+
 #[derive(Debug)]
 pub enum EditorInput {
+    Ignore,
     NewFile {
         file_name: Option<PathBuf>,
         data: collomatique_state_colloscopes::Data,
         dirty: bool,
     },
+    SaveCurrentFileAs(PathBuf),
+    SaveAsClicked,
+    SaveClicked,
 }
 
 pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data>,
     dirty: bool,
+    save_dialog: Controller<dialogs::open_save::Dialog>,
 }
 
 impl EditorPanel {
@@ -102,10 +110,13 @@ impl SimpleComponent for EditorPanel {
                         pack_end = &gtk::Box {
                             add_css_class: "linked",
                             gtk::Button::with_label("Enregistrer") {
-                                set_sensitive: false,
+                                #[watch]
+                                set_sensitive: model.dirty,
+                                connect_clicked => EditorInput::SaveClicked,
                             },
                             gtk::Button {
                                 set_icon_name: "document-save-as",
+                                connect_clicked => EditorInput::SaveAsClicked,
                             },
                         },
                     },
@@ -149,20 +160,32 @@ impl SimpleComponent for EditorPanel {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let save_dialog = dialogs::open_save::Dialog::builder()
+            .transient_for_native(&root)
+            .launch(dialogs::open_save::Type::Save)
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::open_save::DialogOutput::Cancel => EditorInput::Ignore,
+                dialogs::open_save::DialogOutput::FileSelected(path) => {
+                    EditorInput::SaveCurrentFileAs(path)
+                }
+            });
+
         let model = EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
             dirty: false,
+            save_dialog,
         };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
+            EditorInput::Ignore => {}
             EditorInput::NewFile {
                 file_name,
                 data,
@@ -172,6 +195,30 @@ impl SimpleComponent for EditorPanel {
                 self.data = AppState::new(data);
                 self.dirty = dirty;
             }
+            EditorInput::SaveClicked => match &self.file_name {
+                Some(path) => {
+                    sender.input(EditorInput::SaveCurrentFileAs(path.clone()));
+                }
+                None => {
+                    sender.input(EditorInput::SaveAsClicked);
+                }
+            },
+            EditorInput::SaveAsClicked => {
+                self.save_dialog
+                    .sender()
+                    .send(dialogs::open_save::DialogInput::ShowWithDefault(
+                        match &self.file_name {
+                            Some(path) => {
+                                dialogs::open_save::DefaultFile::ExistingFile(path.clone())
+                            }
+                            None => dialogs::open_save::DefaultFile::SuggestedName(
+                                "FichierSansNom.colloscope".into(),
+                            ),
+                        },
+                    ))
+                    .unwrap();
+            }
+            EditorInput::SaveCurrentFileAs(_path) => {}
         }
     }
 }
