@@ -318,16 +318,17 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(EditorUpdateOp::GeneralPlanning(op))
             });
 
-        let check_script_dialog =
-            check_script::Dialog::builder()
-                .launch(())
-                .forward(sender.input_sender(), |msg| match msg {
-                    check_script::DialogOutput::Run(path, script) => {
-                        EditorInput::RunScript(path, script)
-                    }
-                });
+        let check_script_dialog = check_script::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                check_script::DialogOutput::Run(path, script) => {
+                    EditorInput::RunScript(path, script)
+                }
+            });
 
         let run_script_dialog = run_script::Dialog::builder()
+            .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |_| EditorInput::Ignore);
 
