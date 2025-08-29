@@ -10,7 +10,12 @@
 //! not actually handle reading and writing from a file. You can use [load_data_from_file]
 //! and [save_data_to_file] for this.
 
+mod decode;
+mod encode;
 mod json;
+
+pub use decode::{Caveats, DecodeError};
+pub use json::Version;
 
 use collomatique_state_colloscopes::Data;
 use std::io;
@@ -27,8 +32,11 @@ pub enum DeserializationError {
     /// Except for programming errors, this means either the
     /// file is corrupted or it is ill-formed (which usually means
     /// it is not a colloscope file)
-    #[error("Invalid JSON structure in colloscope file")]
+    #[error("Invalid JSON structure in colloscope file: {0}")]
     InvalidJson(#[from] serde_json::Error),
+    /// Well-formed JSON structure but issues when decoding it
+    #[error("Error whild decoding the colloscope file: {0}")]
+    Decode(#[from] DecodeError),
 }
 
 /// Deserialize the content of a colloscope file
@@ -38,8 +46,13 @@ pub enum DeserializationError {
 /// in-memory [Data] representation.
 ///
 /// This can fail for numerous reasons, described by [DeserializeError].
-pub fn deserialize_data(_file_content: &str) -> Result<Data, DeserializationError> {
-    todo!()
+///
+/// Even in case of success, the deserialization might only be partial. This
+/// can happen for instance if we try to open a file from a newer version
+/// of Collomatique. The type [Caveats] list possible issues in this situation.
+pub fn deserialize_data(file_content: &str) -> Result<(Data, Vec<Caveats>), DeserializationError> {
+    let json_data = serde_json::from_str::<json::JsonData>(file_content)?;
+    Ok(decode::decode(&json_data)?)
 }
 
 /// Serialize the content of a colloscope file
@@ -49,8 +62,9 @@ pub fn deserialize_data(_file_content: &str) -> Result<Data, DeserializationErro
 /// represented as a UTF-8 string.
 ///
 /// This cannot fail as [Data] is always a valid representation.
-pub fn serialize_data(_data: &Data) -> String {
-    todo!()
+pub fn serialize_data(data: &Data) -> String {
+    let json_data = encode::encode(data);
+    serde_json::to_string_pretty(&json_data).expect("Serializing to JSON should not fail")
 }
 
 /// Errors when loading data from a file
@@ -72,7 +86,11 @@ pub enum LoadError {
 /// Load [Data] from an existing file
 ///
 /// This is a convenience function encapsulating [deserialize_data].
-pub async fn load_data_from_file(file_path: &Path) -> Result<Data, LoadError> {
+///
+/// Even in case of success, the deserialization might only be partial. This
+/// can happen for instance if we try to open a file from a newer version
+/// of Collomatique. The type [Caveats] list possible issues in this situation.
+pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, Vec<Caveats>), LoadError> {
     use tokio::fs;
     let content = fs::read_to_string(file_path).await?;
     Ok(deserialize_data(&content)?)

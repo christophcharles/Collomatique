@@ -22,14 +22,22 @@ pub struct Header {
     file_content: FileContent,
 }
 
+/// Represents a semantic version number
+///
+/// A semantic version number is structure as MAJOR.MINOR.PATCH
+/// as given by th various members
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct Version {
+    /// Major version number
     pub major: u32,
+    /// Minor version number
     pub minor: u32,
+    /// Patch version number
     pub patch: u32,
 }
 
 impl Version {
+    /// Returns the version number of the compiled Collomatique package
     pub fn current() -> Version {
         let major_str = env!("CARGO_PKG_VERSION_MAJOR");
         let minor_str = env!("CARGO_PKG_VERSION_MINOR");
@@ -86,6 +94,12 @@ impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {
         match self {
             ValidEntry::StudentList(_) => 1,
+        }
+    }
+
+    pub fn needed_entry(&self) -> bool {
+        match self {
+            ValidEntry::StudentList(_) => true,
         }
     }
 }
