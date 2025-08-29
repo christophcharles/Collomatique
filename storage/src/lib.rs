@@ -14,10 +14,11 @@ mod decode;
 mod encode;
 mod json;
 
-pub use decode::{Caveats, DecodeError};
+pub use decode::{Caveat, DecodeError};
 pub use json::Version;
 
 use collomatique_state_colloscopes::Data;
+use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
 use thiserror::Error;
@@ -50,7 +51,9 @@ pub enum DeserializationError {
 /// Even in case of success, the deserialization might only be partial. This
 /// can happen for instance if we try to open a file from a newer version
 /// of Collomatique. The type [Caveats] list possible issues in this situation.
-pub fn deserialize_data(file_content: &str) -> Result<(Data, Vec<Caveats>), DeserializationError> {
+pub fn deserialize_data(
+    file_content: &str,
+) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
     let json_data = serde_json::from_str::<json::JsonData>(file_content)?;
     Ok(decode::decode(&json_data)?)
 }
@@ -90,7 +93,7 @@ pub enum LoadError {
 /// Even in case of success, the deserialization might only be partial. This
 /// can happen for instance if we try to open a file from a newer version
 /// of Collomatique. The type [Caveats] list possible issues in this situation.
-pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, Vec<Caveats>), LoadError> {
+pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, BTreeSet<Caveat>), LoadError> {
     use tokio::fs;
     let content = fs::read_to_string(file_path).await?;
     Ok(deserialize_data(&content)?)

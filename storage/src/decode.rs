@@ -5,6 +5,8 @@
 //!
 //! The main function for this is [self::decode]
 
+use crate::json::*;
+
 use super::*;
 
 /// Error type when decoding a [json::JsonData]
@@ -12,9 +14,11 @@ use super::*;
 /// This error type describes error that happen when interpreting the file content.
 #[derive(Debug, Error)]
 pub enum DecodeError {
+    #[error("Unknown file type - this might be from a more recent version of Collomatique")]
+    UnknownFileType,
     #[error("An unknown entry requires a newer version of Collomatique")]
     UnknownNeededEntry,
-    #[error("A known entry has the wrong spec requirements")]
+    #[error("An entry has the wrong spec requirements")]
     MismatchedSpecRequirementInEntry,
 }
 
@@ -27,10 +31,10 @@ pub enum DecodeError {
 ///
 /// This type enumerates possible caveats that were encountered while decoding.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Caveats {
+pub enum Caveat {
     /// The file was opened but it was created with a newer version
     /// of Collomatique
-    CreatedWithNewerVersion(json::Version),
+    CreatedWithNewerVersion(Version),
     /// Unknown entries
     ///
     /// Some entries are unknown. They are maarked as unneeded,
@@ -40,6 +44,51 @@ pub enum Caveats {
     UnknownEntries,
 }
 
-pub fn decode(_json_data: &json::JsonData) -> Result<(Data, Vec<Caveats>), DecodeError> {
+fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), DecodeError> {
+    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+        return Err(DecodeError::UnknownFileType);
+    }
+    if header.produced_with_version > Version::current() {
+        caveats.insert(Caveat::CreatedWithNewerVersion(
+            header.produced_with_version.clone(),
+        ));
+    }
+    Ok(())
+}
+
+fn check_entries_consistency(
+    entries: &[Entry],
+    caveats: &mut BTreeSet<Caveat>,
+) -> Result<(), DecodeError> {
+    for entry in entries {
+        match &entry.content {
+            EntryContent::ValidEntry(valid_entry) => {
+                if entry.minimum_spec_version != valid_entry.minimum_spec_version() {
+                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
+                }
+                if entry.needed_entry != valid_entry.needed_entry() {
+                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
+                }
+            }
+            EntryContent::UnknownEntry(_) => {
+                if entry.minimum_spec_version <= CURRENT_SPEC_VERSION {
+                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
+                }
+                if entry.needed_entry {
+                    return Err(DecodeError::UnknownNeededEntry);
+                }
+                caveats.insert(Caveat::UnknownEntries);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn decode(json_data: &JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeError> {
+    let mut caveats = BTreeSet::new();
+
+    check_header(&json_data.header, &mut caveats)?;
+    check_entries_consistency(&json_data.entries, &mut caveats)?;
+
     todo!()
 }

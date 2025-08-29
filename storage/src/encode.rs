@@ -12,7 +12,7 @@ fn generate_header() -> Header {
     Header {
         file_type: FileType::Collomatique,
         produced_with_version: Version::current(),
-        file_content: FileContent::Colloscope,
+        file_content: FileContent::ValidFileContent(ValidFileContent::Colloscope),
     }
 }
 
