@@ -326,6 +326,8 @@ struct ValidatedJson {
 pub enum ValidationError {
     #[error("Id {0} appears twice in data")]
     DuplicatedId(u64),
+    #[error("Week pattern {0:?} has weeks outside of last week")]
+    WeekPatternWithWeekTooBig(WeekPatternId),
     #[error("Week pattern id {0:?} is referenced but does not exist")]
     BadWeekPatternId(WeekPatternId),
     #[error("Subject group id {0:?} is referenced but does not exist")]
@@ -414,6 +416,17 @@ impl JsonData {
         }
 
         None
+    }
+
+    fn validate_week_patterns(&self) -> ValidationResult<()> {
+        for (week_pattern_id, week_pattern) in &self.week_patterns {
+            if let Some(last_week) = week_pattern.weeks.last() {
+                if last_week.0 >= self.general_data.week_count.get() {
+                    return Err(ValidationError::WeekPatternWithWeekTooBig(*week_pattern_id));
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_students(&self) -> ValidationResult<()> {
@@ -558,6 +571,7 @@ impl JsonData {
             return Err(ValidationError::DuplicatedId(id));
         }
 
+        self.validate_week_patterns()?;
         self.validate_students()?;
         self.validate_incompats()?;
         self.validate_group_lists()?;
