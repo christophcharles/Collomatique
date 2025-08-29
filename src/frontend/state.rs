@@ -110,7 +110,7 @@ impl<T: backend::Storage> AppState<T> {
             Some(op) => {
                 self.update_internal_state(&op).await.map_err(
                     |e| match e {
-                        UpdateError::InternalError(int_err) => UndoError::InternalError(int_err),
+                        UpdateError::Internal(int_err) => UndoError::InternalError(int_err),
                         _ => panic!("Data should be consistent as it was automatically build from previous state"),
                     }
                 )?;
@@ -125,7 +125,7 @@ impl<T: backend::Storage> AppState<T> {
             Some(op) => {
                 self.update_internal_state(&op).await.map_err(
                     |e| match e {
-                        UpdateError::InternalError(int_err) => RedoError::InternalError(int_err),
+                        UpdateError::Internal(int_err) => RedoError::InternalError(int_err),
                         _ => panic!("Data should be consistent as it was automatically build from previous state"),
                     }
                 )?;
@@ -142,15 +142,15 @@ where
     IntError: std::fmt::Debug + std::error::Error,
 {
     #[error("Error in storage backend: {0:?}")]
-    InternalError(#[from] IntError),
+    Internal(#[from] IntError),
     #[error("Cannot set week_count: some week_patterns must be truncated")]
-    CannotSetWeekCountWeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
+    WeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
     #[error("Cannot set interrogations_per_week range: the range must be non-empty")]
-    CannotSetInterrogationsPerWeekRangeIsEmpty,
+    InterrogationsPerWeekRangeIsEmpty,
     #[error("Cannot add the week pattern: it references weeks beyond week_count")]
-    CannotAddWeekPatternWeekNumberTooBig(u32),
+    WeekNumberTooBig(u32),
     #[error("Cannot remove the week pattern: it is referenced by the database")]
-    CannotRemoveWeekPatternBecauseOfDependancies(
+    WeekPatternDependanciesRemaining(
         Vec<backend::WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
     ),
 }
@@ -241,10 +241,10 @@ impl<T: backend::Storage> AppState<T> {
                     .await
                     .map_err(|e| match e {
                         backend::CheckedError::CheckFailed(data) => {
-                            UpdateError::CannotSetWeekCountWeekPatternsNeedTruncating(data)
+                            UpdateError::WeekPatternsNeedTruncating(data)
                         }
                         backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::InternalError(int_error)
+                            UpdateError::Internal(int_error)
                         }
                     })?;
                 Ok(())
@@ -262,7 +262,7 @@ impl<T: backend::Storage> AppState<T> {
                             panic!("General data should be valid as modifying max_interrogations_per_day has no dependancy")
                         }
                         backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::InternalError(int_error)
+                            UpdateError::Internal(int_error)
                         }
                     })?;
                 Ok(())
@@ -272,7 +272,7 @@ impl<T: backend::Storage> AppState<T> {
             ) => {
                 if let Some(range) = new_interrogations_per_week {
                     if range.is_empty() {
-                        return Err(UpdateError::CannotSetInterrogationsPerWeekRangeIsEmpty);
+                        return Err(UpdateError::InterrogationsPerWeekRangeIsEmpty);
                     }
                 }
                 let mut general_data = self.backend_logic.general_data_get().await?;
@@ -285,7 +285,7 @@ impl<T: backend::Storage> AppState<T> {
                             panic!("General data should be valid as modifying interrogations_per_week has no dependancy")
                         }
                         backend::CheckedError::InternalError(int_error) => {
-                            UpdateError::InternalError(int_error)
+                            UpdateError::Internal(int_error)
                         }
                     })?;
                 Ok(())
@@ -305,10 +305,10 @@ impl<T: backend::Storage> AppState<T> {
                     .await
                     .map_err(|e| match e {
                         backend::WeekPatternError::WeekNumberTooBig(week_number) => {
-                            UpdateError::CannotAddWeekPatternWeekNumberTooBig(week_number)
+                            UpdateError::WeekNumberTooBig(week_number)
                         }
                         backend::WeekPatternError::InternalError(int_error) => {
-                            UpdateError::InternalError(int_error)
+                            UpdateError::Internal(int_error)
                         }
                     })?;
                 self.handle_managers
@@ -330,10 +330,10 @@ impl<T: backend::Storage> AppState<T> {
                             panic!("id ({:?}) from the handle manager should be valid", id)
                         }
                         backend::CheckedIdError::InternalError(int_err) => {
-                            UpdateError::InternalError(int_err)
+                            UpdateError::Internal(int_err)
                         }
                         backend::CheckedIdError::CheckFailed(dependancies) => {
-                            UpdateError::CannotRemoveWeekPatternBecauseOfDependancies(dependancies)
+                            UpdateError::WeekPatternDependanciesRemaining(dependancies)
                         }
                     })?;
                 self.handle_managers
