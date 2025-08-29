@@ -522,6 +522,10 @@ pub enum Variable {
         week_modulo: u32,
     },
     UseGrouping(usize),
+    IncompatGroupForStudent {
+        incompat_group: usize,
+        student: usize,
+    },
 }
 
 impl<'a> From<&'a Variable> for Variable {
@@ -558,6 +562,10 @@ impl std::fmt::Display for Variable {
                 week_modulo,
             } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
             Variable::UseGrouping(num) => write!(f, "UG_{}", num),
+            Variable::IncompatGroupForStudent {
+                incompat_group,
+                student,
+            } => write!(f, "IGfS_{}_{}", *incompat_group, *student),
         }
     }
 }
@@ -825,6 +833,26 @@ impl<'a> IlpTranslator<'a> {
             .iter()
             .enumerate()
             .map(|(i, _grouping)| Variable::UseGrouping(i))
+            .collect()
+    }
+
+    fn build_incompat_group_for_student_variables(&self) -> BTreeSet<Variable> {
+        self.data
+            .students
+            .iter()
+            .enumerate()
+            .flat_map(|(i, student)| {
+                student.incompatibilities.iter().flat_map(move |j| {
+                    let incompat = &self.data.incompatibilities[*j];
+                    incompat
+                        .groups
+                        .iter()
+                        .map(move |k| Variable::IncompatGroupForStudent {
+                            incompat_group: *k,
+                            student: i,
+                        })
+                })
+            })
             .collect()
     }
 
@@ -2053,6 +2081,8 @@ impl<'a> IlpTranslator<'a> {
             .expect("Should not have duplicates")
             .add_variables(self.build_use_grouping_variables())
             .expect("Should not have duplicates")
+            .add_variables(self.build_incompat_group_for_student_variables())
+            .expect("Should not have duplicates")
             .add_constraints(self.build_at_most_max_groups_per_slot_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
@@ -2167,6 +2197,18 @@ impl<'a> IlpTranslator<'a> {
                     .collect()
             })
             .collect();
+        let incompat_groups_week_map = self
+            .data
+            .incompatibility_groups
+            .iter()
+            .map(|incompat_group| {
+                incompat_group
+                    .slots
+                    .iter()
+                    .map(|slot| slot.start.week)
+                    .collect()
+            })
+            .collect();
 
         IncrementalInitializer {
             period_length,
@@ -2176,6 +2218,7 @@ impl<'a> IlpTranslator<'a> {
             subject_week_map,
             subject_period,
             grouping_week_map,
+            incompat_groups_week_map,
             max_steps,
             retries,
             initializer,
@@ -2270,6 +2313,7 @@ pub struct IncrementalInitializer<T: GenericInitializer, S: GenericSolver> {
     subject_week_map: Vec<Vec<u32>>,
     subject_period: Vec<NonZeroU32>,
     grouping_week_map: Vec<BTreeSet<u32>>,
+    incompat_groups_week_map: Vec<BTreeSet<u32>>,
     max_steps: Option<usize>,
     retries: usize,
     initializer: T,
@@ -2401,6 +2445,18 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         false
     }
 
+    fn is_incompat_group_concerned_by_period(&self, incompat_group: usize, period: u32) -> bool {
+        for week in self.incompat_groups_week_map[incompat_group]
+            .iter()
+            .copied()
+        {
+            if self.is_week_in_period(week, period) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn are_subject_and_period_concerned_with_periodicity(
         &self,
         subject: usize,
@@ -2465,6 +2521,10 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
             Variable::UseGrouping(grouping) => {
                 self.is_grouping_concerned_by_period(*grouping, period)
             }
+            Variable::IncompatGroupForStudent {
+                incompat_group,
+                student: _,
+            } => self.is_incompat_group_concerned_by_period(*incompat_group, period),
         })
     }
 
