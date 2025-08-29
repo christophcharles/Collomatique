@@ -1022,12 +1022,13 @@ async fn main() -> Result<()> {
     let problem = ilp_translator
         .problem_builder()
         .eval_fn(collomatique::debuggable!(|x| {
-            if x.get(&collomatique::gen::colloscope::Variable::GroupInSlot {
-                subject: 0,
-                slot: 0,
-                group: 0,
-            })
-            .unwrap()
+            if !x
+                .get(&collomatique::gen::colloscope::Variable::GroupInSlot {
+                    subject: 0,
+                    slot: 0,
+                    group: 0,
+                })
+                .unwrap()
             {
                 100.
             } else {
@@ -1038,7 +1039,7 @@ async fn main() -> Result<()> {
 
     println!("{}", problem);
 
-    let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
+    /*let genetic_optimizer = collomatique::ilp::optimizers::genetic::Optimizer::new(&problem);
 
     let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
         collomatique::ilp::random::DefaultRndGen::new(),
@@ -1068,9 +1069,7 @@ async fn main() -> Result<()> {
             ilp_translator.read_solution(&m.config),
             m.cost
         );
-    }
-
-    /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
+    }*/
 
     let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
         collomatique::ilp::random::DefaultRndGen::new(),
@@ -1092,22 +1091,22 @@ async fn main() -> Result<()> {
             Some(config) => config,
             None => continue,
         };
-        sa_optimizer.set_init_config(init_config);
-        sa_optimizer.set_max_steps(None);
-        sa_optimizer.set_init_max_steps(None);
+        let sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(init_config);
 
         let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
-        let iterator = sa_optimizer.iterate(solver, random_gen.clone());
+        let mutation_policy =
+            collomatique::ilp::optimizers::RandomMutationPolicy::new(random_gen.clone(), 0.01);
+        let iterator = sa_optimizer.iterate(solver, random_gen.clone(), mutation_policy);
 
         for (i, (sol, cost)) in iterator.enumerate() {
-            println!(
+            eprintln!(
                 "{}: {} - {:?}",
                 i,
                 cost,
                 ilp_translator.read_solution(sol.as_ref())
             );
         }
-    }*/
+    }
 
     Ok(())
 }
