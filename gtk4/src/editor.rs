@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
-use crate::dialogs;
+use crate::tools;
 
 mod general_planning;
 
@@ -38,6 +38,8 @@ pub enum EditorOutput {
 
 #[derive(Debug)]
 pub enum EditorCommandOutput {
+    FileNotChosen,
+    FileChosen(PathBuf),
     SaveSuccessful(PathBuf),
     SaveFailed(PathBuf, String),
 }
@@ -56,7 +58,6 @@ pub struct EditorPanel {
     file_name: Option<PathBuf>,
     data: AppState<Data>,
     dirty: bool,
-    save_dialog: Controller<dialogs::open_save::Dialog>,
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
     pages_titles_map: BTreeMap<&'static str, &'static str>,
@@ -243,16 +244,6 @@ impl Component for EditorPanel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let save_dialog = dialogs::open_save::Dialog::builder()
-            .transient_for_native(&root)
-            .launch(dialogs::open_save::Type::Save)
-            .forward(sender.input_sender(), |msg| match msg {
-                dialogs::open_save::DialogOutput::Cancel => EditorInput::Ignore,
-                dialogs::open_save::DialogOutput::FileSelected(path) => {
-                    EditorInput::SaveCurrentFileAs(path)
-                }
-            });
-
         let general_planning = general_planning::GeneralPlanning::builder()
             .launch(())
             .forward(sender.input_sender(), |_| EditorInput::Ignore);
@@ -268,7 +259,6 @@ impl Component for EditorPanel {
             file_name: None,
             data: AppState::new(Data::new()),
             dirty: false,
-            save_dialog,
             toast_info: None,
             pages_names,
             pages_titles_map,
@@ -317,19 +307,20 @@ impl Component for EditorPanel {
                 }
             },
             EditorInput::SaveAsClicked => {
-                self.save_dialog
-                    .sender()
-                    .send(dialogs::open_save::DialogInput::ShowWithDefault(
-                        match &self.file_name {
-                            Some(path) => {
-                                dialogs::open_save::DefaultFile::ExistingFile(path.clone())
-                            }
-                            None => dialogs::open_save::DefaultFile::SuggestedName(
-                                "FichierSansNom.collomatique".into(),
-                            ),
-                        },
-                    ))
-                    .unwrap();
+                let file_name = self.file_name.clone();
+                sender.oneshot_command(async move {
+                    match tools::open_save::save_dialog(match &file_name {
+                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
+                        None => tools::open_save::DefaultSaveFile::SuggestedName(
+                            "FichierSansNom.collomatique".into(),
+                        ),
+                    })
+                    .await
+                    {
+                        Some(path) => EditorCommandOutput::FileChosen(path),
+                        None => EditorCommandOutput::FileNotChosen,
+                    }
+                });
             }
             EditorInput::SaveCurrentFileAs(path) => {
                 let data_copy = self.data.get_data().clone();
@@ -371,6 +362,10 @@ impl Component for EditorPanel {
         _root: &Self::Root,
     ) {
         match message {
+            EditorCommandOutput::FileNotChosen => {}
+            EditorCommandOutput::FileChosen(path) => {
+                sender.input(EditorInput::SaveCurrentFileAs(path));
+            }
             EditorCommandOutput::SaveSuccessful(path) => {
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("{} enregistré", path.to_string_lossy()),

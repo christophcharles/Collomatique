@@ -10,5 +10,6 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
+ashpd = "0.11.0"
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
