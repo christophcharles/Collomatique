@@ -101,3 +101,12 @@ impl From<collomatique_state_colloscopes::WeekPatternId> for MsgWeekPatternId {
         MsgWeekPatternId(value.inner())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgSlotId(pub u64);
+
+impl From<collomatique_state_colloscopes::SlotId> for MsgSlotId {
+    fn from(value: collomatique_state_colloscopes::SlotId) -> Self {
+        MsgSlotId(value.inner())
+    }
+}
