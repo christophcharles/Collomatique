@@ -95,9 +95,7 @@ impl From<std::io::Error> for OpenCollomatiqueFileError {
 pub type OpenCollomatiqueFileResult<T> = std::result::Result<T, OpenCollomatiqueFileError>;
 
 impl State {
-    pub fn new_with_empty_file(
-        path: Option<std::path::PathBuf>,
-    ) -> OpenCollomatiqueFileResult<Self> {
+    pub fn new_with_empty_file() -> OpenCollomatiqueFileResult<Self> {
         use collomatique::backend::Logic;
         use collomatique::frontend::state::AppState;
 
@@ -107,7 +105,7 @@ impl State {
 
         Ok(Self {
             panel: Panel::SubjectGroups,
-            path,
+            path: None,
             app_state: AppStateBox::new(app_state),
             init_state,
         })

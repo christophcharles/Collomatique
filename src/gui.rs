@@ -24,7 +24,6 @@ enum GuiMessage {
     FileLoaded(editor::OpenCollomatiqueFileResult<editor::State>),
     OpenExistingFile,
     OpenNewFile,
-    OpenNewFileWithName(std::path::PathBuf),
     GoToWelcomeScreen,
     Ignore,
 }
@@ -80,12 +79,9 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
             )
             .into(),
         ),
-        GuiMessage::OpenNewFile => Task::done(GuiMessage::FileLoaded(
-            editor::State::new_with_empty_file(None),
-        )),
-        GuiMessage::OpenNewFileWithName(file) => Task::done(GuiMessage::FileLoaded(
-            editor::State::new_with_empty_file(Some(file)),
-        )),
+        GuiMessage::OpenNewFile => {
+            Task::done(GuiMessage::FileLoaded(editor::State::new_with_empty_file()))
+        }
         GuiMessage::GoToWelcomeScreen => {
             *state = GuiState::Welcome;
             Task::none()
@@ -142,7 +138,20 @@ pub fn run_gui(create: bool, path: Option<std::path::PathBuf>) -> Result<()> {
                                         .into(),
                                     )
                                 } else {
-                                    iced::Task::done(GuiMessage::OpenNewFileWithName(file.clone()))
+                                    match collomatique::backend::json::JsonStore::new()
+                                        .to_json_file(file)
+                                    {
+                                        Ok(_) => iced::Task::done(GuiMessage::FileSelected(Some(
+                                            file.clone(),
+                                        ))),
+                                        Err(e) => Task::done(
+                                            dialogs::Message::ErrorDialog(
+                                                "Erreur à la création du fichier".into(),
+                                                e.to_string(),
+                                            )
+                                            .into(),
+                                        ),
+                                    }
                                 }
                             }
                             Err(e) => Task::done(
