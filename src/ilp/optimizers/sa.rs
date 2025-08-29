@@ -102,14 +102,17 @@ impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Ite
             }
             None => 1.0,
         };
-
-        self.current_config = config.as_ref().inner().random_neighbour(self.random_gen);
         self.k += 1;
-        if acceptance >= self.random_gen.random() {
-            self.previous_config = Some((config, config_cost));
-        }
 
-        self.previous_config.clone()
+        if let Some(neighbour) = config.as_ref().inner().random_neighbour(self.random_gen) {
+            self.current_config = neighbour;
+            if acceptance >= self.random_gen.random() {
+                self.previous_config = Some((config, config_cost));
+            }
+            self.previous_config.clone()
+        } else {
+            Some((config, config_cost))
+        }
     }
 }
 

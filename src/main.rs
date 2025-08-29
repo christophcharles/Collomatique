@@ -69,6 +69,8 @@ fn main() {
         .build()
         .unwrap();
 
+    println!("{}", pb);
+
     let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb);
 
     let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
