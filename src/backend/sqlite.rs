@@ -278,18 +278,11 @@ CREATE TABLE "collo_time_slots" (
 	FOREIGN KEY("collo_subject_id") REFERENCES "collo_subjects"("collo_subject_id")
 );
 
-CREATE TABLE "collo_ts_assignments" (
-	"collo_ts_assignment_id"	INTEGER NOT NULL,
-	"collo_time_slot_id"	INTEGER NOT NULL,
-	PRIMARY KEY("collo_ts_assignment_id" AUTOINCREMENT),
-	FOREIGN KEY("collo_time_slot_id") REFERENCES "collo_time_slots"("collo_time_slot_id")
-);
-
 CREATE TABLE "collo_weeks" (
 	"collo_week_id"	INTEGER NOT NULL,
-	"collo_ts_assignment_id"	INTEGER NOT NULL,
+	"collo_time_slot_id"	INTEGER NOT NULL,
 	"week"	INTEGER NOT NULL,
-	FOREIGN KEY("collo_ts_assignment_id") REFERENCES "collo_ts_assignments"("collo_ts_assignment_id"),
+	FOREIGN KEY("collo_time_slot_id") REFERENCES "collo_time_slots"("collo_time_slot_id"),
 	PRIMARY KEY("collo_week_id" AUTOINCREMENT)
 );
 
