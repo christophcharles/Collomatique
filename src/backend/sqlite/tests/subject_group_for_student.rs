@@ -222,7 +222,7 @@ async fn subject_group_for_student_get(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subject_group_for_student_set(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store

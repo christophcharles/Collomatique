@@ -402,7 +402,7 @@ struct GroupItemDb {
 
 #[sqlx::test]
 fn students_add(pool: sqlx::SqlitePool) {
-    let store = build_students(pool).await;
+    let mut store = build_students(pool).await;
 
     let id = unsafe {
         store.group_lists_add_unchecked(&GroupList {
@@ -714,7 +714,7 @@ fn students_add(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn group_lists_remove_one(pool: sqlx::SqlitePool) {
-    let store = build_example_group_list(pool).await;
+    let mut store = build_example_group_list(pool).await;
 
     unsafe {
         store
@@ -841,7 +841,7 @@ async fn group_lists_remove_one(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn group_lists_remove_then_add(pool: sqlx::SqlitePool) {
-    let store = build_example_group_list(pool).await;
+    let mut store = build_example_group_list(pool).await;
 
     unsafe {
         store
@@ -1030,7 +1030,7 @@ async fn group_lists_remove_then_add(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn group_lists_update(pool: sqlx::SqlitePool) {
-    let store = build_example_group_list(pool).await;
+    let mut store = build_example_group_list(pool).await;
 
     unsafe {
         store

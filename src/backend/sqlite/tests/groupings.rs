@@ -199,7 +199,7 @@ struct GroupingItemDb {
 
 #[sqlx::test]
 async fn groupings_add_one_1(pool: SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.groupings_add_unchecked(&Grouping {
@@ -241,7 +241,7 @@ async fn groupings_add_one_1(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn groupings_add_one_2(pool: SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.groupings_add_unchecked(&Grouping {
@@ -283,7 +283,7 @@ async fn groupings_add_one_2(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn groupings_add_multiple(pool: SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.groupings_add_unchecked(&Grouping {
@@ -348,7 +348,7 @@ async fn groupings_add_multiple(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn groupings_remove_one(pool: SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -372,7 +372,7 @@ async fn groupings_remove_one(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn groupings_remove_then_add(pool: SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -416,7 +416,7 @@ async fn groupings_remove_then_add(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn groupings_update(pool: SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store

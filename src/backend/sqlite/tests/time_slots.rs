@@ -502,7 +502,7 @@ async fn time_slots_get_all(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -807,7 +807,7 @@ async fn time_slots_remove_one(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -1140,7 +1140,7 @@ async fn time_slots_remove_then_add(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn time_slots_update(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -1470,7 +1470,7 @@ async fn time_slots_update(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn time_slots_add_one(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     let id = unsafe {
         store.time_slots_add_unchecked(&TimeSlot {

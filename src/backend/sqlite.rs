@@ -337,7 +337,7 @@ impl Storage for Store {
     type InternalError = Error;
 
     async fn general_data_set(
-        &self,
+        &mut self,
         general_data: &GeneralData,
     ) -> std::result::Result<(), Self::InternalError> {
         let general_data_json = GeneralDataDb {
@@ -419,7 +419,7 @@ impl Storage for Store {
         week_patterns::get_all(&self.pool)
     }
     fn week_patterns_add(
-        &self,
+        &mut self,
         pattern: &WeekPattern,
     ) -> impl core::future::Future<
         Output = std::result::Result<Self::WeekPatternId, Self::InternalError>,
@@ -427,7 +427,7 @@ impl Storage for Store {
         week_patterns::add(&self.pool, pattern)
     }
     unsafe fn week_patterns_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::WeekPatternId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::WeekPatternId>>,
@@ -435,7 +435,7 @@ impl Storage for Store {
         week_patterns::remove(&self.pool, index)
     }
     fn week_patterns_update(
-        &self,
+        &mut self,
         index: Self::WeekPatternId,
         pattern: &WeekPattern,
     ) -> impl core::future::Future<
@@ -460,14 +460,14 @@ impl Storage for Store {
         teachers::get_all(&self.pool)
     }
     fn teachers_add(
-        &self,
+        &mut self,
         teacher: &Teacher,
     ) -> impl core::future::Future<Output = std::result::Result<Self::TeacherId, Self::InternalError>>
            + Send {
         teachers::add(&self.pool, teacher)
     }
     unsafe fn teachers_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::TeacherId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::TeacherId>>,
@@ -475,7 +475,7 @@ impl Storage for Store {
         teachers::remove(&self.pool, index)
     }
     fn teachers_update(
-        &self,
+        &mut self,
         index: Self::TeacherId,
         teacher: &Teacher,
     ) -> impl core::future::Future<
@@ -500,14 +500,14 @@ impl Storage for Store {
         students::get_all(&self.pool)
     }
     fn students_add(
-        &self,
+        &mut self,
         student: &Student,
     ) -> impl core::future::Future<Output = std::result::Result<Self::StudentId, Self::InternalError>>
            + Send {
         students::add(&self.pool, student)
     }
     unsafe fn students_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::StudentId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::StudentId>>,
@@ -515,7 +515,7 @@ impl Storage for Store {
         students::remove(&self.pool, index)
     }
     fn students_update(
-        &self,
+        &mut self,
         index: Self::StudentId,
         student: &Student,
     ) -> impl core::future::Future<
@@ -546,7 +546,7 @@ impl Storage for Store {
         subject_groups::get_all(&self.pool)
     }
     fn subject_groups_add(
-        &self,
+        &mut self,
         subject_group: &SubjectGroup,
     ) -> impl core::future::Future<
         Output = std::result::Result<Self::SubjectGroupId, Self::InternalError>,
@@ -554,7 +554,7 @@ impl Storage for Store {
         subject_groups::add(&self.pool, subject_group)
     }
     unsafe fn subject_groups_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::SubjectGroupId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectGroupId>>,
@@ -562,7 +562,7 @@ impl Storage for Store {
         subject_groups::remove(&self.pool, index)
     }
     fn subject_groups_update(
-        &self,
+        &mut self,
         index: Self::SubjectGroupId,
         subject_group: &SubjectGroup,
     ) -> impl core::future::Future<
@@ -593,7 +593,7 @@ impl Storage for Store {
         incompats::get_all(&self.pool)
     }
     unsafe fn incompats_add_unchecked(
-        &self,
+        &mut self,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -604,7 +604,7 @@ impl Storage for Store {
         incompats::add(&self.pool, incompat)
     }
     unsafe fn incompats_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::IncompatId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::IncompatId>>,
@@ -612,7 +612,7 @@ impl Storage for Store {
         incompats::remove(&self.pool, index)
     }
     unsafe fn incompats_update_unchecked(
-        &self,
+        &mut self,
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
     ) -> impl core::future::Future<
@@ -646,7 +646,7 @@ impl Storage for Store {
         group_lists::get_all(&self.pool)
     }
     unsafe fn group_lists_add_unchecked(
-        &self,
+        &mut self,
         group_list: &GroupList<Self::StudentId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -657,7 +657,7 @@ impl Storage for Store {
         group_lists::add(&self.pool, group_list)
     }
     unsafe fn group_lists_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::GroupListId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupListId>>,
@@ -665,7 +665,7 @@ impl Storage for Store {
         group_lists::remove(&self.pool, index)
     }
     unsafe fn group_lists_update_unchecked(
-        &self,
+        &mut self,
         index: Self::GroupListId,
         group_list: &GroupList<Self::StudentId>,
     ) -> impl core::future::Future<
@@ -707,7 +707,7 @@ impl Storage for Store {
         subjects::get(&self.pool, index)
     }
     unsafe fn subjects_add_unchecked(
-        &self,
+        &mut self,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -723,7 +723,7 @@ impl Storage for Store {
         subjects::add(&self.pool, subject)
     }
     unsafe fn subjects_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::SubjectId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::SubjectId>>,
@@ -731,7 +731,7 @@ impl Storage for Store {
         subjects::remove(&self.pool, index)
     }
     unsafe fn subjects_update_unchecked(
-        &self,
+        &mut self,
         index: Self::SubjectId,
         subject: &Subject<Self::SubjectGroupId, Self::IncompatId, Self::GroupListId>,
     ) -> impl core::future::Future<
@@ -774,7 +774,7 @@ impl Storage for Store {
         time_slots::get_all(&self.pool)
     }
     unsafe fn time_slots_add_unchecked(
-        &self,
+        &mut self,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -785,7 +785,7 @@ impl Storage for Store {
         time_slots::add(&self.pool, time_slot)
     }
     unsafe fn time_slots_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::TimeSlotId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>,
@@ -793,7 +793,7 @@ impl Storage for Store {
         time_slots::remove(&self.pool, index)
     }
     unsafe fn time_slots_update_unchecked(
-        &self,
+        &mut self,
         index: Self::TimeSlotId,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
     ) -> impl core::future::Future<
@@ -833,7 +833,7 @@ impl Storage for Store {
         groupings::get_all(&self.pool)
     }
     unsafe fn groupings_add_unchecked(
-        &self,
+        &mut self,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -844,7 +844,7 @@ impl Storage for Store {
         groupings::add(&self.pool, grouping)
     }
     unsafe fn groupings_remove_unchecked(
-        &self,
+        &mut self,
         index: Self::GroupingId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingId>>,
@@ -852,7 +852,7 @@ impl Storage for Store {
         groupings::remove(&self.pool, index)
     }
     unsafe fn groupings_update_unchecked(
-        &self,
+        &mut self,
         index: Self::GroupingId,
         grouping: &Grouping<Self::TimeSlotId>,
     ) -> impl core::future::Future<
@@ -886,7 +886,7 @@ impl Storage for Store {
         grouping_incompats::get_all(&self.pool)
     }
     unsafe fn grouping_incompats_add_unchecked(
-        &self,
+        &mut self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> impl core::future::Future<
         Output = std::result::Result<
@@ -897,7 +897,7 @@ impl Storage for Store {
         grouping_incompats::add(&self.pool, grouping_incompat)
     }
     fn grouping_incompats_remove(
-        &self,
+        &mut self,
         index: Self::GroupingIncompatId,
     ) -> impl core::future::Future<
         Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>>,
@@ -905,7 +905,7 @@ impl Storage for Store {
         grouping_incompats::remove(&self.pool, index)
     }
     unsafe fn grouping_incompats_update_unchecked(
-        &self,
+        &mut self,
         index: Self::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> impl core::future::Future<
@@ -918,7 +918,7 @@ impl Storage for Store {
     }
 
     unsafe fn subject_group_for_student_set_unchecked(
-        &self,
+        &mut self,
         student_id: Self::StudentId,
         subject_group_id: Self::SubjectGroupId,
         subject_id: Option<Self::SubjectId>,
@@ -949,7 +949,7 @@ impl Storage for Store {
     }
 
     unsafe fn incompat_for_student_set_unchecked(
-        &self,
+        &mut self,
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
         enabled: bool,

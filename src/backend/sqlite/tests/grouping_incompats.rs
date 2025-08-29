@@ -219,7 +219,7 @@ struct GroupingIncompatItemDb {
 
 #[sqlx::test]
 async fn grouping_incompats_add_one_1(pool: SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.grouping_incompats_add_unchecked(&GroupingIncompat {
@@ -272,7 +272,7 @@ async fn grouping_incompats_add_one_1(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn grouping_incompats_add_one_2(pool: SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.grouping_incompats_add_unchecked(&GroupingIncompat {
@@ -330,7 +330,7 @@ async fn grouping_incompats_add_one_2(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn grouping_incompats_add_multiple(pool: SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.grouping_incompats_add_unchecked(&GroupingIncompat {
@@ -415,7 +415,7 @@ async fn grouping_incompats_add_multiple(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn grouping_incompats_remove_one(pool: SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     store
         .grouping_incompats_remove(super::super::grouping_incompats::Id(1))
@@ -464,7 +464,7 @@ async fn grouping_incompats_remove_one(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     store
         .grouping_incompats_remove(super::super::grouping_incompats::Id(1))
@@ -515,7 +515,7 @@ async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
 
 #[sqlx::test]
 async fn grouping_incompats_update(pool: SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
