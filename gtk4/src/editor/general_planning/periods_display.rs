@@ -120,11 +120,13 @@ impl FactoryComponent for Entry {
                 gtk::Button {
                     set_icon_name: "edit-symbolic",
                     add_css_class: "flat",
+                    set_tooltip_text: Some("Modifier la période"),
                     connect_clicked => EntryInput::EditClicked,
                 },
                 gtk::Button {
                     set_icon_name: "edit-cut-symbolic",
                     add_css_class: "flat",
+                    set_tooltip_text: Some("Découper la période"),
                     connect_clicked => EntryInput::CutClicked,
                 },
                 gtk::Box {
@@ -133,6 +135,7 @@ impl FactoryComponent for Entry {
                 gtk::Button {
                     set_icon_name: "edit-delete",
                     add_css_class: "flat",
+                    set_tooltip_text: Some("Supprimer la période"),
                     connect_clicked => EntryInput::DeleteClicked,
                 },
             },
@@ -142,57 +145,6 @@ impl FactoryComponent for Entry {
                 add_css_class: "boxed-list",
                 set_selection_mode: gtk::SelectionMode::None,
             },
-            /*gtk::ListBox {
-                set_hexpand: true,
-                add_css_class: "boxed-list",
-                set_selection_mode: gtk::SelectionMode::None,
-                append = &gtk::Box {
-                    set_hexpand: true,
-                    set_margin_all: 5,
-                    set_orientation: gtk::Orientation::Horizontal,
-                    gtk::Label {
-                        set_margin_all: 5,
-                        set_label: "Semaine 1 du 01/09/2025 au 07/09/2025"
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                    },
-                    gtk::Switch {
-                        set_active: true,
-                    },
-                },
-                append = &gtk::Box {
-                    set_hexpand: true,
-                    set_margin_all: 5,
-                    set_orientation: gtk::Orientation::Horizontal,
-                    gtk::Label {
-                        set_margin_all: 5,
-                        set_label: "Semaine 2 du 08/09/2025 au 14/09/2025"
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                    },
-                    gtk::Switch {
-                        set_active: true,
-                    },
-                },
-                append = &gtk::Box {
-                    set_hexpand: true,
-                    set_margin_all: 5,
-                    set_orientation: gtk::Orientation::Horizontal,
-                    add_css_class: "dimmed",
-                    gtk::Label {
-                        set_margin_all: 5,
-                        set_label: "Semaine 3 du 15/09/2025 au 21/09/2025"
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                    },
-                    gtk::Switch {
-                        set_active: false,
-                    },
-                },
-            }*/
         },
     }
 
