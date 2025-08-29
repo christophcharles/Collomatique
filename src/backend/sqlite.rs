@@ -646,9 +646,8 @@ impl Storage for Store {
     unsafe fn group_lists_remove_unchecked(
         &mut self,
         index: Self::GroupListId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupListId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         group_lists::remove(&self.pool, index)
     }
     unsafe fn group_lists_update_unchecked(
