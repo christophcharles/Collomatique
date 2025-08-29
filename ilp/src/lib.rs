@@ -1385,13 +1385,97 @@ impl<V: UsableData> ConfigData<V> {
     /// assert_eq!(config_data_transmute, expected_result);
     /// ```
     pub fn transmute<U: UsableData, F: FnMut(&V) -> U>(&self, mut f: F) -> ConfigData<U> {
-        ConfigData {
-            values: self
-                .values
-                .iter()
-                .map(|(var, value)| (f(var), *value))
-                .collect(),
+        self.try_transmute(|x| Some(f(x)))
+            .expect("None should never be returned")
+    }
+
+    /// Transmutes variables
+    ///
+    /// Similarly to [linexpr::LinExpr::try_transmute] and [linexpr::Constraint::try_transmute]
+    /// this functions produces a new [ConfigData] containing exactly the same data
+    /// but using a larger set of variables.
+    /// It works basically as [ConfigData::transmute] but is a faillible version thereof.
+    ///
+    /// For instance, this works without failure:
+    /// ```
+    /// # use collomatique_ilp::ConfigData;
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let config_data = ConfigData::new()
+    ///     .set(V1::A, 1.0)
+    ///     .set(V1::B, 0.0)
+    ///     .set(V1::C, 0.5);
+    ///
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// let config_data_transmute = config_data.try_transmute(|v| match v {
+    ///     V1::A => Some(V2::A),
+    ///     V1::B => Some(V2::B),
+    ///     V1::C => Some(V2::C),
+    /// }).unwrap(); // This should not fail
+    ///
+    /// let expected_result = ConfigData::new()
+    ///     .set(V2::A, 1.0)
+    ///     .set(V2::B, 0.0)
+    ///     .set(V2::C, 0.5);
+    /// assert_eq!(config_data_transmute, expected_result);
+    /// ```
+    /// But this fails because of the C variable:
+    /// ```
+    /// # use collomatique_ilp::ConfigData;
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let config_data = ConfigData::new()
+    ///     .set(V1::A, 1.0)
+    ///     .set(V1::B, 0.0)
+    ///     .set(V1::C, 0.5);
+    ///
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V3 {
+    ///     A,
+    ///     B,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// let config_data_transmute = config_data.try_transmute(|v| match v {
+    ///     V1::A => Some(V3::A),
+    ///     V1::B => Some(V3::B),
+    ///     V1::C => None,
+    /// });
+    ///
+    /// assert_eq!(config_data_transmute, None);
+    /// ```
+    pub fn try_transmute<U: UsableData, F: FnMut(&V) -> Option<U>>(
+        &self,
+        mut f: F,
+    ) -> Option<ConfigData<U>> {
+        let mut new_values = BTreeMap::new();
+
+        for (var, value) in &self.values {
+            new_values.insert(f(var)?, *value);
         }
+
+        Some(ConfigData { values: new_values })
     }
 }
 
