@@ -179,7 +179,7 @@ pub async fn update(
     .await
     .map_err(Error::from)?;
 
-    let grouping_id = sqlx::query!(
+    let rows_affected = sqlx::query!(
         "UPDATE groupings SET name = ?1 WHERE grouping_id = ?2",
         grouping.name,
         grouping_id
@@ -187,7 +187,15 @@ pub async fn update(
     .execute(&mut *conn)
     .await
     .map_err(Error::from)?
-    .last_insert_rowid();
+    .rows_affected();
+
+    if rows_affected > 1 {
+        return Err(CrossIdError::InternalError(Error::CorruptedDatabase(
+            format!("Multiple groupings with id {:?}", index),
+        )));
+    } else if rows_affected == 0 {
+        return Err(CrossIdError::InvalidId(index));
+    }
 
     for slot in &grouping.slots {
         let _ = sqlx::query!(
