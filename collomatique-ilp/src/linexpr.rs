@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests;
 
-use super::UsableData;
+use super::{UsableData, f64_is_zero};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// [LinExpr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
@@ -339,7 +339,7 @@ impl<V: UsableData> LinExpr<V> {
     /// ```
     pub fn clean(&mut self) {
         self.coefs
-            .retain(|_k, v| *v != ordered_float::OrderedFloat(0.0));
+            .retain(|_k, v| !f64_is_zero(v.into_inner()));
     }
 
     /// This works like [LinExpr::clean] but instead of changing
@@ -760,7 +760,7 @@ impl<V: UsableData> Constraint<V> {
 
 impl<V: UsableData> std::fmt::Display for LinExpr<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.coefs.is_empty() && self.constant.into_inner() == 0.0 {
+        if self.coefs.is_empty() && f64_is_zero(self.constant.into_inner()) {
             write!(f, "0.0")?;
             return Ok(());
         }
@@ -773,12 +773,12 @@ impl<V: UsableData> std::fmt::Display for LinExpr<V> {
                 write!(f, "{}*{}", value, key)?;
             }
 
-            if it.peek().is_some() || self.constant.0 != 0.0 {
+            if it.peek().is_some() || !f64_is_zero(self.constant.into_inner()) {
                 write!(f, " + ")?;
             }
         }
 
-        if self.constant.into_inner() != 0.0 || self.coefs.is_empty() {
+        if !f64_is_zero(self.constant.into_inner()) || self.coefs.is_empty() {
             if self.constant.is_sign_negative() {
                 write!(f, "({})", self.constant)?
             } else {

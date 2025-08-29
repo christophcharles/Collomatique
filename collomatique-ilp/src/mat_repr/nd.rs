@@ -13,7 +13,7 @@
 //! Still, this representation is sufficiently straightforward for testing purposes.
 
 use super::{ConfigRepr, ProblemRepr};
-use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable};
+use crate::{linexpr::EqSymbol, Constraint, UsableData, Variable, f64_is_zero, f64_is_non_negative};
 
 use ndarray::{Array1, Array2};
 use std::collections::{BTreeMap, BTreeSet};
@@ -25,7 +25,7 @@ mod tests;
 /// using [ndarray] as a backend.
 ///
 /// See [super::nd] documentation for more details.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct NdProblem<V: UsableData> {
     mat: Array2<f64>,
     constants: Array1<f64>,
@@ -56,10 +56,10 @@ impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
         let mut mat = Array2::zeros((n, p));
         let mut constants = Array1::zeros(n);
 
-        let mut constraints_symbols = Vec::with_capacity(n);
+        let mut constraint_symbols = Vec::with_capacity(n);
 
         for (i, c) in constraints.enumerate() {
-            constraints_symbols.push(c.get_symbol());
+            constraint_symbols.push(c.get_symbol());
             for (var, val) in c.coefficients() {
                 let j = variable_map[var];
                 mat[(i, j)] = val;
@@ -70,7 +70,7 @@ impl<V: UsableData> ProblemRepr<V> for NdProblem<V> {
         NdProblem {
             mat,
             constants,
-            constraint_symbols: constraints_symbols,
+            constraint_symbols,
             variable_map,
         }
     }
@@ -178,12 +178,12 @@ impl<'a, V: UsableData> ConfigRepr<'a, V> for NdConfig<'a, V> {
 
             match symb {
                 EqSymbol::Equals => {
-                    if v != 0.0 {
+                    if !f64_is_zero(v) {
                         result.insert(i);
                     }
                 }
                 EqSymbol::LessThan => {
-                    if v > 0.0 {
+                    if f64_is_non_negative(v) {
                         result.insert(i);
                     }
                 }
@@ -204,6 +204,11 @@ impl<'a, V: UsableData> Eq for NdConfig<'a, V> {}
 
 impl<'a, V: UsableData> Ord for NdConfig<'a, V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let ord = self.pb_repr.cmp(&other.pb_repr);
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+
         let l1 = self.values.len();
         let l2 = other.values.len();
 
