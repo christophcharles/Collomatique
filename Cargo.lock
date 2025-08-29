@@ -332,6 +332,7 @@ dependencies = [
  "highs",
  "indicatif",
  "ndarray",
+ "num_cpus",
  "ordered-float",
  "rand",
  "rayon",
