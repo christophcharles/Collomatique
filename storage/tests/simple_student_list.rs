@@ -1,7 +1,8 @@
 use collomatique_state_colloscopes::{
-    assignments::AssignmentsExternalData, incompats::IncompatsExternalData,
-    periods::PeriodsExternalData, slots::SlotsExternalData, subjects::SubjectsExternalData,
-    teachers::TeachersExternalData, week_patterns::WeekPatternsExternalData,
+    assignments::AssignmentsExternalData, group_lists::GroupListsExternalData,
+    incompats::IncompatsExternalData, periods::PeriodsExternalData, slots::SlotsExternalData,
+    subjects::SubjectsExternalData, teachers::TeachersExternalData,
+    week_patterns::WeekPatternsExternalData,
 };
 use collomatique_storage::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -133,6 +134,7 @@ fn decode_simple_student_list() {
         WeekPatternsExternalData::default(),
         SlotsExternalData::default(),
         IncompatsExternalData::default(),
+        GroupListsExternalData::default(),
     )
     .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::new();
@@ -189,6 +191,7 @@ fn encode_and_redecode_simple_student_list() {
         WeekPatternsExternalData::default(),
         SlotsExternalData::default(),
         IncompatsExternalData::default(),
+        GroupListsExternalData::default(),
     )
     .expect("Expected data should not have ID errors");
 

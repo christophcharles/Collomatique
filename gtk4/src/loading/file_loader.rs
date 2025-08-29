@@ -136,6 +136,7 @@ impl FileLoader {
             DecodeError::InconsistentSlotsData => "Le fichier est mal formé et est probablement corrompu.\n(Données sur les créneaux de colle incohérentes)".into(),
             DecodeError::SlotsDecodedBeforeSubjects => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des créneaux avant le bloc des matières)".into(),
             DecodeError::IllformedSlotInSubjectIncompatibilities => "Le fichier est mal formé et est probablement corrompu.\n(Incompatibilité horaire invalide)".into(),
+            DecodeError::IllformedGroupList => "Le fichier est mal formé et est probablement corrompu.\n(Liste de groupes de colles invalide)".into(),
         }
     }
 }
