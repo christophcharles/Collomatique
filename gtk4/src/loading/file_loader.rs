@@ -135,7 +135,6 @@ impl FileLoader {
             DecodeError::WeekPatternsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de schéma de semaines)".into(),
             DecodeError::InconsistentSlotsData => "Le fichier est mal formé et est probablement corrompu.\n(Données sur les créneaux de colle incohérentes)".into(),
             DecodeError::SlotsDecodedBeforeSubjects => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des créneaux avant le bloc des matières)".into(),
-            DecodeError::DuplicatedSlotInSubjectIncompatibilities => "Le fichier est mal formé et est probablement corrompu.\n(Incompatibilités horaires en double)".into(),
             DecodeError::IllformedSlotInSubjectIncompatibilities => "Le fichier est mal formé et est probablement corrompu.\n(Incompatibilité horaire invalide)".into(),
         }
     }

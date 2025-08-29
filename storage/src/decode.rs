@@ -53,8 +53,6 @@ pub enum DecodeError {
     SlotsDecodedBeforeSubjects,
     #[error("A slot is ill-formed in subject incompatibilities")]
     IllformedSlotInSubjectIncompatibilities,
-    #[error("Duplicated slot in subject incompatibilities")]
-    DuplicatedSlotInSubjectIncompatibilities,
 }
 
 impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
@@ -171,6 +169,7 @@ struct PreData {
 }
 
 mod assignment_map;
+mod incompat_list;
 mod period_list;
 mod slot_list;
 mod student_list;
@@ -208,6 +207,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::SlotList(slot_list) => {
                 slot_list::decode_entry(slot_list, &mut pre_data)?;
             }
+            ValidEntry::IncompatList(incompat_list) => {
+                incompat_list::decode_entry(incompat_list, &mut pre_data)?;
+            }
         }
     }
 
@@ -234,6 +236,7 @@ pub enum EntryTag {
     AssignmentMap,
     WeekPatternList,
     SlotList,
+    IncompatList,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -246,6 +249,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::AssignmentMap(_) => EntryTag::AssignmentMap,
             ValidEntry::WeekPatternList(_) => EntryTag::WeekPatternList,
             ValidEntry::SlotList(_) => EntryTag::SlotList,
+            ValidEntry::IncompatList(_) => EntryTag::IncompatList,
         }
     }
 }
