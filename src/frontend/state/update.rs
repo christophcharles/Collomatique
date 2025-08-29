@@ -109,7 +109,7 @@ pub enum RevError<IntError: std::error::Error> {
     TimeSlotRemoved(TimeSlotHandle),
     #[error("Grouping corresponding to handle {0:?} was previously removed")]
     GroupingRemoved(GroupingHandle),
-    #[error("Grouping ncompat corresponding to handle {0:?} was previously removed")]
+    #[error("Grouping incompat corresponding to handle {0:?} was previously removed")]
     GroupingIncompatRemoved(GroupingIncompatHandle),
 }
 
