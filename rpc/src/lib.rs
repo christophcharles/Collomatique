@@ -31,11 +31,21 @@ pub enum CompleteCmdMsg {
     GracefulExit,
 }
 
+fn trim_newline(mut s: String) -> String {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+    s
+}
+
 impl InitMsg {
     pub fn from_text_msg(data: &str) -> Result<Self, String> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(data.to_string()),
+            Err(_) => Err(trim_newline(data.to_string())),
         }
     }
 
@@ -48,7 +58,7 @@ impl OutMsg {
     pub fn from_text_msg(data: &str) -> Result<Self, String> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(data.to_string()),
+            Err(_) => Err(trim_newline(data.to_string())),
         }
     }
 
@@ -61,7 +71,7 @@ impl CompleteCmdMsg {
     pub fn from_text_msg(data: &str) -> Result<Self, String> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(data.to_string()),
+            Err(_) => Err(trim_newline(data.to_string())),
         }
     }
 

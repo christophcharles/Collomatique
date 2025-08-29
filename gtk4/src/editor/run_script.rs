@@ -1,5 +1,6 @@
 use collomatique_rpc::{CmdMsg, OutMsg};
 use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
@@ -7,14 +8,8 @@ use crate::widgets::rpc_server;
 use std::path::PathBuf;
 
 mod error_dialog;
+mod msg_display;
 mod warning_running;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum CmdDesc {
-    Success(String),
-    Warning(String),
-    Error(String),
-}
 
 pub struct Dialog {
     hidden: bool,
@@ -23,7 +18,7 @@ pub struct Dialog {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
-    commands: Vec<CmdDesc>,
+    commands: FactoryVecDeque<msg_display::Entry>,
 }
 
 #[derive(Debug)]
@@ -104,10 +99,14 @@ impl Component for Dialog {
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                         set_margin_all: 5,
-                        gtk::ListBox {
+                        #[local_ref]
+                        cmds_listbox -> gtk::ListBox {
                             set_hexpand: true,
                             add_css_class: "boxed-list",
                             set_selection_mode: gtk::SelectionMode::None,
+                        }
+                        /*gtk::ListBox {
+
                             gtk::ListBoxRow {
                                 gtk::Box {
                                     set_margin_all: 5,
@@ -150,7 +149,7 @@ impl Component for Dialog {
                                     },
                                 },
                             },
-                        }
+                        }*/
                     },
                     gtk::Expander {
                         set_margin_all: 5,
@@ -198,6 +197,10 @@ impl Component for Dialog {
                 RpcLoggerOutput::Error(e) => DialogInput::Error(e),
             });
 
+        let commands = FactoryVecDeque::builder()
+            .launch(gtk::ListBox::default())
+            .detach();
+
         let model = Dialog {
             hidden: true,
             path: PathBuf::new(),
@@ -205,8 +208,10 @@ impl Component for Dialog {
             warning_running,
             rpc_logger,
             is_running: false,
-            commands: vec![],
+            commands,
         };
+
+        let cmds_listbox = model.commands.widget();
 
         let widgets = view_output!();
 
@@ -218,7 +223,7 @@ impl Component for Dialog {
             DialogInput::Run(path, _script) => {
                 self.hidden = false;
                 self.path = path;
-                self.commands = vec![];
+                self.commands.guard().clear();
                 self.is_running = true;
                 self.rpc_logger
                     .sender()
@@ -246,9 +251,11 @@ impl Component for Dialog {
             }
             DialogInput::Cmd(cmd) => match cmd {
                 Ok(cmd_msg) => {
-                    self.commands.push(match cmd_msg {
-                        CmdMsg::Success => CmdDesc::Success("Successful command".into()),
-                        CmdMsg::Warning => CmdDesc::Warning("Failed command".into()),
+                    self.commands.guard().push_back(match cmd_msg {
+                        CmdMsg::Success => {
+                            msg_display::EntryData::Success("Successful command".into())
+                        }
+                        CmdMsg::Warning => msg_display::EntryData::Warning("Failed command".into()),
                     });
                     self.rpc_logger
                         .sender()
@@ -256,7 +263,9 @@ impl Component for Dialog {
                         .unwrap();
                 }
                 Err(e) => {
-                    self.commands.push(CmdDesc::Error(e));
+                    self.commands
+                        .guard()
+                        .push_back(msg_display::EntryData::Error(e));
                     self.rpc_logger
                         .sender()
                         .send(rpc_server::RpcLoggerInput::SendMsg(OutMsg::Invalid))
