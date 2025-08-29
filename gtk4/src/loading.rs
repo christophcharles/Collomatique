@@ -1,8 +1,10 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::RelmWidgetExt;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender};
+use relm4::{Component, ComponentParts, ComponentSender, WorkerController};
 use std::path::PathBuf;
+
+mod file_loader;
 
 #[derive(Debug)]
 pub enum LoadingInput {
@@ -24,6 +26,7 @@ pub enum LoadingCmdOutput {
 
 pub struct LoadingPanel {
     path: Option<PathBuf>,
+    worker: Option<WorkerController<file_loader::FileLoader>>,
 }
 
 impl LoadingPanel {
@@ -94,7 +97,10 @@ impl Component for LoadingPanel {
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = LoadingPanel { path: None };
+        let model = LoadingPanel {
+            path: None,
+            worker: None,
+        };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -107,15 +113,31 @@ impl Component for LoadingPanel {
                     return;
                 }
                 self.path = Some(path.clone());
-                sender.oneshot_command(async move {
+                let worker = file_loader::FileLoader::builder()
+                    .detach_worker(())
+                    .forward(sender.command_sender(), |x| match x {
+                        file_loader::FileLoadingOutput::Failed(path, error) => {
+                            LoadingCmdOutput::Failed(path, error)
+                        }
+                        file_loader::FileLoadingOutput::Loaded(path, data) => {
+                            LoadingCmdOutput::Loaded(path, data)
+                        }
+                    });
+                worker
+                    .sender()
+                    .send(file_loader::FileLoadingInput::Load(path))
+                    .unwrap();
+                self.worker = Some(worker);
+                /*sender.oneshot_command(async move {
                     match collomatique_storage::load_data_from_file(&path).await {
                         Ok((data, _caveats)) => LoadingCmdOutput::Loaded(path, data),
                         Err(e) => LoadingCmdOutput::Failed(path, e.to_string()),
                     }
-                });
+                });*/
             }
             LoadingInput::StopLoading => {
                 self.path = None;
+                self.worker = None;
             }
         }
     }
@@ -132,6 +154,7 @@ impl Component for LoadingPanel {
                     return;
                 }
                 self.path = None;
+                self.worker = None;
                 sender.output(LoadingOutput::Loaded(path, data)).unwrap();
             }
             LoadingCmdOutput::Failed(path, error) => {
@@ -139,6 +162,7 @@ impl Component for LoadingPanel {
                     return;
                 }
                 self.path = None;
+                self.worker = None;
                 sender.output(LoadingOutput::Failed(path, error)).unwrap();
             }
         }
