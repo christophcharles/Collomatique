@@ -9,8 +9,8 @@ fn expr_display_no_constant() {
 
 #[test]
 fn expr_display_floats_no_constant() {
-    let expr =
-        2.5 * Expr::<String>::var("a") - 3.2 * Expr::<String>::var("b") + 4.1 * Expr::<String>::var("c");
+    let expr = 2.5 * Expr::<String>::var("a") - 3.2 * Expr::<String>::var("b")
+        + 4.1 * Expr::<String>::var("c");
     assert_eq!(format!("{}", expr), "2.5*a + (-3.2)*b + 4.1*c");
 }
 
@@ -71,22 +71,22 @@ fn expr_display_floats_negative_constant_only() {
 }
 
 #[test]
-fn sign_display_less_than() {
-    let sign = Sign::LessThan;
-    assert_eq!(format!("{}", sign), "<=");
+fn symbol_display_less_than() {
+    let symbol = EqSymbol::LessThan;
+    assert_eq!(format!("{}", symbol), "<=");
 }
 
 #[test]
-fn sign_display_equals() {
-    let sign = Sign::Equals;
-    assert_eq!(format!("{}", sign), "=");
+fn symbol_display_equals() {
+    let symbol = EqSymbol::Equals;
+    assert_eq!(format!("{}", symbol), "=");
 }
 
 #[test]
 fn constraint_display_no_constant_less_than() {
     let expr =
         2 * Expr::<String>::var("a") - 3 * Expr::<String>::var("b") + 4 * Expr::<String>::var("c");
-        let constraint = expr.leq(&Expr::<String>::constant(0.0));
+    let constraint = expr.leq(&Expr::<String>::constant(0.0));
     assert_eq!(format!("{}", constraint), "2*a + (-3)*b + 4*c <= 0");
 }
 

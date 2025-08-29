@@ -1,8 +1,14 @@
+//! This module defines [Expr] and [Constraint].
+//! These structs are used to represent linear expressions and constraints for
+//! integer linear optimization problems within collomatique.
+
 #[cfg(test)]
 mod tests;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+/// To allow for easier representation, variable names are somewhat arbitrary.
+/// They must just satisfy the following trait.
 pub trait VariableName:
     std::fmt::Debug
     + std::fmt::Display
@@ -32,26 +38,107 @@ impl<
 {
 }
 
+/// [Expr] represents a linear expression (of the form 2*a + 3*b - 4*c + 2).
+///
+/// The coefficients are f64 and natural operations are overloaded to naturally represent
+/// operations on linear expressions.
+///
+/// There are mainly two ways to build an Expr.
+/// You can use [Expr::var]. This builds an expression containing only one variable with coefficient one.
+/// ```
+/// # use collomatique_ilp::linexpr::Expr;
+/// # use std::collections::BTreeSet;
+/// // expr represents the linear expression : "1*A"
+/// let expr = Expr::<String>::var("A");
+///
+/// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")])); // There is only "A"
+/// assert_eq!(expr.get("A"), Some(1.0)); // The coefficient for "A" is 1
+/// assert_eq!(expr.get_constant(), 0.0); // The constant is 0.0 (there is no constant)
+/// ```
+///
+/// You can use [Expr::constant]. This builds a constant expression containing no variables.
+/// ```
+/// # use collomatique_ilp::linexpr::Expr;
+/// # use std::collections::BTreeSet;
+/// // expr represents the constant linear expression equals to 42
+/// let expr = Expr::<String>::constant(42.0);
+///
+/// assert_eq!(expr.variables(), BTreeSet::new()); // There are no variables
+/// assert_eq!(expr.get_constant(), 42.0); // The constant is 42.0
+/// ```
+///
+/// More complex expressions are then built using overloaded operations
+/// ```
+/// # use collomatique_ilp::linexpr::Expr;
+/// # use std::collections::BTreeSet;
+/// let expr1 = Expr::<String>::var("A");
+/// let expr2 = Expr::<String>::var("B");
+/// let expr3 = Expr::<String>::constant(42.0);
+///
+/// // expr represents the linear expr 2*A - 3*B - 42
+/// let expr = 2.0*expr1 - 3 *expr2 - expr3;
+/// // Note you can use i32 or f64 in your operations
+///
+/// // There are 2 variables : A and B
+/// assert_eq!(expr.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+/// assert_eq!(expr.get("A"), Some(2.0)); // The coefficient for "A" is 2
+/// assert_eq!(expr.get("B"), Some(-3.0)); // The coefficient for "B" is -3
+/// assert_eq!(expr.get_constant(), -42.0); // The constant is -42.0
+/// ```
 #[derive(Debug, Clone, Default, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Expr<V: VariableName> {
     coefs: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
     constant: ordered_float::OrderedFloat<f64>,
 }
 
+/// [EqSymbol] represents an equality or inequality symbol.
+///
+/// It can only represents an equality or a "less-than" inequality.
+/// "more-than" inequalities can always be represented by changing all the signs.
+///
+/// It is done so to simplify comparison between constraints.
+///
+/// Normally, you don't have to handle EqSymbol directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum Sign {
+pub enum EqSymbol {
+    /// Represents an "equal" ("=") symbol
     Equals,
+    /// Represents a "less-than" ("<=") symbol
     #[default]
     LessThan,
 }
 
+/// [Constraint] represents a linear constraint
+///
+/// A linear constraint is a constraint linking different variables
+/// with coefficients for each one of them and possibly a constant.
+///
+/// Here is an example : 2*a +3*c <= 4*b - 42
+///
+/// The precise position of every term is not recorded in [Constraint].
+/// Internally, everything is sent to the left hand side and always compared to zero.
+///
+/// [Constraint] is usually built using [Expr::leq], [Expr::eq] or [Expr::geq].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Constraint<V: VariableName> {
-    sign: Sign,
+    symbol: EqSymbol,
     expr: Expr<V>,
 }
 
 impl<V: VariableName> Expr<V> {
+    /// Expr::var builds a simple linear expression with a single
+    /// variable with coefficient 1 and no constant term.
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// // expr represents the linear expression : "1*A"
+    /// let expr = Expr::<String>::var("A");
+    ///
+    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")])); // There is only "A"
+    /// assert_eq!(expr.get("A"), Some(1.0)); // The coefficient for "A" is 1
+    /// assert_eq!(expr.get_constant(), 0.0); // The constant is 0.0 (there is no constant)
+    /// ```
     pub fn var<T: Into<V>>(name: T) -> Self {
         Expr {
             coefs: BTreeMap::from([(name.into(), ordered_float::OrderedFloat(1.0))]),
@@ -59,6 +146,17 @@ impl<V: VariableName> Expr<V> {
         }
     }
 
+    /// Expr::var builds a simple linear expression with no variables and only the constant term.
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// // expr represents the constant linear expression equals to 42
+    /// let expr = Expr::<String>::constant(42.0);
+    ///
+    /// assert_eq!(expr.variables(), BTreeSet::new()); // There are no variables
+    /// assert_eq!(expr.get_constant(), 42.0); // The constant is 42.0
+    /// ```
     pub fn constant(number: f64) -> Self {
         Expr {
             coefs: BTreeMap::new(),
@@ -68,22 +166,185 @@ impl<V: VariableName> Expr<V> {
 }
 
 impl<V: VariableName> Expr<V> {
+    /// Returns the constant term in the expression.
+    ///
+    /// For instance for the expression 2*a+3*b - 4*c + 42, this would return 42.
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = Expr::<String>::constant(4.0);
+    /// let constant = expr.get_constant(); // should be 4
+    ///
+    /// assert_eq!(constant, 4.0);
+    /// ```
+    ///
+    /// There is always a constant term. If empty, it is actually zero.
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = Expr::<String>::var("a");
+    /// // no constant really is constant = 0
+    /// let constant = expr.get_constant();
+    ///
+    /// assert_eq!(constant, 0.0);
+    /// ```
     pub fn get_constant(&self) -> f64 {
         self.constant.into_inner()
     }
 
+    /// Returns the coefficient associated to a variable in the expression.
+    ///
+    /// For instance for the expression 2*a+3*b - 4*c + 42, and for the variable c, this would return -4.
+    /// Because the variable might not appear at all in the expression, this returns an option.
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = 2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b") - 4 * Expr::<String>::var("c") + Expr::<String>::constant(42.0);
+    /// let coef = expr.get("c"); // should be Some(-4.)
+    ///
+    /// assert_eq!(coef, Some(-4.0));
+    /// ```
+    ///
+    /// If a variable does not appear in an expression, it returns None.
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = Expr::<String>::var("a");
+    /// let coef_b = expr.get("b");
+    ///
+    /// assert_eq!(coef_b, None);
+    /// ```
+    /// 
+    /// But if a coefficient is 0, it is indeed returned.
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = Expr::<String>::var("a") + 0*Expr::<String>::var("b");
+    /// let coef_b = expr.get("b");
+    ///
+    /// assert_eq!(coef_b, Some(0.));
+    /// ```
     pub fn get<T: Into<V>>(&self, var: T) -> Option<f64> {
         self.coefs.get(&var.into()).map(|&x| x.into_inner())
     }
 
+    /// Returns the set of variables that appears in the expression
+    ///
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
+    ///
+    /// // There are 2 variables: "A" and "B"
+    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// ```
+    ///
+    /// This set can be empty :
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr = Expr::<String>::constant(42.0);
+    ///
+    /// assert!(expr.variables().is_empty()); // There are no variables
+    /// ```
+    ///
+    /// But there is a difference between having no coefficient
+    /// (the variable does not appear at all in the expression)
+    /// and having 0 as a coefficient :
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::constant(42.0);
+    /// assert!(expr1.variables().is_empty()); // There are no variables
+    ///
+    /// let expr2 = 0 * Expr::<String>::var("A");
+    /// // There is actually one variable eventhough its coefficient is 0
+    /// assert_eq!(expr2.variables(), BTreeSet::from([String::from("A")]));
+    /// ```
+    /// You can use [Expr::clean] to remove the 0 coefficients.
     pub fn variables(&self) -> BTreeSet<V> {
         self.coefs.keys().cloned().collect()
     }
 
+    /// Removes variables that have a 0 coefficient.
+    /// 
+    /// This changes the expression and removes variable whose
+    /// coefficient is zero.
+    /// 
+    /// After this call, such a variable does not appear at all
+    /// in the expression.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let mut expr = 2.0*expr1 - 0*expr2 - expr3;
+    /// 
+    /// // So far, the variables "A" and "B" both appear
+    /// // eventhough "B" has a 0 in front of it
+    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// 
+    /// // This should remove the "B" which has a zero coefficient:
+    /// expr.clean();
+    /// 
+    /// assert_eq!(expr.variables(), BTreeSet::from([String::from("A")]));
+    /// ```
+    /// 
+    /// Other variables and coefficients are unchanged:
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let mut expr = 2.0*expr1 - 0*expr2 - expr3;
+    /// 
+    /// // The coefficient for "A" is 2.
+    /// assert_eq!(expr.get("A"), Some(2.0));
+    /// 
+    /// // This should remove the "B" which has a zero coefficient:
+    /// expr.clean();
+    /// 
+    /// // But "A" is unchanged:
+    /// assert_eq!(expr.get("A"), Some(2.0));
+    /// ```
     pub fn clean(&mut self) {
-        self.coefs.retain(|_k, v| *v != ordered_float::OrderedFloat(0.0));
+        self.coefs
+            .retain(|_k, v| *v != ordered_float::OrderedFloat(0.0));
     }
 
+    /// This works like [Expr::clean] but instead of changing
+    /// the expression (which requires mutability)
+    /// it returns a new cleaned version.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*expr1 - 0*expr2 - expr3;
+    /// 
+    /// // The coefficient for "A" is 2.
+    /// assert_eq!(expr.get("A"), Some(2.0));
+    /// // The coefficient for "B" is 0.
+    /// assert_eq!(expr.get("B"), Some(0.0));
+    /// 
+    /// // This should remove the "B" which has a zero coefficient
+    /// let new_expr = expr.cleaned();
+    /// 
+    /// // expr should however be unchanged.
+    /// assert_eq!(expr.get("A"), Some(2.0));
+    /// assert_eq!(expr.get("B"), Some(0.0));
+    /// // but new_expr only has "A"
+    /// assert_eq!(new_expr.get("A"), Some(2.0));
+    /// assert_eq!(new_expr.get("B"), None);
+    /// ```
     pub fn cleaned(&self) -> Expr<V> {
         let mut output = self.clone();
         output.clean();
@@ -92,53 +353,322 @@ impl<V: VariableName> Expr<V> {
 }
 
 impl<V: VariableName> Expr<V> {
+    /// Builds a new constraint of the form: "self <= rhs"
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let constraint = (2.0*expr1 - expr2).leq(&expr3);
+    /// 
+    /// // Displays "2*A + (-1)*B + (-42) <= 0"
+    /// println!("{}", constraint);
+    /// # assert_eq!(format!("{}", constraint), "2*A + (-1)*B + (-42) <= 0");
+    /// ```
     pub fn leq(&self, rhs: &Expr<V>) -> Constraint<V> {
         Constraint {
             expr: self - rhs,
-            sign: Sign::LessThan,
+            symbol: EqSymbol::LessThan,
         }
     }
 
+    /// Builds a new constraint of the form: "self >= rhs"
+    /// 
+    /// Internally, this is still represented by a "less than" ("<=")
+    /// constraint. It is simply equivalent to calling `rhs.leq(self)`.
+    /// 
+    /// But it is sometimes convenient and more readable to use this function.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let constraint1 = (2.0*&expr1 - &expr2).geq(&expr3);
+    /// let constraint2 = expr3.leq(&(2.0*&expr1 - &expr2));
+    /// 
+    /// assert_eq!(constraint1, constraint2);
+    /// ```
     pub fn geq(&self, rhs: &Expr<V>) -> Constraint<V> {
         Constraint {
             expr: rhs - self,
-            sign: Sign::LessThan,
+            symbol: EqSymbol::LessThan,
         }
     }
 
+    /// Builds a new constraint of the form: "self = rhs"
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let constraint = (2.0*expr1 - expr2).eq(&expr3);
+    /// 
+    /// // Displays "2*A + (-1)*B + (-42) = 0"
+    /// println!("{}", constraint);
+    /// # assert_eq!(format!("{}", constraint), "2*A + (-1)*B + (-42) = 0");
+    /// ```
     pub fn eq(&self, rhs: &Expr<V>) -> Constraint<V> {
         Constraint {
             expr: self - rhs,
-            sign: Sign::Equals,
+            symbol: EqSymbol::Equals,
         }
     }
 }
 
 impl<V: VariableName> Constraint<V> {
+    /// Returns the variables that appear in the constraint.
+    /// 
+    /// As for [Expr::variables], if a variable has a zero coefficient
+    /// it is still listed in the list of variables that appear.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    /// let expr4 = Expr::<String>::var("C");
+    ///
+    /// let expr = 2.0*expr1 - 3 *expr2 - expr3;
+    /// let constraint = expr.leq(&expr4);
+    ///
+    /// // There are 3 variables: "A", "B" and "C"
+    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B"), String::from("C")]));
+    /// ```
+    ///
+    /// This set can be empty :
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::constant(42.0);
+    /// let expr2 = Expr::<String>::constant(-1.0);
+    ///
+    /// let constraint = expr1.eq(&expr2);
+    /// 
+    /// assert!(constraint.variables().is_empty()); // There are no variables
+    /// ```
+    ///
+    /// But there is a difference between having no coefficient
+    /// (the variable does not appear at all in the expression)
+    /// and having 0 as a coefficient :
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::constant(42.0);
+    /// let expr2 = Expr::<String>::constant(-1.0);
+    /// let constraint1 = expr1.leq(&expr2);
+    /// assert!(constraint1.variables().is_empty()); // There are no variables
+    ///
+    /// let expr3 = 0 * Expr::<String>::var("A");
+    /// let constraint2 = (&expr1 + &expr3).leq(&expr2);
+    /// // There is actually one variable eventhough its coefficient is 0
+    /// assert_eq!(constraint2.variables(), BTreeSet::from([String::from("A")]));
+    /// ```
+    /// You can use [Constraint::clean] to remove the 0 coefficients.
     pub fn variables(&self) -> BTreeSet<V> {
         self.expr.variables()
     }
 
+    /// Returns the coefficient for a variable in the constraint.
+    /// 
+    /// This works similarly to [Expr::get].
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let constraint = expr.leq(&Expr::<String>::constant(1.0));
+    /// 
+    /// assert_eq!(constraint.get_var("A"), Some(2.0));
+    /// ```
+    /// 
+    /// If a variable does not appear
+    /// at all, it returns None:
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let constraint = expr.leq(&Expr::<String>::constant(1.0));
+    /// 
+    /// assert_eq!(constraint.get_var("C"), None);
+    /// ```
+    /// 
+    /// However, if a variable appears but it is coefficient is zero,
+    /// it does return a value :
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr = 2*Expr::<String>::var("A") + 0 * Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let constraint = expr.leq(&Expr::<String>::constant(1.0));
+    /// 
+    /// assert_eq!(constraint.get_var("B"), Some(0.));
+    /// ```
+    /// 
+    /// Internally, a constraint only has a left hand side. So, the signs are changed when
+    /// the coefficient was originally on the right hand side.
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// let constraint = expr1.leq(&expr2);
+    /// 
+    /// assert_eq!(constraint.get_var("C"), Some(-3.0));
+    /// ```
+    /// 
+    /// And the constraints are always "<=" or "=". So if a constraints was built with [Expr::geq],
+    /// signs are also reversed:
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// let constraint = expr1.geq(&expr2);
+    /// 
+    /// assert_eq!(constraint.get_var("B"), Some(1.0));
+    /// ```
+    /// 
+    /// And there can be only one coefficient per variable. So multiple coefficients from left and right hand side
+    /// are merged into one lhs coefficient after computation:
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// let constraint = expr1.leq(&expr2);
+    /// 
+    /// assert_eq!(constraint.get_var("A"), Some(1.0));
+    /// ```
     pub fn get_var<T: Into<V>>(&self, var: T) -> Option<f64> {
         self.expr.get(var)
     }
 
-    pub fn get_sign(&self) -> Sign {
-        self.sign
+    /// Returns the (in)equality symbol used in the constraint.
+    /// 
+    /// It can only be "<=" or "=". ">=" is tranformed internally into a "<=" symbol.
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::{Expr, EqSymbol};
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C");
+    /// 
+    /// let constraint1 = expr1.leq(&expr2);
+    /// let constraint2 = expr1.geq(&expr2);
+    /// let constraint3 = expr1.eq(&expr2);
+    /// 
+    /// assert_eq!(constraint1.get_symbol(), EqSymbol::LessThan);
+    /// assert_eq!(constraint2.get_symbol(), EqSymbol::LessThan);
+    /// assert_eq!(constraint3.get_symbol(), EqSymbol::Equals);
+    /// ```
+    pub fn get_symbol(&self) -> EqSymbol {
+        self.symbol
     }
 
+    /// Returns the constant on the left hand side.
+    /// 
+    /// This works like [Expr::get_constant].
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C");
+    /// let constraint = expr1.leq(&expr2);
+    /// 
+    /// assert_eq!(constraint.get_constant(), 42.0);
+    /// ```
+    /// 
+    /// Remember, there is always only one constant that was obtained by merging all the
+    /// constants to the lhs:
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// let constraint = expr1.leq(&expr2);
+    /// 
+    /// assert_eq!(constraint.get_constant(), 44.0);
+    /// ```
+    /// 
+    /// And even if it does even out and the constant is zero, there is still a constant:
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(42.0);
+    /// let constraint = expr1.leq(&expr2);
+    /// 
+    /// assert_eq!(constraint.get_constant(), 0.0);
+    /// ```
     pub fn get_constant(&self) -> f64 {
         self.expr.get_constant()
     }
 
+    /// This returns the internal expression used by the constraint
+    /// to represent the left hand side (the rhs is always 0 internally).
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// let expr1 = 2*Expr::<String>::var("A") - Expr::<String>::var("B") + Expr::<String>::constant(42.0);
+    /// let expr2 = 1*Expr::<String>::var("A") + 3*Expr::<String>::var("C") + Expr::<String>::constant(-2.0);
+    /// let constraint = expr1.leq(&expr2);
+    /// 
+    /// assert_eq!(*constraint.get_lhs(), &expr1 - &expr2);
+    /// ```
     pub fn get_lhs(&self) -> &Expr<V> {
         &self.expr
     }
 
+    /// Removes variables that have a 0 coefficient.
+    /// 
+    /// It works similarly to [Expr::clean].
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*expr1 - 0*expr2 - expr3;
+    /// let mut constraint = expr.leq(&Expr::constant(2.0));
+    /// 
+    /// // So far, the variables "A" and "B" both appear
+    /// // eventhough "B" has a 0 in front of it
+    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// 
+    /// // This should remove the "B" which has a zero coefficient:
+    /// constraint.clean();
+    /// 
+    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A")]));
+    /// ```
     pub fn clean(&mut self) {
         self.expr.clean();
     }
 
+    /// Removes variables that have a 0 coefficient (like [Constraint::clean]
+    /// but does it without mutability and returns a new constraint.
+    /// 
+    /// It works similarly to [Expr::cleaned].
+    /// 
+    /// ```
+    /// # use collomatique_ilp::linexpr::Expr;
+    /// # use std::collections::BTreeSet;
+    /// let expr1 = Expr::<String>::var("A");
+    /// let expr2 = Expr::<String>::var("B");
+    /// let expr3 = Expr::<String>::constant(42.0);
+    ///
+    /// let expr = 2.0*expr1 - 0*expr2 - expr3;
+    /// let constraint = expr.leq(&Expr::constant(2.0));
+    /// 
+    /// // So far, the variables "A" and "B" both appear
+    /// // eventhough "B" has a 0 in front of it
+    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// 
+    /// // This should remove the "B" which has a zero coefficient:
+    /// let new_constraint = constraint.cleaned();
+    /// 
+    /// assert_eq!(constraint.variables(), BTreeSet::from([String::from("A"), String::from("B")]));
+    /// assert_eq!(new_constraint.variables(), BTreeSet::from([String::from("A")]));
+    /// ```
     pub fn cleaned(&self) -> Constraint<V> {
         let mut output = self.clone();
         output.clean();
@@ -177,14 +707,14 @@ impl<V: VariableName> std::fmt::Display for Expr<V> {
     }
 }
 
-impl std::fmt::Display for Sign {
+impl std::fmt::Display for EqSymbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                Sign::Equals => "=",
-                Sign::LessThan => "<=",
+                EqSymbol::Equals => "=",
+                EqSymbol::LessThan => "<=",
             }
         )
     }
@@ -192,7 +722,7 @@ impl std::fmt::Display for Sign {
 
 impl<V: VariableName> std::fmt::Display for Constraint<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} 0", self.expr, self.sign)
+        write!(f, "{} {} 0", self.expr, self.symbol)
     }
 }
 
