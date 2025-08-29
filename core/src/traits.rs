@@ -89,14 +89,14 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 /// - The problem itself can be described linearly using both [BaseConstraints::MainVariable] and
 ///   [BaseConstraints::MainVariable] with linear constraints. These are returned by
 ///   [BaseConstraints::general_constraints].
-pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
+pub trait BaseConstraints: Send + Sync {
     /// Type to represent the main variables
     ///
     /// The main variables are the variables whose set of values is in one to one correspondance
     /// with the set of possible solutions.
     ///
     /// See [BaseConstraints] for the full discussion.
-    type MainVariable: UsableData;
+    type MainVariable: UsableData + 'static;
 
     /// Type to represent the structure variables
     ///
@@ -105,7 +105,7 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     /// They only have a practical utility and help representing the problem as an ILP problem.
     ///
     /// See [BaseConstraints] for the full discussion.
-    type StructureVariable: UsableData;
+    type StructureVariable: UsableData + 'static;
 
     /// Type to represent the description of structure constraints
     ///
@@ -113,7 +113,7 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     /// from the main variables ([BaseConstraints::MainVariable]).
     ///
     /// See [BaseConstraints] for the full discussion.
-    type StructureConstraintDesc: UsableData;
+    type StructureConstraintDesc: UsableData + 'static;
 
     /// Type to represent the description of general constraints
     ///
@@ -121,7 +121,7 @@ pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     /// and the structure variables ([BaseConstraints::StructureVariable]).
     ///
     /// See [BaseConstraints] for the full discussion.
-    type GeneralConstraintDesc: UsableData;
+    type GeneralConstraintDesc: UsableData + 'static;
 
     /// Partial solution type associated to the problem.
     ///
@@ -268,7 +268,7 @@ impl<
 ///
 /// Because the space of solutions does not change, there is no equivalent to [BaseConstraints::configuration_to_partial_solution]
 /// and [BaseConstraints::partial_solution_to_configuration] in [ExtraConstraints].
-pub trait ExtraConstraints<T: BaseConstraints> {
+pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
     /// Type to represent the structure variables specific to this problem extension.
     ///
     /// The structure variables do not provide any new information and can entirely
@@ -276,7 +276,7 @@ pub trait ExtraConstraints<T: BaseConstraints> {
     /// They only have a practical utility and help representing the problem as an ILP problem.
     ///
     /// See [ExtraConstraints] and [BaseConstraints] for the full discussion.
-    type StructureVariable: UsableData;
+    type StructureVariable: UsableData + 'static;
 
     /// Type to represent the description of the extra structure constraints
     ///
@@ -285,7 +285,7 @@ pub trait ExtraConstraints<T: BaseConstraints> {
     /// existing structure constraints from the main problem ([BaseConstraints::StructureVariable]).
     ///
     /// See [ExtraConstraints] and [BaseConstraints] for the full discussion.
-    type StructureConstraintDesc: UsableData;
+    type StructureConstraintDesc: UsableData + 'static;
 
     /// Type to represent the description of general constraints for the extension.
     ///
@@ -295,7 +295,7 @@ pub trait ExtraConstraints<T: BaseConstraints> {
     /// from the problem extension.
     ///
     /// See [ExtraConstraints] for the full discussion.
-    type GeneralConstraintDesc: UsableData;
+    type GeneralConstraintDesc: UsableData + 'static;
 
     /// Definition of the structure variables for the problem extension.
     ///
