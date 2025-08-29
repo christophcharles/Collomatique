@@ -114,6 +114,7 @@ impl SlotWithDuration {
 pub struct SlotWithTeacher {
     pub teacher: usize,
     pub start: SlotStart,
+    pub cost: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
