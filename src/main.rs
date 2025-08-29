@@ -1009,13 +1009,15 @@ async fn main() -> Result<()> {
     let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
     let random_gen = collomatique::ilp::random::DefaultRndGen::new();
-    let random_initializer = collomatique::ilp::initializers::Random::new(random_gen);
+    let general_initializer =
+        collomatique::ilp::initializers::Random::with_one_out_of(random_gen, 100).unwrap();
+    //let general_initializer = collomatique::ilp::initializers::Null::new();
     use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
     let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
-    let max_steps = Some(1000);
+    let max_steps = Some(10000);
     let retries = 20;
     let mut incremental_initializer =
-        ilp_translator.incremental_initializer(random_initializer, solver, max_steps, retries);
+        ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
 
     for i in 1.. {
         println!("Attempt n°{}...", i);
