@@ -59,4 +59,33 @@ pub enum FileContent {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Entry {}
+pub struct Entry {
+    pub minimum_spec_version: u32,
+    pub needed_entry: bool,
+    pub content: EntryContent,
+}
+
+pub mod common;
+pub mod student_list;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EntryContent {
+    ValidEntry(ValidEntry),
+    UnknownEntry(serde_json::Value),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ValidEntry {
+    StudentList(student_list::List),
+}
+
+pub const CURRENT_SPEC_VERSION: u32 = 1;
+
+impl ValidEntry {
+    pub fn minimum_spec_version(&self) -> u32 {
+        match self {
+            ValidEntry::StudentList(_) => 1,
+        }
+    }
+}
