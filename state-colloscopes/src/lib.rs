@@ -270,6 +270,17 @@ impl Data {
 
         Some(student_id)
     }
+
+    /// Promotes an u64 to a [SubjectId] if it is valid
+    pub fn validate_subject_id(&self, id: u64) -> Option<SubjectId> {
+        for (subject_id, _) in &self.inner_data.subjects.ordered_subject_list {
+            if subject_id.inner() == id {
+                return Some(*subject_id);
+            }
+        }
+
+        None
+    }
 }
 
 impl Data {
