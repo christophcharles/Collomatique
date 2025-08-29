@@ -420,12 +420,10 @@ async fn generate_incompatibilies(db_conn: &SqlitePool) -> Result<Incompatibilit
                         }
                         None => {
                             week_map.insert(week, incompat_list.len());
-                            let max_count_i64 = max_count_map
-                                .get(&x.incompat_group_id)
-                                .copied()
-                                .ok_or(anyhow!(
-                                "Inconsistent database: non existant incompat_group_id referenced"
-                            ))?;
+                            let max_count_i64 =
+                                max_count_map.get(&x.incompat_id).copied().ok_or(anyhow!(
+                                    "Inconsistent database: non existant incompat_id referenced"
+                                ))?;
                             let max_count = usize::try_from(max_count_i64)
                                 .map_err(|_| anyhow!("max_count should fit in usize"))?;
                             incompat_list.push(Incompatibility {
@@ -444,13 +442,9 @@ async fn generate_incompatibilies(db_conn: &SqlitePool) -> Result<Incompatibilit
                     .unwrap_or(&empty_map);
                 for (&week, &incompat_group_index) in group_week_map {
                     week_map.insert(week, incompat_list.len());
-                    let max_count_i64 =
-                        max_count_map
-                            .get(&x.incompat_group_id)
-                            .copied()
-                            .ok_or(anyhow!(
-                                "Inconsistent database: non existant incompat_group_id referenced"
-                            ))?;
+                    let max_count_i64 = max_count_map.get(&x.incompat_id).copied().ok_or(
+                        anyhow!("Inconsistent database: non existant incompat_id referenced"),
+                    )?;
                     let max_count = usize::try_from(max_count_i64)
                         .map_err(|_| anyhow!("max_count should fit in usize"))?;
                     incompat_list.push(Incompatibility {
