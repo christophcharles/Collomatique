@@ -537,8 +537,16 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
             new_obj = new_obj + LinExpr::var(v);
         }
 
-        Objective::new(new_obj, ObjectiveSense::Minimize)
-            + self.internal_constraints.objective(desc)
+        let orig_objective =
+            self.internal_constraints
+                .objective(desc)
+                .into_transmuted(|x| match x {
+                    ExtraVariable::BaseMain(m) => ExtraVariable::BaseMain(m),
+                    ExtraVariable::BaseStructure(s) => ExtraVariable::BaseStructure(s),
+                    ExtraVariable::Extra(e) => ExtraVariable::Extra(SoftVariable::Orig(e)),
+                });
+
+        Objective::new(new_obj, ObjectiveSense::Minimize) + orig_objective
     }
 
     fn reconstruct_extra_structure_variables(
