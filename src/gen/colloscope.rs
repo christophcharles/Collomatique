@@ -20,8 +20,8 @@ pub enum Error {
     StudentWithInvalidSubject(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
-    #[error("Incompatibility has an interrogation slot overlapping next day")]
-    IncompatibilityWithSlotOverlappingNextDay,
+    #[error("Incompatibility {0} has interrogation slot {1} overlapping next day")]
+    IncompatibilityWithSlotOverlappingNextDay(usize, usize),
     #[error("Slot groupings {0} and {1} are duplicates of each other")]
     SlotGroupingsDuplicated(usize, usize),
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid subject reference")]
@@ -163,10 +163,10 @@ impl ValidatedData {
             }
         }
 
-        for incompatibility in &incompatibilities {
-            for slot in &incompatibility.slots {
+        for (i, incompatibility) in incompatibilities.iter().enumerate() {
+            for (j, slot) in incompatibility.slots.iter().enumerate() {
                 if !Self::validate_slot(&general, &slot.start, slot.duration) {
-                    return Err(Error::IncompatibilityWithSlotOverlappingNextDay);
+                    return Err(Error::IncompatibilityWithSlotOverlappingNextDay(i, j));
                 }
             }
         }
