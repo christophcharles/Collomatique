@@ -823,12 +823,11 @@ impl Storage for Store {
     > + Send {
         grouping_incompats::add(&self.pool, grouping_incompat)
     }
-    fn grouping_incompats_remove(
+    unsafe fn grouping_incompats_remove_unchecked(
         &mut self,
         index: Self::GroupingIncompatId,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<(), IdError<Self::InternalError, Self::GroupingIncompatId>>,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         grouping_incompats::remove(&self.pool, index)
     }
     unsafe fn grouping_incompats_update_unchecked(
