@@ -59,6 +59,11 @@ pub enum PeriodEntryOutput {
         bool,
     ),
     CopyPreviousPeriod(collomatique_state_colloscopes::PeriodId),
+    UpdateStatusAll(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::SubjectId,
+        bool,
+    ),
 }
 
 impl PeriodEntry {
@@ -238,8 +243,32 @@ impl FactoryComponent for PeriodEntry {
             PeriodEntryInput::SubjectDropdownChanged(num) => {
                 self.current_subject = num.map(|x| self.data.filtered_subjects[x].0.clone());
             }
-            PeriodEntryInput::AssignAll => {}
-            PeriodEntryInput::UnassignAll => {}
+            PeriodEntryInput::AssignAll => {
+                let Some(subject_id) = self.current_subject else {
+                    return;
+                };
+
+                sender
+                    .output(PeriodEntryOutput::UpdateStatusAll(
+                        self.data.period_id,
+                        subject_id,
+                        true,
+                    ))
+                    .unwrap();
+            }
+            PeriodEntryInput::UnassignAll => {
+                let Some(subject_id) = self.current_subject else {
+                    return;
+                };
+
+                sender
+                    .output(PeriodEntryOutput::UpdateStatusAll(
+                        self.data.period_id,
+                        subject_id,
+                        false,
+                    ))
+                    .unwrap();
+            }
         }
     }
 }

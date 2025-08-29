@@ -21,6 +21,11 @@ pub enum AssignmentsInput {
         collomatique_state_colloscopes::SubjectId,
         bool,
     ),
+    UpdateStatusAll(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::SubjectId,
+        bool,
+    ),
     CopyPreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
@@ -85,6 +90,11 @@ impl Component for Assignments {
                 assignments_display::PeriodEntryOutput::CopyPreviousPeriod(period_id) => {
                     AssignmentsInput::CopyPreviousPeriod(period_id)
                 }
+                assignments_display::PeriodEntryOutput::UpdateStatusAll(
+                    period_id,
+                    subject_id,
+                    new_status,
+                ) => AssignmentsInput::UpdateStatusAll(period_id, subject_id, new_status),
             });
 
         let model = Assignments {
@@ -122,6 +132,13 @@ impl Component for Assignments {
             AssignmentsInput::CopyPreviousPeriod(period_id) => {
                 sender
                     .output(AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id))
+                    .unwrap();
+            }
+            AssignmentsInput::UpdateStatusAll(period_id, subject_id, new_status) => {
+                sender
+                    .output(AssignmentsUpdateOp::AssignAll(
+                        period_id, subject_id, new_status,
+                    ))
                     .unwrap();
             }
         }
