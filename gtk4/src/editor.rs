@@ -90,6 +90,12 @@ impl EditorPanel {
             name
         }
     }
+
+    fn generate_tooltip_text(&self) -> Option<String> {
+        self.file_name
+            .as_ref()
+            .map(|x| x.to_string_lossy().to_string())
+    }
 }
 
 #[relm4::component(pub)]
@@ -115,6 +121,8 @@ impl Component for EditorPanel {
                             set_title: "Collomatique",
                             #[watch]
                             set_subtitle: &model.generate_subtitle(),
+                            #[watch]
+                            set_tooltip_text: model.generate_tooltip_text().as_deref(),
                         },
                         pack_end = &gtk::MenuButton {
                             set_icon_name: "open-menu-symbolic",
