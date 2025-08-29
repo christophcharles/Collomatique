@@ -343,6 +343,7 @@ dependencies = [
  "chrono",
  "clap",
  "collomatique-python",
+ "collomatique-rpc",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
@@ -369,6 +370,10 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python"
+version = "0.1.0"
+
+[[package]]
+name = "collomatique-rpc"
 version = "0.1.0"
 
 [[package]]
