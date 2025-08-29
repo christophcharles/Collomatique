@@ -20,6 +20,8 @@ pub enum DecodeError {
     UnknownNeededEntry,
     #[error("An entry has the wrong spec requirements")]
     MismatchedSpecRequirementInEntry,
+    #[error("An entry of type {0:?} is duplicated")]
+    DuplicatedEntry(EntryTag),
 }
 
 /// Caveats type
@@ -60,6 +62,8 @@ fn check_entries_consistency(
     entries: &[Entry],
     caveats: &mut BTreeSet<Caveat>,
 ) -> Result<(), DecodeError> {
+    let mut entries_found_so_far = BTreeSet::new();
+
     for entry in entries {
         match &entry.content {
             EntryContent::ValidEntry(valid_entry) => {
@@ -68,6 +72,10 @@ fn check_entries_consistency(
                 }
                 if entry.needed_entry != valid_entry.needed_entry() {
                     return Err(DecodeError::MismatchedSpecRequirementInEntry);
+                }
+                let tag = EntryTag::from(valid_entry);
+                if !entries_found_so_far.insert(tag) {
+                    return Err(DecodeError::DuplicatedEntry(tag));
                 }
             }
             EntryContent::UnknownEntry(_) => {
@@ -90,5 +98,24 @@ pub fn decode(json_data: &JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeEr
     check_header(&json_data.header, &mut caveats)?;
     check_entries_consistency(&json_data.entries, &mut caveats)?;
 
+    let data = decode_entries(&json_data.entries)?;
+    Ok((data, caveats))
+}
+
+fn decode_entries(_entries: &[Entry]) -> Result<Data, DecodeError> {
     todo!()
+}
+
+/// Type of entries that can be found in a file
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EntryTag {
+    StudentList,
+}
+
+impl From<&ValidEntry> for EntryTag {
+    fn from(value: &ValidEntry) -> Self {
+        match value {
+            ValidEntry::StudentList(_) => EntryTag::StudentList,
+        }
+    }
 }
