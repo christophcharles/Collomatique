@@ -126,11 +126,20 @@ impl Data {
     /// This will check the consistency of the lists
     /// and will also do some internal checks, so this might fail.
     pub fn from_lists(
-        student_list: BTreeMap<StudentId, PersonWithContacts>,
+        student_list: BTreeMap<u64, PersonWithContacts>,
     ) -> Result<Data, tools::IdError> {
         let student_ids = student_list.keys();
+        let id_issuer = IdIssuer::new(student_ids)?;
+
+        // Ids have been validated
+        let student_list = unsafe {
+            student_list
+                .into_iter()
+                .map(|(key, value)| (StudentId::new(key), value))
+                .collect()
+        };
         Ok(Data {
-            id_issuer: IdIssuer::new(student_ids)?,
+            id_issuer,
             student_list,
         })
     }
