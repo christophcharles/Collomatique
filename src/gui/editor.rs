@@ -24,13 +24,13 @@ pub struct State {
 
 #[derive(Debug, Error, Clone)]
 pub enum ConnectDbError {
-    #[error("Path is not a valid UTF-8 string")]
+    #[error("Nom de fichier invalide (Chaine UTF-8 invalide)")]
     InvalidPath,
-    #[error("Trying to override already existing database {0}")]
+    #[error("Le fichier {0} existe déjà et ne sera pas écrasé")]
     DatabaseAlreadyExists(std::path::PathBuf),
-    #[error("Database {0} does not exist")]
+    #[error("Le fichier {0} n'existe pas")]
     DatabaseDoesNotExist(std::path::PathBuf),
-    #[error("sqlx error")]
+    #[error("Erreur sqlx : {0}")]
     SqlxError(std::sync::Arc<sqlx::Error>),
 }
 
