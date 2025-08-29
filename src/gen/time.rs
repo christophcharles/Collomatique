@@ -58,6 +58,35 @@ impl From<Weekday> for usize {
     }
 }
 
+use thiserror::Error;
+
+#[derive(Clone, Debug, Error)]
+pub enum WeekdayError {
+    #[error("Day number larger than 6")]
+    DayNumberTooBig,
+}
+
+impl TryFrom<usize> for Weekday {
+    type Error = WeekdayError;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        if value > 6 {
+            return Err(WeekdayError::DayNumberTooBig);
+        }
+
+        let list = [
+            Weekday::Monday,
+            Weekday::Tuesday,
+            Weekday::Wednesday,
+            Weekday::Thursday,
+            Weekday::Friday,
+            Weekday::Saturday,
+            Weekday::Sunday,
+        ];
+
+        Ok(list[value])
+    }
+}
+
 impl From<&Weekday> for usize {
     fn from(value: &Weekday) -> usize {
         (*value).into()
