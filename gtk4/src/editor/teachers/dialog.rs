@@ -312,6 +312,7 @@ impl FactoryComponent for SubjectEntry {
         #[root]
         adw::SwitchRow {
             set_hexpand: true,
+            set_use_markup: false,
             #[watch]
             set_title: &self.data.name,
             #[track(self.should_redraw)]

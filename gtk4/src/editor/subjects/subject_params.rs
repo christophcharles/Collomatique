@@ -334,6 +334,7 @@ impl SimpleComponent for Dialog {
                             },
                             adw::SwitchRow {
                                 set_hexpand: true,
+                                set_use_markup: false,
                                 set_title: "Pas de colles",
                                 set_subtitle: "Cette matière n'a que des cours",
                                 #[track(model.should_redraw)]
@@ -373,6 +374,7 @@ impl SimpleComponent for Dialog {
                             },
                             adw::SwitchRow {
                                 set_hexpand: true,
+                                set_use_markup: false,
                                 set_title: "Durée compatibilisée",
                                 set_subtitle: "Pour équilibrer le nombre d'heures par semaine",
                                 #[track(model.should_redraw)]

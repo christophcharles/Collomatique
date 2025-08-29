@@ -316,6 +316,7 @@ impl FactoryComponent for PeriodEntry {
         #[root]
         adw::SwitchRow {
             set_hexpand: true,
+            set_use_markup: false,
             #[watch]
             set_title: &super::super::generate_period_title(
                 &self.data.global_first_week,
