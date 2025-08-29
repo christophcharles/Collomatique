@@ -21,6 +21,8 @@ enum GuiMessage {
     EditorMessage(editor::Message),
     DialogMessage(dialogs::Message),
     FileSelected(Option<dialogs::FileDesc>),
+    OpenExistingFile,
+    OpenNewFile,
     GoToWelcomeScreen,
     Ignore,
 }
@@ -55,6 +57,22 @@ fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
             }
             None => Task::none(),
         },
+        GuiMessage::OpenExistingFile => Task::done(
+            dialogs::Message::FileChooserDialog(
+                "Ouvrir un colloscope".into(),
+                false,
+                std::sync::Arc::new(|file_desc| GuiMessage::FileSelected(file_desc)),
+            )
+            .into(),
+        ),
+        GuiMessage::OpenNewFile => Task::done(
+            dialogs::Message::FileChooserDialog(
+                "Créer un colloscope".into(),
+                true,
+                std::sync::Arc::new(|file_desc| GuiMessage::FileSelected(file_desc)),
+            )
+            .into(),
+        ),
         GuiMessage::GoToWelcomeScreen => {
             *state = GuiState::Welcome;
             Task::none()
@@ -99,7 +117,7 @@ pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
                     None => GuiState::Welcome,
                 },
                 if create && db.is_none() {
-                    iced::Task::done(dialogs::Message::OpenNewFile.into())
+                    iced::Task::done(GuiMessage::OpenNewFile)
                 } else {
                     iced::Task::none()
                 },

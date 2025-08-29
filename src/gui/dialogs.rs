@@ -11,9 +11,12 @@ pub struct FileDesc {
 
 #[derive(Clone)]
 pub enum Message {
-    OpenNewFile,
-    OpenExistingFile,
-    FileSelected(Option<FileDesc>),
+    FileChooserDialog(
+        String,
+        bool,
+        std::sync::Arc<dyn Fn(Option<FileDesc>) -> GuiMessage + Send + Sync>,
+    ),
+    FileChooserDialogClosed(Option<FileDesc>),
     AlertDialog(
         String,
         String,
@@ -25,9 +28,14 @@ pub enum Message {
 impl std::fmt::Debug for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Message::OpenNewFile => write!(f, "Message::OpenNewFile"),
-            Message::OpenExistingFile => write!(f, "Message::OpenExistingFile"),
-            Message::FileSelected(file_desc) => write!(f, "Message::FileSelected({:?}", file_desc),
+            Message::FileChooserDialog(title, create, _msg) => write!(
+                f,
+                "Message::FileChooserDialog({:?}, {:?}, Fn)",
+                title, create
+            ),
+            Message::FileChooserDialogClosed(file_desc) => {
+                write!(f, "Message::FileChooserDialogClosed({:?}", file_desc)
+            }
             Message::AlertDialog(title, txt, _msg) => {
                 write!(f, "Message::AlertDialog({:?}, {:?}, Fn)", title, txt)
             }
@@ -40,7 +48,7 @@ impl std::fmt::Debug for Message {
 
 #[derive(Clone)]
 pub enum DialogShown {
-    FileChooser,
+    FileChooser(std::sync::Arc<dyn Fn(Option<FileDesc>) -> GuiMessage + Send + Sync>),
     Alert(
         String,
         String,
@@ -51,7 +59,7 @@ pub enum DialogShown {
 impl std::fmt::Debug for DialogShown {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DialogShown::FileChooser => write!(f, "DialogShown::FileChooser"),
+            DialogShown::FileChooser(_msg) => write!(f, "DialogShown::FileChooser(Fn)"),
             DialogShown::Alert(title, txt, _msg) => {
                 write!(f, "DialogShown::Alert({:?}, {:?}, Fn)", title, txt)
             }
@@ -67,27 +75,25 @@ pub struct State {
 
 pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     match message {
-        Message::OpenNewFile => {
+        Message::FileChooserDialog(title, create, msg) => {
             *state = GuiState::DialogShown(State {
                 previous_state: Box::new(state.clone()),
-                dialog_shown: DialogShown::FileChooser,
+                dialog_shown: DialogShown::FileChooser(msg),
             });
-            Task::perform(open_file_dialog(true), |x| Message::FileSelected(x).into())
+            Task::perform(file_chooser_dialog(title, create), |x| {
+                Message::FileChooserDialogClosed(x).into()
+            })
         }
-        Message::OpenExistingFile => {
-            *state = GuiState::DialogShown(State {
-                previous_state: Box::new(state.clone()),
-                dialog_shown: DialogShown::FileChooser,
-            });
-            Task::perform(open_file_dialog(false), |x| Message::FileSelected(x).into())
-        }
-        Message::FileSelected(file_desc) => {
+        Message::FileChooserDialogClosed(file_desc) => {
             let GuiState::DialogShown(dialog_state) = state else {
                 panic!("Dialog message but not in dialog state");
             };
+            let DialogShown::FileChooser(msg) = dialog_state.dialog_shown.clone() else {
+                panic!("File chooser dialog message but not in file chooser dialog state");
+            };
 
             *state = dialog_state.previous_state.as_ref().clone();
-            Task::done(GuiMessage::FileSelected(file_desc))
+            Task::done(msg(file_desc))
         }
         Message::AlertDialog(title, txt, msg) => {
             *state = GuiState::DialogShown(State {
@@ -110,13 +116,13 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     }
 }
 
-async fn open_file_dialog(create: bool) -> Option<FileDesc> {
-    let dialog = rfd::AsyncFileDialog::new();
+async fn file_chooser_dialog(title: String, create: bool) -> Option<FileDesc> {
+    let dialog = rfd::AsyncFileDialog::new().set_title(title);
 
     let file = if create {
-        dialog.set_title("Créer un fichier").save_file().await
+        dialog.save_file().await
     } else {
-        dialog.set_title("Ouvrir un fichier").pick_file().await
+        dialog.pick_file().await
     };
 
     file.map(|handle| FileDesc {
@@ -129,7 +135,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
     let normal_view = super::view(state.previous_state.as_ref());
 
     let content: Element<GuiMessage> = match &state.dialog_shown {
-        DialogShown::FileChooser => Space::new(Length::Shrink, Length::Shrink).into(),
+        DialogShown::FileChooser(_msg) => Space::new(Length::Shrink, Length::Shrink).into(),
         DialogShown::Alert(title, txt, _msg) => {
             let mut bold_font = iced::Font::default();
             bold_font.weight = iced::font::Weight::Bold;
