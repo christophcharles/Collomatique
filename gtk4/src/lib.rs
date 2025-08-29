@@ -5,6 +5,7 @@ use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller, SimpleComponent};
 use std::path::PathBuf;
 
+mod dialogs;
 mod editor;
 mod loading;
 mod welcome;
@@ -19,6 +20,8 @@ struct AppControllers {
     welcome: Controller<welcome::WelcomePanel>,
     loading: Controller<loading::LoadingPanel>,
     editor: Controller<editor::EditorPanel>,
+
+    file_error: Controller<dialogs::file_error::Dialog>,
 }
 
 enum GlobalState {
@@ -48,7 +51,7 @@ pub enum AppInput {
     NewColloscope(Option<PathBuf>),
     LoadColloscope(PathBuf),
     ColloscopeLoaded(PathBuf, collomatique_state_colloscopes::Data),
-    ColloscopeLoadingFailed(PathBuf),
+    ColloscopeLoadingFailed(PathBuf, String),
     OpenExistingColloscopeWithDialog,
 }
 
@@ -99,7 +102,9 @@ impl SimpleComponent for AppModel {
                     loading::LoadingOutput::Loaded(path, data) => {
                         AppInput::ColloscopeLoaded(path, data)
                     }
-                    loading::LoadingOutput::Failed(path) => AppInput::ColloscopeLoadingFailed(path),
+                    loading::LoadingOutput::Failed(path, error) => {
+                        AppInput::ColloscopeLoadingFailed(path, error)
+                    }
                 });
 
         let welcome =
@@ -112,10 +117,16 @@ impl SimpleComponent for AppModel {
                     }
                 });
 
+        let file_error = dialogs::file_error::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |_| AppInput::Ignore);
+
         let controllers = AppControllers {
             welcome,
             loading,
             editor,
+            file_error,
         };
 
         let state = GlobalState::WelcomeScreen;
@@ -201,9 +212,16 @@ impl SimpleComponent for AppModel {
                     })
                     .unwrap();
             }
-            AppInput::ColloscopeLoadingFailed(_path) => {
-                // Ignore for now
-                // Only restore welcome screen
+            AppInput::ColloscopeLoadingFailed(path, error) => {
+                self.controllers
+                    .file_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Open,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
                 self.state = GlobalState::WelcomeScreen;
             }
         }

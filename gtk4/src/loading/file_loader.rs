@@ -9,7 +9,7 @@ pub enum FileLoadingInput {
 #[derive(Debug)]
 pub enum FileLoadingOutput {
     Loaded(PathBuf, collomatique_state_colloscopes::Data),
-    Failed(PathBuf),
+    Failed(PathBuf, String),
 }
 
 pub struct FileLoader;
@@ -30,8 +30,11 @@ impl Worker for FileLoader {
 
         let FileLoadingInput::Load(path) = msg;
         let data = collomatique_state_colloscopes::Data::new();
+        /*sender
+        .output(FileLoadingOutput::Loaded(path, data))
+        .unwrap();*/
         sender
-            .output(FileLoadingOutput::Loaded(path, data))
+            .output(FileLoadingOutput::Failed(path, "Test error".into()))
             .unwrap();
     }
 }
