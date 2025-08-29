@@ -282,6 +282,12 @@ enum PythonCommand {
         name: String,
         /// Optional csv file to give as input to the python script
         csv: Option<PathBuf>,
+        /// The csv file does not have headers
+        #[arg(long)]
+        no_headers: bool,
+        /// Delimiter for the csv file (default is adjusted for pronote files)
+        #[arg(short, long, default_value_t = ';')]
+        delimiter: char,
         /// If multiple python scripts have the same name, select which one to use.
         /// So if there are 3 python script with the same name, 1 would refer to the first one, 2 to the second, etc...
         /// Be careful the order might change between databases update (even when using undo/redo)
@@ -296,6 +302,12 @@ enum PythonCommand {
         func: String,
         /// Optional csv file to give as input to the python script
         csv: Option<PathBuf>,
+        /// The csv file does not have headers
+        #[arg(long)]
+        no_headers: bool,
+        /// Delimiter for the csv file (default is adjusted for pronote files)
+        #[arg(short, long, default_value_t = ';')]
+        delimiter: char,
     },
 }
 
@@ -1171,19 +1183,43 @@ async fn python_command(
         PythonCommand::Run {
             name: _name,
             csv: _csv,
+            no_headers: _no_headers,
+            delimiter: _delimiter,
             python_script_number: _python_script_number,
         } => Err(anyhow!("python run command not yet implemented")),
-        PythonCommand::RunFromFile { script, func, csv } => {
-            if csv.is_some() {
-                return Err(anyhow!(
-                    "csv loading not yet implented for python run-file command"
-                ));
+        PythonCommand::RunFromFile {
+            script,
+            func,
+            csv,
+            no_headers,
+            delimiter,
+        } => {
+            if let Some(path) = csv {
+                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+                let csv_content = collomatique::frontend::csv::Content::from_csv_file(&path)?;
+
+                if !delimiter.is_ascii() {
+                    return Err(anyhow!(
+                        "Csv delimiter must be encoded as a single byte  ASCII character"
+                    ));
+                }
+                let delimiter_str = delimiter.to_string();
+
+                let params = collomatique::frontend::csv::Params {
+                    has_headers: !no_headers,
+                    delimiter: delimiter_str.as_bytes()[0],
+                };
+
+                let csv_extract = csv_content.extract(&params)?;
+
+                python_code.run_with_csv_file(&func, csv_extract)?;
+                Ok(None)
+            } else {
+                let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+                python_code.run(&func)?;
+
+                Ok(None)
             }
-
-            let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
-            python_code.run(&func)?;
-
-            Ok(None)
         }
     }
 }
