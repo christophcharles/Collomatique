@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::{linexpr, random};
+use crate::ilp::linexpr;
 use std::collections::{BTreeMap, BTreeSet};
 
 use ndarray::{Array1, Array2};
@@ -99,24 +99,15 @@ impl<V: VariableName> super::ProblemRepr<V> for NdProblem<V> {
         }
     }
 
-    fn default_config(&self) -> NdConfig<V> {
-        let p = self.leq_mat.shape()[1];
-
-        let values = Array1::zeros(p);
-
-        NdConfig {
-            values,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-
-    fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> NdConfig<V> {
+    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config {
         let p = self.leq_mat.shape()[1];
 
         let mut values = Array1::zeros(p);
 
         for i in 0..p {
-            values[i] = if random_gen.randbool() { 1 } else { 0 };
+            if vars.contains(&i) {
+                values[i] = 1;
+            }
         }
 
         NdConfig {

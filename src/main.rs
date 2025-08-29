@@ -1007,17 +1007,20 @@ async fn main() -> Result<()> {
 
     let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
-
     for i in 1.. {
         println!("Attempt n°{}...", i);
 
-        sa_optimizer.set_init_config(problem.random_config(&mut random_gen));
+        let random_gen = collomatique::ilp::random::DefaultRndGen::new();
+        let mut initializer = collomatique::ilp::initializers::random::Initializer::new(random_gen);
+
+        use collomatique::ilp::initializers::ConfigInitializer;
+        sa_optimizer.set_init_config(initializer.build_init_config(&problem));
         sa_optimizer.set_max_steps(Some(1000));
         sa_optimizer.set_init_max_steps(Some(100000));
 
         use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
         let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
+        let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
         let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
         for (i, (sol, cost)) in iterator.enumerate() {

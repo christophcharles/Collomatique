@@ -2,7 +2,6 @@ pub mod nd;
 pub mod sparse;
 
 use super::linexpr::{self, VariableName};
-use super::random;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug {
@@ -10,9 +9,7 @@ pub trait ProblemRepr<V: VariableName>: Clone + std::fmt::Debug {
 
     fn new(variables_vec: &Vec<V>, constraints: &BTreeSet<linexpr::Constraint<V>>) -> Self;
 
-    fn default_config(&self) -> Self::Config;
-
-    fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Self::Config;
+    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config;
 }
 
 pub trait ConfigRepr<V: VariableName>:

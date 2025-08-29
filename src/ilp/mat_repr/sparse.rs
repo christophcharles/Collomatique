@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ilp::{linexpr, random};
+use crate::ilp::linexpr;
 use std::collections::{BTreeMap, BTreeSet};
 
 use sprs::{CsMat, CsVec};
@@ -126,25 +126,14 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
         }
     }
 
-    fn default_config(&self) -> SprsConfig<V> {
-        let p = self.leq_mat.shape().1;
-
-        let values = CsVec::empty(p);
-
-        SprsConfig {
-            values,
-            _phantom: std::marker::PhantomData,
-        }
-    }
-
-    fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> SprsConfig<V> {
+    fn config_from(&self, vars: &BTreeSet<usize>) -> Self::Config {
         let mut indices = vec![];
         let mut data = vec![];
 
         let p = self.leq_mat.shape().1;
 
         for i in 0..p {
-            if random_gen.randbool() {
+            if vars.contains(&i) {
                 indices.push(i);
                 data.push(1);
             }
