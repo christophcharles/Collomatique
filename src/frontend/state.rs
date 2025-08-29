@@ -157,6 +157,10 @@ impl<T: backend::Storage> AppState<T> {
         self.mod_history.get_max_history_size()
     }
 
+    pub fn get_backend_logic(&self) -> &backend::Logic<T> {
+        &self.backend_logic
+    }
+
     pub fn set_max_history_size(&mut self, max_history_size: Option<usize>) {
         self.mod_history.set_max_history_size(max_history_size);
     }
@@ -217,9 +221,7 @@ where
     #[error("Error in storage backend: {0:?}")]
     InternalError(#[from] IntError),
     #[error("Cannot set week_count: some week_patterns must be truncated")]
-    CannotSetWeekCountWeekPatternsNeedTruncating(
-        Vec<backend::GeneralDataDependancy<T::WeekPatternId>>,
-    ),
+    CannotSetWeekCountWeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
 }
 
 impl<T: backend::Storage> AppState<T> {

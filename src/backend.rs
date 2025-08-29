@@ -191,11 +191,21 @@ where
 }
 
 pub trait OrdId:
-    std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy
+    std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy + std::fmt::Display
 {
 }
-impl<T: std::fmt::Debug + Clone + PartialEq + Eq + PartialOrd + Ord + Send + Sync + Copy> OrdId
-    for T
+impl<
+        T: std::fmt::Debug
+            + Clone
+            + PartialEq
+            + Eq
+            + PartialOrd
+            + Ord
+            + Send
+            + Sync
+            + Copy
+            + std::fmt::Display,
+    > OrdId for T
 {
 }
 
@@ -662,11 +672,6 @@ impl<GroupingId: OrdId> GroupingIncompat<GroupingId> {
 }
 
 #[derive(Clone, Debug)]
-pub enum GeneralDataDependancy<WeekPatternId: OrdId> {
-    WeekPattern(WeekPatternId),
-}
-
-#[derive(Clone, Debug)]
 pub enum WeekPatternDependancy<IncompatId: OrdId, TimeSlotId: OrdId> {
     Incompat(IncompatId),
     TimeSlot(TimeSlotId),
@@ -761,17 +766,14 @@ impl<T: Storage> Logic<T> {
     pub async fn general_data_set(
         &mut self,
         general_data: &GeneralData,
-    ) -> std::result::Result<
-        (),
-        CheckedError<T::InternalError, Vec<GeneralDataDependancy<T::WeekPatternId>>>,
-    > {
+    ) -> std::result::Result<(), CheckedError<T::InternalError, Vec<T::WeekPatternId>>> {
         let week_patterns = self.week_patterns_get_all().await?;
 
         let mut errors = vec![];
         for (&week_pattern_id, week_pattern) in &week_patterns {
             if let Some(last_week) = week_pattern.weeks.last() {
                 if last_week.0 >= general_data.week_count.get() {
-                    errors.push(GeneralDataDependancy::WeekPattern(week_pattern_id));
+                    errors.push(week_pattern_id);
                 }
             }
         }
