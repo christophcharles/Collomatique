@@ -9,25 +9,19 @@ use crate::ilp::random::RandomGen;
 #[derive(Clone, Debug)]
 pub struct Random<T: RandomGen> {
     random_gen: T,
-    one_out_of: usize,
+    p: f64,
 }
 
 impl<T: RandomGen> Random<T> {
     pub fn new(random_gen: T) -> Self {
-        Random {
-            random_gen,
-            one_out_of: 2,
-        }
+        Random { random_gen, p: 0.5 }
     }
 
-    pub fn with_one_out_of(random_gen: T, one_out_of: usize) -> Option<Self> {
-        if one_out_of < 2 {
+    pub fn with_p(random_gen: T, p: f64) -> Option<Self> {
+        if p < 0. || p > 1. {
             return None;
         }
-        Some(Random {
-            random_gen,
-            one_out_of,
-        })
+        Some(Random { random_gen, p })
     }
 }
 
@@ -37,7 +31,7 @@ impl<V: VariableName, P: ProblemRepr<V>, T: RandomGen> ConfigInitializer<V, P> f
         let mut vars = BTreeSet::new();
 
         for var in problem.get_variables() {
-            if self.random_gen.rand_in_range(0..self.one_out_of) == 0 {
+            if self.random_gen.random() < self.p {
                 vars.insert(var);
             }
         }
