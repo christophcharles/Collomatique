@@ -170,7 +170,7 @@ fn subject_slot_overlaps_next_day() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::SubjectWithSlotOverlappingNextDay)
+        Err(Error::SubjectWithSlotOverlappingNextDay(0, 0, 0))
     );
 }
 
