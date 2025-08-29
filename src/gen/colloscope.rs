@@ -2203,7 +2203,7 @@ impl<'a> IlpTranslator<'a> {
             }
 
             let start = range.start;
-            let end = range.end - window_size;
+            let end = range.end - window_size + 1;
             for i in start..end {
                 output.push(i..(i + window_size));
             }
