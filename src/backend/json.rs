@@ -10,7 +10,7 @@ pub enum BackupError<T: std::fmt::Debug + std::error::Error> {
 
 pub type BackupResult<T, E> = std::result::Result<T, BackupError<E>>;
 
-fn get_backup_id<T: OrdId, U: OrdId + From<u64>>(
+fn get_next_id<T: OrdId, U: OrdId + From<u64>>(
     next_id: &mut u64,
     id_map: &mut BTreeMap<T, U>,
     id: T,
@@ -28,8 +28,8 @@ fn get_backup_id<T: OrdId, U: OrdId + From<u64>>(
 
 fn translate_incompat<T: OrdId>(
     incompat: Incompat<T>,
-    week_pattern_ids: &BTreeMap<T, BackupWeekPatternId>,
-) -> Option<Incompat<BackupWeekPatternId>> {
+    week_pattern_ids: &BTreeMap<T, WeekPatternId>,
+) -> Option<Incompat<WeekPatternId>> {
     Some(Incompat {
         name: incompat.name,
         max_count: incompat.max_count,
@@ -37,12 +37,12 @@ fn translate_incompat<T: OrdId>(
             .groups
             .into_iter()
             .map(|x| {
-                Some(IncompatGroup::<BackupWeekPatternId> {
+                Some(IncompatGroup::<WeekPatternId> {
                     slots: x
                         .slots
                         .into_iter()
                         .map(|y| {
-                            Some(IncompatSlot::<BackupWeekPatternId> {
+                            Some(IncompatSlot::<WeekPatternId> {
                                 start: y.start,
                                 duration: y.duration,
                                 week_pattern_id: week_pattern_ids
@@ -59,8 +59,8 @@ fn translate_incompat<T: OrdId>(
 
 fn translate_group_list<T: OrdId>(
     group_list: GroupList<T>,
-    student_ids: &BTreeMap<T, BackupStudentId>,
-) -> Option<GroupList<BackupStudentId>> {
+    student_ids: &BTreeMap<T, StudentId>,
+) -> Option<GroupList<StudentId>> {
     Some(GroupList {
         name: group_list.name,
         groups: group_list.groups,
@@ -78,10 +78,10 @@ fn translate_group_list<T: OrdId>(
 
 fn translate_subject<T: OrdId, U: OrdId, V: OrdId>(
     subject: Subject<T, U, V>,
-    subject_group_ids: &BTreeMap<T, BackupSubjectGroupId>,
-    incompat_ids: &BTreeMap<U, BackupIncompatId>,
-    group_list_ids: &BTreeMap<V, BackupGroupListId>,
-) -> Option<Subject<BackupSubjectGroupId, BackupIncompatId, BackupGroupListId>> {
+    subject_group_ids: &BTreeMap<T, SubjectGroupId>,
+    incompat_ids: &BTreeMap<U, IncompatId>,
+    group_list_ids: &BTreeMap<V, GroupListId>,
+) -> Option<Subject<SubjectGroupId, IncompatId, GroupListId>> {
     Some(Subject {
         name: subject.name,
         subject_group_id: subject_group_ids.get(&subject.subject_group_id).cloned()?,
@@ -105,10 +105,10 @@ fn translate_subject<T: OrdId, U: OrdId, V: OrdId>(
 
 fn translate_time_slot<T: OrdId, U: OrdId, V: OrdId>(
     time_slot: TimeSlot<T, U, V>,
-    subject_ids: &BTreeMap<T, BackupSubjectId>,
-    teacher_ids: &BTreeMap<U, BackupTeacherId>,
-    week_pattern_ids: &BTreeMap<V, BackupWeekPatternId>,
-) -> Option<TimeSlot<BackupSubjectId, BackupTeacherId, BackupWeekPatternId>> {
+    subject_ids: &BTreeMap<T, SubjectId>,
+    teacher_ids: &BTreeMap<U, TeacherId>,
+    week_pattern_ids: &BTreeMap<V, WeekPatternId>,
+) -> Option<TimeSlot<SubjectId, TeacherId, WeekPatternId>> {
     Some(TimeSlot {
         subject_id: subject_ids.get(&time_slot.subject_id).cloned()?,
         teacher_id: teacher_ids.get(&time_slot.teacher_id).cloned()?,
@@ -121,8 +121,8 @@ fn translate_time_slot<T: OrdId, U: OrdId, V: OrdId>(
 
 fn translate_grouping<T: OrdId>(
     grouping: Grouping<T>,
-    time_slot_ids: &BTreeMap<T, BackupTimeSlotId>,
-) -> Option<Grouping<BackupTimeSlotId>> {
+    time_slot_ids: &BTreeMap<T, TimeSlotId>,
+) -> Option<Grouping<TimeSlotId>> {
     Some(Grouping {
         name: grouping.name,
         slots: grouping
@@ -139,8 +139,8 @@ fn translate_grouping<T: OrdId>(
 
 fn translate_grouping_incompat<T: OrdId>(
     grouping_incompat: GroupingIncompat<T>,
-    grouping_ids: &BTreeMap<T, BackupGroupingId>,
-) -> Option<GroupingIncompat<BackupGroupingId>> {
+    grouping_ids: &BTreeMap<T, GroupingId>,
+) -> Option<GroupingIncompat<GroupingId>> {
     Some(GroupingIncompat {
         max_count: grouping_incompat.max_count,
         groupings: grouping_incompat
@@ -157,8 +157,8 @@ fn translate_grouping_incompat<T: OrdId>(
 
 fn translate_colloscope_group_list<V: OrdId>(
     colloscope_group_list: ColloscopeGroupList<V>,
-    student_ids: &BTreeMap<V, BackupStudentId>,
-) -> Option<ColloscopeGroupList<BackupStudentId>> {
+    student_ids: &BTreeMap<V, StudentId>,
+) -> Option<ColloscopeGroupList<StudentId>> {
     Some(ColloscopeGroupList {
         name: colloscope_group_list.name,
         groups: colloscope_group_list.groups,
@@ -176,8 +176,8 @@ fn translate_colloscope_group_list<V: OrdId>(
 
 fn translate_colloscope_time_slot<T: OrdId>(
     colloscope_time_slot: ColloscopeTimeSlot<T>,
-    teacher_ids: &BTreeMap<T, BackupTeacherId>,
-) -> Option<ColloscopeTimeSlot<BackupTeacherId>> {
+    teacher_ids: &BTreeMap<T, TeacherId>,
+) -> Option<ColloscopeTimeSlot<TeacherId>> {
     Some(ColloscopeTimeSlot {
         teacher_id: teacher_ids.get(&colloscope_time_slot.teacher_id).cloned()?,
         start: colloscope_time_slot.start,
@@ -188,9 +188,9 @@ fn translate_colloscope_time_slot<T: OrdId>(
 
 fn translate_colloscope_subject<T: OrdId, V: OrdId>(
     colloscope_subject: ColloscopeSubject<T, V>,
-    teacher_ids: &BTreeMap<T, BackupTeacherId>,
-    student_ids: &BTreeMap<V, BackupStudentId>,
-) -> Option<ColloscopeSubject<BackupTeacherId, BackupStudentId>> {
+    teacher_ids: &BTreeMap<T, TeacherId>,
+    student_ids: &BTreeMap<V, StudentId>,
+) -> Option<ColloscopeSubject<TeacherId, StudentId>> {
     Some(ColloscopeSubject {
         time_slots: colloscope_subject
             .time_slots
@@ -203,10 +203,10 @@ fn translate_colloscope_subject<T: OrdId, V: OrdId>(
 
 fn translate_colloscope<T: OrdId, U: OrdId, V: OrdId>(
     colloscope: Colloscope<T, U, V>,
-    teacher_ids: &BTreeMap<T, BackupTeacherId>,
-    subject_ids: &BTreeMap<U, BackupSubjectId>,
-    student_ids: &BTreeMap<V, BackupStudentId>,
-) -> Option<Colloscope<BackupTeacherId, BackupSubjectId, BackupStudentId>> {
+    teacher_ids: &BTreeMap<T, TeacherId>,
+    subject_ids: &BTreeMap<U, SubjectId>,
+    student_ids: &BTreeMap<V, StudentId>,
+) -> Option<Colloscope<TeacherId, SubjectId, StudentId>> {
     Some(Colloscope {
         name: colloscope.name,
         subjects: colloscope
@@ -226,9 +226,9 @@ fn translate_colloscope<T: OrdId, U: OrdId, V: OrdId>(
 
 fn translate_slot_selection<T: OrdId, U: OrdId>(
     slot_selection: SlotSelection<T, U>,
-    subject_ids: &BTreeMap<T, BackupSubjectId>,
-    time_slot_ids: &BTreeMap<U, BackupTimeSlotId>,
-) -> Option<SlotSelection<BackupSubjectId, BackupTimeSlotId>> {
+    subject_ids: &BTreeMap<T, SubjectId>,
+    time_slot_ids: &BTreeMap<U, TimeSlotId>,
+) -> Option<SlotSelection<SubjectId, TimeSlotId>> {
     Some(SlotSelection {
         subject_id: subject_ids.get(&slot_selection.subject_id).cloned()?,
         slot_groups: slot_selection
@@ -249,29 +249,29 @@ fn translate_slot_selection<T: OrdId, U: OrdId>(
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupWeekPatternId(u64);
+pub struct WeekPatternId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupTeacherId(u64);
+pub struct TeacherId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupStudentId(u64);
+pub struct StudentId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupSubjectGroupId(u64);
+pub struct SubjectGroupId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupIncompatId(u64);
+pub struct IncompatId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupGroupListId(u64);
+pub struct GroupListId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupSubjectId(u64);
+pub struct SubjectId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupTimeSlotId(u64);
+pub struct TimeSlotId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupGroupingId(u64);
+pub struct GroupingId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupGroupingIncompatId(u64);
+pub struct GroupingIncompatId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupColloscopeId(u64);
+pub struct ColloscopeId(u64);
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BackupSlotSelectionId(u64);
+pub struct SlotSelectionId(u64);
 
 macro_rules! impl_backup_id_from {
     ($id:ty) => {
@@ -282,108 +282,102 @@ macro_rules! impl_backup_id_from {
         }
     };
 }
-impl_backup_id_from!(BackupWeekPatternId);
-impl_backup_id_from!(BackupTeacherId);
-impl_backup_id_from!(BackupStudentId);
-impl_backup_id_from!(BackupSubjectGroupId);
-impl_backup_id_from!(BackupIncompatId);
-impl_backup_id_from!(BackupGroupListId);
-impl_backup_id_from!(BackupSubjectId);
-impl_backup_id_from!(BackupTimeSlotId);
-impl_backup_id_from!(BackupGroupingId);
-impl_backup_id_from!(BackupGroupingIncompatId);
-impl_backup_id_from!(BackupColloscopeId);
-impl_backup_id_from!(BackupSlotSelectionId);
+impl_backup_id_from!(WeekPatternId);
+impl_backup_id_from!(TeacherId);
+impl_backup_id_from!(StudentId);
+impl_backup_id_from!(SubjectGroupId);
+impl_backup_id_from!(IncompatId);
+impl_backup_id_from!(GroupListId);
+impl_backup_id_from!(SubjectId);
+impl_backup_id_from!(TimeSlotId);
+impl_backup_id_from!(GroupingId);
+impl_backup_id_from!(GroupingIncompatId);
+impl_backup_id_from!(ColloscopeId);
+impl_backup_id_from!(SlotSelectionId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackupAssignments {
-    pub subject_groups: BTreeMap<BackupSubjectGroupId, BackupSubjectId>,
-    pub incompats: BTreeSet<BackupIncompatId>,
+pub struct Assignments {
+    pub subject_groups: BTreeMap<SubjectGroupId, SubjectId>,
+    pub incompats: BTreeSet<IncompatId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackupData {
+pub struct JsonData {
     pub next_id: u64,
     pub general_data: GeneralData,
-    pub week_patterns: BTreeMap<BackupWeekPatternId, WeekPattern>,
-    pub teachers: BTreeMap<BackupTeacherId, Teacher>,
-    pub students: BTreeMap<BackupStudentId, Student>,
-    pub subject_groups: BTreeMap<BackupSubjectGroupId, SubjectGroup>,
-    pub incompats: BTreeMap<BackupIncompatId, Incompat<BackupWeekPatternId>>,
-    pub group_lists: BTreeMap<BackupGroupListId, GroupList<BackupStudentId>>,
-    pub subjects: BTreeMap<
-        BackupSubjectId,
-        Subject<BackupSubjectGroupId, BackupIncompatId, BackupGroupListId>,
-    >,
-    pub time_slots:
-        BTreeMap<BackupTimeSlotId, TimeSlot<BackupSubjectId, BackupTeacherId, BackupWeekPatternId>>,
-    pub groupings: BTreeMap<BackupGroupingId, Grouping<BackupTimeSlotId>>,
-    pub grouping_incompats: BTreeMap<BackupGroupingIncompatId, GroupingIncompat<BackupGroupingId>>,
-    pub colloscopes:
-        BTreeMap<BackupColloscopeId, Colloscope<BackupTeacherId, BackupSubjectId, BackupStudentId>>,
-    pub slot_selections:
-        BTreeMap<BackupSlotSelectionId, SlotSelection<BackupSubjectId, BackupTimeSlotId>>,
-    pub student_assignments: BTreeMap<BackupStudentId, BackupAssignments>,
+    pub week_patterns: BTreeMap<WeekPatternId, WeekPattern>,
+    pub teachers: BTreeMap<TeacherId, Teacher>,
+    pub students: BTreeMap<StudentId, Student>,
+    pub subject_groups: BTreeMap<SubjectGroupId, SubjectGroup>,
+    pub incompats: BTreeMap<IncompatId, Incompat<WeekPatternId>>,
+    pub group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
+    pub subjects: BTreeMap<SubjectId, Subject<SubjectGroupId, IncompatId, GroupListId>>,
+    pub time_slots: BTreeMap<TimeSlotId, TimeSlot<SubjectId, TeacherId, WeekPatternId>>,
+    pub groupings: BTreeMap<GroupingId, Grouping<TimeSlotId>>,
+    pub grouping_incompats: BTreeMap<GroupingIncompatId, GroupingIncompat<GroupingId>>,
+    pub colloscopes: BTreeMap<ColloscopeId, Colloscope<TeacherId, SubjectId, StudentId>>,
+    pub slot_selections: BTreeMap<SlotSelectionId, SlotSelection<SubjectId, TimeSlotId>>,
+    pub student_assignments: BTreeMap<StudentId, Assignments>,
 }
 
-impl BackupData {
+impl JsonData {
     pub async fn from_logic<T: Storage>(
         logic: &Logic<T>,
-    ) -> BackupResult<BackupData, T::InternalError> {
+    ) -> BackupResult<JsonData, T::InternalError> {
         let mut next_id = 0;
         let general_data = logic.general_data_get().await?;
 
-        let mut week_pattern_ids = BTreeMap::<T::WeekPatternId, BackupWeekPatternId>::new();
+        let mut week_pattern_ids = BTreeMap::<T::WeekPatternId, WeekPatternId>::new();
         let week_patterns: BTreeMap<_, _> = logic
             .week_patterns_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut week_pattern_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut week_pattern_ids, id);
                 (new_id, x)
             })
             .collect();
 
-        let mut teacher_ids = BTreeMap::<T::TeacherId, BackupTeacherId>::new();
+        let mut teacher_ids = BTreeMap::<T::TeacherId, TeacherId>::new();
         let teachers: BTreeMap<_, _> = logic
             .teachers_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut teacher_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut teacher_ids, id);
                 (new_id, x)
             })
             .collect();
 
-        let mut student_ids = BTreeMap::<T::StudentId, BackupStudentId>::new();
+        let mut student_ids = BTreeMap::<T::StudentId, StudentId>::new();
         let students: BTreeMap<_, _> = logic
             .students_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut student_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut student_ids, id);
                 (new_id, x)
             })
             .collect();
 
-        let mut subject_group_ids = BTreeMap::<T::SubjectGroupId, BackupSubjectGroupId>::new();
+        let mut subject_group_ids = BTreeMap::<T::SubjectGroupId, SubjectGroupId>::new();
         let subject_groups: BTreeMap<_, _> = logic
             .subject_groups_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut subject_group_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut subject_group_ids, id);
                 (new_id, x)
             })
             .collect();
 
-        let mut incompat_ids = BTreeMap::<T::IncompatId, BackupIncompatId>::new();
+        let mut incompat_ids = BTreeMap::<T::IncompatId, IncompatId>::new();
         let incompats: BTreeMap<_, _> = logic
             .incompats_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut incompat_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut incompat_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_incompat(x, &week_pattern_ids).ok_or(BackupError::InconsistentId)?,
@@ -391,13 +385,13 @@ impl BackupData {
             })
             .collect::<BackupResult<_, _>>()?;
 
-        let mut group_list_ids = BTreeMap::<T::GroupListId, BackupGroupListId>::new();
+        let mut group_list_ids = BTreeMap::<T::GroupListId, GroupListId>::new();
         let group_lists: BTreeMap<_, _> = logic
             .group_lists_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut group_list_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut group_list_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_group_list(x, &student_ids).ok_or(BackupError::InconsistentId)?,
@@ -405,13 +399,13 @@ impl BackupData {
             })
             .collect::<BackupResult<_, _>>()?;
 
-        let mut subject_ids = BTreeMap::<T::SubjectId, BackupSubjectId>::new();
+        let mut subject_ids = BTreeMap::<T::SubjectId, SubjectId>::new();
         let subjects: BTreeMap<_, _> = logic
             .subjects_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut subject_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut subject_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_subject(x, &subject_group_ids, &incompat_ids, &group_list_ids)
@@ -420,13 +414,13 @@ impl BackupData {
             })
             .collect::<BackupResult<_, _>>()?;
 
-        let mut time_slot_ids = BTreeMap::<T::TimeSlotId, BackupTimeSlotId>::new();
+        let mut time_slot_ids = BTreeMap::<T::TimeSlotId, TimeSlotId>::new();
         let time_slots: BTreeMap<_, _> = logic
             .time_slots_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut time_slot_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut time_slot_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_time_slot(x, &subject_ids, &teacher_ids, &week_pattern_ids)
@@ -435,13 +429,13 @@ impl BackupData {
             })
             .collect::<BackupResult<_, _>>()?;
 
-        let mut grouping_ids = BTreeMap::<T::GroupingId, BackupGroupingId>::new();
+        let mut grouping_ids = BTreeMap::<T::GroupingId, GroupingId>::new();
         let groupings: BTreeMap<_, _> = logic
             .groupings_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut grouping_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut grouping_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_grouping(x, &time_slot_ids).ok_or(BackupError::InconsistentId)?,
@@ -450,13 +444,13 @@ impl BackupData {
             .collect::<BackupResult<_, _>>()?;
 
         let mut grouping_incompat_ids =
-            BTreeMap::<T::GroupingIncompatId, BackupGroupingIncompatId>::new();
+            BTreeMap::<T::GroupingIncompatId, GroupingIncompatId>::new();
         let grouping_incompats: BTreeMap<_, _> = logic
             .grouping_incompats_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut grouping_incompat_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut grouping_incompat_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_grouping_incompat(x, &grouping_ids)
@@ -465,13 +459,13 @@ impl BackupData {
             })
             .collect::<BackupResult<_, _>>()?;
 
-        let mut colloscope_ids = BTreeMap::<T::ColloscopeId, BackupColloscopeId>::new();
+        let mut colloscope_ids = BTreeMap::<T::ColloscopeId, ColloscopeId>::new();
         let colloscopes: BTreeMap<_, _> = logic
             .colloscopes_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut colloscope_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut colloscope_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_colloscope(x, &teacher_ids, &subject_ids, &student_ids)
@@ -480,13 +474,13 @@ impl BackupData {
             })
             .collect::<BackupResult<_, _>>()?;
 
-        let mut slot_selection_ids = BTreeMap::<T::SlotSelectionId, BackupSlotSelectionId>::new();
+        let mut slot_selection_ids = BTreeMap::<T::SlotSelectionId, SlotSelectionId>::new();
         let slot_selections: BTreeMap<_, _> = logic
             .slot_selections_get_all()
             .await?
             .into_iter()
             .map(|(id, x)| {
-                let new_id = get_backup_id(&mut next_id, &mut slot_selection_ids, id);
+                let new_id = get_next_id(&mut next_id, &mut slot_selection_ids, id);
                 BackupResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_slot_selection(x, &subject_ids, &time_slot_ids)
@@ -497,7 +491,7 @@ impl BackupData {
 
         let mut student_assignments = BTreeMap::<_, _>::new();
         for (old_student_id, new_student_id) in &student_ids {
-            let mut incompats = BTreeSet::<BackupIncompatId>::new();
+            let mut incompats = BTreeSet::<IncompatId>::new();
             for (old_incompat_id, new_incompat_id) in &incompat_ids {
                 if logic
                     .incompat_for_student_get(*old_student_id, *old_incompat_id)
@@ -512,7 +506,7 @@ impl BackupData {
                 }
             }
 
-            let mut subject_groups = BTreeMap::<BackupSubjectGroupId, BackupSubjectId>::new();
+            let mut subject_groups = BTreeMap::<SubjectGroupId, SubjectId>::new();
             for (old_subject_group_id, new_subject_group_id) in &subject_group_ids {
                 let old_subject_id_opt = logic
                     .subject_group_for_student_get(*old_student_id, *old_subject_group_id)
@@ -534,14 +528,14 @@ impl BackupData {
 
             student_assignments.insert(
                 *new_student_id,
-                BackupAssignments {
+                Assignments {
                     subject_groups,
                     incompats,
                 },
             );
         }
 
-        Ok(BackupData {
+        Ok(JsonData {
             next_id,
             general_data,
             week_patterns,
