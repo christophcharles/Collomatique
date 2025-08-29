@@ -73,6 +73,18 @@ pub enum AnnotatedOp {
     Period(AnnotatedPeriodOp),
 }
 
+impl From<AnnotatedStudentOp> for AnnotatedOp {
+    fn from(value: AnnotatedStudentOp) -> Self {
+        AnnotatedOp::Student(value)
+    }
+}
+
+impl From<AnnotatedPeriodOp> for AnnotatedOp {
+    fn from(value: AnnotatedPeriodOp) -> Self {
+        AnnotatedOp::Period(value)
+    }
+}
+
 /// Student annotated operation enumeration
 ///
 /// Compared to [StudentOp], this is a annotated operation,
@@ -124,13 +136,15 @@ impl AnnotatedOp {
     ///
     /// This might lead to the creation of new unique ids
     /// through an [IdIssuer].
-    pub(crate) fn annotate(op: Op, id_issuer: &mut IdIssuer) -> AnnotatedOp {
+    pub(crate) fn annotate(op: Op, id_issuer: &mut IdIssuer) -> (AnnotatedOp, Option<NewId>) {
         match op {
             Op::Student(student_op) => {
-                AnnotatedOp::Student(AnnotatedStudentOp::annotate(student_op, id_issuer))
+                let (op, id) = AnnotatedStudentOp::annotate(student_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
             }
             Op::Period(period_op) => {
-                AnnotatedOp::Period(AnnotatedPeriodOp::annotate(period_op, id_issuer))
+                let (op, id) = AnnotatedPeriodOp::annotate(period_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
             }
         }
     }
@@ -140,12 +154,18 @@ impl AnnotatedStudentOp {
     /// Used internally
     ///
     /// Annotates the subcategory of operations [StudentOp].
-    fn annotate(student_op: StudentOp, id_issuer: &mut IdIssuer) -> AnnotatedStudentOp {
+    fn annotate(
+        student_op: StudentOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedStudentOp, Option<StudentId>) {
         match student_op {
-            StudentOp::Add(student) => AnnotatedStudentOp::Add(id_issuer.get_student_id(), student),
-            StudentOp::Remove(student_id) => AnnotatedStudentOp::Remove(student_id),
+            StudentOp::Add(student) => {
+                let new_id = id_issuer.get_student_id();
+                (AnnotatedStudentOp::Add(new_id, student), Some(new_id))
+            }
+            StudentOp::Remove(student_id) => (AnnotatedStudentOp::Remove(student_id), None),
             StudentOp::Update(student_id, student) => {
-                AnnotatedStudentOp::Update(student_id, student)
+                (AnnotatedStudentOp::Update(student_id, student), None)
             }
         }
     }
@@ -155,17 +175,25 @@ impl AnnotatedPeriodOp {
     /// Used internally
     ///
     /// Annotates the subcategory of operations [PeriodOp].
-    fn annotate(period_op: PeriodOp, id_issuer: &mut IdIssuer) -> AnnotatedPeriodOp {
+    fn annotate(
+        period_op: PeriodOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedPeriodOp, Option<PeriodId>) {
         match period_op {
-            PeriodOp::ChangeStartDate(date) => AnnotatedPeriodOp::ChangeStartDate(date),
+            PeriodOp::ChangeStartDate(date) => (AnnotatedPeriodOp::ChangeStartDate(date), None),
             PeriodOp::AddFront(desc) => {
-                AnnotatedPeriodOp::AddFront(id_issuer.get_period_id(), desc)
+                let new_id = id_issuer.get_period_id();
+                (AnnotatedPeriodOp::AddFront(new_id, desc), Some(new_id))
             }
             PeriodOp::AddAfter(after_id, desc) => {
-                AnnotatedPeriodOp::AddAfter(id_issuer.get_period_id(), after_id, desc)
+                let new_id = id_issuer.get_period_id();
+                (
+                    AnnotatedPeriodOp::AddAfter(new_id, after_id, desc),
+                    Some(new_id),
+                )
             }
-            PeriodOp::Remove(period_id) => AnnotatedPeriodOp::Remove(period_id),
-            PeriodOp::Update(period_id, desc) => AnnotatedPeriodOp::Update(period_id, desc),
+            PeriodOp::Remove(period_id) => (AnnotatedPeriodOp::Remove(period_id), None),
+            PeriodOp::Update(period_id, desc) => (AnnotatedPeriodOp::Update(period_id, desc), None),
         }
     }
 }
