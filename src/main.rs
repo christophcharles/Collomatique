@@ -363,14 +363,10 @@ async fn general_command(
 }
 
 async fn week_pattern_command(
-    command: WeekPatternCommand,
-    app_state: &mut AppState<sqlite::Store>,
+    _command: WeekPatternCommand,
+    _app_state: &mut AppState<sqlite::Store>,
 ) -> Result<()> {
-    use collomatique::frontend::state::{Operation, UpdateError};
-
     todo!("Week pattern commands not yet implemented");
-
-    Ok(())
 }
 
 #[tokio::main]
