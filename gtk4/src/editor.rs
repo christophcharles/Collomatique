@@ -1,5 +1,6 @@
 use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
+use glib::object::Cast;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use relm4::prelude::{ComponentController, RelmWidgetExt};
 use relm4::{adw, gtk};
@@ -82,6 +83,42 @@ enum PanelNumbers {
     Teachers = 3,
     Students = 4,
     Assignments = 5,
+}
+
+impl PanelNumbers {
+    fn iter() -> impl Iterator<Item = PanelNumbers> {
+        [
+            PanelNumbers::GeneralPlanning,
+            PanelNumbers::WeekPatterns,
+            PanelNumbers::Subjects,
+            PanelNumbers::Teachers,
+            PanelNumbers::Students,
+            PanelNumbers::Assignments,
+        ]
+        .into_iter()
+    }
+
+    fn panel_name(&self) -> &'static str {
+        match self {
+            PanelNumbers::GeneralPlanning => "general_planning",
+            PanelNumbers::WeekPatterns => "week_patterns",
+            PanelNumbers::Subjects => "subjects",
+            PanelNumbers::Teachers => "teachers",
+            PanelNumbers::Students => "students",
+            PanelNumbers::Assignments => "assignments",
+        }
+    }
+
+    fn panel_title(&self) -> &'static str {
+        match self {
+            PanelNumbers::GeneralPlanning => "Planning général",
+            PanelNumbers::WeekPatterns => "Modèles de périodicité",
+            PanelNumbers::Subjects => "Matières",
+            PanelNumbers::Teachers => "Colleurs",
+            PanelNumbers::Students => "Élèves",
+            PanelNumbers::Assignments => "Inscriptions dans les matières",
+        }
+    }
 }
 
 pub struct EditorPanel {
@@ -433,22 +470,9 @@ impl Component for EditorPanel {
             .launch(())
             .detach();
 
-        let pages_names = vec![
-            "general_planning",
-            "week_patterns",
-            "subjects",
-            "teachers",
-            "students",
-            "assignments",
-        ];
-        let pages_titles_map = BTreeMap::from([
-            ("general_planning", "Planning général"),
-            ("week_patterns", "Modèles de périodicité"),
-            ("subjects", "Matières"),
-            ("teachers", "Colleurs"),
-            ("students", "Élèves"),
-            ("assignments", "Inscriptions dans les matières"),
-        ]);
+        let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
+        let pages_titles_map =
+            BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
 
         let model = EditorPanel {
             file_name: None,
@@ -469,54 +493,19 @@ impl Component for EditorPanel {
         };
         let widgets = view_output!();
 
-        widgets.main_stack.add_titled(
-            model.general_planning.widget(),
-            Some(model.pages_names[PanelNumbers::GeneralPlanning as usize]),
-            model
-                .pages_titles_map
-                .get(model.pages_names[PanelNumbers::GeneralPlanning as usize])
-                .unwrap(),
-        );
-        widgets.main_stack.add_titled(
-            &gtk::Label::new(Some("Placeholder")),
-            Some(model.pages_names[PanelNumbers::WeekPatterns as usize]),
-            model
-                .pages_titles_map
-                .get(model.pages_names[PanelNumbers::WeekPatterns as usize])
-                .unwrap(),
-        );
-        widgets.main_stack.add_titled(
-            model.subjects.widget(),
-            Some(model.pages_names[PanelNumbers::Subjects as usize]),
-            model
-                .pages_titles_map
-                .get(model.pages_names[PanelNumbers::Subjects as usize])
-                .unwrap(),
-        );
-        widgets.main_stack.add_titled(
-            model.teachers.widget(),
-            Some(model.pages_names[PanelNumbers::Teachers as usize]),
-            model
-                .pages_titles_map
-                .get(model.pages_names[PanelNumbers::Teachers as usize])
-                .unwrap(),
-        );
-        widgets.main_stack.add_titled(
-            model.students.widget(),
-            Some(model.pages_names[PanelNumbers::Students as usize]),
-            model
-                .pages_titles_map
-                .get(model.pages_names[PanelNumbers::Students as usize])
-                .unwrap(),
-        );
-        widgets.main_stack.add_titled(
-            model.assignments.widget(),
-            Some(model.pages_names[PanelNumbers::Assignments as usize]),
-            model
-                .pages_titles_map
-                .get(model.pages_names[PanelNumbers::Assignments as usize])
-                .unwrap(),
-        );
+        for panel in PanelNumbers::iter() {
+            let widget: gtk::Widget = match panel {
+                PanelNumbers::GeneralPlanning => model.general_planning.widget().clone().upcast(),
+                PanelNumbers::WeekPatterns => gtk::Label::new(Some("Placeholder")).clone().upcast(),
+                PanelNumbers::Subjects => model.subjects.widget().clone().upcast(),
+                PanelNumbers::Teachers => model.teachers.widget().clone().upcast(),
+                PanelNumbers::Students => model.students.widget().clone().upcast(),
+                PanelNumbers::Assignments => model.assignments.widget().clone().upcast(),
+            };
+            widgets
+                .main_stack
+                .add_titled(&widget, Some(panel.panel_name()), panel.panel_title());
+        }
 
         ComponentParts { model, widgets }
     }
