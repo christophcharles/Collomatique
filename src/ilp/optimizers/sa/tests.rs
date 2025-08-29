@@ -1,8 +1,8 @@
-use collomatique::eval_fn;
-use collomatique::ilp::linexpr::Expr;
-use collomatique::ilp::{Config, ProblemBuilder};
+#[test]
+fn test_sa() {
+    use crate::ilp::linexpr::Expr;
+    use crate::ilp::{Config, ProblemBuilder};
 
-fn main() {
     // We test on a simple scheduling problem.
     //
     // We have two student groups x and y.
@@ -30,6 +30,9 @@ fn main() {
     // We represent this with 8 boolean variables.
     // The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
     // The same pattern is used for yij.
+    //
+    // We add a cost function: putting y on the first course of the second week costs "1.0".
+    // So, the prefered solution should be : ["x12", "y11", "y22", "x21"]
 
     let x11 = Expr::var("x11");
     let x12 = Expr::var("x12");
@@ -63,15 +66,27 @@ fn main() {
         .eval_fn(crate::eval_fn!(|x| if x.get("y12") { 1.0 } else { 0.0 }))
         .build();
 
-    let dijkstra_solver = collomatique::ilp::solvers::dijkstra::Solver::new(&pb);
-    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&pb, dijkstra_solver);
+    let dijkstra_solver = crate::ilp::solvers::dijkstra::Solver::new(&pb);
+    let mut sa_optimizer = super::Optimizer::new(&pb, dijkstra_solver);
 
-    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+    let config = Config::from_iter(["x11", "y12", "y21"]); // We choose a starting closer to the "bad" (high cost) solution
+    sa_optimizer.set_init_config(config);
+    sa_optimizer.set_max_iter(1); // There are only two solutions so only one iteration should even be enough to find the optimal one
 
-    sa_optimizer.set_init_config(pb.random_config(&mut random_gen));
-    sa_optimizer.set_max_iter(10);
-
+    let mut random_gen = crate::ilp::random::DefaultRndGen::new();
     let solution = sa_optimizer.optimize(&mut random_gen);
 
-    println!("{:?}", Config::from(solution.unwrap()));
+    assert_eq!(
+        Config::from(solution.expect("Solution found")),
+        Config::from_iter(["x12", "y11", "y22", "x21"])
+    );
+
+    let config = Config::from_iter(["x12", "y11", "y22"]); // We choose a starting closer to the "good" (low cost) solution
+    sa_optimizer.set_init_config(config);
+    let solution = sa_optimizer.optimize(&mut random_gen);
+
+    assert_eq!(
+        Config::from(solution.expect("Solution found")),
+        Config::from_iter(["x12", "y11", "y22", "x21"])
+    );
 }
