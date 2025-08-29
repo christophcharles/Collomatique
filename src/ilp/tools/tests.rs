@@ -100,3 +100,44 @@ fn test_is_feasable() {
     assert_eq!(cfg_repr_e.is_feasable(), false);
     assert_eq!(cfg_repr_f.is_feasable(), false);
 }
+
+#[test]
+fn test_neighbours() {
+    use crate::ilp::linexpr::Expr;
+
+    let a = Expr::var("a");
+    let b = Expr::var("b");
+    let c = Expr::var("c");
+    let d = Expr::var("d");
+
+    let pb = crate::ilp::ProblemBuilder::new()
+        .add((&a + &b).leq(&Expr::constant(1)))
+        .add((&c + &d).leq(&Expr::constant(1)))
+        .add((&a + &d).eq(&Expr::constant(1)))
+        .build();
+
+    let mat_repr = MatRepr::new(&pb);
+
+    let config = Config::from_iter(["a", "b"]);
+
+    let cfg_repr = mat_repr.config(&config);
+
+    let neighbours = cfg_repr
+        .neighbours()
+        .into_iter()
+        .collect::<BTreeSet<ConfigRepr>>();
+
+    let config_0 = Config::from_iter(["b"]);
+    let config_1 = Config::from_iter(["a"]);
+    let config_2 = Config::from_iter(["a", "b", "c"]);
+    let config_3 = Config::from_iter(["a", "b", "d"]);
+
+    let cfg_repr_0 = mat_repr.config(&config_0);
+    let cfg_repr_1 = mat_repr.config(&config_1);
+    let cfg_repr_2 = mat_repr.config(&config_2);
+    let cfg_repr_3 = mat_repr.config(&config_3);
+
+    let neighbours_expected = BTreeSet::from_iter([cfg_repr_0, cfg_repr_1, cfg_repr_2, cfg_repr_3]);
+
+    assert_eq!(neighbours, neighbours_expected);
+}
