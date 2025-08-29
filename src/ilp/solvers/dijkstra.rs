@@ -12,18 +12,19 @@ impl Solver {
     }
 }
 
-use super::FeasabilitySolver;
+use super::{FeasabilitySolver, VariableName};
+
 use std::collections::BTreeSet;
 
-impl FeasabilitySolver for Solver {
+impl<V: VariableName> FeasabilitySolver<V> for Solver {
     fn restore_feasability_exclude<'a>(
         &self,
-        config: &Config<'a>,
-        exclude_list: &BTreeSet<&FeasableConfig<'a>>,
-    ) -> Option<FeasableConfig<'a>> {
+        config: &Config<'a, V>,
+        exclude_list: &BTreeSet<&FeasableConfig<'a, V>>,
+    ) -> Option<FeasableConfig<'a, V>> {
         use std::collections::VecDeque;
 
-        let exclude_configs: BTreeSet<Config<'a>> =
+        let exclude_configs: BTreeSet<Config<'a, V>> =
             exclude_list.iter().map(|x| x.inner().clone()).collect();
         let mut explored_configs = exclude_configs.clone();
         let mut config_queue = VecDeque::new();
