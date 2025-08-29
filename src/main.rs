@@ -592,10 +592,7 @@ async fn week_count_command(
             {
                 let err = match e {
                     UpdateError::WeekPatternsNeedTruncating(week_patterns_to_truncate) => {
-                        let week_patterns = app_state
-                            .get_backend_logic()
-                            .week_patterns_get_all()
-                            .await?;
+                        let week_patterns = app_state.week_patterns_get_all().await?;
 
                         let week_pattern_list = week_patterns_to_truncate.into_iter().map(
                             |week_pattern| week_patterns.get(&week_pattern).expect("Week pattern id should be valid as it is taken from a dependancy")
