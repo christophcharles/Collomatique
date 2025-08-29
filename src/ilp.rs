@@ -1,4 +1,5 @@
 pub mod linexpr;
+pub mod random;
 pub mod solvers;
 mod tools;
 
@@ -110,6 +111,16 @@ impl std::fmt::Display for Problem {
         }
 
         Ok(())
+    }
+}
+
+impl Problem {
+    pub fn random_config<T: random::RandomGen>(&self, random_gen: &mut T) -> Config {
+        let mut config = Config::new();
+        for v in &self.variables {
+            config.set(v, random_gen.randbool());
+        }
+        config
     }
 }
 
