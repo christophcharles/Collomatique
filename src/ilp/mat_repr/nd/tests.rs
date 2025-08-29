@@ -56,21 +56,31 @@ fn test_is_feasable() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["b"]).unwrap();
-    let config_3 = pb.config_from(["a", "b"]).unwrap();
-    let config_4 = pb.config_from(["c"]).unwrap();
-    let config_5 = pb.config_from(["a", "c"]).unwrap();
-    let config_6 = pb.config_from(["b", "c"]).unwrap();
-    let config_7 = pb.config_from(["a", "b", "c"]).unwrap();
-    let config_8 = pb.config_from(["d"]).unwrap();
-    let config_9 = pb.config_from(["a", "d"]).unwrap();
-    let config_a = pb.config_from(["b", "d"]).unwrap();
-    let config_b = pb.config_from(["a", "b", "d"]).unwrap();
-    let config_c = pb.config_from(["c", "d"]).unwrap();
-    let config_d = pb.config_from(["a", "c", "d"]).unwrap();
-    let config_e = pb.config_from(["b", "c", "d"]).unwrap();
-    let config_f = pb.config_from(["a", "b", "c", "d"]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
+    let config_7 = pb
+        .config_from([("a", true), ("b", true), ("c", true)])
+        .unwrap();
+    let config_8 = pb.config_from([("d", true)]).unwrap();
+    let config_9 = pb.config_from([("a", true), ("d", true)]).unwrap();
+    let config_a = pb.config_from([("b", true), ("d", true)]).unwrap();
+    let config_b = pb
+        .config_from([("a", true), ("b", true), ("d", true)])
+        .unwrap();
+    let config_c = pb.config_from([("c", true), ("d", true)]).unwrap();
+    let config_d = pb
+        .config_from([("a", true), ("c", true), ("d", true)])
+        .unwrap();
+    let config_e = pb
+        .config_from([("b", true), ("c", true), ("d", true)])
+        .unwrap();
+    let config_f = pb
+        .config_from([("a", true), ("b", true), ("c", true), ("d", true)])
+        .unwrap();
 
     let nd_problem = &pb.pb_repr;
 
@@ -183,9 +193,9 @@ fn test_is_feasable_no_constraint() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["b"]).unwrap();
-    let config_3 = pb.config_from(["a", "b"]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
 
     use crate::ilp::mat_repr::ConfigRepr;
     assert_eq!(
@@ -232,13 +242,15 @@ fn nd_config_ord() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["b"]).unwrap();
-    let config_3 = pb.config_from(["a", "b"]).unwrap();
-    let config_4 = pb.config_from(["c"]).unwrap();
-    let config_5 = pb.config_from(["a", "c"]).unwrap();
-    let config_6 = pb.config_from(["b", "c"]).unwrap();
-    let config_7 = pb.config_from(["a", "b", "c"]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
+    let config_7 = pb
+        .config_from([("a", true), ("b", true), ("c", true)])
+        .unwrap();
 
     let nd_config_0 = config_0.cfg_repr.clone();
     let nd_config_1 = config_1.cfg_repr.clone();
@@ -315,21 +327,31 @@ fn compute_lhs() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["b"]).unwrap();
-    let config_3 = pb.config_from(["a", "b"]).unwrap();
-    let config_4 = pb.config_from(["c"]).unwrap();
-    let config_5 = pb.config_from(["a", "c"]).unwrap();
-    let config_6 = pb.config_from(["b", "c"]).unwrap();
-    let config_7 = pb.config_from(["a", "b", "c"]).unwrap();
-    let config_8 = pb.config_from(["d"]).unwrap();
-    let config_9 = pb.config_from(["a", "d"]).unwrap();
-    let config_a = pb.config_from(["b", "d"]).unwrap();
-    let config_b = pb.config_from(["a", "b", "d"]).unwrap();
-    let config_c = pb.config_from(["c", "d"]).unwrap();
-    let config_d = pb.config_from(["a", "c", "d"]).unwrap();
-    let config_e = pb.config_from(["b", "c", "d"]).unwrap();
-    let config_f = pb.config_from(["a", "b", "c", "d"]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
+    let config_7 = pb
+        .config_from([("a", true), ("b", true), ("c", true)])
+        .unwrap();
+    let config_8 = pb.config_from([("d", true)]).unwrap();
+    let config_9 = pb.config_from([("a", true), ("d", true)]).unwrap();
+    let config_a = pb.config_from([("b", true), ("d", true)]).unwrap();
+    let config_b = pb
+        .config_from([("a", true), ("b", true), ("d", true)])
+        .unwrap();
+    let config_c = pb.config_from([("c", true), ("d", true)]).unwrap();
+    let config_d = pb
+        .config_from([("a", true), ("c", true), ("d", true)])
+        .unwrap();
+    let config_e = pb
+        .config_from([("b", true), ("c", true), ("d", true)])
+        .unwrap();
+    let config_f = pb
+        .config_from([("a", true), ("b", true), ("c", true), ("d", true)])
+        .unwrap();
 
     let nd_problem = &pb.pb_repr;
 

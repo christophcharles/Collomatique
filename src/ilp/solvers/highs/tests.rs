@@ -44,9 +44,9 @@ fn highs() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
+        .add_bool_variables(["y11", "y12", "y21", "y22"])
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
@@ -86,8 +86,10 @@ fn highs() {
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap(),
+        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+            .unwrap(),
+        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+            .unwrap(),
     ]);
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
@@ -139,9 +141,9 @@ fn highs_2() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
-        .add_variables(["y11", "y12", "y21", "y22"])
+        .add_bool_variables(["y11", "y12", "y21", "y22"])
         .unwrap()
         // Both class should not attend a course at the same time
         .add_constraint((&x11 + &y11).leq(&one))
@@ -171,7 +173,9 @@ fn highs_2() {
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
         .build();
-    let config = pb.config_from(["y21", "y22", "x11"]).unwrap();
+    let config = pb
+        .config_from([("y21", true), ("y22", true), ("x11", true)])
+        .unwrap();
 
     let solver = super::Solver::new();
 
@@ -181,8 +185,10 @@ fn highs_2() {
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap(),
+        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+            .unwrap(),
+        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+            .unwrap(),
     ]);
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
@@ -201,7 +207,7 @@ fn highs_impossible() {
     let one = Expr::<String>::constant(1);
 
     let pb = ProblemBuilder::<String>::new()
-        .add_variables(["x11", "x12", "x21", "x22"])
+        .add_bool_variables(["x11", "x12", "x21", "x22"])
         .unwrap()
         .add_constraints([
             (&x11 + &x12).eq(&one),
@@ -212,7 +218,7 @@ fn highs_impossible() {
         ])
         .unwrap()
         .build();
-    let config = pb.config_from(["x11"]).unwrap();
+    let config = pb.config_from([("x11", true)]).unwrap();
 
     let solver = super::Solver::new();
 

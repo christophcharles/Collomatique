@@ -86,8 +86,10 @@ fn coin_cbc() {
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap(),
+        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+            .unwrap(),
+        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+            .unwrap(),
     ]);
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
@@ -171,7 +173,9 @@ fn coin_cbc_2() {
         .add_constraint((&y21 + &y22).eq(&one))
         .unwrap()
         .build();
-    let config = pb.config_from(["y21", "y22", "x11"]).unwrap();
+    let config = pb
+        .config_from([("y21", true), ("y22", true), ("x11", true)])
+        .unwrap();
 
     let solver = super::Solver::new();
 
@@ -181,8 +185,10 @@ fn coin_cbc_2() {
 
     use std::collections::BTreeSet;
     let possible_solutions = BTreeSet::from([
-        pb.config_from(["x11", "y12", "y21", "x22"]).unwrap(),
-        pb.config_from(["x12", "y11", "y22", "x21"]).unwrap(),
+        pb.config_from([("x11", true), ("y12", true), ("y21", true), ("x22", true)])
+            .unwrap(),
+        pb.config_from([("x12", true), ("y11", true), ("y22", true), ("x21", true)])
+            .unwrap(),
     ]);
 
     assert!(possible_solutions.contains(&solution.expect("Solution should be found").into_inner()));
@@ -212,7 +218,7 @@ fn coin_cbc_impossible() {
         ])
         .unwrap()
         .build();
-    let config = pb.config_from(["x11"]).unwrap();
+    let config = pb.config_from([("x11", true)]).unwrap();
 
     let solver = super::Solver::new();
 

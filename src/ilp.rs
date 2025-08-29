@@ -255,24 +255,28 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
             .expect("Valid variables as no variables are used")
     }
 
-    pub fn config_from<'a, T: IntoIterator<Item = (V, bool)>>(
+    pub fn config_from<'a, U, T: IntoIterator<Item = (U, bool)>>(
         &'a self,
         bool_vars: T,
-    ) -> Result<Config<'a, V, P>, V> {
+    ) -> Result<Config<'a, V, P>, V>
+    where
+        U: Into<V>,
+    {
         let mut vars_repr = BTreeMap::new();
 
         for (var, value) in bool_vars {
-            let var_type = match self.variables.get(&var) {
+            let v = var.into();
+            let var_type = match self.variables.get(&v) {
                 Some(t) => t.clone(),
-                None => return Err(Error::InvalidVariable(var.clone())),
+                None => return Err(Error::InvalidVariable(v.clone())),
             };
             if var_type != VariableType::Bool {
-                return Err(Error::InvalidVariableType(var.clone()));
+                return Err(Error::InvalidVariableType(v.clone()));
             }
 
             let num = self
                 .variables_lookup
-                .get(&var)
+                .get(&v)
                 .copied()
                 .expect("Variable should exist as it is in variables map");
             vars_repr.insert(num, if value { 1 } else { 0 });
