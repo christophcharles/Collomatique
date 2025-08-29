@@ -1876,6 +1876,8 @@ struct GenColloscopeData<T: Storage> {
     incompats: BTreeMap<T::IncompatId, Incompat<T::WeekPatternId>>,
     students: BTreeMap<T::StudentId, Student>,
     incompat_for_student_data: BTreeSet<(T::StudentId, T::IncompatId)>,
+    subjects: BTreeMap<T::SubjectId, Subject<T::SubjectGroupId, T::IncompatId, T::GroupListId>>,
+    subject_for_student_data: BTreeSet<(T::StudentId, T::SubjectId)>,
 }
 
 impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
@@ -1903,6 +1905,30 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             }
         }
 
+        let subjects = self.data_storage.subjects_get_all().await?;
+        let subject_groups = self.data_storage.subject_groups_get_all().await?;
+
+        let mut subject_for_student_data = BTreeSet::new();
+        for (&student_id, _student) in &students {
+            for (&subject_group_id, _subject_group) in &subject_groups {
+                let subject_opt = self
+                    .data_storage
+                    .subject_group_for_student_get(student_id, subject_group_id)
+                    .await
+                    .map_err(|e| match e {
+                        Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid", id1),
+                        Id2Error::InvalidId2(id2) => {
+                            panic!("Subject group id {:?} should be valid", id2)
+                        }
+                        Id2Error::InternalError(int_err) => int_err,
+                    })?;
+
+                if let Some(subject_id) = subject_opt {
+                    subject_for_student_data.insert((student_id, subject_id));
+                }
+            }
+        }
+
         Ok(GenColloscopeData {
             general_data: self.data_storage.general_data_get().await?,
             week_patterns: self.data_storage.week_patterns_get_all().await?,
@@ -1910,6 +1936,8 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             incompats,
             students,
             incompat_for_student_data,
+            subjects,
+            subject_for_student_data,
         })
     }
 
@@ -2061,6 +2089,24 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
                             .iter()
                             .cloned(),
                     )
+                }
+            }
+
+            for (&subject_id, subject) in &data.subjects {
+                if let Some(incompat_id) = subject.incompat_id {
+                    if data
+                        .subject_for_student_data
+                        .contains(&(student_id, subject_id))
+                    {
+                        // Because we are using BTreeSet, we don't care if the incompat was already added
+                        new_student.incompatibilities.extend(
+                            incompat_id_map
+                                .get(&incompat_id)
+                                .expect("Incompat id should be valid in map")
+                                .iter()
+                                .cloned(),
+                        )
+                    }
                 }
             }
 
