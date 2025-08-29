@@ -636,10 +636,7 @@ impl Storage for Store {
         &mut self,
         group_list: &GroupList<Self::StudentId>,
     ) -> impl core::future::Future<
-        Output = std::result::Result<
-            Self::GroupListId,
-            InvalidCrossError<Self::InternalError, GroupList<Self::StudentId>, Self::StudentId>,
-        >,
+        Output = std::result::Result<Self::GroupListId, Self::InternalError>,
     > + Send {
         group_lists::add(&self.pool, group_list)
     }
@@ -654,17 +651,8 @@ impl Storage for Store {
         &mut self,
         index: Self::GroupListId,
         group_list: &GroupList<Self::StudentId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            InvalidCrossIdError<
-                Self::InternalError,
-                GroupList<Self::StudentId>,
-                Self::GroupListId,
-                Self::StudentId,
-            >,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         group_lists::update(&self.pool, index, group_list)
     }
 

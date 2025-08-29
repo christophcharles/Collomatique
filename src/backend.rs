@@ -208,6 +208,13 @@ pub enum DataStatusWithId<Id: OrdId> {
     BadCrossId(Id),
 }
 
+#[derive(Error, Debug)]
+pub enum DataStatusWithIdAndInvalidState<Id: OrdId> {
+    Ok,
+    InvalidData,
+    BadCrossId(Id),
+}
+
 use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
@@ -697,15 +704,71 @@ pub trait Storage: Send + Sync {
     async unsafe fn group_lists_add_unchecked(
         &mut self,
         group_list: &GroupList<Self::StudentId>,
-    ) -> std::result::Result<
-        Self::GroupListId,
-        InvalidCrossError<Self::InternalError, GroupList<Self::StudentId>, Self::StudentId>,
-    >;
+    ) -> std::result::Result<Self::GroupListId, Self::InternalError>;
     async unsafe fn group_lists_remove_unchecked(
         &mut self,
         index: Self::GroupListId,
     ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn group_lists_update_unchecked(
+        &mut self,
+        index: Self::GroupListId,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn group_lists_check_id(
+        &self,
+        index: Self::GroupListId,
+    ) -> std::result::Result<bool, Self::InternalError> {
+        async move {
+            let group_lists = self.group_lists_get_all().await?;
+
+            Ok(group_lists.contains_key(&index))
+        }
+    }
+    async fn group_lists_check_data(
+        &self,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> std::result::Result<DataStatusWithIdAndInvalidState<Self::StudentId>, Self::InternalError>
+    {
+        async move {
+            let students = self.students_get_all().await?;
+
+            for (&student_id, &group) in &group_list.students_mapping {
+                if !students.contains_key(&student_id) {
+                    return Ok(DataStatusWithIdAndInvalidState::BadCrossId(student_id));
+                }
+
+                if group >= group_list.groups.len() {
+                    return Ok(DataStatusWithIdAndInvalidState::InvalidData);
+                }
+            }
+
+            Ok(DataStatusWithIdAndInvalidState::Ok)
+        }
+    }
+    async fn group_lists_add(
+        &mut self,
+        group_list: &GroupList<Self::StudentId>,
+    ) -> std::result::Result<
+        Self::GroupListId,
+        InvalidCrossError<Self::InternalError, GroupList<Self::StudentId>, Self::StudentId>,
+    > {
+        async move {
+            let data_status = self.group_lists_check_data(group_list).await?;
+            match data_status {
+                DataStatusWithIdAndInvalidState::BadCrossId(id) => {
+                    Err(InvalidCrossError::InvalidCrossId(id))
+                }
+                DataStatusWithIdAndInvalidState::InvalidData => {
+                    Err(InvalidCrossError::InvalidData(group_list.clone()))
+                }
+                DataStatusWithIdAndInvalidState::Ok => {
+                    let id = unsafe { self.group_lists_add_unchecked(group_list) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
+    async fn group_lists_update(
         &mut self,
         index: Self::GroupListId,
         group_list: &GroupList<Self::StudentId>,
@@ -717,16 +780,34 @@ pub trait Storage: Send + Sync {
             Self::GroupListId,
             Self::StudentId,
         >,
-    >;
+    > {
+        async move {
+            if !self.group_lists_check_id(index).await? {
+                return Err(InvalidCrossIdError::InvalidId(index));
+            }
+
+            let data_status = self.group_lists_check_data(group_list).await?;
+            match data_status {
+                DataStatusWithIdAndInvalidState::BadCrossId(id) => {
+                    Err(InvalidCrossIdError::InvalidCrossId(id))
+                }
+                DataStatusWithIdAndInvalidState::InvalidData => {
+                    Err(InvalidCrossIdError::InvalidData(group_list.clone()))
+                }
+                DataStatusWithIdAndInvalidState::Ok => {
+                    unsafe { self.group_lists_update_unchecked(index, group_list) }.await?;
+                    Ok(())
+                }
+            }
+        }
+    }
     async fn group_lists_can_remove(
         &mut self,
         index: Self::GroupListId,
     ) -> std::result::Result<Vec<Self::SubjectId>, IdError<Self::InternalError, Self::GroupListId>>
     {
         async move {
-            let group_lists = self.group_lists_get_all().await?;
-
-            if !group_lists.contains_key(&index) {
+            if !self.group_lists_check_id(index).await? {
                 return Err(IdError::InvalidId(index));
             }
 
