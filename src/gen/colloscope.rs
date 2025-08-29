@@ -1831,116 +1831,6 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
-    fn is_slot_compatible_with_student(
-        &self,
-        slot_start: &SlotStart,
-        duration: NonZeroU32,
-        student: usize,
-    ) -> bool {
-        for incompat in self.data.students[student]
-            .incompatibilities
-            .iter()
-            .copied()
-        {
-            for incompat_group in self.data.incompatibilities[incompat].groups.iter().copied() {
-                for slot in self.data.incompatibility_groups[incompat_group]
-                    .slots
-                    .iter()
-                {
-                    if slot.overlap_with(&SlotWithDuration {
-                        start: slot_start.clone(),
-                        duration,
-                    }) {
-                        return false;
-                    }
-                }
-            }
-        }
-        true
-    }
-
-    fn build_students_incompats_constraint_for_group(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        group: &GroupDesc,
-    ) -> Option<Constraint<Variable>> {
-        let mut ok = true;
-        for student in group.students.iter().copied() {
-            if !self.is_slot_compatible_with_student(&slot.start, subject.duration, student) {
-                ok = false;
-            }
-        }
-        if ok {
-            return None;
-        }
-
-        let lhs = Expr::var(Variable::GroupInSlot {
-            subject: i,
-            slot: j,
-            group: k,
-        });
-        Some(lhs.eq(&Expr::constant(0)))
-    }
-
-    fn build_students_incompats_constraint_for_dynamic_student(
-        &self,
-        i: usize,
-        subject: &Subject,
-        j: usize,
-        slot: &SlotWithTeacher,
-        k: usize,
-        student: usize,
-    ) -> Option<Constraint<Variable>> {
-        if self.is_slot_compatible_with_student(&slot.start, subject.duration, student) {
-            return None;
-        }
-
-        let lhs = Expr::var(Variable::DynamicGroupAssignment {
-            subject: i,
-            slot: j,
-            group: k,
-            student,
-        });
-        Some(lhs.eq(&Expr::constant(0)))
-    }
-
-    fn build_students_incompats_constraints(&self) -> BTreeSet<Constraint<Variable>> {
-        let mut constraints = BTreeSet::new();
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    constraints.extend(self.build_students_incompats_constraint_for_group(
-                        i, subject, j, slot, k, group,
-                    ));
-                }
-            }
-        }
-
-        for (i, subject) in self.data.subjects.iter().enumerate() {
-            for (j, slot) in subject.slots.iter().enumerate() {
-                for (k, group) in subject.groups.prefilled_groups.iter().enumerate() {
-                    if Self::is_group_fixed(group, subject) {
-                        continue;
-                    }
-                    for student in subject.groups.not_assigned.iter().copied() {
-                        constraints.extend(
-                            self.build_students_incompats_constraint_for_dynamic_student(
-                                i, subject, j, slot, k, student,
-                            ),
-                        );
-                    }
-                }
-            }
-        }
-
-        constraints
-    }
-
     fn build_max_min_balancing_from_expr(
         &self,
         subject: &Subject,
@@ -2317,8 +2207,6 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_grouping_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_grouping_incompats_constraints())
-            .expect("Variables should be declared")
-            .add_constraints(self.build_students_incompats_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_incompat_group_for_student_constraints())
             .expect("Variables should be declared")
