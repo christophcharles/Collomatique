@@ -5,18 +5,17 @@ use super::*;
 
 use ndarray::{Array, Array1, Array2, ArrayView};
 
-#[derive(Debug, Clone)]
-pub struct MatRepr<'a> {
-    problem: &'a Problem,
+#[derive(Debug, Clone, Default)]
+pub struct MatRepr {
     leq_mat: Array2<i32>,
     leq_constants: Array1<i32>,
     eq_mat: Array2<i32>,
     eq_constants: Array1<i32>,
 }
 
-impl<'a> MatRepr<'a> {
-    pub fn new(problem: &'a Problem) -> MatRepr<'a> {
-        let p = problem.variables.len();
+impl MatRepr {
+    pub fn new(variables_vec: &Vec<String>, constraints: &Vec<linexpr::Constraint>) -> MatRepr {
+        let p = variables_vec.len();
 
         let mut leq_mat = Array2::zeros((0, p));
         let mut eq_mat = Array2::zeros((0, p));
@@ -24,9 +23,9 @@ impl<'a> MatRepr<'a> {
         let mut leq_constants_vec = vec![];
         let mut eq_constants_vec = vec![];
 
-        for c in &problem.constraints {
+        for c in constraints {
             let mut current_row = Array::zeros(p);
-            for (j, var) in problem.variables.iter().enumerate() {
+            for (j, var) in variables_vec.iter().enumerate() {
                 if let Some(val) = c.get_var(var) {
                     current_row[j] = val;
                 }
@@ -49,7 +48,6 @@ impl<'a> MatRepr<'a> {
         let eq_constants = Array::from_vec(eq_constants_vec);
 
         MatRepr {
-            problem,
             leq_mat,
             leq_constants,
             eq_mat,
@@ -57,49 +55,42 @@ impl<'a> MatRepr<'a> {
         }
     }
 
-    pub fn config<'b>(&'b self, config: &Config) -> Option<ConfigRepr<'a, 'b>> {
-        let p1 = self.problem as *const Problem;
-        let p2 = config.problem as *const Problem;
-
-        if p1 != p2 {
-            return None;
-        }
-
-        let p = self.problem.variables.len();
+    pub fn config<'a>(&self, config: &Config<'a>) -> ConfigRepr<'a> {
+        let p = config.problem.variables.len();
 
         let mut values = Array1::zeros(p);
 
-        for (i, var) in self.problem.variables.iter().enumerate() {
+        for (i, var) in config.problem.variables.iter().enumerate() {
             if config.get(var).expect("Variable declared for config") {
                 values[i] = 1;
             }
         }
 
-        Some(ConfigRepr {
-            mat_repr: self,
+        ConfigRepr {
+            problem: config.problem,
             values,
-        })
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigRepr<'a, 'b> {
-    mat_repr: &'b MatRepr<'a>,
+pub struct ConfigRepr<'a> {
+    problem: &'a Problem,
     values: Array1<i32>,
 }
 
-impl<'a, 'b> PartialEq for ConfigRepr<'a, 'b> {
+impl<'a> PartialEq for ConfigRepr<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == std::cmp::Ordering::Equal
     }
 }
 
-impl<'a, 'b> Eq for ConfigRepr<'a, 'b> {}
+impl<'a> Eq for ConfigRepr<'a> {}
 
-impl<'a, 'b> Ord for ConfigRepr<'a, 'b> {
+impl<'a> Ord for ConfigRepr<'a> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let p1: *const MatRepr<'a> = &*self.mat_repr;
-        let p2: *const MatRepr<'a> = &*other.mat_repr;
+        let p1: *const Problem = &*self.problem;
+        let p2: *const Problem = &*other.problem;
 
         let mat_repr_ord = p1.cmp(&p2);
         if mat_repr_ord != std::cmp::Ordering::Equal {
@@ -121,26 +112,28 @@ impl<'a, 'b> Ord for ConfigRepr<'a, 'b> {
     }
 }
 
-impl<'a, 'b> PartialOrd for ConfigRepr<'a, 'b> {
+impl<'a> PartialOrd for ConfigRepr<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a, 'b> From<ConfigRepr<'a, 'b>> for Config<'a> {
-    fn from(value: ConfigRepr<'a, 'b>) -> Self {
-        let mut config = value.mat_repr.problem.default_config();
-        for (i, var) in value.mat_repr.problem.variables.iter().enumerate() {
+impl<'a> From<ConfigRepr<'a>> for Config<'a> {
+    fn from(value: ConfigRepr<'a>) -> Self {
+        let mut config = value.problem.default_config();
+        for (i, var) in value.problem.variables.iter().enumerate() {
             *config.get_mut(var).expect("Variable declared in config") = value.values[i] == 1;
         }
         config
     }
 }
 
-impl<'a, 'b> ConfigRepr<'a, 'b> {
+impl<'a> ConfigRepr<'a> {
     pub fn is_feasable(&self) -> bool {
-        let leq_column = self.mat_repr.leq_mat.dot(&self.values) + &self.mat_repr.leq_constants;
-        let eq_column = self.mat_repr.eq_mat.dot(&self.values) + &self.mat_repr.eq_constants;
+        let leq_column =
+            self.problem.mat_repr.leq_mat.dot(&self.values) + &self.problem.mat_repr.leq_constants;
+        let eq_column =
+            self.problem.mat_repr.eq_mat.dot(&self.values) + &self.problem.mat_repr.eq_constants;
 
         for v in &leq_column {
             if *v > 0 {
@@ -155,7 +148,7 @@ impl<'a, 'b> ConfigRepr<'a, 'b> {
         true
     }
 
-    pub fn neighbours(&self) -> Vec<ConfigRepr<'a, 'b>> {
+    pub fn neighbours(&self) -> Vec<ConfigRepr<'a>> {
         let mut output = vec![];
 
         for i in 0..self.values.len() {
