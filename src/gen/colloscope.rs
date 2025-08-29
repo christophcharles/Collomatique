@@ -79,8 +79,14 @@ pub struct Interrogation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupDesc {
+    students: BTreeSet<usize>,
+    can_be_extended: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupsDesc {
-    assigned_to_group: Vec<BTreeSet<usize>>,
+    assigned_to_group: Vec<GroupDesc>,
     not_assigned: BTreeSet<usize>,
 }
 
@@ -198,7 +204,7 @@ impl ValidatedData {
             }
 
             for (j, group) in subject.groups.assigned_to_group.iter().enumerate() {
-                for k in group {
+                for k in &group.students {
                     if *k >= students.len() {
                         return Err(Error::SubjectWithInvalidAssignedStudent(i, j, *k));
                     }
@@ -214,7 +220,7 @@ impl ValidatedData {
             let mut students_no_duplicate = BTreeMap::new();
 
             for (j, group) in subject.groups.assigned_to_group.iter().enumerate() {
-                for k in group {
+                for k in &group.students {
                     if let Some(first_j) = students_no_duplicate.get(k) {
                         return Err(Error::SubjectWithDuplicatedStudentInGroups(
                             i, *k, *first_j, j,
@@ -223,14 +229,14 @@ impl ValidatedData {
                         students_no_duplicate.insert(*k, j);
                     }
                 }
-                if group.len() > subject.students_per_interrogation.end().get() {
+                if group.students.len() > subject.students_per_interrogation.end().get() {
                     return Err(Error::SubjectWithTooLargeAssignedGroup(
                         i,
                         j,
                         subject.students_per_interrogation.clone(),
                     ));
                 }
-                if group.is_empty() {
+                if group.students.is_empty() {
                     return Err(Error::SubjectWithEmptyGroup(i, j));
                 }
             }
