@@ -815,6 +815,8 @@ dependencies = [
 name = "collomatique-ilp"
 version = "0.1.0"
 dependencies = [
+ "coin_cbc",
+ "gag",
  "ndarray 0.15.6",
  "ordered-float",
  "sprs",
