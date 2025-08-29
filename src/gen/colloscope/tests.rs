@@ -2507,26 +2507,32 @@ fn group_on_week_selection_variables() {
         duration: NonZeroU32::new(60).unwrap(),
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::Strict,
-            object: BalancingObject::Teachers(BTreeMap::from([
-                (
-                    WeekSelection {
-                        selection: BTreeSet::from([0, 2]),
-                    },
-                    BTreeMap::from([
-                        (TeacherBalancing { teacher: 0 }, 1),
-                        (TeacherBalancing { teacher: 1 }, 1),
-                    ]),
-                ),
-                (
-                    WeekSelection {
-                        selection: BTreeSet::from([1, 3]),
-                    },
-                    BTreeMap::from([
-                        (TeacherBalancing { teacher: 0 }, 1),
-                        (TeacherBalancing { teacher: 1 }, 1),
-                    ]),
-                ),
-            ])),
+            slot_selections: vec![
+                BalancingSlotSelection {
+                    slot_groups: vec![
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([0, 2]),
+                            count: 1,
+                        },
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([4, 6]),
+                            count: 1,
+                        },
+                    ],
+                },
+                BalancingSlotSelection {
+                    slot_groups: vec![
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([1, 3]),
+                            count: 1,
+                        },
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([5, 7]),
+                            count: 1,
+                        },
+                    ],
+                },
+            ],
         }),
         slots: vec![
             SlotWithTeacher {
@@ -7145,7 +7151,7 @@ fn balancing_teachers() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::teachers_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_teachers_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -7360,7 +7366,7 @@ fn balancing_timeslots() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::timeslots_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -7584,7 +7590,7 @@ fn balancing_timeslots_2() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::timeslots_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -7799,7 +7805,9 @@ fn balancing_teachers_and_timeslots() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::teachers_and_timeslots_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_teachers_and_timeslots_from_slots(
+                &slots,
+            ),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -8258,7 +8266,7 @@ fn balancing_timeslots_with_ghost_group() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::timeslots_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -8575,7 +8583,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::timeslots_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -8824,7 +8832,7 @@ fn balancing_timeslots_with_partial_last_period() {
         period_is_strict: false,
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::OverallOnly,
-            object: BalancingObject::timeslots_from_slots(&slots),
+            slot_selections: BalancingRequirements::balance_timeslots_from_slots(&slots),
         }),
         duration: NonZeroU32::new(60).unwrap(),
         slots,
@@ -9820,26 +9828,32 @@ fn group_on_week_selection_constraints() {
         duration: NonZeroU32::new(60).unwrap(),
         balancing_requirements: Some(BalancingRequirements {
             strictness: BalancingStrictness::Strict,
-            object: BalancingObject::Teachers(BTreeMap::from([
-                (
-                    WeekSelection {
-                        selection: BTreeSet::from([0, 2]),
-                    },
-                    BTreeMap::from([
-                        (TeacherBalancing { teacher: 0 }, 1),
-                        (TeacherBalancing { teacher: 1 }, 1),
-                    ]),
-                ),
-                (
-                    WeekSelection {
-                        selection: BTreeSet::from([1, 3]),
-                    },
-                    BTreeMap::from([
-                        (TeacherBalancing { teacher: 0 }, 1),
-                        (TeacherBalancing { teacher: 1 }, 1),
-                    ]),
-                ),
-            ])),
+            slot_selections: vec![
+                BalancingSlotSelection {
+                    slot_groups: vec![
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([0, 2]),
+                            count: 1,
+                        },
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([4, 6]),
+                            count: 1,
+                        },
+                    ],
+                },
+                BalancingSlotSelection {
+                    slot_groups: vec![
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([1, 3]),
+                            count: 1,
+                        },
+                        BalancingSlotGroup {
+                            slots: BTreeSet::from([5, 7]),
+                            count: 1,
+                        },
+                    ],
+                },
+            ],
         }),
         slots: vec![
             SlotWithTeacher {
