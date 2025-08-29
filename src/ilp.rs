@@ -5,9 +5,50 @@ mod tools;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, PartialEq, Eq, Default, Clone)]
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct EvalFn {
+    func: Arc<dyn Fn(&Config) -> Option<f64>>,
+    debug_payload: &'static str,
+}
+
+impl EvalFn {
+    pub fn new(func: Arc<dyn Fn(&Config) -> Option<f64>>, debug_payload: &'static str) -> EvalFn {
+        EvalFn {
+            func,
+            debug_payload,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! eval_fn {
+    ($($body:tt)+) => {
+        $crate::ilp::EvalFn::new(
+            std::sync::Arc::new($($body)+),
+            stringify!($($body)+)
+        )
+    };
+}
+
+impl std::fmt::Debug for EvalFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.debug_payload)
+    }
+}
+
+impl std::ops::Deref for EvalFn {
+    type Target = Arc<dyn Fn(&Config) -> Option<f64>>;
+    fn deref(&self) -> &Arc<dyn Fn(&Config) -> Option<f64>> {
+        &self.func
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct ProblemBuilder {
     constraints: Vec<linexpr::Constraint>,
+    eval_fn: Option<EvalFn>,
 }
 
 impl ProblemBuilder {
@@ -17,6 +58,11 @@ impl ProblemBuilder {
 
     pub fn add(mut self, constraint: linexpr::Constraint) -> Self {
         self.constraints.push(constraint);
+        self
+    }
+
+    pub fn eval_fn(mut self, func: EvalFn) -> Self {
+        self.eval_fn = Some(func);
         self
     }
 
@@ -34,16 +80,18 @@ impl ProblemBuilder {
         Problem {
             variables,
             constraints: self.constraints,
+            eval_fn: self.eval_fn,
         }
     }
 }
 
 use std::collections::BTreeSet;
 
-#[derive(Debug, PartialEq, Eq, Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Problem {
     variables: BTreeSet<String>,
     constraints: Vec<linexpr::Constraint>,
+    eval_fn: Option<EvalFn>,
 }
 
 impl std::fmt::Display for Problem {
@@ -54,10 +102,13 @@ impl std::fmt::Display for Problem {
         }
         write!(f, " ]\n")?;
 
+        write!(f, "evaluation function : {:?}\n", self.eval_fn)?;
+
         write!(f, "constraints :")?;
         for (i, c) in self.constraints.iter().enumerate() {
             write!(f, "\n{}) {}", i, c)?;
         }
+
         Ok(())
     }
 }
