@@ -22,6 +22,8 @@ pub enum Op {
     Student(StudentOp),
     /// Operation on periods
     Period(PeriodOp),
+    /// Operation on the subjects
+    Subject(SubjectOp),
 }
 
 impl Operation for Op {}
@@ -58,6 +60,23 @@ pub enum PeriodOp {
     Update(PeriodId, Vec<bool>),
 }
 
+/// Subject operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// subjects we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubjectOp {
+    /// Add a subject after an existing subject
+    /// If `None`, it is placed first
+    AddAfter(Option<SubjectId>, subjects::SubjectExternalData),
+    /// Remove an existing subject
+    Remove(SubjectId),
+    /// Move a subject to another position in the list
+    ChangePosition(SubjectId, usize),
+    /// Update the parameters of an existing subject
+    Update(SubjectId, subjects::SubjectExternalData),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -71,6 +90,8 @@ pub enum AnnotatedOp {
     Student(AnnotatedStudentOp),
     /// Operation on the periods
     Period(AnnotatedPeriodOp),
+    /// Operation on the subjects
+    Subject(AnnotatedSubjectOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -82,6 +103,12 @@ impl From<AnnotatedStudentOp> for AnnotatedOp {
 impl From<AnnotatedPeriodOp> for AnnotatedOp {
     fn from(value: AnnotatedPeriodOp) -> Self {
         AnnotatedOp::Period(value)
+    }
+}
+
+impl From<AnnotatedSubjectOp> for AnnotatedOp {
+    fn from(value: AnnotatedSubjectOp) -> Self {
+        AnnotatedOp::Subject(value)
     }
 }
 
@@ -124,6 +151,27 @@ pub enum AnnotatedPeriodOp {
     Update(PeriodId, Vec<bool>),
 }
 
+/// Subject annotated operation enumeration
+///
+/// Compared to [SubjectOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedSubjectOp {
+    /// Add a period after an existing period
+    /// First parameter is the period id for the new period
+    /// If the second parameter is `None`, the subject is added at the first place
+    AddAfter(SubjectId, Option<SubjectId>, subjects::SubjectExternalData),
+    /// Remove an existing subject
+    Remove(SubjectId),
+    /// Move a subject to another position in the list
+    ChangePosition(SubjectId, usize),
+    /// Update the parameters of an existing subject
+    Update(SubjectId, subjects::SubjectExternalData),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -144,6 +192,10 @@ impl AnnotatedOp {
             }
             Op::Period(period_op) => {
                 let (op, id) = AnnotatedPeriodOp::annotate(period_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Subject(subject_op) => {
+                let (op, id) = AnnotatedSubjectOp::annotate(subject_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
         }
@@ -194,6 +246,31 @@ impl AnnotatedPeriodOp {
             }
             PeriodOp::Remove(period_id) => (AnnotatedPeriodOp::Remove(period_id), None),
             PeriodOp::Update(period_id, desc) => (AnnotatedPeriodOp::Update(period_id, desc), None),
+        }
+    }
+}
+
+impl AnnotatedSubjectOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [SubjectOp].
+    fn annotate(
+        subject_op: SubjectOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedSubjectOp, Option<SubjectId>) {
+        match subject_op {
+            SubjectOp::AddAfter(after_id, parameters) => {
+                let new_id = id_issuer.get_subject_id();
+                (
+                    AnnotatedSubjectOp::AddAfter(new_id, after_id, parameters),
+                    Some(new_id),
+                )
+            }
+            SubjectOp::ChangePosition(id, pos) => {
+                (AnnotatedSubjectOp::ChangePosition(id, pos), None)
+            }
+            SubjectOp::Remove(id) => (AnnotatedSubjectOp::Remove(id), None),
+            SubjectOp::Update(id, new_params) => (AnnotatedSubjectOp::Update(id, new_params), None),
         }
     }
 }

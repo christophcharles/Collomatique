@@ -14,7 +14,7 @@ use ids::IdIssuer;
 pub use ids::{PeriodId, StudentId, SubjectId};
 pub mod ops;
 pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp};
-use ops::{AnnotatedPeriodOp, AnnotatedStudentOp};
+use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp};
 
 pub mod periods;
 pub mod subjects;
@@ -127,6 +127,7 @@ pub enum Error {
 pub enum NewId {
     StudentId(StudentId),
     PeriodId(PeriodId),
+    SubjectId(SubjectId),
 }
 
 impl From<StudentId> for NewId {
@@ -138,6 +139,12 @@ impl From<StudentId> for NewId {
 impl From<PeriodId> for NewId {
     fn from(value: PeriodId) -> Self {
         NewId::PeriodId(value)
+    }
+}
+
+impl From<SubjectId> for NewId {
+    fn from(value: SubjectId) -> Self {
+        NewId::SubjectId(value)
     }
 }
 
@@ -162,6 +169,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Period(period_op) => {
                 Ok(AnnotatedOp::Period(self.build_rev_period(period_op)?))
             }
+            AnnotatedOp::Subject(subject_op) => {
+                Ok(AnnotatedOp::Subject(self.build_rev_subject(subject_op)?))
+            }
         }
     }
 
@@ -169,6 +179,7 @@ impl InMemoryData for Data {
         match op {
             AnnotatedOp::Student(student_op) => self.apply_student(student_op)?,
             AnnotatedOp::Period(period_op) => self.apply_period(period_op)?,
+            AnnotatedOp::Subject(subject_op) => self.apply_subject(subject_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -486,6 +497,13 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply period operations
+    fn apply_subject(&mut self, subject_op: &AnnotatedSubjectOp) -> std::result::Result<(), Error> {
+        todo!()
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -588,5 +606,15 @@ impl Data {
                 Ok(AnnotatedPeriodOp::Update(period_id.clone(), old_desc))
             }
         }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a subject operation
+    fn build_rev_subject(
+        &self,
+        subject_op: &AnnotatedSubjectOp,
+    ) -> std::result::Result<AnnotatedSubjectOp, Error> {
+        todo!()
     }
 }
