@@ -13,12 +13,23 @@ pub enum Panel {
 
 pub struct State {
     panel: Panel,
+    db: Option<std::path::PathBuf>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
             panel: Panel::SubjectGroups,
+            db: None,
+        }
+    }
+}
+
+impl State {
+    pub fn new(file: std::path::PathBuf) -> Self {
+        Self {
+            panel: Panel::SubjectGroups,
+            db: Some(file),
         }
     }
 }
