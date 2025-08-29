@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RulesUpdateWarning {}
 
 impl RulesUpdateWarning {
