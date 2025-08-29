@@ -83,7 +83,7 @@ impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParamete
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubjectPeriodicity {
     OnceForEveryBlockOfWeeks {
-        weeks_per_block: u32,
+        weeks_per_block: NonZeroU32,
     },
     ExactlyPeriodic {
         periodicity_in_weeks: NonZeroU32,

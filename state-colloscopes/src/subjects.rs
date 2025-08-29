@@ -96,7 +96,7 @@ pub enum SubjectPeriodicity {
     /// be on week 2 and week 3. We do not enforce a *perfect* regularity.
     OnceForEveryBlockOfWeeks {
         /// Number of weeks per block
-        weeks_per_block: u32,
+        weeks_per_block: NonZeroU32,
     },
     /// The interrogation must happen every week or every other week
     /// and the periodicity must be *strict*.

@@ -142,7 +142,7 @@ impl SubjectParameters {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubjectPeriodicity {
     OnceForEveryBlockOfWeeks {
-        weeks_per_block: u32,
+        weeks_per_block: NonZeroU32,
     },
     ExactlyPeriodic {
         periodicity_in_weeks: NonZeroU32,
