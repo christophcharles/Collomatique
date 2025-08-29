@@ -9,6 +9,7 @@ mod group_lists;
 mod incompats;
 mod students;
 mod subject_groups;
+mod subjects;
 mod teachers;
 mod week_patterns;
 
