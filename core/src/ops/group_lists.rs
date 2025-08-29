@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GroupListsUpdateWarning {
     LoosePrefilledGroupList(
         collomatique_state_colloscopes::GroupListId,
@@ -65,7 +65,7 @@ impl GroupListsUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GroupListsUpdateOp {
     AddNewGroupList(collomatique_state_colloscopes::group_lists::GroupListParameters),
     UpdateGroupList(
@@ -157,6 +157,15 @@ pub enum AssignGroupListToSubjectError {
 }
 
 impl GroupListsUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<GroupListsUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             GroupListsUpdateOp::AddNewGroupList(_params) => "Ajouter une liste de groupes".into(),

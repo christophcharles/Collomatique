@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum IncompatibilitiesUpdateWarning {}
 
 impl IncompatibilitiesUpdateWarning {
@@ -12,7 +12,7 @@ impl IncompatibilitiesUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum IncompatibilitiesUpdateOp {
     AddNewIncompat(collomatique_state_colloscopes::incompats::Incompatibility),
     DeleteIncompat(collomatique_state_colloscopes::IncompatId),
@@ -57,6 +57,17 @@ pub enum UpdateIncompatError {
 }
 
 impl IncompatibilitiesUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        _data: &T,
+    ) -> CleaningOps<IncompatibilitiesUpdateWarning> {
+        CleaningOps {
+            cleaning_ops: vec![],
+        }
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             IncompatibilitiesUpdateOp::AddNewIncompat(_) => {

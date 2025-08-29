@@ -51,7 +51,7 @@ pub enum OpCategory {
     GroupLists,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UpdateOp {
     GeneralPlanning(GeneralPlanningUpdateOp),
     Subjects(SubjectsUpdateOp),
@@ -86,7 +86,7 @@ pub enum UpdateError {
     GroupLists(#[from] GroupListsUpdateError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UpdateWarning {
     GeneralPlanning(GeneralPlanningUpdateWarning),
     Subjects(SubjectsUpdateWarning),
@@ -173,6 +173,55 @@ impl UpdateWarning {
 
     fn from_iter<T: Into<UpdateWarning>>(iter: impl IntoIterator<Item = T>) -> Vec<UpdateWarning> {
         iter.into_iter().map(|x| x.into()).collect()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CleaningOp<T: Clone + std::fmt::Debug> {
+    warning: T,
+    ops: Vec<UpdateOp>,
+}
+
+#[derive(Clone, Debug)]
+struct CleaningOps<T: Clone + std::fmt::Debug> {
+    cleaning_ops: Vec<CleaningOp<T>>,
+}
+
+impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> CleaningOps<T> {
+    fn downcast(self) -> CleaningOps<UpdateWarning> {
+        CleaningOps {
+            cleaning_ops: self
+                .cleaning_ops
+                .into_iter()
+                .map(|x| CleaningOp {
+                    warning: x.warning.into(),
+                    ops: x.ops,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl UpdateOp {
+    fn get_cleaning_ops<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &T,
+    ) -> CleaningOps<UpdateWarning> {
+        match self {
+            UpdateOp::GeneralPlanning(period_op) => period_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Subjects(subject_op) => subject_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Teachers(teacher_op) => teacher_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Students(student_op) => student_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Assignments(assignment_op) => assignment_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::WeekPatterns(week_pattern_op) => {
+                week_pattern_op.get_cleaning_ops(data).downcast()
+            }
+            UpdateOp::Slots(slot_op) => slot_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Incompatibilities(incompat_op) => {
+                incompat_op.get_cleaning_ops(data).downcast()
+            }
+            UpdateOp::GroupLists(group_list_op) => group_list_op.get_cleaning_ops(data).downcast(),
+        }
     }
 }
 

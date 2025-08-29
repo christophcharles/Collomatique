@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SlotsUpdateWarning {
     LooseRuleReferencingSlot(
         collomatique_state_colloscopes::SlotId,
@@ -27,7 +27,7 @@ impl SlotsUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SlotsUpdateOp {
     AddNewSlot(
         collomatique_state_colloscopes::SubjectId,
@@ -119,6 +119,15 @@ pub enum MoveSlotDownError {
 }
 
 impl SlotsUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<SlotsUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             SlotsUpdateOp::AddNewSlot(_desc, _slot) => "Ajouter un créneau de colle".into(),

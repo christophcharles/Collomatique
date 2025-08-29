@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GeneralPlanningUpdateWarning {
     LooseStudentExclusionForPeriod(
         collomatique_state_colloscopes::StudentId,
@@ -126,7 +126,7 @@ impl GeneralPlanningUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GeneralPlanningUpdateOp {
     DeleteFirstWeek,
     UpdateFirstWeek(collomatique_time::NaiveMondayDate),
@@ -191,6 +191,15 @@ pub enum UpdateWeekStatusError {
 }
 
 impl GeneralPlanningUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<GeneralPlanningUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             GeneralPlanningUpdateOp::DeleteFirstWeek => "Effacer le début des colles".into(),

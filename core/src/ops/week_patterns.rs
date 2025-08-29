@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WeekPatternsUpdateWarning {
     LooseInterrogationSlot(collomatique_state_colloscopes::SlotId),
     LooseScheduleIncompat(collomatique_state_colloscopes::IncompatId),
@@ -71,7 +71,7 @@ impl WeekPatternsUpdateWarning {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WeekPatternsUpdateOp {
     AddNewWeekPattern(collomatique_state_colloscopes::week_patterns::WeekPattern),
     UpdateWeekPattern(
@@ -102,6 +102,15 @@ pub enum DeleteWeekPatternError {
 }
 
 impl WeekPatternsUpdateOp {
+    pub(crate) fn get_cleaning_ops<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        data: &T,
+    ) -> CleaningOps<WeekPatternsUpdateWarning> {
+        todo!()
+    }
+
     pub fn get_desc(&self) -> String {
         match self {
             WeekPatternsUpdateOp::AddNewWeekPattern(_desc) => {
