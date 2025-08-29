@@ -2,7 +2,7 @@ use super::*;
 
 #[sqlx::test]
 async fn students_add_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _id = store
         .students_add(&Student {
@@ -34,7 +34,7 @@ async fn students_add_one(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn students_add_multiple(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _id = store
         .students_add(&Student {
@@ -172,7 +172,7 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
 
 #[sqlx::test]
 async fn students_remove_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -216,7 +216,7 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
 
 #[sqlx::test]
 async fn students_remove_then_add(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -281,7 +281,7 @@ VALUES ("Durand", "Bernard", NULL, "07 99 99 99 01"), ("Dupont", "Leonard", "old
 
 #[sqlx::test]
 async fn students_update(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"

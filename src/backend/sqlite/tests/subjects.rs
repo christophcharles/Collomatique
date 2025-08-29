@@ -106,7 +106,7 @@ struct SubjectDb {
 
 #[sqlx::test]
 async fn subjects_add_one_1(pool: sqlx::SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.subjects_add_unchecked(&Subject {
@@ -158,7 +158,7 @@ async fn subjects_add_one_1(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subjects_add_one_2(pool: sqlx::SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.subjects_add_unchecked(&Subject {
@@ -210,7 +210,7 @@ async fn subjects_add_one_2(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
-    let store = prepare_db(pool).await;
+    let mut store = prepare_db(pool).await;
 
     let id = unsafe {
         store.subjects_add_unchecked(&Subject {
@@ -661,7 +661,7 @@ async fn subjects_get_all(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -813,7 +813,7 @@ async fn subjects_remove_one_1(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -965,7 +965,7 @@ async fn subjects_remove_one_2(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store
@@ -1157,7 +1157,7 @@ async fn subjects_remove_one_then_add(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn subjects_update(pool: sqlx::SqlitePool) {
-    let store = prepare_example_db(pool).await;
+    let mut store = prepare_example_db(pool).await;
 
     unsafe {
         store

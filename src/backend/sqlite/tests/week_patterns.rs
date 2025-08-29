@@ -14,7 +14,7 @@ struct WeekDb {
 
 #[sqlx::test]
 async fn week_patterns_add_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
@@ -91,7 +91,7 @@ async fn week_patterns_add_one(pool: sqlx::SqlitePool) {
 
 #[sqlx::test]
 async fn week_patterns_add_multiple(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let weeks = (0..20).into_iter().map(|x| Week(x)).collect();
 
@@ -402,7 +402,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
 #[sqlx::test]
 async fn week_patterns_remove_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -455,7 +455,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
 #[sqlx::test]
 async fn week_patterns_remove_then_add(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
@@ -525,7 +525,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
 
 #[sqlx::test]
 async fn week_patterns_update_one(pool: sqlx::SqlitePool) {
-    let store = prepare_empty_db(pool).await;
+    let mut store = prepare_empty_db(pool).await;
 
     let _ = sqlx::query!(
         r#"
