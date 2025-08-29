@@ -301,12 +301,6 @@ CREATE TABLE "group_items" (
     }
 }
 
-impl Store {
-    pub fn get_pool(&self) -> &SqlitePool {
-        &self.pool
-    }
-}
-
 use super::*;
 
 mod group_lists;
