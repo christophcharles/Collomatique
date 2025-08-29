@@ -299,6 +299,58 @@ impl<V: UsableData> Objective<V> {
             sense: self.sense,
         }
     }
+
+    /// Transmute variables
+    ///
+    /// This method creates a new [Objective] with a different
+    /// variable type.
+    ///
+    /// It works like [Objective::transmute] but consumes the original objective
+    ///
+    /// For instance :
+    /// ```
+    /// # use collomatique_ilp::{linexpr::LinExpr, Objective, ObjectiveSense};
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
+    /// let obj = Objective::new(expr, ObjectiveSense::Minimize);
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let obj_transmute = obj.into_transmuted(|v| match v {
+    ///     V1::A => V2::A,
+    ///     V1::B => V2::B,
+    ///     V1::C => V2::C,
+    /// });
+    ///
+    /// let expected_result = Objective::new(
+    ///     LinExpr::var(V2::A) + 2.0*LinExpr::var(V2::B) + 3.0*LinExpr::var(V2::C),
+    ///     ObjectiveSense::Minimize
+    /// );
+    /// assert_eq!(obj_transmute, expected_result);
+    /// ```
+    pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, f: F) -> Objective<U> {
+        Objective {
+            func: self.func.into_transmuted(f),
+            sense: self.sense,
+        }
+    }
 }
 
 impl<V: UsableData> std::ops::Add for &Objective<V> {
