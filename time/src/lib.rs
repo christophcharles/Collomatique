@@ -189,7 +189,7 @@ impl SlotWithDuration {
 /// of a specific week.
 ///
 /// Internally it is just a [chrono::NaiveDate].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NaiveMondayDate(chrono::NaiveDate);
 
 impl NaiveMondayDate {
