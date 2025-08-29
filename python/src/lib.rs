@@ -7,5 +7,8 @@
 ///
 /// Runs the Python engine through stdin/stderr
 pub fn run_python_engine() {
-    println!("Hello World!");
+    for i in 1..=100 {
+        println!("Hello World! {}", i);
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
 }

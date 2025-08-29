@@ -1,4 +1,7 @@
+use tokio::io::BufReader;
+
 use relm4::{Component, ComponentParts, ComponentSender};
+use tokio::io::AsyncBufReadExt;
 
 #[derive(Debug)]
 pub enum ProcessWorkerInput {
@@ -20,6 +23,7 @@ pub enum ProcessWorkerCmdOutput {
     CheckRunning,
     ProcessKilled(std::io::Result<()>),
     ProcessLaunched(std::io::Result<tokio::process::Child>),
+    NewStdoutData(String, BufReader<tokio::process::ChildStdout>),
 }
 
 pub struct ProcessWorker {
@@ -142,7 +146,11 @@ impl Component for ProcessWorker {
                 self.launching = false;
 
                 match child_result {
-                    Ok(child) => {
+                    Ok(mut child) => {
+                        if let Some(stdout) = child.stdout.take() {
+                            let stdout_buf = BufReader::new(stdout);
+                            self.wait_stdout_data(sender.clone(), stdout_buf);
+                        }
                         self.child_process = Some(child);
                         self.schedule_check(sender);
                     }
@@ -151,6 +159,12 @@ impl Component for ProcessWorker {
                             .output(ProcessWorkerOutput::Error(e.to_string()))
                             .unwrap();
                     }
+                }
+            }
+            ProcessWorkerCmdOutput::NewStdoutData(data, stdout_buf) => {
+                sender.output(ProcessWorkerOutput::StdOut(data)).unwrap();
+                if self.child_process.is_some() {
+                    self.wait_stdout_data(sender, stdout_buf);
                 }
             }
         }
@@ -162,6 +176,18 @@ impl ProcessWorker {
         sender.oneshot_command(async move {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             ProcessWorkerCmdOutput::CheckRunning
+        });
+    }
+
+    fn wait_stdout_data(
+        &mut self,
+        sender: ComponentSender<Self>,
+        mut stdout_buf: BufReader<tokio::process::ChildStdout>,
+    ) {
+        sender.oneshot_command(async move {
+            let mut line = String::new();
+            stdout_buf.read_line(&mut line).await.unwrap();
+            ProcessWorkerCmdOutput::NewStdoutData(line, stdout_buf)
         });
     }
 }

@@ -1,13 +1,17 @@
 use gtk::prelude::{ButtonExt, GtkWindowExt, OrientableExt, TextBufferExt, TextViewExt, WidgetExt};
 use relm4::{adw, gtk, Component, ComponentController};
-use relm4::{
-    ComponentParts, ComponentSender, Controller, RelmWidgetExt, SimpleComponent, WorkerController,
-};
+use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt, WorkerController};
 
 use std::path::PathBuf;
 
 mod error_dialog;
 mod process_worker;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BufferOp {
+    Clear,
+    Insert(String),
+}
 
 pub struct Dialog {
     hidden: bool,
@@ -15,7 +19,7 @@ pub struct Dialog {
     is_running: bool,
     error_dialog: Controller<error_dialog::Dialog>,
     worker: WorkerController<process_worker::ProcessWorker>,
-    stdout: String,
+    buffer_op: Option<BufferOp>,
 }
 
 #[derive(Debug)]
@@ -31,11 +35,12 @@ pub enum DialogInput {
 }
 
 #[relm4::component(pub)]
-impl SimpleComponent for Dialog {
+impl Component for Dialog {
     type Init = ();
 
     type Input = DialogInput;
     type Output = ();
+    type CommandOutput = ();
 
     view! {
         #[root]
@@ -155,16 +160,18 @@ impl SimpleComponent for Dialog {
                             set_hexpand: true,
                             set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                             set_margin_all: 5,
+                            #[name(text_view)]
                             gtk::TextView {
                                 add_css_class: "frame",
                                 add_css_class: "osd",
                                 set_wrap_mode: gtk::WrapMode::Char,
                                 set_editable: false,
                                 set_monospace: true,
+                                #[name(text_buffer)]
                                 #[wrap(Some)]
                                 set_buffer = &gtk::TextBuffer {
-                                    #[watch]
-                                    set_text: &model.stdout,
+                                    #[track(model.buffer_op == Some(BufferOp::Clear))]
+                                    set_text: "",
                                 },
                             }
                         }
@@ -202,13 +209,14 @@ impl SimpleComponent for Dialog {
                 }
                 process_worker::ProcessWorkerOutput::Error(error) => DialogInput::Error(error),
             });
+
         let model = Dialog {
             hidden: true,
             path: PathBuf::new(),
             is_running: true,
             error_dialog,
             worker,
-            stdout: String::new(),
+            buffer_op: None,
         };
 
         let widgets = view_output!();
@@ -216,13 +224,13 @@ impl SimpleComponent for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             DialogInput::Run(path, script) => {
                 self.hidden = false;
                 self.path = path;
                 self.is_running = true;
-                self.stdout = String::new();
+                self.buffer_op = Some(BufferOp::Clear);
                 self.worker
                     .sender()
                     .send(process_worker::ProcessWorkerInput::RunScript(script))
@@ -242,7 +250,7 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::StdErr(_content) => {}
             DialogInput::StdOut(content) => {
-                self.stdout += &content;
+                self.buffer_op = Some(BufferOp::Insert(content));
             }
             DialogInput::Error(error) => {
                 self.error_dialog
@@ -251,6 +259,31 @@ impl SimpleComponent for Dialog {
                     .unwrap();
                 self.is_running = false;
             }
+        }
+    }
+
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update(message, sender.clone(), root);
+        self.update_view(widgets, sender);
+        self.update_buffer_if_needed(widgets);
+    }
+}
+
+impl Dialog {
+    fn update_buffer_if_needed(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if let Some(BufferOp::Insert(content)) = self.buffer_op.take() {
+            let mut end_iter = widgets.text_buffer.end_iter();
+            widgets.text_buffer.insert(&mut end_iter, &content);
+            let mut end_iter = widgets.text_buffer.end_iter();
+            widgets
+                .text_view
+                .scroll_to_iter(&mut end_iter, 0., false, 0., 0.);
         }
     }
 }
