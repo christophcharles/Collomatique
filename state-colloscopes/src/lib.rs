@@ -125,6 +125,12 @@ pub enum StudentError {
     /// A period id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
+
+    /// Some non-default assignments are still present for the student
+    #[error(
+        "student id {0:?} has non-default assignments for subject id {1:?} in period id ({0:?}) and cannot be removed or updated"
+    )]
+    StudentStillHasNonTrivialAssignments(StudentId, SubjectId, PeriodId),
 }
 
 /// Errors for periods operations
@@ -194,7 +200,7 @@ pub enum SubjectError {
 
     /// Some non-default assignments are still present for the subject
     #[error(
-        "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed"
+        "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed or updated"
     )]
     SubjectStillHasNonTrivialAssignments(PeriodId, SubjectId),
 }
@@ -761,8 +767,24 @@ impl Data {
                 Ok(())
             }
             AnnotatedStudentOp::Remove(id) => {
-                if !self.inner_data.students.student_map.contains_key(id) {
+                let Some(current_student) = self.inner_data.students.student_map.get(id) else {
                     return Err(StudentError::InvalidStudentId(*id));
+                };
+
+                for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
+                    if current_student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
+                    {
+                        if excluded_students.contains(id) {
+                            return Err(StudentError::StudentStillHasNonTrivialAssignments(
+                                *id,
+                                *subject_id,
+                                *period_id,
+                            ));
+                        }
+                    }
                 }
 
                 self.inner_data.students.student_map.remove(id);
@@ -774,6 +796,24 @@ impl Data {
                 let Some(current_student) = self.inner_data.students.student_map.get_mut(id) else {
                     return Err(StudentError::InvalidStudentId(*id));
                 };
+
+                for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
+                    if current_student.excluded_periods.contains(period_id)
+                        || !new_student.excluded_periods.contains(period_id)
+                    {
+                        continue;
+                    }
+                    for (subject_id, excluded_students) in &period_assignments.subject_exclusion_map
+                    {
+                        if excluded_students.contains(id) {
+                            return Err(StudentError::StudentStillHasNonTrivialAssignments(
+                                *id,
+                                *subject_id,
+                                *period_id,
+                            ));
+                        }
+                    }
+                }
 
                 *current_student = new_student.clone();
 
