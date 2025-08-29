@@ -105,13 +105,13 @@ fn check_entries_consistency(
     Ok(())
 }
 
-pub fn decode(json_data: &JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeError> {
+pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeError> {
     let mut caveats = BTreeSet::new();
 
     check_header(&json_data.header, &mut caveats)?;
     check_entries_consistency(&json_data.entries, &mut caveats)?;
 
-    let data = decode_entries(&json_data.entries)?;
+    let data = decode_entries(json_data.entries)?;
     Ok((data, caveats))
 }
 
@@ -122,11 +122,11 @@ struct PreData {
 
 mod student_list;
 
-fn decode_entries(entries: &[Entry]) -> Result<Data, DecodeError> {
+fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
     let mut pre_data = PreData::default();
 
     for entry in entries {
-        let EntryContent::ValidEntry(valid_entry) = &entry.content else {
+        let EntryContent::ValidEntry(valid_entry) = entry.content else {
             continue;
         };
 
