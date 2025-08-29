@@ -8,6 +8,7 @@ use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
 use std::collections::{BTreeMap, BTreeSet};
 use subjects::{Subjects, SubjectsExternalData};
+use teachers::{Teachers, TeachersExternalData};
 
 pub mod ids;
 use ids::IdIssuer;
@@ -71,6 +72,7 @@ struct InnerData {
     student_list: BTreeMap<StudentId, PersonWithContact>,
     periods: periods::Periods,
     subjects: subjects::Subjects,
+    teachers: teachers::Teachers,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -168,6 +170,24 @@ pub enum SubjectError {
     InterrogationCountRangeIsEmpty,
 }
 
+/// Errors for teacher operations
+///
+/// These errors can be returned when trying to modify [Data] with a teacher op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum TeacherError {
+    /// A teacher id is invalid
+    #[error("invalid teacher id ({0:?})")]
+    InvalidTeacherId(TeacherId),
+
+    /// The teacher id already exists
+    #[error("teacher id ({0:?}) already exists")]
+    TeacherIdAlreadyExists(TeacherId),
+
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -179,6 +199,8 @@ pub enum Error {
     Period(#[from] PeriodError),
     #[error(transparent)]
     Subject(#[from] SubjectError),
+    #[error(transparent)]
+    Teacher(#[from] TeacherError),
 }
 
 /// Potential new id returned by annotation
@@ -307,6 +329,10 @@ impl Data {
         for (id, _) in &self.inner_data.student_list {
             assert!(ids_so_far.insert(id.inner()));
         }
+
+        for (id, _) in &self.inner_data.teachers.teachers {
+            assert!(ids_so_far.insert(id.inner()));
+        }
     }
 
     /// USED INTERNALLY
@@ -374,6 +400,40 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Checks that a subject is valid
+    fn validate_teacher_internal(
+        teacher: &teachers::Teacher,
+        subject_ids: &BTreeSet<SubjectId>,
+    ) -> Result<(), TeacherError> {
+        for subject_id in &teacher.subjects {
+            if !subject_ids.contains(subject_id) {
+                return Err(TeacherError::InvalidSubjectId(*subject_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    fn validate_teacher(&self, teacher: &teachers::Teacher) -> Result<(), TeacherError> {
+        let subject_ids = self.build_subject_ids();
+
+        Self::validate_teacher_internal(teacher, &subject_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in subject data
+    fn check_teachers_data_consistency(&self, subject_ids: &BTreeSet<SubjectId>) {
+        for (_teacher_id, teacher) in &self.inner_data.teachers.teachers {
+            Self::validate_teacher_internal(teacher, subject_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -387,13 +447,28 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// Build the set of SubjectIds
+    ///
+    /// This is useful to check that references are valid
+    fn build_subject_ids(&self) -> BTreeSet<SubjectId> {
+        let mut ids = BTreeSet::new();
+        for (id, _) in &self.inner_data.subjects.ordered_subject_list {
+            ids.insert(*id);
+        }
+        ids
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
         let period_ids = self.build_period_ids();
+        let subject_ids = self.build_subject_ids();
 
         self.check_subjects_data_consistency(&period_ids);
+        self.check_teachers_data_consistency(&subject_ids);
     }
 }
 
@@ -408,6 +483,7 @@ impl Data {
             student_list,
             PeriodsExternalData::default(),
             SubjectsExternalData::default(),
+            TeachersExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -420,17 +496,13 @@ impl Data {
         student_list: BTreeMap<u64, PersonWithContact>,
         periods: periods::PeriodsExternalData,
         subjects: subjects::SubjectsExternalData,
+        teachers: teachers::TeachersExternalData,
     ) -> Result<Data, tools::IdError> {
         let student_ids = student_list.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
         let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
-        let teacher_ids = vec![];
-        let id_issuer = IdIssuer::new(
-            student_ids,
-            period_ids,
-            subject_ids,
-            teacher_ids.into_iter(),
-        )?;
+        let teacher_ids = teachers.teachers.iter().map(|(id, _d)| *id);
+        let id_issuer = IdIssuer::new(student_ids, period_ids, subject_ids, teacher_ids)?;
 
         let period_ids: std::collections::BTreeSet<_> = periods
             .ordered_period_list
@@ -438,6 +510,14 @@ impl Data {
             .map(|(id, _d)| *id)
             .collect();
         if !subjects.validate_all(&period_ids) {
+            return Err(tools::IdError::InvalidId);
+        }
+        let subject_ids: std::collections::BTreeSet<_> = subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _d)| *id)
+            .collect();
+        if !teachers.validate_all(&subject_ids) {
             return Err(tools::IdError::InvalidId);
         }
 
@@ -450,6 +530,7 @@ impl Data {
         };
         let periods = unsafe { Periods::from_external_data(periods) };
         let subjects = unsafe { Subjects::from_external_data(subjects) };
+        let teachers = unsafe { Teachers::from_external_data(teachers) };
 
         let data = Data {
             id_issuer,
@@ -457,6 +538,7 @@ impl Data {
                 student_list,
                 periods,
                 subjects,
+                teachers,
             },
         };
 

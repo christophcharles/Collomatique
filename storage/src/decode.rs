@@ -134,6 +134,7 @@ struct PreData {
     student_list: BTreeMap<u64, collomatique_state_colloscopes::PersonWithContact>,
     periods: collomatique_state_colloscopes::periods::PeriodsExternalData,
     subjects: collomatique_state_colloscopes::subjects::SubjectsExternalData,
+    teachers: collomatique_state_colloscopes::teachers::TeachersExternalData,
 }
 
 mod period_list;
@@ -161,7 +162,12 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         }
     }
 
-    let data = Data::from_data(pre_data.student_list, pre_data.periods, pre_data.subjects)?;
+    let data = Data::from_data(
+        pre_data.student_list,
+        pre_data.periods,
+        pre_data.subjects,
+        pre_data.teachers,
+    )?;
     Ok(data)
 }
 
