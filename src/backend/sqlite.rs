@@ -157,13 +157,13 @@ CREATE TABLE "subjects" (
 	"period_is_strict"	INTEGER NOT NULL,
 	"is_tutorial"	INTEGER NOT NULL,
 	"max_groups_per_slot"	INTEGER NOT NULL,
-	"balance_teachers"	INTEGER NOT NULL,
-	"balance_timeslots"	INTEGER NOT NULL,
 	"group_list_id"	INTEGER,
-	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	"balancing_constraints"	INTEGER NOT NULL,
+	"balancing_slot_selections"	INTEGER NOT NULL,
 	FOREIGN KEY("subject_group_id") REFERENCES "subject_groups"("subject_group_id"),
-	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id"),
-	PRIMARY KEY("subject_id" AUTOINCREMENT)
+	FOREIGN KEY("group_list_id") REFERENCES "group_lists"("group_list_id"),
+	PRIMARY KEY("subject_id" AUTOINCREMENT),
+	FOREIGN KEY("incompat_id") REFERENCES "incompats"("incompat_id")
 );
 
 CREATE TABLE "groupings" (
