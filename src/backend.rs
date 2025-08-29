@@ -1060,7 +1060,7 @@ pub trait Storage: Send + Sync {
     async unsafe fn time_slots_remove_unchecked(
         &mut self,
         index: Self::TimeSlotId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn time_slots_update_unchecked(
         &mut self,
         index: Self::TimeSlotId,
@@ -1151,6 +1151,47 @@ pub trait Storage: Send + Sync {
                     Ok(())
                 }
             }
+        }
+    }
+    async fn time_slots_can_remove(
+        &mut self,
+        index: Self::TimeSlotId,
+    ) -> std::result::Result<Vec<Self::GroupingId>, IdError<Self::InternalError, Self::TimeSlotId>>
+    {
+        async move {
+            if !self.time_slots_check_id(index).await? {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let groupings = self.groupings_get_all().await?;
+            for (grouping_id, grouping) in groupings {
+                if grouping.references_time_slot(index) {
+                    dependancies.push(grouping_id);
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn time_slots_remove(
+        &mut self,
+        index: Self::TimeSlotId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<Self::InternalError, Self::TimeSlotId, Vec<Self::GroupingId>>,
+    > {
+        async move {
+            let dependancies = self
+                .time_slots_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.time_slots_remove_unchecked(index) }.await?;
+            Ok(())
         }
     }
 
@@ -1386,6 +1427,12 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
 pub struct Grouping<TimeSlotId: OrdId> {
     pub name: String,
     pub slots: BTreeSet<TimeSlotId>,
+}
+
+impl<TimeSlotId: OrdId> Grouping<TimeSlotId> {
+    pub fn references_time_slot(&self, time_slot_id: TimeSlotId) -> bool {
+        self.slots.contains(&time_slot_id)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
