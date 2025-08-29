@@ -110,7 +110,7 @@ impl GeneralPlanningUpdateOp {
                     .clone();
                 let new_desc = desc.split_off(*new_week_count);
 
-                let mut session = collomatique_state::AppSession::new(data);
+                let mut session = collomatique_state::AppSession::new(data.clone());
 
                 session.apply(collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
@@ -119,7 +119,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, new_desc),
                 ))?;
 
-                session.commit();
+                *data = session.commit();
                 Ok(())
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -140,7 +140,7 @@ impl GeneralPlanningUpdateOp {
 
                 prev_desc.extend(desc);
 
-                let mut session = collomatique_state::AppSession::new(data);
+                let mut session = collomatique_state::AppSession::new(data.clone());
 
                 session.apply(collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::Update(previous_id, prev_desc),
@@ -149,7 +149,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
                 ))?;
 
-                session.commit();
+                *data = session.commit();
                 Ok(())
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
