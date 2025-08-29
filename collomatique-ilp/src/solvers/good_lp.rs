@@ -70,11 +70,21 @@ impl GoodSolver {
             .iter()
             .map(|(var, desc)| {
                 let col = pb_vars.add({
-                    let var_def = good_lp::VariableDefinition::new();
-                    let var_def = match desc.get_type() {
-                        VariableType::Integer => var_def.integer(),
-                        VariableType::Continuous => var_def,
+                    let mut var_def = good_lp::VariableDefinition::new();
+
+                    match desc.get_type() {
+                        VariableType::Integer => var_def = var_def.integer(),
+                        _ => {}
                     };
+
+                    if let Some(m) = desc.get_min() {
+                        var_def = var_def.min(m);
+                    }
+
+                    if let Some(m) = desc.get_max() {
+                        var_def = var_def.max(m);
+                    }
+
                     var_def
                 });
 
