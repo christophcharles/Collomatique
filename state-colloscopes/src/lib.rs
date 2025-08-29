@@ -39,14 +39,14 @@ pub struct PersonWithContact {
     /// This field is optional: this reflects the
     /// fact that some persons might not want to share
     /// their personal info or only some of it.
-    pub tel: Option<String>,
+    pub tel: Option<non_empty_string::NonEmptyString>,
 
     /// Person's email
     ///
     /// This field is optional: this reflects the
     /// fact that some persons might not want to share
     /// their personal info or only some of it.
-    pub email: Option<String>,
+    pub email: Option<non_empty_string::NonEmptyString>,
 }
 
 /// Internal structure to store the data for [Data]
