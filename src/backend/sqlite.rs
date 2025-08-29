@@ -290,7 +290,7 @@ CREATE TABLE "collo_groups" (
 	"collo_group_id"	INTEGER NOT NULL,
 	"collo_subject_id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
-	FOREIGN KEY("collo_subject_id") REFERENCES "subjects"("subject_id"),
+	FOREIGN KEY("collo_subject_id") REFERENCES "collo_subjects"("collo_subject_id"),
 	PRIMARY KEY("collo_group_id" AUTOINCREMENT)
 );
 
