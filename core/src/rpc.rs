@@ -44,9 +44,24 @@ impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NewId {
+    PeriodId(cmd_msg::MsgPeriodId),
+    StudentId(cmd_msg::MsgStudentId),
+}
+
+impl From<collomatique_state_colloscopes::NewId> for NewId {
+    fn from(value: collomatique_state_colloscopes::NewId) -> Self {
+        match value {
+            collomatique_state_colloscopes::NewId::PeriodId(id) => NewId::PeriodId(id.into()),
+            collomatique_state_colloscopes::NewId::StudentId(id) => NewId::StudentId(id.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultMsg {
     InvalidMsg,
-    Ack,
+    Ack(Option<NewId>),
     Data(InternalDataStream),
     Error(ErrorMsg),
 }

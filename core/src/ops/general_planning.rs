@@ -91,45 +91,61 @@ impl GeneralPlanningUpdateOp {
     pub fn apply<T: collomatique_state::traits::Manager<Data = Data>>(
         &self,
         data: &mut T,
-    ) -> Result<(), GeneralPlanningUpdateError> {
+    ) -> Result<Option<collomatique_state_colloscopes::PeriodId>, GeneralPlanningUpdateError> {
         match self {
             GeneralPlanningUpdateOp::DeleteFirstWeek => {
-                data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
-                    ),
-                    self.get_desc(),
-                )
-                .expect("Deleting first week should always work");
-                Ok(())
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Deleting first week should always work");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
-                data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(
-                            date.clone(),
-                        )),
-                    ),
-                    self.get_desc(),
-                )
-                .expect("Updating first week should always work");
-                Ok(())
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(
+                                date.clone(),
+                            )),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Updating first week should always work");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
             }
             GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
                 let new_desc = vec![true; *week_count];
-                data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        match data.get_data().get_periods().ordered_period_list.last() {
-                            Some((id, _)) => {
-                                collomatique_state_colloscopes::PeriodOp::AddAfter(*id, new_desc)
-                            }
-                            None => collomatique_state_colloscopes::PeriodOp::AddFront(new_desc),
-                        },
-                    ),
-                    self.get_desc(),
-                )
-                .expect("Adding a period should never fail");
-                Ok(())
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            match data.get_data().get_periods().ordered_period_list.last() {
+                                Some((id, _)) => {
+                                    collomatique_state_colloscopes::PeriodOp::AddAfter(
+                                        *id, new_desc,
+                                    )
+                                }
+                                None => {
+                                    collomatique_state_colloscopes::PeriodOp::AddFront(new_desc)
+                                }
+                            },
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Adding a period should never fail");
+                match result {
+                    Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => Ok(Some(id)),
+                    _ => panic!("Unexpected result! {:?}", result),
+                }
             }
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
                 let pos = data
@@ -143,29 +159,37 @@ impl GeneralPlanningUpdateOp {
 
                 desc.resize(*week_count, desc.last().copied().unwrap_or(true));
 
-                data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                    ),
-                    self.get_desc(),
-                )
-                .expect("Period id should be valid at this point");
-                Ok(())
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("Period id should be valid at this point");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
             }
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
-                    ),
-                    self.get_desc(),
-                )
-                .map_err(|e| match e {
-                    collomatique_state_colloscopes::Error::InvalidPeriodId(id) => {
-                        DeletePeriodError::InvalidPeriodId(id)
-                    }
-                    _ => panic!("Unexpected error {:?}", e),
-                })?;
-                Ok(())
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| match e {
+                        collomatique_state_colloscopes::Error::InvalidPeriodId(id) => {
+                            DeletePeriodError::InvalidPeriodId(id)
+                        }
+                        _ => panic!("Unexpected error {:?}", e),
+                    })?;
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
             }
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
                 let pos = data
@@ -188,7 +212,7 @@ impl GeneralPlanningUpdateOp {
 
                 let mut session = collomatique_state::AppSession::new(data.clone());
 
-                session
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
@@ -196,7 +220,10 @@ impl GeneralPlanningUpdateOp {
                         "Racourcir une période".into(),
                     )
                     .expect("At this point, period id should be valid");
-                session
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::AddAfter(
@@ -206,9 +233,13 @@ impl GeneralPlanningUpdateOp {
                         "Ajouter une période".into(),
                     )
                     .expect("At this point, period id should be valid");
+                let new_id = match result {
+                    Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => id,
+                    _ => panic!("Unexpected result! {:?}", result),
+                };
 
                 *data = session.commit(self.get_desc());
-                Ok(())
+                Ok(Some(new_id))
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
                 let pos = data
@@ -232,7 +263,7 @@ impl GeneralPlanningUpdateOp {
 
                 let mut session = collomatique_state::AppSession::new(data.clone());
 
-                session
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Update(
@@ -243,7 +274,10 @@ impl GeneralPlanningUpdateOp {
                         "Prolongement d'une période".into(),
                     )
                     .expect("At this point, period id should be valid");
-                session
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
@@ -251,9 +285,12 @@ impl GeneralPlanningUpdateOp {
                         "Suppression d'une période".into(),
                     )
                     .expect("At this point, period id should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
 
                 *data = session.commit(self.get_desc());
-                Ok(())
+                Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
                 let pos = data
@@ -274,14 +311,18 @@ impl GeneralPlanningUpdateOp {
 
                 desc[*week_num] = *state;
 
-                data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                    ),
-                    self.get_desc(),
-                )
-                .expect("At this point, parameters should be valid");
-                Ok(())
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("At this point, parameters should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
             }
         }
     }

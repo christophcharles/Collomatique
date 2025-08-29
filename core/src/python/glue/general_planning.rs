@@ -74,12 +74,12 @@ impl SessionPeriods {
         ))
         .expect("Valid result message");
 
-        if result != ResultMsg::Ack {
+        if result != ResultMsg::Ack(None) {
             panic!("Unexpected result: {:?}", result)
         }
     }
 
-    fn add(_self: PyRef<'_, Self>, week_count: usize) {
+    fn add(_self: PyRef<'_, Self>, week_count: usize) -> PeriodId {
         let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::AddNewPeriod(week_count),
@@ -87,8 +87,9 @@ impl SessionPeriods {
         ))
         .expect("Valid result message");
 
-        if result != ResultMsg::Ack {
-            panic!("Unexpected result: {:?}", result)
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(id))) => id.into(),
+            _ => panic!("Unexpected result: {:?}", result),
         }
     }
 
@@ -104,7 +105,7 @@ impl SessionPeriods {
         .expect("Valid result message");
 
         match result {
-            ResultMsg::Ack => Ok(()),
+            ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(ErrorMsg::GeneralPlanning(
                 GeneralPlanningError::UpdatePeriodWeekCount(e),
             )) => match e {
@@ -125,7 +126,7 @@ impl SessionPeriods {
         .expect("Valid result message");
 
         match result {
-            ResultMsg::Ack => Ok(()),
+            ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::DeletePeriod(e))) => {
                 match e {
                     DeletePeriodError::InvalidPeriodId(id) => {
@@ -137,7 +138,7 @@ impl SessionPeriods {
         }
     }
 
-    fn cut(_self: PyRef<'_, Self>, id: PeriodId, remaining_weeks: usize) -> PyResult<()> {
+    fn cut(_self: PyRef<'_, Self>, id: PeriodId, remaining_weeks: usize) -> PyResult<PeriodId> {
         let result = crate::rpc::send_rpc(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
                 crate::rpc::cmd_msg::GeneralPlanningCmdMsg::CutPeriod(id.into(), remaining_weeks),
@@ -146,7 +147,7 @@ impl SessionPeriods {
         .expect("Valid result message");
 
         match result {
-            ResultMsg::Ack => Ok(()),
+            ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(new_id))) => Ok(new_id.into()),
             ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::CutPeriod(e))) => {
                 match e {
                     CutPeriodError::InvalidPeriodId(id) => {
@@ -170,7 +171,7 @@ impl SessionPeriods {
         .expect("Valid result message");
 
         match result {
-            ResultMsg::Ack => Ok(()),
+            ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(ErrorMsg::GeneralPlanning(
                 GeneralPlanningError::MergeWithPreviousPeriod(e),
             )) => match e {
@@ -203,7 +204,7 @@ impl SessionPeriods {
         .expect("Valid result message");
 
         match result {
-            ResultMsg::Ack => Ok(()),
+            ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(ErrorMsg::GeneralPlanning(
                 GeneralPlanningError::UpdateWeekStatus(e),
             )) => match e {
