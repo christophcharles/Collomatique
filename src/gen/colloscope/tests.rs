@@ -2276,7 +2276,7 @@ fn no_full_period() {
             grouping_incompats
         )
         .err(),
-        Some(Error::SubjectWithPeriodicityTooBig(2, 1))
+        Some(Error::SubjectWithPeriodicityTooBig(0, 2, 1))
     );
 }
 
