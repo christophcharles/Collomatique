@@ -199,6 +199,42 @@ impl SubjectsUpdateOp {
                     }
                 }
 
+                let excluded_periods = &data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject(*subject_id)
+                    .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?
+                    .excluded_periods;
+
+                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                {
+                    if excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    let excluded_students = period_assignments.subject_exclusion_map.get(subject_id)
+                        .expect("Assignment data is inconsistent and does not have a required subject entry");
+
+                    for student_id in excluded_students {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Assignment(
+                                    collomatique_state_colloscopes::AssignmentOp::Assign(
+                                        *period_id,
+                                        *student_id,
+                                        *subject_id,
+                                        true,
+                                    ),
+                                ),
+                                "Valeur par défaut pour l'affectation d'un élève".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
                 let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
@@ -206,21 +242,7 @@ impl SubjectsUpdateOp {
                         ),
                         "Suppression effective de la matière".into(),
                     )
-                    .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Subject(se) = e {
-                            match se {
-                                collomatique_state_colloscopes::SubjectError::InvalidSubjectId(
-                                    id,
-                                ) => DeleteSubjectError::InvalidSubjectId(id),
-                                _ => panic!(
-                                    "Unexpected subject error during DeleteSubject: {:?}",
-                                    se
-                                ),
-                            }
-                        } else {
-                            panic!("Unexpected error during DeleteSubject: {:?}", e);
-                        }
-                    })?;
+                    .expect("All data should be valid at this point");
 
                 assert!(result.is_none());
 
@@ -292,6 +314,9 @@ impl SubjectsUpdateOp {
                 {
                     Err(UpdatePeriodStatusError::InvalidPeriodId(*period_id))?;
                 }
+
+                let mut session = collomatique_state::AppSession::new(data.clone());
+
                 let mut subject = data
                     .get_data()
                     .get_subjects()
@@ -299,21 +324,55 @@ impl SubjectsUpdateOp {
                     .ok_or(UpdatePeriodStatusError::InvalidSubjectId(*subject_id))?
                     .clone();
 
+                let old_status = !subject.excluded_periods.contains(period_id);
+
                 if *new_status {
                     subject.excluded_periods.remove(period_id);
                 } else {
+                    if !old_status {
+                        let period_assignments = data
+                            .get_data()
+                            .get_assignments()
+                            .period_map
+                            .get(period_id)
+                            .expect("Period id should be valid at this point");
+
+                        let excluded_students = period_assignments
+                            .subject_exclusion_map
+                            .get(subject_id)
+                            .expect("subject_id should be available in subject exclusion map at this point");
+
+                        for student_id in excluded_students {
+                            let result = session
+                                .apply(
+                                    collomatique_state_colloscopes::Op::Assignment(
+                                        collomatique_state_colloscopes::AssignmentOp::Assign(
+                                            *period_id,
+                                            *student_id,
+                                            *subject_id,
+                                            true,
+                                        ),
+                                    ),
+                                    "Restauration de l'état par défaut d'un élève".into(),
+                                )
+                                .expect("No error should be possible at this point");
+                            assert!(result.is_none());
+                        }
+                    }
                     subject.excluded_periods.insert(*period_id);
                 }
 
-                let result = data
+                let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Update(*subject_id, subject),
                         ),
-                        self.get_desc(),
+                        "Mise à jour effective du statut de la période".into(),
                     )
                     .expect("No error should be possible at this point");
                 assert!(result.is_none());
+
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
