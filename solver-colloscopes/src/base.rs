@@ -5,7 +5,6 @@
 //! a (partially completed or not) colloscope.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroUsize;
 
 pub trait Identifier : Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync {}
 
