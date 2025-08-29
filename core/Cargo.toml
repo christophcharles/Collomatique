@@ -7,5 +7,8 @@ authors.workspace = true
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+collomatique-time = { path = "../time" }
+collomatique-state = { path = "../state" }
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
 pyo3 = "0.25"
 anyhow.workspace = true
