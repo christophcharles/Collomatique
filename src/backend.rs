@@ -15,6 +15,39 @@ where
 }
 
 #[derive(Error, Debug)]
+pub enum Id2Error<T, Id1, Id2>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id1: std::fmt::Debug,
+    Id2: std::fmt::Debug,
+{
+    #[error("Id {0:?} is invalid")]
+    InvalidId1(Id1),
+    #[error("Id {0:?} is invalid")]
+    InvalidId2(Id2),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
+pub enum Id3Error<T, Id1, Id2, Id3>
+where
+    T: std::fmt::Debug + std::error::Error,
+    Id1: std::fmt::Debug,
+    Id2: std::fmt::Debug,
+    Id3: std::fmt::Debug,
+{
+    #[error("Id {0:?} is invalid")]
+    InvalidId1(Id1),
+    #[error("Id {0:?} is invalid")]
+    InvalidId2(Id2),
+    #[error("Id {0:?} is invalid")]
+    InvalidId3(Id3),
+    #[error("Backend internal error: {0:?}")]
+    InternalError(#[from] T),
+}
+
+#[derive(Error, Debug)]
 pub enum CrossError<T, CrossId>
 where
     T: std::fmt::Debug + std::error::Error,
@@ -436,6 +469,35 @@ pub trait Storage {
         (),
         CrossIdError<Self::InternalError, Self::GroupingIncompatId, Self::GroupingId>,
     >;
+
+    async fn subject_group_for_student_set(
+        &self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+        subject_id: Option<Self::SubjectId>,
+    ) -> std::result::Result<
+        (),
+        Id3Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId, Self::SubjectId>,
+    >;
+    async fn subject_group_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        subject_group_id: Self::SubjectGroupId,
+    ) -> std::result::Result<
+        Option<Self::SubjectId>,
+        Id2Error<Self::InternalError, Self::StudentId, Self::SubjectGroupId>,
+    >;
+    async fn incompat_for_student_set(
+        &self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+        enabled: bool,
+    ) -> std::result::Result<(), Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
+    async fn incompat_for_student_get(
+        &self,
+        student_id: Self::StudentId,
+        incompat_id: Self::IncompatId,
+    ) -> std::result::Result<bool, Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
