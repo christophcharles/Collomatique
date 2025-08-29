@@ -300,10 +300,10 @@ struct CourseIncompatRecord {
     duration: i64,
 }
 
-fn generate_incompatibility(
+fn generate_incompatibility_group(
     id: i64,
     course_incompats_data: &Vec<CourseIncompatRecord>,
-) -> Result<collomatique::gen::colloscope::Incompatibility> {
+) -> Result<collomatique::gen::colloscope::IncompatibilityGroup> {
     let records_iter = course_incompats_data
         .iter()
         .filter(|x| x.id == id)
@@ -323,17 +323,19 @@ fn generate_incompatibility(
             })
         });
 
-    let mut slots = Vec::new();
+    use std::collections::BTreeSet;
+    let mut slots = BTreeSet::new();
     for record in records_iter {
-        slots.push(record?);
+        slots.insert(record?);
     }
 
-    Ok(collomatique::gen::colloscope::Incompatibility { slots })
+    Ok(collomatique::gen::colloscope::IncompatibilityGroup { slots })
 }
 
 #[derive(Clone, Debug)]
 struct IncompatibilitiesData {
     list: collomatique::gen::colloscope::IncompatibilityList,
+    incompat_group_list: collomatique::gen::colloscope::IncompatibilityGroupList,
     id_map: std::collections::BTreeMap<i64, usize>,
 }
 
@@ -354,14 +356,29 @@ FROM course_incompat_items NATURAL JOIN weeks
     .fetch_all(db_conn)
     .await?;
 
-    use collomatique::gen::colloscope::IncompatibilityList;
+    use collomatique::gen::colloscope::{
+        Incompatibility, IncompatibilityGroupList, IncompatibilityList,
+    };
+    use std::collections::BTreeSet;
 
     let mut list = IncompatibilityList::with_capacity(ids.len());
+    let mut incompat_group_list = IncompatibilityGroupList::with_capacity(ids.len());
     for x in &ids {
-        list.push(generate_incompatibility(x.id, &course_incompats_data)?);
+        list.push(Incompatibility {
+            groups: BTreeSet::from([incompat_group_list.len()]),
+            max_count: 0,
+        });
+        incompat_group_list.push(generate_incompatibility_group(
+            x.id,
+            &course_incompats_data,
+        )?);
     }
 
-    Ok(IncompatibilitiesData { list, id_map })
+    Ok(IncompatibilitiesData {
+        list,
+        incompat_group_list,
+        id_map,
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -1035,6 +1052,7 @@ async fn generate_colloscope_data(
     Ok(ValidatedData::new(
         general.await?,
         subjects.list,
+        incompatibilities.incompat_group_list,
         incompatibilities.list,
         students.list,
         slot_groupings.list,

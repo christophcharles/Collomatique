@@ -10,6 +10,7 @@ fn trivial_validated_data() {
     };
 
     let subjects = SubjectList::new();
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
 
@@ -20,6 +21,7 @@ fn trivial_validated_data() {
         general: general.clone(),
         subjects: subjects.clone(),
         incompatibilities: incompatibilities.clone(),
+        incompatibility_groups: incompatibility_groups.clone(),
         students: students.clone(),
         slot_groupings: slot_groupings.clone(),
         slot_grouping_incompats: grouping_incompats.clone(),
@@ -29,6 +31,7 @@ fn trivial_validated_data() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -106,15 +109,19 @@ fn simple_validated_data() {
         },
         ..Subject::default()
     }];
-    let incompatibilities = vec![Incompatibility {
-        slots: vec![SlotWithDuration {
+    let incompatibility_groups = vec![IncompatibilityGroup {
+        slots: BTreeSet::from([SlotWithDuration {
             duration: NonZeroU32::new(60).unwrap(),
             start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(8, 0).unwrap(),
             },
-        }],
+        }]),
+    }];
+    let incompatibilities = vec![Incompatibility {
+        groups: BTreeSet::from([0]),
+        max_count: 0,
     }];
     let students = vec![
         Student {
@@ -167,6 +174,7 @@ fn simple_validated_data() {
     let expected_result = ValidatedData {
         general: general.clone(),
         subjects: subjects.clone(),
+        incompatibility_groups: incompatibility_groups.clone(),
         incompatibilities: incompatibilities.clone(),
         students: students.clone(),
         slot_groupings: slot_groupings.clone(),
@@ -177,6 +185,7 @@ fn simple_validated_data() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -215,6 +224,7 @@ fn invalid_students_per_interrogation() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
@@ -224,6 +234,7 @@ fn invalid_students_per_interrogation() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -265,6 +276,7 @@ fn subject_slot_overlaps_next_day() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
@@ -274,6 +286,7 @@ fn subject_slot_overlaps_next_day() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -292,15 +305,19 @@ fn incompatibility_slot_overlaps_next_day() {
         max_interrogations_per_day: None,
     };
     let subjects = SubjectList::new();
-    let incompatibilities = vec![Incompatibility {
-        slots: vec![SlotWithDuration {
+    let incompatibility_groups = vec![IncompatibilityGroup {
+        slots: BTreeSet::from([SlotWithDuration {
             duration: NonZeroU32::new(60).unwrap(),
             start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(23, 1).unwrap(),
             },
-        }],
+        }]),
+    }];
+    let incompatibilities = vec![Incompatibility {
+        groups: BTreeSet::from([0]),
+        max_count: 0,
     }];
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
@@ -309,12 +326,23 @@ fn incompatibility_slot_overlaps_next_day() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::IncompatibilityWithSlotOverlappingNextDay(0, 0))
+        Err(Error::IncompatibilityGroupWithSlotOverlappingNextDay(
+            0,
+            SlotWithDuration {
+                duration: NonZeroU32::new(60).unwrap(),
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(23, 1).unwrap(),
+                },
+            }
+        ))
     );
 }
 
@@ -347,6 +375,7 @@ fn invalid_teacher_number() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = SlotGroupingList::new();
@@ -356,6 +385,7 @@ fn invalid_teacher_number() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -375,15 +405,19 @@ fn invalid_incompatibility_number() {
     };
 
     let subjects = SubjectList::new();
-    let incompatibilities = vec![Incompatibility {
-        slots: vec![SlotWithDuration {
+    let incompatibility_groups = vec![IncompatibilityGroup {
+        slots: BTreeSet::from([SlotWithDuration {
             duration: NonZeroU32::new(60).unwrap(),
             start: SlotStart {
                 week: 0,
                 weekday: time::Weekday::Monday,
                 start_time: time::Time::from_hm(23, 0).unwrap(),
             },
-        }],
+        }]),
+    }];
+    let incompatibilities = vec![Incompatibility {
+        groups: BTreeSet::from([0]),
+        max_count: 0,
     }];
     let students = vec![Student {
         incompatibilities: BTreeSet::from([1]),
@@ -395,6 +429,7 @@ fn invalid_incompatibility_number() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -454,6 +489,7 @@ fn slot_ref_has_invalid_subject() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = vec![SlotGrouping {
@@ -474,6 +510,7 @@ fn slot_ref_has_invalid_subject() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -539,6 +576,7 @@ fn slot_ref_has_invalid_slot() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = vec![SlotGrouping {
@@ -559,6 +597,7 @@ fn slot_ref_has_invalid_slot() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -634,6 +673,7 @@ fn slot_grouping_overlap() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = vec![
@@ -668,6 +708,7 @@ fn slot_grouping_overlap() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -733,6 +774,7 @@ fn grouping_incompact_invalid_ref() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
     let slot_groupings = vec![
@@ -758,6 +800,7 @@ fn grouping_incompact_invalid_ref() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -777,6 +820,7 @@ fn invalid_interrogations_per_week() {
     };
 
     let subjects = SubjectList::new();
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = StudentList::new();
 
@@ -787,6 +831,7 @@ fn invalid_interrogations_per_week() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -867,6 +912,7 @@ fn duplicated_groups() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -895,6 +941,7 @@ fn duplicated_groups() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -973,6 +1020,7 @@ fn duplicated_student() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1010,6 +1058,7 @@ fn duplicated_student() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1084,6 +1133,7 @@ fn duplicated_student_not_assigned() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1121,6 +1171,7 @@ fn duplicated_student_not_assigned() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1197,6 +1248,7 @@ fn invalid_student_in_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1225,6 +1277,7 @@ fn invalid_student_in_group() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1293,6 +1346,7 @@ fn invalid_student_not_assigned() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1321,6 +1375,7 @@ fn invalid_student_not_assigned() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1399,6 +1454,7 @@ fn empty_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1436,6 +1492,7 @@ fn empty_group() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1518,6 +1575,7 @@ fn extensible_empty_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1555,6 +1613,7 @@ fn extensible_empty_group() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1629,6 +1688,7 @@ fn group_too_large() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1666,6 +1726,7 @@ fn group_too_large() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1748,6 +1809,7 @@ fn non_extensible_too_small_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1785,6 +1847,7 @@ fn non_extensible_too_small_group() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1863,6 +1926,7 @@ fn too_few_groups() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -1900,6 +1964,7 @@ fn too_few_groups() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -1989,6 +2054,7 @@ fn too_many_groups() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -2026,6 +2092,7 @@ fn too_many_groups() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -2087,6 +2154,7 @@ fn no_full_period() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -2115,6 +2183,7 @@ fn no_full_period() {
         ValidatedData::new(
             general,
             subjects,
+            incompatibility_groups,
             incompatibilities,
             students,
             slot_groupings,
@@ -2229,6 +2298,7 @@ fn group_in_slot_variables() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -2274,6 +2344,7 @@ fn group_in_slot_variables() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -2427,6 +2498,7 @@ fn dynamic_group_assignment_variables() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -2472,6 +2544,7 @@ fn dynamic_group_assignment_variables() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -2705,6 +2778,7 @@ fn student_in_group_variables() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -2750,6 +2824,7 @@ fn student_in_group_variables() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -2917,6 +2992,7 @@ fn with_student_not_in_last_period_variables() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -2962,6 +3038,7 @@ fn with_student_not_in_last_period_variables() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -3141,6 +3218,7 @@ fn without_student_not_in_last_period_variables() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -3186,6 +3264,7 @@ fn without_student_not_in_last_period_variables() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -3338,6 +3417,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -3383,6 +3463,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -3517,6 +3598,7 @@ fn periodicity_variables_for_strict_period() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -3562,6 +3644,7 @@ fn periodicity_variables_for_strict_period() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -3706,6 +3789,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -3751,6 +3835,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -3895,6 +3980,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -3940,6 +4026,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -4019,6 +4106,7 @@ fn use_grouping() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -4062,6 +4150,7 @@ fn use_grouping() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -4221,6 +4310,7 @@ fn at_most_max_groups_per_slot_constraints() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -4266,6 +4356,7 @@ fn at_most_max_groups_per_slot_constraints() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -4466,6 +4557,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -4493,6 +4585,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -4687,6 +4780,7 @@ fn one_interrogation_per_period() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -4714,6 +4808,7 @@ fn one_interrogation_per_period() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -4924,6 +5019,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -4951,6 +5047,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -5143,6 +5240,7 @@ fn students_per_group_count() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -5188,6 +5286,7 @@ fn students_per_group_count() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -5326,6 +5425,7 @@ fn student_in_single_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -5371,6 +5471,7 @@ fn student_in_single_group() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -5484,6 +5585,7 @@ fn dynamic_groups_student_in_group_inequalities() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -5511,6 +5613,7 @@ fn dynamic_groups_student_in_group_inequalities() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -5607,6 +5710,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -5634,6 +5738,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -5829,6 +5934,7 @@ fn one_periodicity_choice_per_student() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -5856,6 +5962,7 @@ fn one_periodicity_choice_per_student() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -6107,6 +6214,7 @@ fn periodicity_inequalities() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -6134,6 +6242,7 @@ fn periodicity_inequalities() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -6464,6 +6573,7 @@ fn interrogations_per_week() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -6491,6 +6601,7 @@ fn interrogations_per_week() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -6637,6 +6748,7 @@ fn grouping_inequalities() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -6686,6 +6798,7 @@ fn grouping_inequalities() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -6793,6 +6906,7 @@ fn grouping_incompats() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -6842,6 +6956,7 @@ fn grouping_incompats() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -6929,9 +7044,9 @@ fn students_incompats() {
         },
         ..Subject::default()
     }];
-    let incompatibilities = IncompatibilityList::from([
-        Incompatibility {
-            slots: vec![
+    let incompatibility_groups = vec![
+        IncompatibilityGroup {
+            slots: BTreeSet::from([
                 SlotWithDuration {
                     start: SlotStart {
                         week: 0,
@@ -6948,17 +7063,27 @@ fn students_incompats() {
                     },
                     duration: NonZeroU32::new(60).unwrap(),
                 },
-            ],
+            ]),
         },
-        Incompatibility {
-            slots: vec![SlotWithDuration {
+        IncompatibilityGroup {
+            slots: BTreeSet::from([SlotWithDuration {
                 start: SlotStart {
                     week: 1,
                     weekday: time::Weekday::Wednesday,
                     start_time: time::Time::from_hm(11, 0).unwrap(),
                 },
                 duration: NonZeroU32::new(120).unwrap(),
-            }],
+            }]),
+        },
+    ];
+    let incompatibilities = IncompatibilityList::from([
+        Incompatibility {
+            groups: BTreeSet::from([0]),
+            max_count: 0,
+        },
+        Incompatibility {
+            groups: BTreeSet::from([1]),
+            max_count: 0,
         },
     ]);
     let students = vec![
@@ -6987,6 +7112,7 @@ fn students_incompats() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -7175,6 +7301,7 @@ fn simple_colloscope() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -7202,6 +7329,7 @@ fn simple_colloscope() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -7339,6 +7467,7 @@ fn colloscope_with_dynamic_groups() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = IncompatibilityList::new();
     let students = vec![
         Student {
@@ -7366,6 +7495,7 @@ fn colloscope_with_dynamic_groups() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -7604,6 +7734,7 @@ fn at_most_one_interrogation_per_empty_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -7631,6 +7762,7 @@ fn at_most_one_interrogation_per_empty_group() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -7789,6 +7921,7 @@ fn max_interrogations_per_day() {
             ..Subject::default()
         },
     ];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -7816,6 +7949,7 @@ fn max_interrogations_per_day() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -7974,6 +8108,7 @@ fn balancing_teachers() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -8010,6 +8145,7 @@ fn balancing_teachers() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -8171,6 +8307,7 @@ fn balancing_timeslots() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -8207,6 +8344,7 @@ fn balancing_timeslots() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -8377,6 +8515,7 @@ fn balancing_timeslots_2() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -8413,6 +8552,7 @@ fn balancing_timeslots_2() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -8574,6 +8714,7 @@ fn balancing_teachers_and_timeslots() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -8610,6 +8751,7 @@ fn balancing_teachers_and_timeslots() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -8780,6 +8922,7 @@ fn no_balancing() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -8816,6 +8959,7 @@ fn no_balancing() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -8999,6 +9143,7 @@ fn balancing_timeslots_with_ghost_group() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -9035,6 +9180,7 @@ fn balancing_timeslots_with_ghost_group() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -9292,6 +9438,7 @@ fn balancing_timeslots_with_ghost_group_2() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -9328,6 +9475,7 @@ fn balancing_timeslots_with_ghost_group_2() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
@@ -9523,6 +9671,7 @@ fn balancing_timeslots_with_partial_last_period() {
         },
         ..Subject::default()
     }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
     let incompatibilities = vec![];
     let students = vec![
         Student {
@@ -9559,6 +9708,7 @@ fn balancing_timeslots_with_partial_last_period() {
     let data = ValidatedData::new(
         general,
         subjects,
+        incompatibility_groups,
         incompatibilities,
         students,
         slot_groupings,
