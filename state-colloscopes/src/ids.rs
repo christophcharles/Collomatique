@@ -13,6 +13,13 @@ use collomatique_state::tools;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StudentId(u64);
 
+impl StudentId {
+    /// Returns the value for the ID
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
