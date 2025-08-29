@@ -171,7 +171,7 @@ pub enum GroupListOp {
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
     /// Change pre-fill for a group list
-    PreFill(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
     /// Assign a group list to a subject
     AssignToSubject(SubjectId, Option<GroupListId>),
 }
@@ -424,7 +424,7 @@ pub enum AnnotatedGroupListOp {
     /// Update a group list
     Update(GroupListId, group_lists::GroupListParameters),
     /// Change pre-fill for a group list
-    PreFill(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
     /// Assign a group list to a subject
     AssignToSubject(SubjectId, Option<GroupListId>),
 }
