@@ -538,6 +538,7 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
         }
 
         Objective::new(new_obj, ObjectiveSense::Minimize)
+            + self.internal_constraints.objective(desc)
     }
 
     fn reconstruct_extra_structure_variables(
