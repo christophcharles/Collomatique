@@ -18,13 +18,14 @@ async fn week_patterns_add_one(pool: sqlx::SqlitePool) {
 
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
-    let _id = store
-        .week_patterns_add(&WeekPattern {
+    let _id = unsafe {
+        store.week_patterns_add_unchecked(&WeekPattern {
             name: String::from("Impaires"),
             weeks,
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     let week_patterns = sqlx::query_as!(WeekPatternDb, "SELECT * FROM week_patterns")
         .fetch_all(&store.pool)
@@ -95,23 +96,25 @@ async fn week_patterns_add_multiple(pool: sqlx::SqlitePool) {
 
     let weeks = (0..20).into_iter().map(|x| Week(x)).collect();
 
-    let _id = store
-        .week_patterns_add(&WeekPattern {
+    let _id = unsafe {
+        store.week_patterns_add_unchecked(&WeekPattern {
             name: String::from("Toutes"),
             weeks,
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     let weeks = (0..20).into_iter().step_by(2).map(|x| Week(x)).collect();
 
-    let _id = store
-        .week_patterns_add(&WeekPattern {
+    let _id = unsafe {
+        store.week_patterns_add_unchecked(&WeekPattern {
             name: String::from("Impaires"),
             weeks,
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     let weeks = (0..20)
         .into_iter()
@@ -120,13 +123,14 @@ async fn week_patterns_add_multiple(pool: sqlx::SqlitePool) {
         .map(|x| Week(x))
         .collect();
 
-    let _id = store
-        .week_patterns_add(&WeekPattern {
+    let _id = unsafe {
+        store.week_patterns_add_unchecked(&WeekPattern {
             name: String::from("Paires"),
             weeks,
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     let week_patterns = sqlx::query_as!(WeekPatternDb, "SELECT * FROM week_patterns")
         .fetch_all(&store.pool)
@@ -473,13 +477,14 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
             .unwrap();
     }
 
-    let id = store
-        .week_patterns_add(&WeekPattern {
+    let id = unsafe {
+        store.week_patterns_add_unchecked(&WeekPattern {
             name: String::from("Impaires"),
             weeks: BTreeSet::from([Week(0), Week(2), Week(4), Week(6), Week(8)]),
         })
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     assert_eq!(id, super::super::week_patterns::Id(4));
 
@@ -536,16 +541,17 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
         "#
     ).execute(&store.pool).await.unwrap();
 
-    store
-        .week_patterns_update(
+    unsafe {
+        store.week_patterns_update_unchecked(
             super::super::week_patterns::Id(2),
             &WeekPattern {
                 name: String::from("Une sur trois"),
                 weeks: BTreeSet::from([Week(0), Week(3), Week(6), Week(9)]),
             },
         )
-        .await
-        .unwrap();
+    }
+    .await
+    .unwrap();
 
     let result = store.week_patterns_get_all().await.unwrap();
 
