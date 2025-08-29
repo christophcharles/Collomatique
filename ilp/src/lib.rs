@@ -231,7 +231,6 @@ pub trait UsableData:
     + PartialEq
     + Eq
     + Clone
-    + for<'a> From<&'a Self>
     + Send
     + Sync
 {
@@ -245,7 +244,6 @@ impl<
             + PartialEq
             + Eq
             + Clone
-            + for<'a> From<&'a T>
             + Send
             + Sync,
     > UsableData for T
