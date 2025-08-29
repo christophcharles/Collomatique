@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+//use anyhow::anyhow;
 use anyhow::Result;
 use clap::Parser;
 
@@ -12,12 +12,12 @@ struct Args {
     db: std::path::PathBuf,
 }
 
-use sqlx::sqlite::SqlitePool;
+//use sqlx::sqlite::SqlitePool;
 
 use collomatique::backend::sqlite;
 
 use serde::{Deserialize, Serialize};
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32; //, NonZeroUsize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct GeneralDataDb {
@@ -33,7 +33,7 @@ async fn connect_db(create: bool, path: &std::path::Path) -> Result<sqlite::Stor
     }
 }
 
-async fn generate_general_data(
+/*async fn generate_general_data(
     db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::GeneralData> {
     let teacher_count_req =
@@ -684,7 +684,7 @@ FROM time_slots NATURAL JOIN weeks"
         StudentInGroupRecord,
         "
 SELECT subject_id, group_id, student_id
-FROM group_list_subjects 
+FROM group_list_subjects
 JOIN group_lists ON group_list_subjects.group_list_id = group_lists.group_list_id
 JOIN group_items ON group_lists.group_list_id = group_items.group_list_id;
         "
@@ -865,7 +865,7 @@ async fn generate_grouping_incompats(
     }
 
     Ok(set)
-}
+}*/
 
 /*async fn get_colloscope_id(db_conn: &SqlitePool, colloscope: Option<String>) -> Result<i64> {
     match colloscope {
@@ -886,7 +886,7 @@ async fn generate_grouping_incompats(
     }
 }*/
 
-async fn generate_colloscope_data(
+/*async fn generate_colloscope_data(
     db_conn: &SqlitePool,
 ) -> Result<collomatique::gen::colloscope::ValidatedData> {
     use collomatique::gen::colloscope::*;
@@ -907,7 +907,7 @@ async fn generate_colloscope_data(
         slot_groupings.list,
         grouping_incompats.await?,
     )?)
-}
+}*/
 
 #[tokio::main]
 async fn main() -> Result<()> {
