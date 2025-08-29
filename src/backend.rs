@@ -834,7 +834,7 @@ impl<T: Storage> Logic<T> {
         Ok(unsafe { self.storage.week_patterns_update_unchecked(index, pattern) }.await?)
     }
     pub async fn week_patterns_check_can_remove(
-        &mut self,
+        &self,
         index: T::WeekPatternId,
     ) -> std::result::Result<
         Vec<WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
@@ -911,7 +911,7 @@ impl<T: Storage> Logic<T> {
         self.storage.teachers_update(index, teacher).await
     }
     pub async fn teachers_check_can_remove(
-        &mut self,
+        &self,
         index: T::TeacherId,
     ) -> std::result::Result<Vec<T::TimeSlotId>, IdError<T::InternalError, T::TeacherId>> {
         let teachers = self.teachers_get_all().await?;
@@ -972,7 +972,7 @@ impl<T: Storage> Logic<T> {
         self.storage.students_update(index, student).await
     }
     pub async fn students_check_can_remove(
-        &mut self,
+        &self,
         index: T::StudentId,
     ) -> std::result::Result<Vec<T::GroupListId>, IdError<T::InternalError, T::StudentId>> {
         let students = self.students_get_all().await?;
