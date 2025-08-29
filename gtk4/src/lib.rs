@@ -1,8 +1,7 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::component::{AsyncComponent, AsyncComponentParts, AsyncComponentSender};
-use relm4::loading_widgets::LoadingWidgets;
 use relm4::RelmWidgetExt;
-use relm4::{adw, gtk, view};
+use relm4::{adw, gtk};
 use std::path::PathBuf;
 
 pub struct AppInit {
@@ -82,38 +81,6 @@ impl AsyncComponent for AppModel {
                 }
             }
         }
-    }
-
-    fn init_loading_widgets(root: Self::Root) -> Option<LoadingWidgets> {
-        view! {
-            #[local]
-            root {
-                set_default_width: 800,
-                set_default_height: 600,
-                set_title: Some("Collomatique"),
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    adw::HeaderBar::new(),
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_margin_all: 5,
-                        set_spacing: 5,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        set_hexpand: true,
-                        set_vexpand: true,
-                        #[name(spinner)]
-                        adw::Spinner {
-                            set_halign: gtk::Align::Center,
-                            set_valign: gtk::Align::Center,
-                            set_height_request: 48,
-                            set_width_request: 48,
-                        }
-                    }
-                }
-            }
-        }
-        Some(LoadingWidgets::new(root, spinner))
     }
 
     async fn init(
