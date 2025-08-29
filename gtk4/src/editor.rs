@@ -13,6 +13,8 @@ use collomatique_state_colloscopes::Data;
 
 use crate::dialogs;
 
+mod general_planning;
+
 #[derive(Debug)]
 pub enum EditorInput {
     Ignore,
@@ -58,6 +60,8 @@ pub struct EditorPanel {
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
     pages_titles_map: BTreeMap<&'static str, &'static str>,
+
+    general_planning: Controller<general_planning::GeneralPlanning>,
 }
 
 impl EditorPanel {
@@ -249,10 +253,16 @@ impl Component for EditorPanel {
                 }
             });
 
-        let pages_names = vec!["test1", "test2", "test3"];
+        let general_planning = general_planning::GeneralPlanning::builder()
+            .launch(())
+            .forward(sender.input_sender(), |_| EditorInput::Ignore);
 
-        let pages_titles_map =
-            BTreeMap::from([("test1", "Test1"), ("test2", "Test2"), ("test3", "Test3")]);
+        let pages_names = vec!["general_planning", "test2", "test3"];
+        let pages_titles_map = BTreeMap::from([
+            ("general_planning", "Planning général"),
+            ("test2", "Test2"),
+            ("test3", "Test3"),
+        ]);
 
         let model = EditorPanel {
             file_name: None,
@@ -262,11 +272,12 @@ impl Component for EditorPanel {
             toast_info: None,
             pages_names,
             pages_titles_map,
+            general_planning,
         };
         let widgets = view_output!();
 
         widgets.main_stack.add_titled(
-            &gtk::Label::new(Some("Test1 - content")),
+            model.general_planning.widget(),
             Some(model.pages_names[0]),
             model.pages_titles_map.get(model.pages_names[0]).unwrap(),
         );
