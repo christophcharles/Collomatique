@@ -441,7 +441,7 @@ impl Component for EditorPanel {
             ("subjects", "Matières"),
             ("teachers", "Colleurs"),
             ("students", "Élèves"),
-            ("assignments", "Matières suivies"),
+            ("assignments", "Inscriptions dans les matières"),
         ]);
 
         let model = EditorPanel {
