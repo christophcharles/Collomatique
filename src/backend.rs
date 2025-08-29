@@ -130,6 +130,7 @@ pub trait Storage {
     type GroupListId: OrdId;
     type SubjectId: OrdId;
     type TimeSlotId: OrdId;
+    type GroupingsId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
@@ -371,6 +372,36 @@ pub trait Storage {
             Self::WeekPatternId,
         >,
     >;
+
+    async fn groupings_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::GroupingsId, Grouping<Self::TimeSlotId>>,
+        Self::InternalError,
+    >;
+    async fn groupings_get(
+        &self,
+        index: Self::GroupingsId,
+    ) -> std::result::Result<
+        Grouping<Self::TimeSlotId>,
+        IdError<Self::InternalError, Self::GroupingsId>,
+    >;
+    async fn groupings_add(
+        &self,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> std::result::Result<Self::GroupingsId, CrossError<Self::InternalError, Self::TimeSlotId>>;
+    async fn groupings_remove(
+        &self,
+        index: Self::GroupingsId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupingsId>>;
+    async fn groupings_update(
+        &self,
+        index: Self::GroupingsId,
+        grouping: &Grouping<Self::TimeSlotId>,
+    ) -> std::result::Result<
+        (),
+        CrossIdError<Self::InternalError, Self::GroupingsId, Self::TimeSlotId>,
+    >;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -487,4 +518,10 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
     pub start: SlotStart,
     pub week_pattern_id: WeekPatternId,
     pub room: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Grouping<TimeSlotId: OrdId> {
+    pub name: String,
+    pub slots: BTreeSet<TimeSlotId>,
 }
