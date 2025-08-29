@@ -40,7 +40,7 @@ pub enum EditorCommandOutput {
     SaveFailed(PathBuf, String),
 }
 
-const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(5);
+const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
 
 enum ToastInfo {
     Toast {
