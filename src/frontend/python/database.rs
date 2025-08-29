@@ -381,6 +381,444 @@ impl Database {
 
         Ok(())
     }
+
+    fn incompats_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<IncompatHandle, Incompat>> {
+        let Answer::Incompats(IncompatsAnswer::GetAll(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Incompats(IncompatsCommand::GetAll),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn incompats_get(self_: PyRef<'_, Self>, handle: IncompatHandle) -> PyResult<Incompat> {
+        let Answer::Incompats(IncompatsAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Incompats(IncompatsCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn incompats_create(self_: PyRef<'_, Self>, incompat: Incompat) -> PyResult<IncompatHandle> {
+        let Answer::Incompats(IncompatsAnswer::Create(handle)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Incompats(IncompatsCommand::Create(incompat)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn incompats_update(
+        self_: PyRef<'_, Self>,
+        handle: IncompatHandle,
+        incompat: Incompat,
+    ) -> PyResult<()> {
+        let Answer::Incompats(IncompatsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Incompats(IncompatsCommand::Update(handle, incompat)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn incompats_remove(self_: PyRef<'_, Self>, handle: IncompatHandle) -> PyResult<()> {
+        let Answer::Incompats(IncompatsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Incompats(IncompatsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn group_lists_get_all(
+        self_: PyRef<'_, Self>,
+    ) -> PyResult<BTreeMap<GroupListHandle, GroupList>> {
+        let Answer::GroupLists(GroupListsAnswer::GetAll(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GroupLists(GroupListsCommand::GetAll),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn group_lists_get(self_: PyRef<'_, Self>, handle: GroupListHandle) -> PyResult<GroupList> {
+        let Answer::GroupLists(GroupListsAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GroupLists(GroupListsCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn group_lists_create(
+        self_: PyRef<'_, Self>,
+        group_list: GroupList,
+    ) -> PyResult<GroupListHandle> {
+        let Answer::GroupLists(GroupListsAnswer::Create(handle)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GroupLists(GroupListsCommand::Create(group_list)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn group_lists_update(
+        self_: PyRef<'_, Self>,
+        handle: GroupListHandle,
+        group_list: GroupList,
+    ) -> PyResult<()> {
+        let Answer::GroupLists(GroupListsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GroupLists(GroupListsCommand::Update(handle, group_list)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn group_lists_remove(self_: PyRef<'_, Self>, handle: GroupListHandle) -> PyResult<()> {
+        let Answer::GroupLists(GroupListsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::GroupLists(GroupListsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn subjects_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<SubjectHandle, Subject>> {
+        let Answer::Subjects(SubjectsAnswer::GetAll(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Subjects(SubjectsCommand::GetAll),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn subjects_get(self_: PyRef<'_, Self>, handle: SubjectHandle) -> PyResult<Subject> {
+        let Answer::Subjects(SubjectsAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Subjects(SubjectsCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn subjects_create(self_: PyRef<'_, Self>, subject: Subject) -> PyResult<SubjectHandle> {
+        let Answer::Subjects(SubjectsAnswer::Create(handle)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Subjects(SubjectsCommand::Create(subject)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn subjects_update(
+        self_: PyRef<'_, Self>,
+        handle: SubjectHandle,
+        subject: Subject,
+    ) -> PyResult<()> {
+        let Answer::Subjects(SubjectsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Subjects(SubjectsCommand::Update(handle, subject)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn subjects_remove(self_: PyRef<'_, Self>, handle: SubjectHandle) -> PyResult<()> {
+        let Answer::Subjects(SubjectsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Subjects(SubjectsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn time_slots_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<TimeSlotHandle, TimeSlot>> {
+        let Answer::TimeSlots(TimeSlotsAnswer::GetAll(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::TimeSlots(TimeSlotsCommand::GetAll),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn time_slots_get(self_: PyRef<'_, Self>, handle: TimeSlotHandle) -> PyResult<TimeSlot> {
+        let Answer::TimeSlots(TimeSlotsAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::TimeSlots(TimeSlotsCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn time_slots_create(self_: PyRef<'_, Self>, time_slot: TimeSlot) -> PyResult<TimeSlotHandle> {
+        let Answer::TimeSlots(TimeSlotsAnswer::Create(handle)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::TimeSlots(TimeSlotsCommand::Create(time_slot)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn time_slots_update(
+        self_: PyRef<'_, Self>,
+        handle: TimeSlotHandle,
+        time_slot: TimeSlot,
+    ) -> PyResult<()> {
+        let Answer::TimeSlots(TimeSlotsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::TimeSlots(TimeSlotsCommand::Update(handle, time_slot)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn time_slots_remove(self_: PyRef<'_, Self>, handle: TimeSlotHandle) -> PyResult<()> {
+        let Answer::TimeSlots(TimeSlotsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::TimeSlots(TimeSlotsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn groupings_get_all(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<GroupingHandle, Grouping>> {
+        let Answer::Groupings(GroupingsAnswer::GetAll(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Groupings(GroupingsCommand::GetAll),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn groupings_get(self_: PyRef<'_, Self>, handle: GroupingHandle) -> PyResult<Grouping> {
+        let Answer::Groupings(GroupingsAnswer::Get(val)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Groupings(GroupingsCommand::Get(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn groupings_create(self_: PyRef<'_, Self>, grouping: Grouping) -> PyResult<GroupingHandle> {
+        let Answer::Groupings(GroupingsAnswer::Create(handle)) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Groupings(GroupingsCommand::Create(grouping)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn groupings_update(
+        self_: PyRef<'_, Self>,
+        handle: GroupingHandle,
+        grouping: Grouping,
+    ) -> PyResult<()> {
+        let Answer::Groupings(GroupingsAnswer::Update) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Groupings(GroupingsCommand::Update(handle, grouping)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn groupings_remove(self_: PyRef<'_, Self>, handle: GroupingHandle) -> PyResult<()> {
+        let Answer::Groupings(GroupingsAnswer::Remove) = SessionConnection::send_command(
+            self_.py(),
+            &self_.sender,
+            Command::Groupings(GroupingsCommand::Remove(handle)),
+        )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn grouping_incompats_get_all(
+        self_: PyRef<'_, Self>,
+    ) -> PyResult<BTreeMap<GroupingIncompatHandle, GroupingIncompat>> {
+        let Answer::GroupingIncompats(GroupingIncompatsAnswer::GetAll(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::GroupingIncompats(GroupingIncompatsCommand::GetAll),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn grouping_incompats_get(
+        self_: PyRef<'_, Self>,
+        handle: GroupingIncompatHandle,
+    ) -> PyResult<GroupingIncompat> {
+        let Answer::GroupingIncompats(GroupingIncompatsAnswer::Get(val)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::GroupingIncompats(GroupingIncompatsCommand::Get(handle)),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(val)
+    }
+
+    fn grouping_incompats_create(
+        self_: PyRef<'_, Self>,
+        grouping_incompat: GroupingIncompat,
+    ) -> PyResult<GroupingIncompatHandle> {
+        let Answer::GroupingIncompats(GroupingIncompatsAnswer::Create(handle)) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::GroupingIncompats(GroupingIncompatsCommand::Create(grouping_incompat)),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(handle)
+    }
+
+    fn grouping_incompats_update(
+        self_: PyRef<'_, Self>,
+        handle: GroupingIncompatHandle,
+        grouping_incompat: GroupingIncompat,
+    ) -> PyResult<()> {
+        let Answer::GroupingIncompats(GroupingIncompatsAnswer::Update) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::GroupingIncompats(GroupingIncompatsCommand::Update(
+                    handle,
+                    grouping_incompat,
+                )),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn grouping_incompats_remove(
+        self_: PyRef<'_, Self>,
+        handle: GroupingIncompatHandle,
+    ) -> PyResult<()> {
+        let Answer::GroupingIncompats(GroupingIncompatsAnswer::Remove) =
+            SessionConnection::send_command(
+                self_.py(),
+                &self_.sender,
+                Command::GroupingIncompats(GroupingIncompatsCommand::Remove(handle)),
+            )?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
 }
 
 use std::sync::mpsc::{self, Receiver, Sender};
