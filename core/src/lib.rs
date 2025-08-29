@@ -188,7 +188,7 @@ pub enum ExtraVariable<M: UsableData, S: UsableData, E: UsableData> {
     Extra(E),
 }
 
-impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display, E: UsableData>
+impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display, E: UsableData + std::fmt::Display>
     std::fmt::Display for ExtraVariable<M, S, E>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -501,7 +501,7 @@ where
             let v_id = self.id_issuer.get_id();
             let v_name = ExtraVariable::Extra(IdVariable {
                 id: v_id,
-                desc: format!("{}", v),
+                desc: format!("{:?}", v),
             });
 
             v_map.insert(v_name.clone(), v_desc);
@@ -629,7 +629,7 @@ where
             let soft_variable_id = self.id_issuer.get_id();
             let soft_variable = ExtraVariable::Extra(IdVariable {
                 id: soft_variable_id,
-                desc: format!("soft_{} ({})", soft_variable_id, c_desc),
+                desc: format!("soft_{} ({:?})", soft_variable_id, c_desc),
             });
 
             self.variables
