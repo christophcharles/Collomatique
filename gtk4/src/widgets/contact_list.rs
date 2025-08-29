@@ -105,6 +105,29 @@ pub enum EntryOutput<Id: Identifier> {
     DeleteContact(Id),
 }
 
+impl<Id: Identifier> Entry<Id> {
+    fn generate_name_text(&self) -> String {
+        format!(
+            "{} {}",
+            self.data.contact.firstname, self.data.contact.surname,
+        )
+    }
+
+    fn generate_telephone_text(&self) -> String {
+        match &self.data.contact.tel {
+            Some(t) => t.clone().into_inner(),
+            None => "<i>Non renseigné</i>".into(),
+        }
+    }
+
+    fn generate_email_text(&self) -> String {
+        match &self.data.contact.email {
+            Some(e) => e.clone().into_inner(),
+            None => "<i>Non renseigné</i>".into(),
+        }
+    }
+}
+
 #[relm4::factory(pub)]
 impl<Id: Identifier> FactoryComponent for Entry<Id> {
     type Init = ContactInfo<Id>;
@@ -130,7 +153,8 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
-                set_label: "Gertrude DUPOND",
+                #[watch]
+                set_label: &self.generate_name_text(),
                 set_size_request: (150, -1),
             },
             gtk::Separator {
@@ -145,8 +169,10 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             gtk::Label {
                 set_halign: gtk::Align::Start,
                 set_margin_end: 5,
-                set_label: "<i>Non renseigné</i>",
-                set_use_markup: true,
+                #[watch]
+                set_label: &self.generate_telephone_text(),
+                #[watch]
+                set_use_markup: self.data.contact.tel.is_none(),
                 set_size_request: (120, -1),
             },
             gtk::Separator {
@@ -162,8 +188,10 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_halign: gtk::Align::Start,
                 set_xalign: 0.,
                 set_margin_end: 5,
-                set_label: "<i>Non renseigné</i>",
-                set_use_markup: true,
+                #[watch]
+                set_label: &self.generate_email_text(),
+                #[watch]
+                set_use_markup: self.data.contact.tel.is_none(),
             },
             gtk::Box {
                 set_hexpand: true,
@@ -171,7 +199,8 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             gtk::Label {
                 set_halign: gtk::Align::End,
                 set_margin_end: 5,
-                set_label: "Espagnol",
+                #[watch]
+                set_label: &self.data.extra,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
