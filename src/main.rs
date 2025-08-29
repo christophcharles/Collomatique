@@ -28,6 +28,7 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum GeneralCommand {
+    /// Change the number of weeks in the colloscope
     SetWeekCount {
         /// New week count for the colloscope
         week_count: NonZeroU32,
@@ -35,7 +36,31 @@ enum GeneralCommand {
         #[arg(short, long, default_value_t = false)]
         force: bool,
     },
+    /// Set a maximum number of interrogations per day for each student
+    SetMaxInterrogationsPerDay {
+        /// New maximum number of interrogations per day for each student
+        max_interrogations_per_day: NonZeroU32,
+    },
+    /// Disable any maximum number of interrogations per day for each student
+    DisableMaxInterrogationsPerDay,
+    /// Set a maximum number of interrogations per week for each student - will set minimum to 0 if not already set
+    SetMaxInterrogationsPerWeek {
+        /// New maximum number of interrogations per week for each student
+        max_interrogations_per_week: u32,
+    },
+    /// Set a maximum number of interrogations per week for each student - will set maximum to the same value if not already set
+    SetMinInterrogationsPerWeek {
+        /// New minimum number of interrogations per week for each student
+        min_interrogations_per_week: u32,
+    },
+    /// Disable any limit on possible numbers of interrogations per week for each student
+    DisableInterrogationsPerWeekRange,
+    /// Show the number of weeks currently in the colloscope
     GetWeekCount,
+    /// Show the maximum number of interrogations per day (show \"none\" if none is set)
+    GetMaxInterrogationsPerDay,
+    /// Show the possible range of number of interrogations per week (show \"none\" if none is set)
+    GetInterrogationsPerWeekRange,
 }
 
 use collomatique::backend::sqlite;
@@ -137,10 +162,114 @@ async fn general_command(
                 return Err(err);
             }
         }
+        GeneralCommand::SetMaxInterrogationsPerDay {
+            max_interrogations_per_day: max_interrogation_per_day,
+        } => {
+            if let Err(e) = app_state
+                .apply(Operation::GeneralSetMaxInterrogationPerDay(Some(
+                    max_interrogation_per_day,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+        }
+        GeneralCommand::DisableMaxInterrogationsPerDay => {
+            if let Err(e) = app_state
+                .apply(Operation::GeneralSetMaxInterrogationPerDay(None))
+                .await
+            {
+                let err = match e {
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+        }
+        GeneralCommand::SetMaxInterrogationsPerWeek {
+            max_interrogations_per_week,
+        } => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let interrogations_per_week = match general_data.interrogations_per_week {
+                Some(value) => value.start..(max_interrogations_per_week + 1),
+                None => 0..(max_interrogations_per_week + 1),
+            };
+            if interrogations_per_week.is_empty() {
+                return Err(anyhow!("The maximum number of interrogations per week must be greater than the minimum number"));
+            }
+            if let Err(e) = app_state
+                .apply(Operation::GeneralSetInterrogationPerWeekRange(Some(
+                    interrogations_per_week,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+        }
+        GeneralCommand::SetMinInterrogationsPerWeek {
+            min_interrogations_per_week,
+        } => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let interrogations_per_week = match general_data.interrogations_per_week {
+                Some(value) => min_interrogations_per_week..value.end,
+                None => min_interrogations_per_week..(min_interrogations_per_week + 1),
+            };
+            if interrogations_per_week.is_empty() {
+                return Err(anyhow!("The minimum number of interrogations per week must be less than the maximum number"));
+            }
+            if let Err(e) = app_state
+                .apply(Operation::GeneralSetInterrogationPerWeekRange(Some(
+                    interrogations_per_week,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+        }
+        GeneralCommand::DisableInterrogationsPerWeekRange => {
+            if let Err(e) = app_state
+                .apply(Operation::GeneralSetInterrogationPerWeekRange(None))
+                .await
+            {
+                let err = match e {
+                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+        }
         GeneralCommand::GetWeekCount => {
             let general_data = app_state.get_backend_logic().general_data_get().await?;
             let week_count = general_data.week_count.get();
             print!("{}", week_count);
+        }
+        GeneralCommand::GetMaxInterrogationsPerDay => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let max_interrogations_per_day = general_data.max_interrogations_per_day;
+            match max_interrogations_per_day {
+                Some(value) => print!("{}", value.get()),
+                None => print!("none"),
+            }
+        }
+        GeneralCommand::GetInterrogationsPerWeekRange => {
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let interrogations_per_week = general_data.interrogations_per_week;
+            match interrogations_per_week {
+                Some(value) => print!("{}..{}", value.start, value.end - 1),
+                None => print!("none"),
+            }
         }
     }
 
