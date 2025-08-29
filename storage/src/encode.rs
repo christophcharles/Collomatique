@@ -65,12 +65,25 @@ fn generate_teacher_list(data: &Data) -> teacher_list::List {
     }
 }
 
+fn generate_assignment_map(data: &Data) -> assignment_map::Map {
+    let orig_assignments = data.get_assignments();
+
+    assignment_map::Map {
+        period_map: orig_assignments
+            .period_map
+            .iter()
+            .map(|(id, period_assignments)| (id.inner(), period_assignments.into()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
     let subject_list_entry = ValidEntry::SubjectList(generate_subject_list(data));
     let teacher_list_entry = ValidEntry::TeacherList(generate_teacher_list(data));
     let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
+    let assignment_map_entry = ValidEntry::AssignmentMap(generate_assignment_map(data));
 
     JsonData {
         header,
@@ -79,6 +92,7 @@ pub fn encode(data: &Data) -> JsonData {
             subject_list_entry,
             teacher_list_entry,
             student_list_entry,
+            assignment_map_entry,
         ]
         .into_iter()
         .map(|x| Entry {
