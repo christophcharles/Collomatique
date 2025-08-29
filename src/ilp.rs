@@ -50,12 +50,12 @@ pub enum VarError<V: VariableName> {
 pub type VarResult<T, V> = std::result::Result<T, VarError<V>>;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum BuildError<V: VariableName> {
-    #[error("Variable {1} is used in constraint {0} but not explicitly declared")]
-    UndeclaredVariable(usize, V),
+pub enum ConstraintError<V: VariableName> {
+    #[error("Variable {0} is used in constraint but not explicitly declared")]
+    UndeclaredVariable(V),
 }
 
-pub type BuildResult<T, V> = std::result::Result<T, BuildError<V>>;
+pub type ConstraintResult<T, V> = std::result::Result<T, ConstraintError<V>>;
 
 impl<V: VariableName> Default for ProblemBuilder<V> {
     fn default() -> Self {
@@ -73,18 +73,31 @@ impl<V: VariableName> ProblemBuilder<V> {
         Self::default()
     }
 
-    pub fn add_constraint(mut self, constraint: linexpr::Constraint<V>) -> Self {
+    pub fn add_constraint(
+        mut self,
+        constraint: linexpr::Constraint<V>,
+    ) -> ConstraintResult<Self, V> {
+        let constraint_vars = constraint.variables();
+        if !self.variables.is_superset(&constraint_vars) {
+            for var in constraint_vars {
+                if !self.variables.contains(&var) {
+                    return Err(ConstraintError::UndeclaredVariable(var));
+                }
+            }
+        }
+
         self.constraints.insert(constraint.cleaned());
-        self
+        Ok(self)
     }
 
     pub fn add_constraints<T: IntoIterator<Item = linexpr::Constraint<V>>>(
         mut self,
         constraints: T,
-    ) -> Self {
-        self.constraints
-            .extend(constraints.into_iter().map(|x| x.cleaned()));
-        self
+    ) -> ConstraintResult<Self, V> {
+        for constraint in constraints {
+            self = self.add_constraint(constraint)?;
+        }
+        Ok(self)
     }
 
     pub fn eval_fn(mut self, func: EvalFn<V>) -> Self {
@@ -141,18 +154,7 @@ impl<V: VariableName> ProblemBuilder<V> {
         Ok(self)
     }
 
-    pub fn build(self) -> BuildResult<Problem<V>, V> {
-        for (i, c) in self.constraints.iter().enumerate() {
-            let constraint_vars = c.variables();
-            if !self.variables.is_superset(&constraint_vars) {
-                for var in constraint_vars {
-                    if !self.variables.contains(&var) {
-                        return Err(BuildError::UndeclaredVariable(i, var));
-                    }
-                }
-            }
-        }
-
+    pub fn build(self) -> Problem<V> {
         let variables_vec: Vec<_> = self.variables.iter().cloned().collect();
         let mut variables_lookup = BTreeMap::new();
         for (i, var) in variables_vec.iter().enumerate() {
@@ -161,7 +163,7 @@ impl<V: VariableName> ProblemBuilder<V> {
 
         let nd_problem = ndtools::NdProblem::new(&variables_vec, &self.constraints);
 
-        Ok(Problem {
+        Problem {
             variables: self.variables,
             variables_vec,
             variables_lookup,
@@ -169,7 +171,7 @@ impl<V: VariableName> ProblemBuilder<V> {
             constants: self.constants,
             eval_fn: self.eval_fn,
             nd_problem,
-        })
+        }
     }
 
     pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V> {
