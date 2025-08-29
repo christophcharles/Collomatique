@@ -48,6 +48,7 @@ fn simple_validated_data() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -180,6 +181,7 @@ fn invalid_students_per_interrogation() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -226,6 +228,7 @@ fn subject_slot_overlaps_next_day() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -303,6 +306,7 @@ fn invalid_teacher_number() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 1,
@@ -386,6 +390,7 @@ fn slot_ref_has_invalid_subject() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -404,6 +409,7 @@ fn slot_ref_has_invalid_subject() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -470,6 +476,7 @@ fn slot_ref_has_invalid_interrogation() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -488,6 +495,7 @@ fn slot_ref_has_invalid_interrogation() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -554,6 +562,7 @@ fn slot_ref_has_invalid_slot() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -572,6 +581,7 @@ fn slot_ref_has_invalid_slot() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -638,6 +648,7 @@ fn grouping_incompact_invalid_ref() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -656,6 +667,7 @@ fn grouping_incompact_invalid_ref() {
             students_per_interrogation: NonZeroUsize::new(2).unwrap()
                 ..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: false,
             duration: NonZeroU32::new(60).unwrap(),
             interrogations: vec![Interrogation {
                 teacher: 0,
@@ -748,6 +760,7 @@ fn duplicated_groups() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -841,6 +854,7 @@ fn duplicated_student() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -943,6 +957,7 @@ fn duplicated_student_not_assigned() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -1043,6 +1058,7 @@ fn invalid_student_in_group() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -1132,6 +1148,7 @@ fn invalid_student_not_assigned() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -1215,6 +1232,7 @@ fn empty_group() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -1317,6 +1335,7 @@ fn extensible_empty_group() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -1419,6 +1438,7 @@ fn group_too_large() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
@@ -1521,6 +1541,7 @@ fn non_extensible_too_small_group() {
     let subjects = vec![Subject {
         students_per_interrogation: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
         duration: NonZeroU32::new(60).unwrap(),
         interrogations: vec![Interrogation {
             teacher: 0,
