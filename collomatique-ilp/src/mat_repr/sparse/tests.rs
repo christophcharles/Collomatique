@@ -1,7 +1,7 @@
 use super::*;
 
-/*#[test]
-fn sprs_problem_correctly_builds_matrices()
+#[test]
+fn sprs_problem_correctly_builds_matrices() {
     use crate::LinExpr;
 
     let variables = BTreeMap::from([
@@ -21,19 +21,25 @@ fn sprs_problem_correctly_builds_matrices()
             .eq(&(-1 * LinExpr::var("e") + LinExpr::var("c"))),
     ];
 
-    let pb = NdProblem::new(&variables, constraints.iter());
+    let pb = SprsProblem::new(&variables, constraints.iter());
 
-    use ndarray::array;
+    use sprs::{CsMat, CsVec};
 
+    // Expected matrix is :
+    //
+    // [0., -3., 4., 5., 0.]
+    // [-3., 1., 3., 5., 0.]
+    // [0., 0., 1., -3., 5.]
     assert_eq!(
         pb.mat,
-        array![
-            [0., -3., 4., 5., 0.],
-            [-3., 1., 3., 5., 0.],
-            [0., 0., 1., -3., 5.]
-        ]
+        CsMat::new(
+            (3,5),
+            vec![0,3,7,10],
+            vec![1,2,3,0,1,2,3,2,3,4],
+            vec![-3.,4.,5.,-3.,1.,3.,5.,1.,-3.,5.]
+        )
     );
-    assert_eq!(pb.constants, array![-3., 3., 2.]);
+    assert_eq!(pb.constants, CsVec::new(3, vec![0,1,2], vec![-3., 3., 2.]));
     assert_eq!(
         pb.constraint_symbols,
         vec![EqSymbol::LessThan, EqSymbol::LessThan, EqSymbol::Equals]
@@ -48,7 +54,7 @@ fn sprs_problem_correctly_builds_matrices()
             (String::from("e"), 4),
         ])
     );
-}*/
+}
 
 #[test]
 fn sprs_repr_checks_is_feasable_on_simple_example() {
