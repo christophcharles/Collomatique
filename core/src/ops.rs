@@ -34,6 +34,8 @@ pub mod incompatibilities;
 pub use incompatibilities::*;
 pub mod group_lists;
 pub use group_lists::*;
+pub mod rules;
+pub use rules::*;
 
 pub type Desc = (OpCategory, String);
 
@@ -49,6 +51,7 @@ pub enum OpCategory {
     Slots,
     Incompatibilities,
     GroupLists,
+    Rules,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +65,7 @@ pub enum UpdateOp {
     Slots(SlotsUpdateOp),
     Incompatibilities(IncompatibilitiesUpdateOp),
     GroupLists(GroupListsUpdateOp),
+    Rules(RulesUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -84,6 +88,8 @@ pub enum UpdateError {
     Incompatibilities(#[from] IncompatibilitiesUpdateError),
     #[error(transparent)]
     GroupLists(#[from] GroupListsUpdateError),
+    #[error(transparent)]
+    Rules(#[from] RulesUpdateError),
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +103,7 @@ pub enum UpdateWarning {
     Slots(SlotsUpdateWarning),
     Incompatibilities(IncompatibilitiesUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
+    Rules(RulesUpdateWarning),
 }
 
 impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
@@ -153,6 +160,12 @@ impl From<GroupListsUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<RulesUpdateWarning> for UpdateWarning {
+    fn from(value: RulesUpdateWarning) -> Self {
+        UpdateWarning::Rules(value)
+    }
+}
+
 impl UpdateWarning {
     pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
@@ -168,6 +181,7 @@ impl UpdateWarning {
             UpdateWarning::Slots(w) => w.build_desc(data),
             UpdateWarning::Incompatibilities(w) => w.build_desc(data),
             UpdateWarning::GroupLists(w) => w.build_desc(data),
+            UpdateWarning::Rules(w) => w.build_desc(data),
         }
     }
 
@@ -221,6 +235,7 @@ impl UpdateOp {
                 incompat_op.get_cleaning_ops(data).downcast()
             }
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_cleaning_ops(data).downcast(),
+            UpdateOp::Rules(rule_op) => rule_op.get_cleaning_ops(data).downcast(),
         }
     }
 }
@@ -247,6 +262,7 @@ impl UpdateOp {
             UpdateOp::GroupLists(group_list_op) => {
                 (OpCategory::GroupLists, group_list_op.get_desc())
             }
+            UpdateOp::Rules(rule_op) => (OpCategory::Rules, rule_op.get_desc()),
         }
     }
 
@@ -280,6 +296,7 @@ impl UpdateOp {
             UpdateOp::GroupLists(group_list_op) => {
                 UpdateWarning::from_iter(group_list_op.get_warnings(data))
             }
+            UpdateOp::Rules(rule_op) => UpdateWarning::from_iter(rule_op.get_warnings(data)),
         }
     }
 
@@ -322,6 +339,10 @@ impl UpdateOp {
             }
             UpdateOp::GroupLists(group_list_op) => {
                 let result = group_list_op.apply(data)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Rules(rule_op) => {
+                let result = rule_op.apply(data)?;
                 Ok(result.map(|x| x.into()))
             }
         }
