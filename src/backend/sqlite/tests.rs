@@ -5,4 +5,5 @@ async fn prepare_empty_db(pool: sqlx::SqlitePool) -> Store {
     Store { pool }
 }
 
+mod teachers;
 mod week_patterns;
