@@ -17,22 +17,13 @@ fn generate_header() -> Header {
 }
 
 fn generate_student_list(data: &Data) -> student_list::List {
-    let orig_student_list = data.get_student_list();
+    let orig_students = data.get_students();
 
     student_list::List {
-        map: orig_student_list
-            .into_iter()
-            .map(|(id, person)| {
-                (
-                    id.inner(),
-                    common::PersonWithContact {
-                        firstname: person.firstname.clone(),
-                        surname: person.surname.clone(),
-                        telephone: person.tel.clone(),
-                        email: person.email.clone(),
-                    },
-                )
-            })
+        student_map: orig_students
+            .student_map
+            .iter()
+            .map(|(id, student)| (id.inner(), student.into()))
             .collect(),
     }
 }
@@ -76,18 +67,18 @@ fn generate_teacher_list(data: &Data) -> teacher_list::List {
 
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
-    let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
     let subject_list_entry = ValidEntry::SubjectList(generate_subject_list(data));
     let teacher_list_entry = ValidEntry::TeacherList(generate_teacher_list(data));
+    let student_list_entry = ValidEntry::StudentList(generate_student_list(data));
 
     JsonData {
         header,
         entries: vec![
-            student_list_entry,
             period_list_entry,
             subject_list_entry,
             teacher_list_entry,
+            student_list_entry,
         ]
         .into_iter()
         .map(|x| Entry {

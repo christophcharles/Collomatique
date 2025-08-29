@@ -71,18 +71,24 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
             "needed_entry": true,
             "content": {{
                 "StudentList": {{
-                    "map": {{
+                    "student_map": {{
                         "0": {{
-                            "firstname": "Mathieu",
-                            "surname": "DURAND",
-                            "telephone": null,
-                            "email": "mathieu.durand@monfai.fr"
+                            "desc": {{
+                                "firstname": "Mathieu",
+                                "surname": "DURAND",
+                                "telephone": null,
+                                "email": "mathieu.durand@monfai.fr"
+                            }},
+                            "excluded_periods": []
                         }},
                         "42": {{
-                            "firstname": "Christelle",
-                            "surname": "DUPONT",
-                            "telephone": "06 06 06 06 06",
-                            "email": null
+                            "desc": {{
+                                "firstname": "Christelle",
+                                "surname": "DUPONT",
+                                "telephone": "06 06 06 06 06",
+                                "email": null
+                            }},
+                            "excluded_periods": []
                         }}
                     }}
                 }}
@@ -95,36 +101,47 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
 
     let (data, caveats) =
         collomatique_storage::deserialize_data(&content).expect("File structure should be valid");
-    let expected_student_list = BTreeMap::from([
-        (
-            0,
-            collomatique_state_colloscopes::PersonWithContact {
-                firstname: "Mathieu".to_string(),
-                surname: "DURAND".to_string(),
-                tel: None,
-                email: Some(
-                    non_empty_string::NonEmptyString::new("mathieu.durand@monfai.fr".to_string())
-                        .unwrap(),
-                ),
-            },
-        ),
-        (
-            42,
-            collomatique_state_colloscopes::PersonWithContact {
-                firstname: "Christelle".to_string(),
-                surname: "DUPONT".to_string(),
-                tel: Some(
-                    non_empty_string::NonEmptyString::new("06 06 06 06 06".to_string()).unwrap(),
-                ),
-                email: None,
-            },
-        ),
-    ]);
+    let expected_students = collomatique_state_colloscopes::students::StudentsExternalData {
+        student_map: BTreeMap::from([
+            (
+                0,
+                collomatique_state_colloscopes::students::StudentExternalData {
+                    desc: collomatique_state_colloscopes::PersonWithContact {
+                        firstname: "Mathieu".to_string(),
+                        surname: "DURAND".to_string(),
+                        tel: None,
+                        email: Some(
+                            non_empty_string::NonEmptyString::new(
+                                "mathieu.durand@monfai.fr".to_string(),
+                            )
+                            .unwrap(),
+                        ),
+                    },
+                    excluded_periods: BTreeSet::new(),
+                },
+            ),
+            (
+                42,
+                collomatique_state_colloscopes::students::StudentExternalData {
+                    desc: collomatique_state_colloscopes::PersonWithContact {
+                        firstname: "Christelle".to_string(),
+                        surname: "DUPONT".to_string(),
+                        tel: Some(
+                            non_empty_string::NonEmptyString::new("06 06 06 06 06".to_string())
+                                .unwrap(),
+                        ),
+                        email: None,
+                    },
+                    excluded_periods: BTreeSet::new(),
+                },
+            ),
+        ]),
+    };
     let expected_data = collomatique_state_colloscopes::Data::from_data(
-        expected_student_list,
         PeriodsExternalData::default(),
         SubjectsExternalData::default(),
         TeachersExternalData::default(),
+        expected_students,
     )
     .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);
@@ -227,18 +244,24 @@ fn decode_fails_with_known_data_aside_with_wrong_minimum_spec() {
             "needed_entry": true,
             "content": {
                 "StudentList": {
-                    "map": {
+                    "student_map": {
                         "0": {
-                            "firstname": "Mathieu",
-                            "surname": "DURAND",
-                            "telephone": null,
-                            "email": "mathieu.durand@monfai.fr"
+                            "desc": {
+                                "firstname": "Mathieu",
+                                "surname": "DURAND",
+                                "telephone": null,
+                                "email": "mathieu.durand@monfai.fr"
+                            },
+                            "excluded_periods": []
                         },
                         "42": {
-                            "firstname": "Christelle",
-                            "surname": "DUPONT",
-                            "telephone": "06 06 06 06 06",
-                            "email": null
+                            "desc": {
+                                "firstname": "Christelle",
+                                "surname": "DUPONT",
+                                "telephone": "06 06 06 06 06",
+                                "email": null
+                            },
+                            "excluded_periods": []
                         }
                     }
                 }
@@ -274,18 +297,24 @@ fn decode_fails_with_known_data_aside_with_wrong_neediness() {
             "needed_entry": false,
             "content": {
                 "StudentList": {
-                    "map": {
+                    "student_map": {
                         "0": {
-                            "firstname": "Mathieu",
-                            "surname": "DURAND",
-                            "telephone": null,
-                            "email": "mathieu.durand@monfai.fr"
+                            "desc": {
+                                "firstname": "Mathieu",
+                                "surname": "DURAND",
+                                "telephone": null,
+                                "email": "mathieu.durand@monfai.fr"
+                            },
+                            "excluded_periods": []
                         },
                         "42": {
-                            "firstname": "Christelle",
-                            "surname": "DUPONT",
-                            "telephone": "06 06 06 06 06",
-                            "email": null
+                            "desc": {
+                                "firstname": "Christelle",
+                                "surname": "DUPONT",
+                                "telephone": "06 06 06 06 06",
+                                "email": null
+                            },
+                            "excluded_periods": []
                         }
                     }
                 }
@@ -321,12 +350,15 @@ fn decode_fails_on_duplicate_known_data() {
             "needed_entry": true,
             "content": {
                 "StudentList": {
-                    "map": {
+                    "student_map": {
                         "0": {
-                            "firstname": "Mathieu",
-                            "surname": "DURAND",
-                            "telephone": null,
-                            "email": "mathieu.durand@monfai.fr"
+                            "desc": {
+                                "firstname": "Mathieu",
+                                "surname": "DURAND",
+                                "telephone": null,
+                                "email": "mathieu.durand@monfai.fr"
+                            },
+                            "excluded_periods": []
                         }
                     }
                 }
@@ -337,12 +369,15 @@ fn decode_fails_on_duplicate_known_data() {
             "needed_entry": true,
             "content": {
                 "StudentList": {
-                    "map": {
+                    "student_map": {
                         "42": {
-                            "firstname": "Christelle",
-                            "surname": "DUPONT",
-                            "telephone": "06 06 06 06 06",
-                            "email": null
+                            "desc": {
+                                "firstname": "Christelle",
+                                "surname": "DUPONT",
+                                "telephone": "06 06 06 06 06",
+                                "email": null
+                            },
+                            "excluded_periods": []
                         }
                     }
                 }

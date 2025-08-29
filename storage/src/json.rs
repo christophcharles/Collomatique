@@ -130,15 +130,15 @@ pub enum ValidEntry {
     TeacherList(teacher_list::List),
 }
 
-pub const CURRENT_SPEC_VERSION: u32 = 4;
+pub const CURRENT_SPEC_VERSION: u32 = 1;
 
 impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {
         match self {
             ValidEntry::StudentList(_) => 1,
-            ValidEntry::PeriodList(_) => 2,
-            ValidEntry::SubjectList(_) => 3,
-            ValidEntry::TeacherList(_) => 4,
+            ValidEntry::PeriodList(_) => 1,
+            ValidEntry::SubjectList(_) => 1,
+            ValidEntry::TeacherList(_) => 1,
         }
     }
 
