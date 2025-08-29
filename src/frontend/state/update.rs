@@ -85,6 +85,8 @@ pub enum UpdateError<IntError: std::error::Error> {
     GroupingIncompatBadGrouping(GroupingHandle),
     #[error("Cannot register student: Subject {1:?} is not in subject group {0:?}")]
     RegisterStudentBadSubject(SubjectGroupHandle, SubjectHandle),
+    #[error("Colloscope corresponding to handle {0:?} was previously removed")]
+    ColloscopeRemoved(ColloscopeHandle),
 }
 
 #[derive(Debug, Error)]
@@ -111,6 +113,8 @@ pub enum RevError<IntError: std::error::Error> {
     GroupingRemoved(GroupingHandle),
     #[error("Grouping incompat corresponding to handle {0:?} was previously removed")]
     GroupingIncompatRemoved(GroupingIncompatHandle),
+    #[error("Colloscope corresponding to handle {0:?} was previously removed")]
+    ColloscopeRemoved(ColloscopeHandle),
 }
 
 impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntError> {
@@ -129,6 +133,7 @@ impl<IntError: std::error::Error> From<RevError<IntError>> for UpdateError<IntEr
             RevError::GroupingIncompatRemoved(handle) => {
                 UpdateError::GroupingIncompatRemoved(handle)
             }
+            RevError::ColloscopeRemoved(handle) => UpdateError::ColloscopeRemoved(handle),
         }
     }
 }
@@ -146,6 +151,7 @@ pub enum ReturnHandle {
     TimeSlot(TimeSlotHandle),
     Grouping(GroupingHandle),
     GroupingIncompat(GroupingIncompatHandle),
+    Colloscope(ColloscopeHandle),
 }
 
 use backend::{IdError, WeekPatternDependancy, WeekPatternError};
@@ -425,6 +431,29 @@ pub trait Manager: ManagerInternal {
             StudentHandle,
             IncompatHandle,
         >,
+    >;
+    async fn colloscopes_get_all(
+        &mut self,
+    ) -> Result<
+        BTreeMap<
+            ColloscopeHandle,
+            backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+        >,
+        <Self::Storage as backend::Storage>::InternalError,
+    >;
+    async fn colloscopes_get(
+        &mut self,
+        handle: ColloscopeHandle,
+    ) -> Result<
+        backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+        IdError<<Self::Storage as backend::Storage>::InternalError, ColloscopeHandle>,
+    >;
+    async fn colloscopes_check_data(
+        &self,
+        colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ) -> Result<
+        backend::DataStatusWithId3<TeacherHandle, SubjectHandle, StudentHandle>,
+        <Self::Storage as backend::Storage>::InternalError,
     >;
 
     async fn apply(
@@ -1742,6 +1771,107 @@ impl<T: ManagerInternal> Manager for T {
                 })?;
 
             Ok(output)
+        }
+    }
+
+    fn colloscopes_get(
+        &mut self,
+        handle: ColloscopeHandle,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+            IdError<<Self::Storage as backend::Storage>::InternalError, ColloscopeHandle>,
+        >,
+    > + Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().colloscopes;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let colloscope = self
+                .get_backend_logic()
+                .colloscopes_get(index)
+                .await
+                .map_err(|e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(_id) => IdError::InvalidId(handle),
+                })?;
+
+            Ok(private::convert_colloscope_to_handles(
+                colloscope,
+                self.get_handle_managers_mut(),
+            ))
+        }
+    }
+
+    fn colloscopes_get_all(
+        &mut self,
+    ) -> impl core::future::Future<
+        Output = Result<
+            BTreeMap<
+                ColloscopeHandle,
+                backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+            >,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async {
+            let colloscopes_backend = self.get_backend_logic().colloscopes_get_all().await?;
+
+            let colloscopes = colloscopes_backend
+                .into_iter()
+                .map(|(id, colloscope)| {
+                    let handle = self.get_handle_managers_mut().colloscopes.get_handle(id);
+                    let colloscope = private::convert_colloscope_to_handles(
+                        colloscope,
+                        self.get_handle_managers_mut(),
+                    );
+                    (handle, colloscope)
+                })
+                .collect();
+
+            Ok(colloscopes)
+        }
+    }
+
+    fn colloscopes_check_data(
+        &self,
+        colloscope: &backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+    ) -> impl core::future::Future<
+        Output = Result<
+            backend::DataStatusWithId3<TeacherHandle, SubjectHandle, StudentHandle>,
+            <Self::Storage as backend::Storage>::InternalError,
+        >,
+    > + Send {
+        async {
+            let colloscope_backend = match private::convert_colloscope_from_handles(
+                colloscope.clone(),
+                self.get_handle_managers(),
+            ) {
+                Ok(val) => val,
+                Err(status) => return Ok(status),
+            };
+
+            let status_backend = self
+                .get_backend_logic()
+                .colloscopes_check_data(&colloscope_backend)
+                .await?;
+
+            let status = match status_backend {
+                backend::DataStatusWithId3::BadCrossId1(_id) => {
+                    panic!("TeacherId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::BadCrossId2(_id) => {
+                    panic!("SubjectId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::BadCrossId3(_id) => {
+                    panic!("StudentId was taken from a handle manager and thus should be valid")
+                }
+                backend::DataStatusWithId3::Ok => backend::DataStatusWithId3::Ok,
+            };
+
+            Ok(status)
         }
     }
 
@@ -4110,6 +4240,135 @@ pub(super) mod private {
                         .groupings
                         .get_id(x)
                         .ok_or(backend::DataStatusWithId::BadCrossId(x))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    fn convert_collo_subject_to_handles<T: backend::Storage>(
+        collo_subject: backend::ColloscopeSubject<T::TeacherId, T::StudentId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::ColloscopeSubject<TeacherHandle, StudentHandle> {
+        backend::ColloscopeSubject {
+            time_slots: collo_subject
+                .time_slots
+                .into_iter()
+                .map(|time_slot| backend::ColloscopeTimeSlot {
+                    teacher_id: handle_managers.teachers.get_handle(time_slot.teacher_id),
+                    start: time_slot.start,
+                    room: time_slot.room,
+                    group_assignments: time_slot.group_assignments,
+                })
+                .collect(),
+            group_list: backend::ColloscopeGroupList {
+                name: collo_subject.group_list.name,
+                groups: collo_subject.group_list.groups,
+                students_mapping: collo_subject
+                    .group_list
+                    .students_mapping
+                    .into_iter()
+                    .map(|(student_id, group)| {
+                        (handle_managers.students.get_handle(student_id), group)
+                    })
+                    .collect(),
+            },
+        }
+    }
+
+    pub fn convert_colloscope_to_handles<T: backend::Storage>(
+        colloscope: backend::Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle> {
+        backend::Colloscope {
+            name: colloscope.name,
+            subjects: colloscope
+                .subjects
+                .into_iter()
+                .map(|(subject_id, collo_subject)| {
+                    (
+                        handle_managers.subjects.get_handle(subject_id),
+                        convert_collo_subject_to_handles(collo_subject, handle_managers),
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    fn convert_collo_subject_from_handles<T: backend::Storage>(
+        collo_subject: backend::ColloscopeSubject<TeacherHandle, StudentHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<
+        backend::ColloscopeSubject<T::TeacherId, T::StudentId>,
+        backend::DataStatusWithId2<TeacherHandle, StudentHandle>,
+    > {
+        Ok(backend::ColloscopeSubject {
+            time_slots: collo_subject
+                .time_slots
+                .into_iter()
+                .map(|time_slot| {
+                    Ok(backend::ColloscopeTimeSlot {
+                        teacher_id: handle_managers
+                            .teachers
+                            .get_id(time_slot.teacher_id)
+                            .ok_or(backend::DataStatusWithId2::BadCrossId1(
+                                time_slot.teacher_id,
+                            ))?,
+                        start: time_slot.start,
+                        room: time_slot.room,
+                        group_assignments: time_slot.group_assignments,
+                    })
+                })
+                .collect::<Result<_, _>>()?,
+            group_list: backend::ColloscopeGroupList {
+                name: collo_subject.group_list.name,
+                groups: collo_subject.group_list.groups,
+                students_mapping: collo_subject
+                    .group_list
+                    .students_mapping
+                    .into_iter()
+                    .map(|(student_handle, group)| {
+                        Ok((
+                            handle_managers
+                                .students
+                                .get_id(student_handle)
+                                .ok_or(backend::DataStatusWithId2::BadCrossId2(student_handle))?,
+                            group,
+                        ))
+                    })
+                    .collect::<Result<_, _>>()?,
+            },
+        })
+    }
+
+    pub fn convert_colloscope_from_handles<T: backend::Storage>(
+        colloscope: backend::Colloscope<TeacherHandle, SubjectHandle, StudentHandle>,
+        handle_managers: &handles::ManagerCollection<T>,
+    ) -> Result<
+        backend::Colloscope<T::TeacherId, T::SubjectId, T::StudentId>,
+        backend::DataStatusWithId3<TeacherHandle, SubjectHandle, StudentHandle>,
+    > {
+        Ok(backend::Colloscope {
+            name: colloscope.name,
+            subjects: colloscope
+                .subjects
+                .into_iter()
+                .map(|(subject_handle, collo_subject)| {
+                    Ok((
+                        handle_managers
+                            .subjects
+                            .get_id(subject_handle)
+                            .ok_or(backend::DataStatusWithId3::BadCrossId2(subject_handle))?,
+                        convert_collo_subject_from_handles(collo_subject, handle_managers)
+                            .map_err(|e| match e {
+                                backend::DataStatusWithId2::Ok => panic!("not an error"),
+                                backend::DataStatusWithId2::BadCrossId1(id) => {
+                                    backend::DataStatusWithId3::BadCrossId1(id)
+                                }
+                                backend::DataStatusWithId2::BadCrossId2(id) => {
+                                    backend::DataStatusWithId3::BadCrossId3(id)
+                                }
+                            })?,
+                    ))
                 })
                 .collect::<Result<_, _>>()?,
         })
