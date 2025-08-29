@@ -14,8 +14,8 @@ pub enum Error {
     SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroU32>),
     #[error("Interrogation slot is too long to fit in a day")]
     SlotOverlapsNextDay,
-    #[error("Teacher number is invalid")]
-    InvalidTeacherNumber,
+    #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
+    SubjectWithInvalidTeacher(usize, usize, usize),
     #[error("Student {0} references an invalid subject number ({1})")]
     StudentWithInvalidSubject(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
@@ -145,9 +145,13 @@ impl ValidatedData {
                 ));
             }
 
-            for interrogation in &subject.interrogations {
+            for (j, interrogation) in subject.interrogations.iter().enumerate() {
                 if interrogation.teacher >= general.teacher_count {
-                    return Err(Error::InvalidTeacherNumber);
+                    return Err(Error::SubjectWithInvalidTeacher(
+                        i,
+                        j,
+                        interrogation.teacher,
+                    ));
                 }
                 for slot_start in &interrogation.slots {
                     if !Self::validate_slot(&general, slot_start, subject.duration) {

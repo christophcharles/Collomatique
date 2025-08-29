@@ -238,7 +238,7 @@ fn invalid_teacher_number() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::InvalidTeacherNumber)
+        Err(Error::SubjectWithInvalidTeacher(0, 0, 1))
     );
 }
 
