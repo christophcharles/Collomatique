@@ -34,9 +34,9 @@ pub mod colloscopes;
 pub mod time;
 
 pub mod solver;
-pub mod traits;
+pub mod generics;
 
 pub use solver::{
     DecoratedCompleteSolution, ExtraTranslator, Problem, ProblemBuilder, TimeLimitSolution,
 };
-pub use traits::{BaseConstraints, BaseVariable, ExtraConstraints, ExtraVariable, SoftConstraints};
+pub use generics::{BaseConstraints, BaseVariable, ExtraConstraints, ExtraVariable, SoftConstraints};
