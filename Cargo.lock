@@ -105,6 +105,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-core"
+version = "0.1.0"
+dependencies = [
+ "collomatique-solver",
+ "collomatique-solver-colloscopes",
+]
+
+[[package]]
+name = "collomatique-gtk4"
+version = "0.1.0"
+dependencies = [
+ "collomatique-core",
+]
+
+[[package]]
 name = "collomatique-ilp"
 version = "0.1.0"
 dependencies = [

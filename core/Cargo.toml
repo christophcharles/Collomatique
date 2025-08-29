@@ -1,0 +1,9 @@
+[package]
+name = "collomatique-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+collomatique-solver = { path = "../solver" }
+collomatique-solver-colloscopes = { path = "../solver-colloscopes" }
+
