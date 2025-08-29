@@ -181,9 +181,12 @@ impl GeneralPlanningUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| match e {
-                        collomatique_state_colloscopes::Error::InvalidPeriodId(id) => {
-                            DeletePeriodError::InvalidPeriodId(id)
-                        }
+                        collomatique_state_colloscopes::Error::Period(period_e) => match period_e {
+                            collomatique_state_colloscopes::PeriodError::InvalidPeriodId(id) => {
+                                DeletePeriodError::InvalidPeriodId(id)
+                            }
+                            _ => panic!("Unexpected error {:?}", period_e),
+                        },
                         _ => panic!("Unexpected error {:?}", e),
                     })?;
                 if result.is_some() {

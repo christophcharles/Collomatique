@@ -100,11 +100,11 @@ impl Eq for Data {}
 
 use thiserror::Error;
 
-/// Errors for colloscopes modification
+/// Errors for students operations
 ///
-/// These errors can be returned when trying to modifying [Data].
+/// These errors can be returned when trying to modify [Data] with a student op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum Error {
+pub enum StudentError {
     /// A student id is invalid
     #[error("invalid student id ({0:?})")]
     InvalidStudentId(StudentId),
@@ -112,14 +112,39 @@ pub enum Error {
     /// The student id already exists
     #[error("student id ({0:?}) already exists")]
     StudentIdAlreadyExists(StudentId),
+}
 
-    /// A period id is invalid
+/// Errors for periods operations
+///
+/// These errors can be returned when trying to modify [Data] with a period op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PeriodError {
+    /// A student id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
 
-    /// The period id already exists
+    /// The student id already exists
     #[error("period id ({0:?}) already exists")]
     PeriodIdAlreadyExists(PeriodId),
+}
+
+/// Errors for subject operations
+///
+/// These errors can be returned when trying to modify [Data] with a subject op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SubjectError {}
+
+/// Errors for colloscopes modification
+///
+/// These errors can be returned when trying to modify [Data].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Student(#[from] StudentError),
+    #[error(transparent)]
+    Period(#[from] PeriodError),
+    #[error(transparent)]
+    Subject(#[from] SubjectError),
 }
 
 /// Potential new id returned by annotation
@@ -398,11 +423,14 @@ impl Data {
     /// Used internally
     ///
     /// Apply student operations
-    fn apply_student(&mut self, student_op: &AnnotatedStudentOp) -> std::result::Result<(), Error> {
+    fn apply_student(
+        &mut self,
+        student_op: &AnnotatedStudentOp,
+    ) -> std::result::Result<(), StudentError> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, student) => {
                 if self.inner_data.student_list.contains_key(student_id) {
-                    return Err(Error::StudentIdAlreadyExists(student_id.clone()));
+                    return Err(StudentError::StudentIdAlreadyExists(student_id.clone()));
                 }
 
                 self.inner_data
@@ -412,13 +440,13 @@ impl Data {
             }
             AnnotatedStudentOp::Remove(student_id) => {
                 if self.inner_data.student_list.remove(&student_id).is_none() {
-                    return Err(Error::InvalidStudentId(student_id.clone()));
+                    return Err(StudentError::InvalidStudentId(student_id.clone()));
                 }
                 Ok(())
             }
             AnnotatedStudentOp::Update(student_id, student) => {
                 let Some(old_student) = self.inner_data.student_list.get_mut(&student_id) else {
-                    return Err(Error::InvalidStudentId(student_id.clone()));
+                    return Err(StudentError::InvalidStudentId(student_id.clone()));
                 };
 
                 *old_student = student.clone();
@@ -430,7 +458,10 @@ impl Data {
     /// Used internally
     ///
     /// Apply period operations
-    fn apply_period(&mut self, period_op: &AnnotatedPeriodOp) -> std::result::Result<(), Error> {
+    fn apply_period(
+        &mut self,
+        period_op: &AnnotatedPeriodOp,
+    ) -> std::result::Result<(), PeriodError> {
         match period_op {
             AnnotatedPeriodOp::ChangeStartDate(new_date) => {
                 self.inner_data.periods.first_week = new_date.clone();
@@ -443,7 +474,7 @@ impl Data {
                     .find_period_position(*period_id)
                     .is_some()
                 {
-                    return Err(Error::PeriodIdAlreadyExists(*period_id));
+                    return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
                 }
 
                 self.inner_data
@@ -459,11 +490,11 @@ impl Data {
                     .find_period_position(*period_id)
                     .is_some()
                 {
-                    return Err(Error::PeriodIdAlreadyExists(*period_id));
+                    return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
                 }
 
                 let Some(position) = self.inner_data.periods.find_period_position(*after_id) else {
-                    return Err(Error::InvalidPeriodId(*after_id));
+                    return Err(PeriodError::InvalidPeriodId(*after_id));
                 };
 
                 self.inner_data
@@ -475,7 +506,7 @@ impl Data {
             AnnotatedPeriodOp::Remove(period_id) => {
                 let Some(position) = self.inner_data.periods.find_period_position(*period_id)
                 else {
-                    return Err(Error::InvalidPeriodId(*period_id));
+                    return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
                 self.inner_data.periods.ordered_period_list.remove(position);
@@ -485,7 +516,7 @@ impl Data {
             AnnotatedPeriodOp::Update(period_id, desc) => {
                 let Some(position) = self.inner_data.periods.find_period_position(*period_id)
                 else {
-                    return Err(Error::InvalidPeriodId(*period_id));
+                    return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
                 self.inner_data.periods.ordered_period_list[position].1 = desc.clone();
@@ -498,7 +529,10 @@ impl Data {
     /// Used internally
     ///
     /// Apply period operations
-    fn apply_subject(&mut self, subject_op: &AnnotatedSubjectOp) -> std::result::Result<(), Error> {
+    fn apply_subject(
+        &mut self,
+        subject_op: &AnnotatedSubjectOp,
+    ) -> std::result::Result<(), SubjectError> {
         todo!()
     }
 
@@ -508,11 +542,11 @@ impl Data {
     fn build_rev_student(
         &self,
         student_op: &AnnotatedStudentOp,
-    ) -> std::result::Result<AnnotatedStudentOp, Error> {
+    ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, _student) => {
                 if self.inner_data.student_list.contains_key(student_id) {
-                    return Err(Error::StudentIdAlreadyExists(student_id.clone()));
+                    return Err(StudentError::StudentIdAlreadyExists(student_id.clone()));
                 }
 
                 Ok(AnnotatedStudentOp::Remove(student_id.clone()))
@@ -520,7 +554,7 @@ impl Data {
             AnnotatedStudentOp::Remove(student_id) => {
                 let Some(old_student) = self.inner_data.student_list.get(&student_id).cloned()
                 else {
-                    return Err(Error::InvalidStudentId(student_id.clone()));
+                    return Err(StudentError::InvalidStudentId(student_id.clone()));
                 };
 
                 Ok(AnnotatedStudentOp::Add(student_id.clone(), old_student))
@@ -528,7 +562,7 @@ impl Data {
             AnnotatedStudentOp::Update(student_id, _student) => {
                 let Some(old_student) = self.inner_data.student_list.get(&student_id).cloned()
                 else {
-                    return Err(Error::InvalidStudentId(student_id.clone()));
+                    return Err(StudentError::InvalidStudentId(student_id.clone()));
                 };
 
                 Ok(AnnotatedStudentOp::Update(student_id.clone(), old_student))
@@ -542,7 +576,7 @@ impl Data {
     fn build_rev_period(
         &self,
         period_op: &AnnotatedPeriodOp,
-    ) -> std::result::Result<AnnotatedPeriodOp, Error> {
+    ) -> std::result::Result<AnnotatedPeriodOp, PeriodError> {
         match period_op {
             AnnotatedPeriodOp::ChangeStartDate(_new_date) => Ok(
                 AnnotatedPeriodOp::ChangeStartDate(self.inner_data.periods.first_week.clone()),
@@ -554,7 +588,7 @@ impl Data {
                     .find_period_position(*new_id)
                     .is_some()
                 {
-                    return Err(Error::PeriodIdAlreadyExists(new_id.clone()));
+                    return Err(PeriodError::PeriodIdAlreadyExists(new_id.clone()));
                 }
 
                 Ok(AnnotatedPeriodOp::Remove(new_id.clone()))
@@ -566,12 +600,12 @@ impl Data {
                     .find_period_position(*new_id)
                     .is_some()
                 {
-                    return Err(Error::PeriodIdAlreadyExists(new_id.clone()));
+                    return Err(PeriodError::PeriodIdAlreadyExists(new_id.clone()));
                 }
 
                 let Some(_after_position) = self.inner_data.periods.find_period_position(*after_id)
                 else {
-                    return Err(Error::InvalidPeriodId(after_id.clone()));
+                    return Err(PeriodError::InvalidPeriodId(after_id.clone()));
                 };
 
                 Ok(AnnotatedPeriodOp::Remove(new_id.clone()))
@@ -579,7 +613,7 @@ impl Data {
             AnnotatedPeriodOp::Remove(period_id) => {
                 let Some(position) = self.inner_data.periods.find_period_position(*period_id)
                 else {
-                    return Err(Error::InvalidPeriodId(period_id.clone()));
+                    return Err(PeriodError::InvalidPeriodId(period_id.clone()));
                 };
 
                 let old_desc = self.inner_data.periods.ordered_period_list[position]
@@ -596,7 +630,7 @@ impl Data {
             AnnotatedPeriodOp::Update(period_id, _desc) => {
                 let Some(position) = self.inner_data.periods.find_period_position(*period_id)
                 else {
-                    return Err(Error::InvalidPeriodId(period_id.clone()));
+                    return Err(PeriodError::InvalidPeriodId(period_id.clone()));
                 };
 
                 let old_desc = self.inner_data.periods.ordered_period_list[position]
