@@ -65,10 +65,10 @@ pub use linexpr::{Constraint, LinExpr};
 use mat_repr::{ConfigRepr, ProblemRepr};
 
 /// Default matrix representation for [Problem].
-/// 
+///
 /// In most cases, the default representation is just fine
 /// and there is no reason to change it.
-/// 
+///
 /// See [mat_repr] for more information.
 pub type DefaultRepr<V> = mat_repr::nd::NdProblem<V>;
 
@@ -127,6 +127,16 @@ pub enum VariableType {
     Binary,
 }
 
+impl std::fmt::Display for VariableType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VariableType::Binary => write!(f, "binary"),
+            VariableType::Integer => write!(f, "int"),
+            VariableType::Continuous => write!(f, "real"),
+        }
+    }
+}
+
 /// Complete description of the possible range of values for a variable.
 ///
 /// The description is built using a builder pattern by starting with a call to
@@ -141,6 +151,26 @@ pub struct Variable {
     var_type: VariableType,
     min: Option<ordered_float::OrderedFloat<f64>>,
     max: Option<ordered_float::OrderedFloat<f64>>,
+}
+
+impl std::fmt::Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (self.min, self.max) {
+            (Some(mi), Some(ma)) => {
+                write!(f, "{} [{},{}]", self.var_type, mi, ma)?;
+            }
+            (None, Some(ma)) => {
+                write!(f, "{} ]-oo,{}]", self.var_type, ma)?;
+            }
+            (Some(mi), None) => {
+                write!(f, "{} [{},+oo[", self.var_type, mi)?;
+            }
+            (None, None) => {
+                write!(f, "{} ]-oo,+oo[", self.var_type)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for Variable {
@@ -328,6 +358,15 @@ pub enum ObjectiveSense {
     Minimize,
     /// Maximize the objective function
     Maximize,
+}
+
+impl std::fmt::Display for ObjectiveSense {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ObjectiveSense::Minimize => write!(f, "Minimize"),
+            ObjectiveSense::Maximize => write!(f, "Maximize"),
+        }
+    }
 }
 
 /// Problem builder
@@ -796,6 +835,25 @@ pub struct Problem<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr
     objective_func: LinExpr<V>,
     objective_sense: ObjectiveSense,
     repr: P,
+}
+
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> std::fmt::Display for Problem<V, C, P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "variables:\n")?;
+        for (i, (v, desc)) in self.variables.iter().enumerate() {
+            write!(f, "{}) {}: {}", i, v, desc)?;
+        }
+
+        write!(f, "constraints:\n")?;
+        for (i, (c, desc)) in self.constraints.iter().enumerate() {
+            write!(f, "{}) {} ({})\n", i, c, desc)?;
+        }
+
+        write!(f, "objective function: {}", self.objective_func)?;
+        write!(f, "objective sense: {}", self.objective_sense)?;
+
+        Ok(())
+    }
 }
 
 impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
