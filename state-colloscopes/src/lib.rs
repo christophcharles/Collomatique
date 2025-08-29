@@ -237,6 +237,10 @@ pub enum SubjectError {
     /// The subject is referenced by a schedule incompatibility
     #[error("subject id ({0:?}) is referenced by the incompat id {1:?}")]
     SubjectStillHasAssociatedIncompats(SubjectId, IncompatId),
+
+    /// The subject is associated to a group list
+    #[error("subject id ({0:?}) is associated to group list id {1:?}")]
+    SubjectStillHasAssociatedGroupList(SubjectId, GroupListId),
 }
 
 /// Errors for teacher operations
@@ -1745,6 +1749,15 @@ impl Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
+                if let Some(group_list_id) =
+                    self.inner_data.group_lists.subjects_associations.get(id)
+                {
+                    return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                        *id,
+                        *group_list_id,
+                    ));
+                }
+
                 if let Some(subject_slots) = self.inner_data.slots.subject_map.get(id) {
                     if !subject_slots.ordered_slots.is_empty() {
                         return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
@@ -1838,6 +1851,16 @@ impl Data {
                                 *id,
                             ));
                         }
+                    }
+
+                    // Also, we should not have a corresponding group list
+                    if let Some(group_list_id) =
+                        self.inner_data.group_lists.subjects_associations.get(id)
+                    {
+                        return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
                     }
 
                     // Let's also check that we don't have corresponding interrogations
