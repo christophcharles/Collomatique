@@ -1,0 +1,3565 @@
+{
+  "next_id": 97,
+  "general_data": {
+    "interrogations_per_week": {
+      "start": 3,
+      "end": 4
+    },
+    "max_interrogations_per_day": 2,
+    "week_count": 20,
+    "periodicity_cuts": [],
+    "costs_adjustments": {
+      "max_interrogations_per_day_for_single_student": 1,
+      "max_interrogations_per_day_for_all_students": 1,
+      "interrogations_per_week_range_for_single_student": 1,
+      "interrogations_per_week_range_for_all_students": 1,
+      "balancing": 1,
+      "consecutive_slots": 1
+    }
+  },
+  "week_patterns": {
+    "0": {
+      "name": "Toutes",
+      "weeks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    "1": {
+      "name": "Paires",
+      "weeks": [
+        1,
+        3,
+        5,
+        7,
+        9,
+        11,
+        13,
+        15,
+        17,
+        19
+      ]
+    },
+    "2": {
+      "name": "Impaires",
+      "weeks": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18
+      ]
+    }
+  },
+  "teachers": {
+    "3": {
+      "surname": "DURAND",
+      "firstname": "Gontran",
+      "contact": "gontran.durand@yahoo.fr"
+    },
+    "4": {
+      "surname": "BEAUREGARD",
+      "firstname": "Stéphane",
+      "contact": "sbeauregard42@orange.fr"
+    },
+    "5": {
+      "surname": "RIVOUX",
+      "firstname": "Jérôme",
+      "contact": "jejeriri@gmail.com"
+    },
+    "6": {
+      "surname": "DUPONT",
+      "firstname": "Suzanne",
+      "contact": "s.dupont158@wanadoo.fr"
+    },
+    "7": {
+      "surname": "MORET",
+      "firstname": "Béatrice",
+      "contact": "bebemoret@yahoo.fr"
+    },
+    "8": {
+      "surname": "SELLIER",
+      "firstname": "Geoffroy",
+      "contact": "geoffroy.sellier@ac-lyon.fr"
+    },
+    "9": {
+      "surname": "WEBER",
+      "firstname": "Xavier",
+      "contact": "xavier.weber@gmail.com"
+    },
+    "10": {
+      "surname": "LALLEMAND",
+      "firstname": "Gérard",
+      "contact": "gerardlallemand@orange.fr"
+    },
+    "11": {
+      "surname": "VILLARD",
+      "firstname": "Josette",
+      "contact": "josette.villard@ac-lyon.fr"
+    },
+    "12": {
+      "surname": "COLAS",
+      "firstname": "Filibustine",
+      "contact": "fcolas@gmail.com"
+    },
+    "13": {
+      "surname": "HUARD",
+      "firstname": "Violette",
+      "contact": "vhuard42@orange.fr"
+    },
+    "14": {
+      "surname": "RAMOS",
+      "firstname": "Camille",
+      "contact": "camille.ramos@ac-lyon.fr"
+    },
+    "15": {
+      "surname": "MARTEAU",
+      "firstname": "Fabrice",
+      "contact": "fmarteau73@orange.fr"
+    },
+    "16": {
+      "surname": "TOURNIER",
+      "firstname": "Alexandre",
+      "contact": "alexandre.tournier@ac-lyon.fr"
+    },
+    "17": {
+      "surname": "VIGOUROUX",
+      "firstname": "Maud",
+      "contact": "maud.vigouroux@orange.fr"
+    },
+    "18": {
+      "surname": "PEYRE",
+      "firstname": "Elisabeth",
+      "contact": "epeyre@laposte.net"
+    },
+    "19": {
+      "surname": "DE SOUSA",
+      "firstname": "Gabriel",
+      "contact": "gabidesousa42@yahoo.fr"
+    },
+    "20": {
+      "surname": "BUISSON",
+      "firstname": "Louise",
+      "contact": "louise.buisson@ac-lyon.fr"
+    }
+  },
+  "students": {
+    "21": {
+      "surname": "Roth",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "22": {
+      "surname": "Marin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "23": {
+      "surname": "Bordes",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "24": {
+      "surname": "Bresson",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "25": {
+      "surname": "Gosset",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "26": {
+      "surname": "Martel",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "27": {
+      "surname": "Delarue",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "28": {
+      "surname": "Chauvet",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "29": {
+      "surname": "Bourdon",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "30": {
+      "surname": "Lafond",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "31": {
+      "surname": "Rondeau",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "32": {
+      "surname": "Vigneron",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "33": {
+      "surname": "Davy",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "34": {
+      "surname": "Gosselin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "35": {
+      "surname": "Jeannin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "36": {
+      "surname": "Sicard",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "37": {
+      "surname": "Mounier",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "38": {
+      "surname": "Lafon",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "39": {
+      "surname": "Brun",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "40": {
+      "surname": "Hardy",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "41": {
+      "surname": "Girault",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "42": {
+      "surname": "Delahaye",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "43": {
+      "surname": "Levasseur",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "44": {
+      "surname": "Gonthier",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    }
+  },
+  "subject_groups": {
+    "45": {
+      "name": "Spécialité",
+      "optional": false
+    },
+    "46": {
+      "name": "LV2",
+      "optional": false
+    },
+    "47": {
+      "name": "LV1",
+      "optional": false
+    },
+    "48": {
+      "name": "Mathématiques",
+      "optional": false
+    },
+    "49": {
+      "name": "Lettres-Philo",
+      "optional": false
+    },
+    "50": {
+      "name": "TP Info",
+      "optional": false
+    }
+  },
+  "incompats": {
+    "51": {
+      "name": "ESH",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 600
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "52": {
+      "name": "LV2 - Espagnol",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "53": {
+      "name": "LV2 - Allemand",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 480
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "54": {
+      "name": "Repas midi - lundi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "55": {
+      "name": "Repas midi - mardi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "56": {
+      "name": "Repas midi - mercredi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "57": {
+      "name": "Repas midi - jeudi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "58": {
+      "name": "Repas midi - vendredi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "group_lists": {
+    "59": {
+      "name": "Groupes",
+      "groups": [
+        {
+          "name": "1",
+          "extendable": false
+        },
+        {
+          "name": "2",
+          "extendable": false
+        },
+        {
+          "name": "3",
+          "extendable": false
+        },
+        {
+          "name": "4",
+          "extendable": false
+        },
+        {
+          "name": "5",
+          "extendable": false
+        },
+        {
+          "name": "6",
+          "extendable": false
+        },
+        {
+          "name": "7",
+          "extendable": false
+        },
+        {
+          "name": "8",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "21": 0,
+        "22": 0,
+        "23": 0,
+        "24": 1,
+        "25": 1,
+        "26": 1,
+        "27": 2,
+        "28": 2,
+        "29": 2,
+        "30": 3,
+        "31": 3,
+        "32": 3,
+        "33": 4,
+        "34": 4,
+        "35": 4,
+        "36": 5,
+        "37": 5,
+        "38": 5,
+        "39": 6,
+        "40": 6,
+        "41": 6,
+        "42": 7,
+        "43": 7,
+        "44": 7
+      }
+    },
+    "60": {
+      "name": "HGG",
+      "groups": [
+        {
+          "name": "5",
+          "extendable": false
+        },
+        {
+          "name": "6",
+          "extendable": false
+        },
+        {
+          "name": "3+7",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "29": 2,
+        "33": 0,
+        "34": 0,
+        "35": 0,
+        "36": 1,
+        "37": 1,
+        "38": 1,
+        "41": 2
+      }
+    },
+    "61": {
+      "name": "TP Info",
+      "groups": [
+        {
+          "name": "P",
+          "extendable": false
+        },
+        {
+          "name": "I",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "21": 1,
+        "22": 1,
+        "23": 1,
+        "24": 0,
+        "25": 0,
+        "26": 0,
+        "27": 1,
+        "28": 1,
+        "29": 1,
+        "30": 0,
+        "31": 0,
+        "32": 0,
+        "33": 1,
+        "34": 1,
+        "35": 1,
+        "36": 0,
+        "37": 0,
+        "38": 0,
+        "39": 1,
+        "40": 1,
+        "41": 1,
+        "42": 0,
+        "43": 0,
+        "44": 0
+      }
+    }
+  },
+  "subjects": {
+    "62": {
+      "name": "HGG",
+      "subject_group_id": 45,
+      "incompat_id": null,
+      "group_list_id": 60,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "63": {
+      "name": "ESH",
+      "subject_group_id": 45,
+      "incompat_id": 51,
+      "group_list_id": 59,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "64": {
+      "name": "Lettres-Philo",
+      "subject_group_id": 49,
+      "incompat_id": null,
+      "group_list_id": 59,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "65": {
+      "name": "LV1 - Anglais",
+      "subject_group_id": 47,
+      "incompat_id": null,
+      "group_list_id": 59,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "66": {
+      "name": "LV2 - Espagnol",
+      "subject_group_id": 46,
+      "incompat_id": 52,
+      "group_list_id": 59,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "67": {
+      "name": "LV2 - Allemand",
+      "subject_group_id": 46,
+      "incompat_id": 53,
+      "group_list_id": 59,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "68": {
+      "name": "Mathématiques Approfondies",
+      "subject_group_id": 48,
+      "incompat_id": null,
+      "group_list_id": 59,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "69": {
+      "name": "TP Info",
+      "subject_group_id": 50,
+      "incompat_id": null,
+      "group_list_id": 61,
+      "duration": 120,
+      "students_per_group": {
+        "start": 10,
+        "end": 19
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    }
+  },
+  "time_slots": {
+    "70": {
+      "subject_id": 62,
+      "teacher_id": 3,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "71": {
+      "subject_id": 62,
+      "teacher_id": 3,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 1,
+      "room": "",
+      "cost": 0
+    },
+    "72": {
+      "subject_id": 63,
+      "teacher_id": 4,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "73": {
+      "subject_id": 63,
+      "teacher_id": 4,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "74": {
+      "subject_id": 63,
+      "teacher_id": 5,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "75": {
+      "subject_id": 63,
+      "teacher_id": 6,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "76": {
+      "subject_id": 64,
+      "teacher_id": 7,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "77": {
+      "subject_id": 64,
+      "teacher_id": 7,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "78": {
+      "subject_id": 64,
+      "teacher_id": 8,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "79": {
+      "subject_id": 64,
+      "teacher_id": 9,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "80": {
+      "subject_id": 65,
+      "teacher_id": 10,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "81": {
+      "subject_id": 65,
+      "teacher_id": 11,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "82": {
+      "subject_id": 65,
+      "teacher_id": 12,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "83": {
+      "subject_id": 65,
+      "teacher_id": 13,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "84": {
+      "subject_id": 68,
+      "teacher_id": 14,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "85": {
+      "subject_id": 68,
+      "teacher_id": 15,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "86": {
+      "subject_id": 68,
+      "teacher_id": 16,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "87": {
+      "subject_id": 68,
+      "teacher_id": 16,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "88": {
+      "subject_id": 66,
+      "teacher_id": 17,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "89": {
+      "subject_id": 66,
+      "teacher_id": 18,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "90": {
+      "subject_id": 66,
+      "teacher_id": 19,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "91": {
+      "subject_id": 67,
+      "teacher_id": 20,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 780
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "92": {
+      "subject_id": 69,
+      "teacher_id": 16,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    }
+  },
+  "groupings": {
+    "93": {
+      "name": "G1",
+      "slots": [
+        72
+      ]
+    },
+    "94": {
+      "name": "G2",
+      "slots": [
+        73
+      ]
+    }
+  },
+  "grouping_incompats": {
+    "95": {
+      "max_count": 1,
+      "groupings": [
+        93,
+        94
+      ]
+    }
+  },
+  "colloscopes": {
+    "96": {
+      "name": "Colloscope1",
+      "subjects": {
+        "62": {
+          "time_slots": [
+            {
+              "teacher_id": 3,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  1
+                ],
+                "1": [
+                  0
+                ],
+                "2": [
+                  1
+                ],
+                "3": [
+                  2
+                ],
+                "4": [
+                  1
+                ],
+                "5": [
+                  0
+                ],
+                "6": [
+                  1
+                ],
+                "7": [
+                  2
+                ],
+                "8": [
+                  1
+                ],
+                "9": [
+                  0
+                ],
+                "10": [
+                  1
+                ],
+                "11": [
+                  2
+                ],
+                "12": [
+                  1
+                ],
+                "13": [
+                  0
+                ],
+                "14": [
+                  1
+                ],
+                "15": [
+                  2
+                ],
+                "16": [
+                  1
+                ],
+                "17": [
+                  0
+                ],
+                "18": [
+                  1
+                ],
+                "19": [
+                  2
+                ]
+              }
+            },
+            {
+              "teacher_id": 3,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "1": [
+                  2
+                ],
+                "3": [
+                  0
+                ],
+                "5": [
+                  2
+                ],
+                "7": [
+                  0
+                ],
+                "9": [
+                  2
+                ],
+                "11": [
+                  0
+                ],
+                "13": [
+                  2
+                ],
+                "15": [
+                  0
+                ],
+                "17": [
+                  2
+                ],
+                "19": [
+                  0
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "HGG",
+            "groups": [
+              "5",
+              "6",
+              "3+7"
+            ],
+            "students_mapping": {
+              "29": 2,
+              "33": 0,
+              "34": 0,
+              "35": 0,
+              "36": 1,
+              "37": 1,
+              "38": 1,
+              "41": 2
+            }
+          }
+        },
+        "63": {
+          "time_slots": [
+            {
+              "teacher_id": 4,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [],
+                "1": [
+                  2
+                ],
+                "2": [
+                  3
+                ],
+                "3": [],
+                "4": [
+                  0
+                ],
+                "5": [
+                  1
+                ],
+                "6": [],
+                "7": [
+                  4
+                ],
+                "8": [
+                  5
+                ],
+                "9": [
+                  2
+                ],
+                "10": [],
+                "11": [],
+                "12": [],
+                "13": [
+                  1
+                ],
+                "14": [
+                  0
+                ],
+                "15": [
+                  4
+                ],
+                "16": [],
+                "17": [
+                  2
+                ],
+                "18": [
+                  3
+                ],
+                "19": []
+              }
+            },
+            {
+              "teacher_id": 4,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  3
+                ],
+                "1": [],
+                "2": [],
+                "3": [
+                  1
+                ],
+                "4": [],
+                "5": [],
+                "6": [
+                  0
+                ],
+                "7": [],
+                "8": [],
+                "9": [],
+                "10": [
+                  5
+                ],
+                "11": [
+                  1
+                ],
+                "12": [
+                  3
+                ],
+                "13": [],
+                "14": [],
+                "15": [],
+                "16": [
+                  0
+                ],
+                "17": [],
+                "18": [],
+                "19": [
+                  1
+                ]
+              }
+            },
+            {
+              "teacher_id": 5,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  5
+                ],
+                "1": [
+                  1
+                ],
+                "2": [
+                  0
+                ],
+                "3": [
+                  2
+                ],
+                "4": [
+                  5
+                ],
+                "5": [
+                  4
+                ],
+                "6": [
+                  3
+                ],
+                "7": [
+                  2
+                ],
+                "8": [
+                  3
+                ],
+                "9": [
+                  1
+                ],
+                "10": [
+                  0
+                ],
+                "11": [
+                  4
+                ],
+                "12": [
+                  5
+                ],
+                "13": [
+                  4
+                ],
+                "14": [
+                  3
+                ],
+                "15": [
+                  2
+                ],
+                "16": [
+                  5
+                ],
+                "17": [
+                  1
+                ],
+                "18": [
+                  0
+                ],
+                "19": [
+                  2
+                ]
+              }
+            },
+            {
+              "teacher_id": 6,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  0
+                ],
+                "1": [
+                  4
+                ],
+                "2": [
+                  5
+                ],
+                "3": [
+                  4
+                ],
+                "4": [
+                  3
+                ],
+                "5": [
+                  2
+                ],
+                "6": [
+                  5
+                ],
+                "7": [
+                  1
+                ],
+                "8": [
+                  0
+                ],
+                "9": [
+                  4
+                ],
+                "10": [
+                  3
+                ],
+                "11": [
+                  2
+                ],
+                "12": [
+                  0
+                ],
+                "13": [
+                  2
+                ],
+                "14": [
+                  5
+                ],
+                "15": [
+                  1
+                ],
+                "16": [
+                  3
+                ],
+                "17": [
+                  4
+                ],
+                "18": [
+                  5
+                ],
+                "19": [
+                  4
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "Groupes",
+            "groups": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "7",
+              "8"
+            ],
+            "students_mapping": {
+              "21": 0,
+              "22": 0,
+              "23": 0,
+              "24": 1,
+              "25": 1,
+              "26": 1,
+              "27": 2,
+              "28": 2,
+              "30": 3,
+              "31": 3,
+              "32": 3,
+              "39": 4,
+              "40": 4,
+              "42": 5,
+              "43": 5,
+              "44": 5
+            }
+          }
+        },
+        "64": {
+          "time_slots": [
+            {
+              "teacher_id": 7,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  0
+                ],
+                "1": [
+                  7
+                ],
+                "2": [
+                  6
+                ],
+                "3": [
+                  5
+                ],
+                "4": [
+                  4
+                ],
+                "5": [
+                  3
+                ],
+                "6": [
+                  2
+                ],
+                "7": [
+                  1
+                ],
+                "8": [
+                  0
+                ],
+                "9": [
+                  7
+                ],
+                "10": [
+                  6
+                ],
+                "11": [
+                  5
+                ],
+                "12": [
+                  4
+                ],
+                "13": [
+                  3
+                ],
+                "14": [
+                  2
+                ],
+                "15": [
+                  1
+                ],
+                "16": [
+                  0
+                ],
+                "17": [
+                  7
+                ],
+                "18": [
+                  6
+                ],
+                "19": [
+                  5
+                ]
+              }
+            },
+            {
+              "teacher_id": 7,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  2
+                ],
+                "1": [
+                  3
+                ],
+                "2": [
+                  4
+                ],
+                "3": [
+                  1
+                ],
+                "4": [
+                  6
+                ],
+                "5": [
+                  5
+                ],
+                "6": [
+                  0
+                ],
+                "7": [
+                  7
+                ],
+                "8": [
+                  2
+                ],
+                "9": [
+                  3
+                ],
+                "10": [
+                  4
+                ],
+                "11": [
+                  1
+                ],
+                "12": [
+                  6
+                ],
+                "13": [
+                  5
+                ],
+                "14": [
+                  0
+                ],
+                "15": [
+                  7
+                ],
+                "16": [
+                  2
+                ],
+                "17": [
+                  3
+                ],
+                "18": [
+                  4
+                ],
+                "19": [
+                  1
+                ]
+              }
+            },
+            {
+              "teacher_id": 8,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  6
+                ],
+                "1": [
+                  5
+                ],
+                "2": [
+                  2
+                ],
+                "3": [
+                  7
+                ],
+                "4": [
+                  0
+                ],
+                "5": [
+                  1
+                ],
+                "6": [
+                  4
+                ],
+                "7": [
+                  3
+                ],
+                "8": [
+                  6
+                ],
+                "9": [
+                  5
+                ],
+                "10": [
+                  2
+                ],
+                "11": [
+                  7
+                ],
+                "12": [
+                  0
+                ],
+                "13": [
+                  1
+                ],
+                "14": [
+                  4
+                ],
+                "15": [
+                  3
+                ],
+                "16": [
+                  6
+                ],
+                "17": [
+                  5
+                ],
+                "18": [
+                  2
+                ],
+                "19": [
+                  7
+                ]
+              }
+            },
+            {
+              "teacher_id": 9,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  4
+                ],
+                "1": [
+                  1
+                ],
+                "2": [
+                  0
+                ],
+                "3": [
+                  3
+                ],
+                "4": [
+                  2
+                ],
+                "5": [
+                  7
+                ],
+                "6": [
+                  6
+                ],
+                "7": [
+                  5
+                ],
+                "8": [
+                  4
+                ],
+                "9": [
+                  1
+                ],
+                "10": [
+                  0
+                ],
+                "11": [
+                  3
+                ],
+                "12": [
+                  2
+                ],
+                "13": [
+                  7
+                ],
+                "14": [
+                  6
+                ],
+                "15": [
+                  5
+                ],
+                "16": [
+                  4
+                ],
+                "17": [
+                  1
+                ],
+                "18": [
+                  0
+                ],
+                "19": [
+                  3
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "Groupes",
+            "groups": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8"
+            ],
+            "students_mapping": {
+              "21": 0,
+              "22": 0,
+              "23": 0,
+              "24": 1,
+              "25": 1,
+              "26": 1,
+              "27": 2,
+              "28": 2,
+              "29": 2,
+              "30": 3,
+              "31": 3,
+              "32": 3,
+              "33": 4,
+              "34": 4,
+              "35": 4,
+              "36": 5,
+              "37": 5,
+              "38": 5,
+              "39": 6,
+              "40": 6,
+              "41": 6,
+              "42": 7,
+              "43": 7,
+              "44": 7
+            }
+          }
+        },
+        "65": {
+          "time_slots": [
+            {
+              "teacher_id": 10,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 900
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  6
+                ],
+                "1": [
+                  5
+                ],
+                "2": [
+                  4
+                ],
+                "3": [
+                  1
+                ],
+                "4": [
+                  0
+                ],
+                "5": [
+                  3
+                ],
+                "6": [
+                  2
+                ],
+                "7": [
+                  7
+                ],
+                "8": [
+                  6
+                ],
+                "9": [
+                  5
+                ],
+                "10": [
+                  4
+                ],
+                "11": [
+                  1
+                ],
+                "12": [
+                  0
+                ],
+                "13": [
+                  3
+                ],
+                "14": [
+                  2
+                ],
+                "15": [
+                  7
+                ],
+                "16": [
+                  6
+                ],
+                "17": [
+                  5
+                ],
+                "18": [
+                  4
+                ],
+                "19": [
+                  1
+                ]
+              }
+            },
+            {
+              "teacher_id": 11,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 900
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  4
+                ],
+                "1": [
+                  1
+                ],
+                "2": [
+                  6
+                ],
+                "3": [
+                  3
+                ],
+                "4": [
+                  2
+                ],
+                "5": [
+                  7
+                ],
+                "6": [
+                  0
+                ],
+                "7": [
+                  5
+                ],
+                "8": [
+                  4
+                ],
+                "9": [
+                  1
+                ],
+                "10": [
+                  6
+                ],
+                "11": [
+                  3
+                ],
+                "12": [
+                  2
+                ],
+                "13": [
+                  7
+                ],
+                "14": [
+                  0
+                ],
+                "15": [
+                  5
+                ],
+                "16": [
+                  4
+                ],
+                "17": [
+                  1
+                ],
+                "18": [
+                  0
+                ],
+                "19": [
+                  3
+                ]
+              }
+            },
+            {
+              "teacher_id": 12,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  0
+                ],
+                "1": [
+                  3
+                ],
+                "2": [
+                  2
+                ],
+                "3": [
+                  7
+                ],
+                "4": [
+                  6
+                ],
+                "5": [
+                  5
+                ],
+                "6": [
+                  4
+                ],
+                "7": [
+                  1
+                ],
+                "8": [
+                  0
+                ],
+                "9": [
+                  3
+                ],
+                "10": [
+                  2
+                ],
+                "11": [
+                  7
+                ],
+                "12": [
+                  6
+                ],
+                "13": [
+                  5
+                ],
+                "14": [
+                  4
+                ],
+                "15": [
+                  1
+                ],
+                "16": [
+                  0
+                ],
+                "17": [
+                  3
+                ],
+                "18": [
+                  2
+                ],
+                "19": [
+                  7
+                ]
+              }
+            },
+            {
+              "teacher_id": 13,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  2
+                ],
+                "1": [
+                  7
+                ],
+                "2": [
+                  0
+                ],
+                "3": [
+                  5
+                ],
+                "4": [
+                  4
+                ],
+                "5": [
+                  1
+                ],
+                "6": [
+                  6
+                ],
+                "7": [
+                  3
+                ],
+                "8": [
+                  2
+                ],
+                "9": [
+                  7
+                ],
+                "10": [
+                  0
+                ],
+                "11": [
+                  5
+                ],
+                "12": [
+                  4
+                ],
+                "13": [
+                  1
+                ],
+                "14": [
+                  6
+                ],
+                "15": [
+                  3
+                ],
+                "16": [
+                  2
+                ],
+                "17": [
+                  7
+                ],
+                "18": [
+                  6
+                ],
+                "19": [
+                  5
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "Groupes",
+            "groups": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8"
+            ],
+            "students_mapping": {
+              "21": 0,
+              "22": 0,
+              "23": 0,
+              "24": 1,
+              "25": 1,
+              "26": 1,
+              "27": 2,
+              "28": 2,
+              "29": 2,
+              "30": 3,
+              "31": 3,
+              "32": 3,
+              "33": 4,
+              "34": 4,
+              "35": 4,
+              "36": 5,
+              "37": 5,
+              "38": 5,
+              "39": 6,
+              "40": 6,
+              "41": 6,
+              "42": 7,
+              "43": 7,
+              "44": 7
+            }
+          }
+        },
+        "66": {
+          "time_slots": [
+            {
+              "teacher_id": 17,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  4
+                ],
+                "1": [
+                  3
+                ],
+                "2": [
+                  1
+                ],
+                "3": [
+                  0
+                ],
+                "4": [
+                  5
+                ],
+                "5": [
+                  2
+                ],
+                "6": [
+                  4
+                ],
+                "7": [
+                  3
+                ],
+                "8": [
+                  1
+                ],
+                "9": [
+                  3
+                ],
+                "10": [
+                  5
+                ],
+                "11": [
+                  0
+                ],
+                "12": [
+                  5
+                ],
+                "13": [
+                  2
+                ],
+                "14": [
+                  4
+                ],
+                "15": [
+                  3
+                ],
+                "16": [
+                  1
+                ],
+                "17": [
+                  0
+                ],
+                "18": [
+                  5
+                ],
+                "19": [
+                  2
+                ]
+              }
+            },
+            {
+              "teacher_id": 18,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 900
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  1
+                ],
+                "1": [
+                  2
+                ],
+                "2": [
+                  5
+                ],
+                "3": [
+                  3
+                ],
+                "4": [
+                  4
+                ],
+                "5": [
+                  0
+                ],
+                "6": [
+                  1
+                ],
+                "7": [
+                  2
+                ],
+                "8": [
+                  5
+                ],
+                "9": [
+                  0
+                ],
+                "10": [
+                  1
+                ],
+                "11": [
+                  2
+                ],
+                "12": [
+                  4
+                ],
+                "13": [
+                  3
+                ],
+                "14": [
+                  1
+                ],
+                "15": [
+                  0
+                ],
+                "16": [
+                  5
+                ],
+                "17": [
+                  2
+                ],
+                "18": [
+                  4
+                ],
+                "19": [
+                  3
+                ]
+              }
+            },
+            {
+              "teacher_id": 19,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  5
+                ],
+                "1": [
+                  0
+                ],
+                "2": [
+                  4
+                ],
+                "3": [
+                  2
+                ],
+                "4": [
+                  1
+                ],
+                "5": [
+                  3
+                ],
+                "6": [
+                  5
+                ],
+                "7": [
+                  0
+                ],
+                "8": [
+                  4
+                ],
+                "9": [
+                  2
+                ],
+                "10": [
+                  4
+                ],
+                "11": [
+                  3
+                ],
+                "12": [
+                  1
+                ],
+                "13": [
+                  0
+                ],
+                "14": [
+                  5
+                ],
+                "15": [
+                  2
+                ],
+                "16": [
+                  4
+                ],
+                "17": [
+                  3
+                ],
+                "18": [
+                  1
+                ],
+                "19": [
+                  0
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "Groupes",
+            "groups": [
+              "1",
+              "2",
+              "5",
+              "6",
+              "7",
+              "8"
+            ],
+            "students_mapping": {
+              "21": 0,
+              "22": 0,
+              "23": 0,
+              "24": 1,
+              "25": 1,
+              "26": 1,
+              "33": 2,
+              "34": 2,
+              "35": 2,
+              "36": 3,
+              "37": 3,
+              "38": 3,
+              "39": 4,
+              "40": 4,
+              "41": 4,
+              "42": 5,
+              "43": 5,
+              "44": 5
+            }
+          }
+        },
+        "67": {
+          "time_slots": [
+            {
+              "teacher_id": 20,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  1
+                ],
+                "1": [
+                  0
+                ],
+                "2": [
+                  1
+                ],
+                "3": [
+                  0
+                ],
+                "4": [
+                  1
+                ],
+                "5": [
+                  0
+                ],
+                "6": [
+                  1
+                ],
+                "7": [
+                  0
+                ],
+                "8": [
+                  1
+                ],
+                "9": [
+                  0
+                ],
+                "10": [
+                  1
+                ],
+                "11": [
+                  0
+                ],
+                "12": [
+                  1
+                ],
+                "13": [
+                  0
+                ],
+                "14": [
+                  1
+                ],
+                "15": [
+                  0
+                ],
+                "16": [
+                  1
+                ],
+                "17": [
+                  0
+                ],
+                "18": [
+                  1
+                ],
+                "19": [
+                  0
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "Groupes",
+            "groups": [
+              "3",
+              "4"
+            ],
+            "students_mapping": {
+              "27": 0,
+              "28": 0,
+              "29": 0,
+              "30": 1,
+              "31": 1,
+              "32": 1
+            }
+          }
+        },
+        "68": {
+          "time_slots": [
+            {
+              "teacher_id": 14,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  4
+                ],
+                "1": [
+                  6
+                ],
+                "2": [
+                  2
+                ],
+                "3": [
+                  3
+                ],
+                "4": [
+                  1
+                ],
+                "5": [
+                  0
+                ],
+                "6": [
+                  5
+                ],
+                "7": [
+                  7
+                ],
+                "8": [
+                  4
+                ],
+                "9": [
+                  6
+                ],
+                "10": [
+                  2
+                ],
+                "11": [
+                  3
+                ],
+                "12": [
+                  1
+                ],
+                "13": [
+                  0
+                ],
+                "14": [
+                  5
+                ],
+                "15": [
+                  7
+                ],
+                "16": [
+                  4
+                ],
+                "17": [
+                  6
+                ],
+                "18": [
+                  2
+                ],
+                "19": [
+                  3
+                ]
+              }
+            },
+            {
+              "teacher_id": 15,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  5
+                ],
+                "1": [
+                  3
+                ],
+                "2": [
+                  4
+                ],
+                "3": [
+                  7
+                ],
+                "4": [
+                  2
+                ],
+                "5": [
+                  6
+                ],
+                "6": [
+                  1
+                ],
+                "7": [
+                  0
+                ],
+                "8": [
+                  5
+                ],
+                "9": [
+                  3
+                ],
+                "10": [
+                  4
+                ],
+                "11": [
+                  7
+                ],
+                "12": [
+                  2
+                ],
+                "13": [
+                  6
+                ],
+                "14": [
+                  1
+                ],
+                "15": [
+                  0
+                ],
+                "16": [
+                  5
+                ],
+                "17": [
+                  3
+                ],
+                "18": [
+                  4
+                ],
+                "19": [
+                  7
+                ]
+              }
+            },
+            {
+              "teacher_id": 16,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  2
+                ],
+                "1": [
+                  7
+                ],
+                "2": [
+                  1
+                ],
+                "3": [
+                  0
+                ],
+                "4": [
+                  5
+                ],
+                "5": [
+                  3
+                ],
+                "6": [
+                  4
+                ],
+                "7": [
+                  6
+                ],
+                "8": [
+                  2
+                ],
+                "9": [
+                  7
+                ],
+                "10": [
+                  1
+                ],
+                "11": [
+                  0
+                ],
+                "12": [
+                  5
+                ],
+                "13": [
+                  3
+                ],
+                "14": [
+                  4
+                ],
+                "15": [
+                  6
+                ],
+                "16": [
+                  2
+                ],
+                "17": [
+                  7
+                ],
+                "18": [
+                  1
+                ],
+                "19": [
+                  0
+                ]
+              }
+            },
+            {
+              "teacher_id": 16,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 1020
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  1
+                ],
+                "1": [
+                  0
+                ],
+                "2": [
+                  5
+                ],
+                "3": [
+                  6
+                ],
+                "4": [
+                  4
+                ],
+                "5": [
+                  7
+                ],
+                "6": [
+                  2
+                ],
+                "7": [
+                  3
+                ],
+                "8": [
+                  1
+                ],
+                "9": [
+                  0
+                ],
+                "10": [
+                  5
+                ],
+                "11": [
+                  6
+                ],
+                "12": [
+                  4
+                ],
+                "13": [
+                  7
+                ],
+                "14": [
+                  2
+                ],
+                "15": [
+                  3
+                ],
+                "16": [
+                  1
+                ],
+                "17": [
+                  0
+                ],
+                "18": [
+                  5
+                ],
+                "19": [
+                  6
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "Groupes",
+            "groups": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8"
+            ],
+            "students_mapping": {
+              "21": 0,
+              "22": 0,
+              "23": 0,
+              "24": 1,
+              "25": 1,
+              "26": 1,
+              "27": 2,
+              "28": 2,
+              "29": 2,
+              "30": 3,
+              "31": 3,
+              "32": 3,
+              "33": 4,
+              "34": 4,
+              "35": 4,
+              "36": 5,
+              "37": 5,
+              "38": 5,
+              "39": 6,
+              "40": 6,
+              "41": 6,
+              "42": 7,
+              "43": 7,
+              "44": 7
+            }
+          }
+        },
+        "69": {
+          "time_slots": [
+            {
+              "teacher_id": 16,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 960
+                }
+              },
+              "room": "",
+              "group_assignments": {
+                "0": [
+                  0
+                ],
+                "1": [
+                  1
+                ],
+                "2": [
+                  0
+                ],
+                "3": [
+                  1
+                ],
+                "4": [
+                  0
+                ],
+                "5": [
+                  1
+                ],
+                "6": [
+                  0
+                ],
+                "7": [
+                  1
+                ],
+                "8": [
+                  0
+                ],
+                "9": [
+                  1
+                ],
+                "10": [
+                  0
+                ],
+                "11": [
+                  1
+                ],
+                "12": [
+                  0
+                ],
+                "13": [
+                  1
+                ],
+                "14": [
+                  0
+                ],
+                "15": [
+                  1
+                ],
+                "16": [
+                  0
+                ],
+                "17": [
+                  1
+                ],
+                "18": [
+                  0
+                ],
+                "19": [
+                  1
+                ]
+              }
+            }
+          ],
+          "group_list": {
+            "name": "TP Info",
+            "groups": [
+              "P",
+              "I"
+            ],
+            "students_mapping": {
+              "21": 1,
+              "22": 1,
+              "23": 1,
+              "24": 0,
+              "25": 0,
+              "26": 0,
+              "27": 1,
+              "28": 1,
+              "29": 1,
+              "30": 0,
+              "31": 0,
+              "32": 0,
+              "33": 1,
+              "34": 1,
+              "35": 1,
+              "36": 0,
+              "37": 0,
+              "38": 0,
+              "39": 1,
+              "40": 1,
+              "41": 1,
+              "42": 0,
+              "43": 0,
+              "44": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "slot_selections": {},
+  "student_assignments": {
+    "21": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "22": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "23": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "24": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "25": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "26": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "27": {
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "28": {
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "29": {
+      "subject_groups": {
+        "45": 62,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "30": {
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "31": {
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "32": {
+      "subject_groups": {
+        "45": 63,
+        "46": 67,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "33": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "34": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "35": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "36": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "37": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "38": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "39": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "40": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "41": {
+      "subject_groups": {
+        "45": 62,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "42": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "43": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    },
+    "44": {
+      "subject_groups": {
+        "45": 63,
+        "46": 66,
+        "47": 65,
+        "48": 68,
+        "49": 64,
+        "50": 69
+      },
+      "incompats": [
+        54,
+        55,
+        56,
+        57,
+        58
+      ]
+    }
+  }
+}

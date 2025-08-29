@@ -1,0 +1,3399 @@
+{
+  "next_id": 174,
+  "general_data": {
+    "interrogations_per_week": {
+      "start": 2,
+      "end": 5
+    },
+    "max_interrogations_per_day": 2,
+    "week_count": 20,
+    "periodicity_cuts": [
+      6,
+      18
+    ],
+    "costs_adjustments": {
+      "max_interrogations_per_day_for_single_student": 1,
+      "max_interrogations_per_day_for_all_students": 1,
+      "interrogations_per_week_range_for_single_student": 1,
+      "interrogations_per_week_range_for_all_students": 1,
+      "balancing": 1,
+      "consecutive_slots": 1
+    }
+  },
+  "week_patterns": {
+    "0": {
+      "name": "Toutes",
+      "weeks": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    "1": {
+      "name": "Paires",
+      "weeks": [
+        1,
+        3,
+        5,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        19
+      ]
+    },
+    "2": {
+      "name": "Impaires",
+      "weeks": [
+        0,
+        2,
+        4,
+        7,
+        9,
+        11,
+        13,
+        15,
+        17,
+        18
+      ]
+    }
+  },
+  "teachers": {
+    "3": {
+      "surname": "DURAND",
+      "firstname": "Gontran",
+      "contact": "gontran.durand@yahoo.fr"
+    },
+    "4": {
+      "surname": "BEAUREGARD",
+      "firstname": "Stéphane",
+      "contact": "sbeauregard42@orange.fr"
+    },
+    "5": {
+      "surname": "RIVOUX",
+      "firstname": "Jérôme",
+      "contact": "jejeriri@gmail.com"
+    },
+    "6": {
+      "surname": "DUPONT",
+      "firstname": "Suzanne",
+      "contact": "s.dupont158@wanadoo.fr"
+    },
+    "7": {
+      "surname": "MORET",
+      "firstname": "Béatrice",
+      "contact": "bebemoret@yahoo.fr"
+    },
+    "8": {
+      "surname": "SELLIER",
+      "firstname": "Geoffroy",
+      "contact": "geoffroy.sellier@ac-lyon.fr"
+    },
+    "9": {
+      "surname": "WEBER",
+      "firstname": "Xavier",
+      "contact": "xavier.weber@gmail.com"
+    },
+    "10": {
+      "surname": "LALLEMAND",
+      "firstname": "Gérard",
+      "contact": "gerardlallemand@orange.fr"
+    },
+    "11": {
+      "surname": "VILLARD",
+      "firstname": "Josette",
+      "contact": "josette.villard@ac-lyon.fr"
+    },
+    "12": {
+      "surname": "COLAS",
+      "firstname": "Filibustine",
+      "contact": "fcolas@gmail.com"
+    },
+    "13": {
+      "surname": "HUARD",
+      "firstname": "Violette",
+      "contact": "vhuard42@orange.fr"
+    },
+    "14": {
+      "surname": "RAMOS",
+      "firstname": "Camille",
+      "contact": "camille.ramos@ac-lyon.fr"
+    },
+    "15": {
+      "surname": "MARTEAU",
+      "firstname": "Fabrice",
+      "contact": "fmarteau73@orange.fr"
+    },
+    "16": {
+      "surname": "TOURNIER",
+      "firstname": "Alexandre",
+      "contact": "alexandre.tournier@ac-lyon.fr"
+    },
+    "17": {
+      "surname": "VIGOUROUX",
+      "firstname": "Maud",
+      "contact": "maud.vigouroux@orange.fr"
+    },
+    "18": {
+      "surname": "PEYRE",
+      "firstname": "Elisabeth",
+      "contact": "epeyre@laposte.net"
+    },
+    "19": {
+      "surname": "DE SOUSA",
+      "firstname": "Gabriel",
+      "contact": "gabidesousa42@yahoo.fr"
+    },
+    "20": {
+      "surname": "BUISSON",
+      "firstname": "Louise",
+      "contact": "louise.buisson@ac-lyon.fr"
+    },
+    "21": {
+      "surname": "FERNANDES",
+      "firstname": "Rebecca",
+      "contact": "fernandes.rebecca@yahoo.fr"
+    },
+    "22": {
+      "surname": "COURTIN",
+      "firstname": "Augustin",
+      "contact": "augustindu42@gmail.com"
+    }
+  },
+  "students": {
+    "23": {
+      "surname": "Roth",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "24": {
+      "surname": "Marin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "25": {
+      "surname": "Bordes",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "26": {
+      "surname": "Bresson",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "27": {
+      "surname": "Gosset",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "28": {
+      "surname": "Martel",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "29": {
+      "surname": "Delarue",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "30": {
+      "surname": "Chauvet",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "31": {
+      "surname": "Bourdon",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "32": {
+      "surname": "Lafond",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "33": {
+      "surname": "Rondeau",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "34": {
+      "surname": "Vigneron",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "35": {
+      "surname": "Davy",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "36": {
+      "surname": "Gosselin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "37": {
+      "surname": "Jeannin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "38": {
+      "surname": "Sicard",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "39": {
+      "surname": "Mounier",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "40": {
+      "surname": "Lafon",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "41": {
+      "surname": "Brun",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "42": {
+      "surname": "Hardy",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "43": {
+      "surname": "Girault",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "44": {
+      "surname": "Delahaye",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "45": {
+      "surname": "Levasseur",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "46": {
+      "surname": "Gonthier",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "47": {
+      "surname": "Rambuteuil",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "48": {
+      "surname": "Albimoux",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "49": {
+      "surname": "Guillac",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "50": {
+      "surname": "Clarille",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "51": {
+      "surname": "Saulle",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "52": {
+      "surname": "Larmathier",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "53": {
+      "surname": "Valette",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "54": {
+      "surname": "Blandin",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "55": {
+      "surname": "Lenormand",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "56": {
+      "surname": "Gaillard",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "57": {
+      "surname": "Renault",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "58": {
+      "surname": "Barre",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "59": {
+      "surname": "Parisot",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "60": {
+      "surname": "Rivet",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "61": {
+      "surname": "Maitre",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "62": {
+      "surname": "Guyon",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "63": {
+      "surname": "Camus",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "64": {
+      "surname": "Marquet",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "65": {
+      "surname": "Lafont",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "66": {
+      "surname": "Lesueur",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "67": {
+      "surname": "Labbe",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "68": {
+      "surname": "Lallement",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "69": {
+      "surname": "Le Guen",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "70": {
+      "surname": "Schmitt",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "71": {
+      "surname": "Bonnard",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "72": {
+      "surname": "Loison",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    },
+    "73": {
+      "surname": "Foucault",
+      "firstname": "",
+      "email": null,
+      "phone": null,
+      "no_consecutive_slots": false
+    }
+  },
+  "subject_groups": {
+    "74": {
+      "name": "Spécialité",
+      "optional": false
+    },
+    "75": {
+      "name": "LV1",
+      "optional": false
+    },
+    "76": {
+      "name": "LV2",
+      "optional": false
+    },
+    "77": {
+      "name": "Mathématiques",
+      "optional": false
+    },
+    "78": {
+      "name": "Lettres-Philo",
+      "optional": false
+    },
+    "79": {
+      "name": "TP Info Appli",
+      "optional": true
+    },
+    "80": {
+      "name": "TD Maths Appli",
+      "optional": true
+    }
+  },
+  "incompats": {
+    "81": {
+      "name": "Classe A",
+      "max_count": 0,
+      "groups": []
+    },
+    "82": {
+      "name": "Classe B",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "duration": 60
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 480
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "83": {
+      "name": "Maths Appli",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "84": {
+      "name": "LV2 - Anglais",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "85": {
+      "name": "LV2 - Allemand",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 120
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "86": {
+      "name": "LV2 - Italien",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 600
+                }
+              },
+              "duration": 120
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "87": {
+      "name": "LV2 - Esp A",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 120
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "88": {
+      "name": "LV2 - Esp B",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 600
+                }
+              },
+              "duration": 120
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 120
+            }
+          ]
+        }
+      ]
+    },
+    "89": {
+      "name": "Maths Appro",
+      "max_count": 0,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 840
+                }
+              },
+              "duration": 180
+            },
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 900
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "90": {
+      "name": "Repas midi - lundi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Monday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "91": {
+      "name": "Repas midi - mardi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Tuesday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "92": {
+      "name": "Repas midi - mercredi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Wednesday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "93": {
+      "name": "Repas midi - jeudi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Thursday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    },
+    "94": {
+      "name": "Repas midi - vendredi",
+      "max_count": 2,
+      "groups": [
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 660
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 720
+                }
+              },
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "slots": [
+            {
+              "week_pattern_id": 0,
+              "start": {
+                "day": "Friday",
+                "time": {
+                  "time_in_minutes": 780
+                }
+              },
+              "duration": 60
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "group_lists": {
+    "95": {
+      "name": "Liste principale",
+      "groups": [
+        {
+          "name": "A1",
+          "extendable": false
+        },
+        {
+          "name": "A2",
+          "extendable": false
+        },
+        {
+          "name": "A3",
+          "extendable": false
+        },
+        {
+          "name": "A4",
+          "extendable": false
+        },
+        {
+          "name": "A5",
+          "extendable": false
+        },
+        {
+          "name": "A6",
+          "extendable": false
+        },
+        {
+          "name": "A7",
+          "extendable": false
+        },
+        {
+          "name": "A8",
+          "extendable": false
+        },
+        {
+          "name": "A9",
+          "extendable": false
+        },
+        {
+          "name": "B1",
+          "extendable": false
+        },
+        {
+          "name": "B2",
+          "extendable": false
+        },
+        {
+          "name": "B3",
+          "extendable": false
+        },
+        {
+          "name": "B4",
+          "extendable": false
+        },
+        {
+          "name": "B5",
+          "extendable": false
+        },
+        {
+          "name": "B6",
+          "extendable": false
+        },
+        {
+          "name": "B7",
+          "extendable": false
+        },
+        {
+          "name": "B8",
+          "extendable": false
+        },
+        {
+          "name": "B9",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "23": 0,
+        "24": 0,
+        "25": 1,
+        "26": 1,
+        "27": 1,
+        "28": 2,
+        "29": 2,
+        "30": 2,
+        "31": 3,
+        "32": 3,
+        "33": 3,
+        "34": 4,
+        "35": 4,
+        "36": 4,
+        "37": 5,
+        "38": 5,
+        "39": 5,
+        "40": 6,
+        "41": 6,
+        "42": 6,
+        "43": 7,
+        "44": 7,
+        "45": 7,
+        "46": 8,
+        "47": 8,
+        "48": 8,
+        "49": 9,
+        "50": 9,
+        "51": 9,
+        "52": 10,
+        "53": 10,
+        "54": 11,
+        "55": 11,
+        "56": 11,
+        "57": 12,
+        "58": 12,
+        "59": 13,
+        "60": 13,
+        "61": 13,
+        "62": 14,
+        "63": 14,
+        "64": 14,
+        "65": 15,
+        "66": 15,
+        "67": 15,
+        "68": 16,
+        "69": 16,
+        "70": 16,
+        "71": 17,
+        "72": 17,
+        "73": 17
+      }
+    },
+    "96": {
+      "name": "Maths Appli",
+      "groups": [
+        {
+          "name": "A3",
+          "extendable": false
+        },
+        {
+          "name": "A5",
+          "extendable": false
+        },
+        {
+          "name": "A6",
+          "extendable": false
+        },
+        {
+          "name": "A7",
+          "extendable": false
+        },
+        {
+          "name": "A8",
+          "extendable": false
+        },
+        {
+          "name": "A9",
+          "extendable": false
+        },
+        {
+          "name": "B1",
+          "extendable": false
+        },
+        {
+          "name": "B3",
+          "extendable": false
+        },
+        {
+          "name": "B5",
+          "extendable": false
+        },
+        {
+          "name": "B7",
+          "extendable": false
+        },
+        {
+          "name": "B9",
+          "extendable": false
+        },
+        {
+          "name": "S1",
+          "extendable": false
+        },
+        {
+          "name": "S2",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "26": 11,
+        "28": 0,
+        "29": 0,
+        "30": 0,
+        "31": 11,
+        "32": 12,
+        "33": 12,
+        "34": 1,
+        "35": 1,
+        "36": 1,
+        "37": 2,
+        "38": 2,
+        "39": 2,
+        "40": 3,
+        "41": 3,
+        "42": 3,
+        "43": 4,
+        "44": 4,
+        "45": 4,
+        "46": 5,
+        "47": 5,
+        "48": 5,
+        "49": 6,
+        "50": 6,
+        "51": 6,
+        "54": 7,
+        "55": 7,
+        "56": 7,
+        "59": 8,
+        "60": 8,
+        "61": 8,
+        "65": 9,
+        "66": 9,
+        "67": 9,
+        "71": 10,
+        "72": 10,
+        "73": 10
+      }
+    },
+    "97": {
+      "name": "Espagnol",
+      "groups": [
+        {
+          "name": "A5",
+          "extendable": false
+        },
+        {
+          "name": "A6",
+          "extendable": false
+        },
+        {
+          "name": "A7",
+          "extendable": false
+        },
+        {
+          "name": "A8",
+          "extendable": false
+        },
+        {
+          "name": "A9",
+          "extendable": false
+        },
+        {
+          "name": "B5",
+          "extendable": false
+        },
+        {
+          "name": "B6",
+          "extendable": false
+        },
+        {
+          "name": "B7",
+          "extendable": false
+        },
+        {
+          "name": "B8",
+          "extendable": false
+        },
+        {
+          "name": "B9",
+          "extendable": false
+        },
+        {
+          "name": "S2",
+          "extendable": false
+        },
+        {
+          "name": "S3",
+          "extendable": false
+        },
+        {
+          "name": "S4",
+          "extendable": false
+        },
+        {
+          "name": "S5",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "23": 12,
+        "24": 13,
+        "25": 11,
+        "31": 11,
+        "32": 10,
+        "33": 10,
+        "34": 0,
+        "35": 0,
+        "36": 0,
+        "37": 1,
+        "38": 1,
+        "39": 1,
+        "40": 2,
+        "41": 2,
+        "42": 2,
+        "43": 3,
+        "44": 3,
+        "45": 3,
+        "46": 4,
+        "47": 4,
+        "48": 4,
+        "54": 12,
+        "56": 12,
+        "57": 13,
+        "58": 13,
+        "59": 5,
+        "60": 5,
+        "61": 5,
+        "62": 6,
+        "63": 6,
+        "64": 6,
+        "65": 7,
+        "66": 7,
+        "67": 7,
+        "68": 8,
+        "69": 8,
+        "70": 8,
+        "71": 9,
+        "72": 9,
+        "73": 9
+      }
+    },
+    "98": {
+      "name": "Italien",
+      "groups": [
+        {
+          "name": "A2",
+          "extendable": false
+        },
+        {
+          "name": "B1+B3",
+          "extendable": false
+        }
+      ],
+      "students_mapping": {
+        "26": 0,
+        "27": 0,
+        "50": 1,
+        "55": 1
+      }
+    }
+  },
+  "subjects": {
+    "99": {
+      "name": "ESH",
+      "subject_group_id": 74,
+      "incompat_id": null,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "100": {
+      "name": "HGG",
+      "subject_group_id": 74,
+      "incompat_id": null,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "101": {
+      "name": "Lettres-Philo A",
+      "subject_group_id": 78,
+      "incompat_id": null,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "102": {
+      "name": "Lettres-Philo B",
+      "subject_group_id": 78,
+      "incompat_id": null,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "103": {
+      "name": "LV1 - Anglais A",
+      "subject_group_id": 75,
+      "incompat_id": null,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "StrictWithCutsAndOverall",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "104": {
+      "name": "LV1 - Anglais B",
+      "subject_group_id": 75,
+      "incompat_id": null,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "StrictWithCutsAndOverall",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "105": {
+      "name": "Maths - Appliquées",
+      "subject_group_id": 77,
+      "incompat_id": 83,
+      "group_list_id": 96,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "106": {
+      "name": "Maths - Approfondies",
+      "subject_group_id": 77,
+      "incompat_id": 89,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "107": {
+      "name": "LV2 - Espagnol",
+      "subject_group_id": 76,
+      "incompat_id": null,
+      "group_list_id": 97,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "108": {
+      "name": "LV2 - Allemand",
+      "subject_group_id": 76,
+      "incompat_id": 85,
+      "group_list_id": 95,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "109": {
+      "name": "LV2 - Italien",
+      "subject_group_id": 76,
+      "incompat_id": 86,
+      "group_list_id": 98,
+      "duration": 60,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 1,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "110": {
+      "name": "TP Info - Appliquées",
+      "subject_group_id": 79,
+      "incompat_id": null,
+      "group_list_id": 96,
+      "duration": 120,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 2,
+      "period_is_strict": true,
+      "is_tutorial": false,
+      "max_groups_per_slot": 7,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    },
+    "111": {
+      "name": "TD Maths - Appliquées",
+      "subject_group_id": 80,
+      "incompat_id": null,
+      "group_list_id": 96,
+      "duration": 120,
+      "students_per_group": {
+        "start": 2,
+        "end": 3
+      },
+      "period": 1,
+      "period_is_strict": true,
+      "is_tutorial": true,
+      "max_groups_per_slot": 7,
+      "balancing_requirements": {
+        "constraints": "OptimizeOnly",
+        "slot_selections": "TeachersAndTimeSlots"
+      }
+    }
+  },
+  "time_slots": {
+    "112": {
+      "subject_id": 99,
+      "teacher_id": 3,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 1080
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "113": {
+      "subject_id": 99,
+      "teacher_id": 3,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 1,
+      "room": "",
+      "cost": 0
+    },
+    "114": {
+      "subject_id": 99,
+      "teacher_id": 4,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "115": {
+      "subject_id": 99,
+      "teacher_id": 4,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "116": {
+      "subject_id": 99,
+      "teacher_id": 4,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "117": {
+      "subject_id": 100,
+      "teacher_id": 5,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "118": {
+      "subject_id": 100,
+      "teacher_id": 5,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "119": {
+      "subject_id": 100,
+      "teacher_id": 5,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "120": {
+      "subject_id": 100,
+      "teacher_id": 5,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "121": {
+      "subject_id": 100,
+      "teacher_id": 5,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 480
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "122": {
+      "subject_id": 101,
+      "teacher_id": 6,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "123": {
+      "subject_id": 101,
+      "teacher_id": 6,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "124": {
+      "subject_id": 101,
+      "teacher_id": 6,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "125": {
+      "subject_id": 101,
+      "teacher_id": 6,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "126": {
+      "subject_id": 101,
+      "teacher_id": 6,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 720
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "127": {
+      "subject_id": 102,
+      "teacher_id": 7,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "128": {
+      "subject_id": 102,
+      "teacher_id": 7,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "129": {
+      "subject_id": 102,
+      "teacher_id": 7,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "130": {
+      "subject_id": 102,
+      "teacher_id": 7,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "131": {
+      "subject_id": 102,
+      "teacher_id": 7,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 1,
+      "room": "",
+      "cost": 0
+    },
+    "132": {
+      "subject_id": 103,
+      "teacher_id": 8,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "133": {
+      "subject_id": 103,
+      "teacher_id": 9,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "134": {
+      "subject_id": 103,
+      "teacher_id": 10,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "135": {
+      "subject_id": 103,
+      "teacher_id": 11,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "136": {
+      "subject_id": 103,
+      "teacher_id": 12,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "137": {
+      "subject_id": 104,
+      "teacher_id": 9,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "138": {
+      "subject_id": 104,
+      "teacher_id": 10,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "139": {
+      "subject_id": 104,
+      "teacher_id": 10,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1080
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "140": {
+      "subject_id": 104,
+      "teacher_id": 11,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "141": {
+      "subject_id": 104,
+      "teacher_id": 12,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 1080
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "142": {
+      "subject_id": 105,
+      "teacher_id": 13,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 660
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "143": {
+      "subject_id": 105,
+      "teacher_id": 13,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 720
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "144": {
+      "subject_id": 105,
+      "teacher_id": 13,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 100
+    },
+    "145": {
+      "subject_id": 105,
+      "teacher_id": 13,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 100
+    },
+    "146": {
+      "subject_id": 105,
+      "teacher_id": 14,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "147": {
+      "subject_id": 105,
+      "teacher_id": 14,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "148": {
+      "subject_id": 105,
+      "teacher_id": 15,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 1080
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "149": {
+      "subject_id": 105,
+      "teacher_id": 15,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "150": {
+      "subject_id": 105,
+      "teacher_id": 16,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1080
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "151": {
+      "subject_id": 106,
+      "teacher_id": 15,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1080
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "152": {
+      "subject_id": 106,
+      "teacher_id": 17,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 660
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "153": {
+      "subject_id": 106,
+      "teacher_id": 17,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 720
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "154": {
+      "subject_id": 106,
+      "teacher_id": 16,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "155": {
+      "subject_id": 107,
+      "teacher_id": 18,
+      "start": {
+        "day": "Tuesday",
+        "time": {
+          "time_in_minutes": 780
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "156": {
+      "subject_id": 107,
+      "teacher_id": 18,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "157": {
+      "subject_id": 107,
+      "teacher_id": 19,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "158": {
+      "subject_id": 107,
+      "teacher_id": 19,
+      "start": {
+        "day": "Wednesday",
+        "time": {
+          "time_in_minutes": 1020
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "159": {
+      "subject_id": 107,
+      "teacher_id": 20,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "160": {
+      "subject_id": 107,
+      "teacher_id": 20,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "161": {
+      "subject_id": 107,
+      "teacher_id": 20,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 900
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "162": {
+      "subject_id": 108,
+      "teacher_id": 21,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 720
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "163": {
+      "subject_id": 108,
+      "teacher_id": 21,
+      "start": {
+        "day": "Friday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "164": {
+      "subject_id": 109,
+      "teacher_id": 22,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 720
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "165": {
+      "subject_id": 110,
+      "teacher_id": 14,
+      "start": {
+        "day": "Thursday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "166": {
+      "subject_id": 111,
+      "teacher_id": 14,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 840
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    },
+    "167": {
+      "subject_id": 111,
+      "teacher_id": 14,
+      "start": {
+        "day": "Monday",
+        "time": {
+          "time_in_minutes": 960
+        }
+      },
+      "week_pattern_id": 0,
+      "room": "",
+      "cost": 0
+    }
+  },
+  "groupings": {
+    "168": {
+      "name": "ppli1",
+      "slots": [
+        142,
+        143
+      ]
+    },
+    "169": {
+      "name": "Appli2",
+      "slots": [
+        144,
+        145
+      ]
+    },
+    "170": {
+      "name": "Appro1",
+      "slots": [
+        152
+      ]
+    },
+    "171": {
+      "name": "Appro2",
+      "slots": [
+        153
+      ]
+    }
+  },
+  "grouping_incompats": {
+    "172": {
+      "max_count": 1,
+      "groupings": [
+        168,
+        169
+      ]
+    },
+    "173": {
+      "max_count": 1,
+      "groupings": [
+        170,
+        171
+      ]
+    }
+  },
+  "colloscopes": {},
+  "slot_selections": {},
+  "student_assignments": {
+    "23": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 106,
+        "78": 101
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "24": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 106,
+        "78": 101
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "25": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 106,
+        "78": 101
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "26": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 109,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "27": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 109,
+        "77": 106,
+        "78": 101
+      },
+      "incompats": [
+        81,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "28": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 108,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "29": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 108,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "30": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 108,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "31": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        84,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "32": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "33": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "34": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "35": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        84,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "36": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "37": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "38": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "39": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "40": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "41": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "42": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "43": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "44": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "45": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "46": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "47": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "48": {
+      "subject_groups": {
+        "74": 100,
+        "75": 103,
+        "76": 107,
+        "77": 105,
+        "78": 101,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        81,
+        87,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "49": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 108,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "50": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 109,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "51": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 108,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "52": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 108,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "53": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 108,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "54": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "55": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 109,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "56": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "57": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "58": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "59": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "60": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "61": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        84,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "62": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "63": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "64": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "65": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "66": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "67": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "68": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "69": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "70": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 106,
+        "78": 102
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "71": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "72": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    },
+    "73": {
+      "subject_groups": {
+        "74": 99,
+        "75": 104,
+        "76": 107,
+        "77": 105,
+        "78": 102,
+        "79": 110,
+        "80": 111
+      },
+      "incompats": [
+        82,
+        88,
+        90,
+        91,
+        92,
+        93,
+        94
+      ]
+    }
+  }
+}
