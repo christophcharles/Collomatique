@@ -147,10 +147,7 @@ fn check_config_data_var_detects_non_conforming_variables() {
 
     assert_eq!(
         report.non_conforming_variables,
-        BTreeSet::from([
-            String::from("x21"),
-            String::from("y12")
-        ])
+        BTreeSet::from([String::from("x21"), String::from("y12")])
     );
 }
 

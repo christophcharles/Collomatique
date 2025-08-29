@@ -347,7 +347,7 @@ impl Variable {
     /// A binary variable is an integer variable which is only allowed to be 0 or 1.
     /// In practice, this is just an integer variable with a minimum value of 0
     /// and a maximum value of 0.
-    /// 
+    ///
     /// So this functions is just a helper function.
     ///
     /// ```
@@ -360,6 +360,26 @@ impl Variable {
             var_type: VariableType::Integer,
             min: Some(ordered_float::OrderedFloat(0.0)),
             max: Some(ordered_float::OrderedFloat(1.0)),
+        }
+    }
+
+    /// Builds the description of an unsigned (non-negative) integer.
+    ///
+    /// This is a helper function. It is equivalent to calling [Variable::integer]
+    /// and then [Variable::min].
+    ///
+    /// So this functions is just a helper function.
+    ///
+    /// ```
+    /// # use collomatique_ilp::{Variable, VariableType};
+    /// let var_desc = Variable::uinteger();
+    /// assert_eq!(var_desc, Variable::integer().min(0.0));
+    /// ```
+    pub fn uinteger() -> Self {
+        Variable {
+            var_type: VariableType::Integer,
+            min: Some(ordered_float::OrderedFloat(0.0)),
+            max: None,
         }
     }
 
@@ -378,6 +398,42 @@ impl Variable {
             var_type: VariableType::Continuous,
             min: None,
             max: None,
+        }
+    }
+
+    /// Builds the description of a continuous (real) non-negative variable.
+    ///
+    /// This is a helper function. It is equivalent to calling [Variable::continuous]
+    /// and then [Variable::min].
+    ///
+    /// ```
+    /// # use collomatique_ilp::{Variable, VariableType};
+    /// let var_desc = Variable::non_negative();
+    /// assert_eq!(var_desc, Variable::continuous().min(0.0));
+    /// ```
+    pub fn non_negative() -> Self {
+        Variable {
+            var_type: VariableType::Continuous,
+            min: Some(ordered_float::OrderedFloat(0.0)),
+            max: None,
+        }
+    }
+
+    /// Builds the description of a continuous (real) non-positive variable.
+    ///
+    /// This is a helper function. It is equivalent to calling [Variable::continuous]
+    /// and then [Variable::max].
+    ///
+    /// ```
+    /// # use collomatique_ilp::{Variable, VariableType};
+    /// let var_desc = Variable::non_positive();
+    /// assert_eq!(var_desc, Variable::continuous().max(0.0));
+    /// ```
+    pub fn non_positive() -> Self {
+        Variable {
+            var_type: VariableType::Continuous,
+            min: None,
+            max: Some(ordered_float::OrderedFloat(0.0)),
         }
     }
 
