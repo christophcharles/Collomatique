@@ -1,4 +1,6 @@
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 pub enum Weekday {
     #[default]
     Monday,
@@ -121,7 +123,7 @@ impl TryFrom<&str> for Weekday {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Time {
     time_in_minutes: u32,
 }

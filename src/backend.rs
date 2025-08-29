@@ -1,5 +1,5 @@
 pub mod sqlite;
-
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -614,7 +614,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     ) -> std::result::Result<(), Self::InternalError>;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CostsAdjustments {
     pub max_interrogations_per_day_for_single_student: i32,
     pub max_interrogations_per_day_for_all_students: i32,
@@ -637,7 +637,7 @@ impl Default for CostsAdjustments {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeneralData {
     pub interrogations_per_week: Option<std::ops::Range<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
@@ -648,7 +648,7 @@ pub struct GeneralData {
 
 use std::collections::BTreeSet;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Week(u32);
 
 impl Week {
@@ -661,20 +661,20 @@ impl Week {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekPattern {
     pub name: String,
     pub weeks: BTreeSet<Week>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Teacher {
     pub surname: String,
     pub firstname: String,
     pub contact: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Student {
     pub surname: String,
     pub firstname: String,
@@ -683,31 +683,31 @@ pub struct Student {
     pub no_consecutive_slots: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectGroup {
     pub name: String,
     pub optional: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SlotStart {
     pub day: crate::time::Weekday,
     pub time: crate::time::Time,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct IncompatSlot<WeekPatternId: OrdId> {
     pub week_pattern_id: WeekPatternId,
     pub start: SlotStart,
     pub duration: NonZeroU32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct IncompatGroup<WeekPatternId: OrdId> {
     pub slots: BTreeSet<IncompatSlot<WeekPatternId>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Incompat<WeekPatternId: OrdId> {
     pub name: String,
     pub max_count: usize,
@@ -727,13 +727,13 @@ impl<WeekPatternId: OrdId> Incompat<WeekPatternId> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
     pub name: String,
     pub extendable: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupList<StudentId: OrdId> {
     pub name: String,
     pub groups: Vec<Group>,
@@ -746,7 +746,7 @@ impl<StudentId: OrdId> GroupList<StudentId> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BalancingConstraints {
     OptimizeOnly,
     OverallOnly,
@@ -759,7 +759,7 @@ pub enum BalancingConstraints {
     StrictWithCutsAndOverallAndConsecutiveDifferentTeachers,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BalancingSlotSelections {
     TeachersAndTimeSlots,
     Teachers,
@@ -767,13 +767,13 @@ pub enum BalancingSlotSelections {
     Manual,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BalancingRequirements {
     pub constraints: BalancingConstraints,
     pub slot_selections: BalancingSlotSelections,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Subject<SubjectGroupId: OrdId, IncompatId: OrdId, GroupListId: OrdId> {
     pub name: String,
     pub subject_group_id: SubjectGroupId,
@@ -788,7 +788,7 @@ pub struct Subject<SubjectGroupId: OrdId, IncompatId: OrdId, GroupListId: OrdId>
     pub balancing_requirements: BalancingRequirements,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
     pub subject_id: SubjectId,
     pub teacher_id: TeacherId,
@@ -798,13 +798,13 @@ pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
     pub cost: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotGroup<TimeSlotId: OrdId> {
     pub slots: BTreeSet<TimeSlotId>,
     pub count: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotSelection<SubjectId: OrdId, TimeSlotId: OrdId> {
     pub subject_id: SubjectId,
     pub slot_groups: Vec<SlotGroup<TimeSlotId>>,
@@ -821,7 +821,7 @@ impl<SubjectId: OrdId, TimeSlotId: OrdId> SlotSelection<SubjectId, TimeSlotId> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Grouping<TimeSlotId: OrdId> {
     pub name: String,
     pub slots: BTreeSet<TimeSlotId>,
@@ -833,7 +833,7 @@ impl<TimeSlotId: OrdId> Grouping<TimeSlotId> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupingIncompat<GroupingId: OrdId> {
     pub max_count: NonZeroUsize,
     pub groupings: BTreeSet<GroupingId>,
@@ -845,7 +845,7 @@ impl<GroupingId: OrdId> GroupingIncompat<GroupingId> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeTimeSlot<TeacherId: OrdId> {
     pub teacher_id: TeacherId,
     pub start: SlotStart,
@@ -853,20 +853,20 @@ pub struct ColloscopeTimeSlot<TeacherId: OrdId> {
     pub group_assignments: BTreeMap<Week, BTreeSet<usize>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeGroupList<StudentId: OrdId> {
     pub name: String,
     pub groups: Vec<String>,
     pub students_mapping: BTreeMap<StudentId, usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeSubject<TeacherId: OrdId, StudentId: OrdId> {
     pub time_slots: Vec<ColloscopeTimeSlot<TeacherId>>,
     pub group_list: ColloscopeGroupList<StudentId>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Colloscope<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId> {
     pub name: String,
     pub subjects: BTreeMap<SubjectId, ColloscopeSubject<TeacherId, StudentId>>,
@@ -3054,29 +3054,29 @@ fn translate_slot_selection<T: OrdId, U: OrdId>(
     })
 }
 
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupWeekPatternId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupTeacherId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupStudentId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupSubjectGroupId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupIncompatId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupGroupListId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupSubjectId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupTimeSlotId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupGroupingId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupGroupingIncompatId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupColloscopeId(u64);
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BackupSlotSelectionId(u64);
 
 macro_rules! impl_backup_id_from {
@@ -3101,11 +3101,13 @@ impl_backup_id_from!(BackupGroupingIncompatId);
 impl_backup_id_from!(BackupColloscopeId);
 impl_backup_id_from!(BackupSlotSelectionId);
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupAssignments {
     pub subject_groups: BTreeMap<BackupSubjectGroupId, BackupSubjectId>,
     pub incompats: BTreeSet<BackupIncompatId>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupData {
     pub next_id: u64,
     pub general_data: GeneralData,
