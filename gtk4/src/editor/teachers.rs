@@ -27,6 +27,8 @@ pub struct Teachers {
     teachers: collomatique_state_colloscopes::teachers::Teachers,
 
     teacher_modification_reason: TeacherModificationReason,
+
+    filter_dropdown: Controller<crate::widgets::droplist::Widget>,
 }
 
 #[relm4::component(pub)]
@@ -47,6 +49,11 @@ impl Component for Teachers {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
                 set_spacing: 5,
+                gtk::Box {
+                    set_hexpand: true,
+                    set_orientation: gtk::Orientation::Horizontal,
+                    append: model.filter_dropdown.widget(),
+                },
                 adw::ToggleGroup {
                     set_halign: gtk::Align::Center,
                     add_css_class: "round",
@@ -292,10 +299,19 @@ impl Component for Teachers {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let filter_dropdown = crate::widgets::droplist::Widget::builder()
+            .launch(crate::widgets::droplist::WidgetParams {
+                initial_list: vec!["Test1".into(), "Test2".into()],
+                initial_selected: Some(0),
+                enable_search: true,
+                width_request: 100,
+            })
+            .detach();
         let model = Teachers {
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
             teacher_modification_reason: TeacherModificationReason::New,
+            filter_dropdown,
         };
         let widgets = view_output!();
 

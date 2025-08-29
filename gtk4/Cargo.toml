@@ -12,6 +12,7 @@ collomatique-time = { path = "../time" }
 collomatique-core = { path = "../core" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
+glib = "*"
 rustix = { version = "1.0", features = [ "pty" ] }
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
 clap = { workspace = true, features = ["derive"] }

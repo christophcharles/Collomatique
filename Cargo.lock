@@ -371,6 +371,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-time",
+ "glib",
  "libadwaita",
  "relm4",
  "rfd",
