@@ -214,12 +214,14 @@ impl Component for GeneralPlanning {
                             set_icon_name: "edit-symbolic",
                             add_css_class: "flat",
                             connect_clicked => GeneralPlanningInput::EditFirstWeekClicked,
+                            set_tooltip_text: Some("Modifier"),
                         },
                         gtk::Button {
                             #[watch]
                             set_sensitive: model.periods.first_week.is_some(),
                             set_icon_name: "edit-delete",
                             add_css_class: "flat",
+                            set_tooltip_text: Some("Effacer"),
                             connect_clicked => GeneralPlanningInput::DeleteFirstWeekClicked,
                         },
                     },
