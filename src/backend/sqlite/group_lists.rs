@@ -248,7 +248,7 @@ pub async fn add(
     Ok(Id(group_list_id))
 }
 
-pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), Error> {
     let group_list_id = index.0;
 
     let groups_to_delete = sqlx::query!(
@@ -294,12 +294,10 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
     .rows_affected();
 
     if count > 1 {
-        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "Multiple group_lists with id {:?}",
             index
-        ))));
-    } else if count == 0 {
-        return Err(IdError::InvalidId(index));
+        )));
     }
 
     Ok(())

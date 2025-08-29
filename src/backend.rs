@@ -657,7 +657,7 @@ pub trait Storage: Send + Sync {
     async unsafe fn group_lists_remove_unchecked(
         &mut self,
         index: Self::GroupListId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::GroupListId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn group_lists_update_unchecked(
         &mut self,
         index: Self::GroupListId,
@@ -671,6 +671,49 @@ pub trait Storage: Send + Sync {
             Self::StudentId,
         >,
     >;
+    async fn group_lists_can_remove(
+        &mut self,
+        index: Self::GroupListId,
+    ) -> std::result::Result<Vec<Self::SubjectId>, IdError<Self::InternalError, Self::GroupListId>>
+    {
+        async move {
+            let group_lists = self.group_lists_get_all().await?;
+
+            if !group_lists.contains_key(&index) {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let subjects = self.subjects_get_all().await?;
+            for (subject_id, subject) in subjects {
+                if subject.group_list_id == Some(index) {
+                    dependancies.push(subject_id);
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn group_lists_remove(
+        &mut self,
+        index: Self::GroupListId,
+    ) -> std::result::Result<
+        (),
+        CheckedIdError<Self::InternalError, Self::GroupListId, Vec<Self::SubjectId>>,
+    > {
+        async move {
+            let dependancies = self
+                .group_lists_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.group_lists_remove_unchecked(index) }.await?;
+            Ok(())
+        }
+    }
 
     async fn subjects_get_all(
         &self,
