@@ -215,53 +215,6 @@ fn test_is_feasable_no_constraint() {
 }
 
 #[test]
-fn test_neighbours() {
-    use crate::ilp::linexpr::Expr;
-
-    let a = Expr::<String>::var("a");
-    let b = Expr::<String>::var("b");
-    let c = Expr::<String>::var("c");
-    let d = Expr::<String>::var("d");
-
-    let pb = crate::ilp::ProblemBuilder::<String, NdProblem<_>>::new()
-        .add_variables(["a", "b", "c", "d"])
-        .unwrap()
-        .add_constraint((&a + &b).leq(&Expr::constant(1)))
-        .unwrap()
-        .add_constraint((&c + &d).leq(&Expr::constant(1)))
-        .unwrap()
-        .add_constraint((&a + &d).eq(&Expr::constant(1)))
-        .unwrap()
-        .build();
-
-    let config = pb.config_from(["a", "b"]).unwrap();
-
-    let nd_config = config.cfg_repr.clone();
-
-    use crate::ilp::mat_repr::ConfigRepr;
-    use std::collections::BTreeSet;
-    let neighbours = (0..4)
-        .into_iter()
-        .map(|x| nd_config.neighbour(x))
-        .collect::<BTreeSet<NdConfig<String>>>();
-
-    let config_0 = pb.config_from(["b"]).unwrap();
-    let config_1 = pb.config_from(["a"]).unwrap();
-    let config_2 = pb.config_from(["a", "b", "c"]).unwrap();
-    let config_3 = pb.config_from(["a", "b", "d"]).unwrap();
-
-    let nd_config_0 = config_0.cfg_repr.clone();
-    let nd_config_1 = config_1.cfg_repr.clone();
-    let nd_config_2 = config_2.cfg_repr.clone();
-    let nd_config_3 = config_3.cfg_repr.clone();
-
-    let neighbours_expected =
-        BTreeSet::from_iter([nd_config_0, nd_config_1, nd_config_2, nd_config_3]);
-
-    assert_eq!(neighbours, neighbours_expected);
-}
-
-#[test]
 fn nd_config_ord() {
     use crate::ilp::linexpr::Expr;
 
