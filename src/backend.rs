@@ -2710,6 +2710,21 @@ impl<T: Storage> Logic<T> {
             })
             .collect::<BackupResult<_, _>>()?;
 
+        let mut colloscope_ids = BTreeMap::<T::ColloscopeId, BackupColloscopeId>::new();
+        let colloscopes: BTreeMap<_, _> = self
+            .colloscopes_get_all()
+            .await?
+            .into_iter()
+            .map(|(id, x)| {
+                let new_id = get_backup_id(&mut next_id, &mut colloscope_ids, id);
+                BackupResult::<_, T::InternalError>::Ok((
+                    new_id,
+                    translate_colloscope(x, &teacher_ids, &subject_ids, &student_ids)
+                        .ok_or(BackupError::InconsistentId)?,
+                ))
+            })
+            .collect::<BackupResult<_, _>>()?;
+
         todo!()
     }
 }
@@ -2864,6 +2879,75 @@ fn translate_grouping_incompat<T: OrdId>(
                 let new_grouping_id = grouping_ids.get(&grouping_id).cloned()?;
 
                 Some(new_grouping_id)
+            })
+            .collect::<Option<_>>()?,
+    })
+}
+
+fn translate_colloscope_group_list<V: OrdId>(
+    colloscope_group_list: ColloscopeGroupList<V>,
+    student_ids: &BTreeMap<V, BackupStudentId>,
+) -> Option<ColloscopeGroupList<BackupStudentId>> {
+    Some(ColloscopeGroupList {
+        name: colloscope_group_list.name,
+        groups: colloscope_group_list.groups,
+        students_mapping: colloscope_group_list
+            .students_mapping
+            .into_iter()
+            .map(|(student_id, x)| {
+                let new_student_id = student_ids.get(&student_id).cloned()?;
+
+                Some((new_student_id, x))
+            })
+            .collect::<Option<_>>()?,
+    })
+}
+
+fn translate_colloscope_time_slot<T: OrdId>(
+    colloscope_time_slot: ColloscopeTimeSlot<T>,
+    teacher_ids: &BTreeMap<T, BackupTeacherId>,
+) -> Option<ColloscopeTimeSlot<BackupTeacherId>> {
+    Some(ColloscopeTimeSlot {
+        teacher_id: teacher_ids.get(&colloscope_time_slot.teacher_id).cloned()?,
+        start: colloscope_time_slot.start,
+        room: colloscope_time_slot.room,
+        group_assignments: colloscope_time_slot.group_assignments,
+    })
+}
+
+fn translate_colloscope_subject<T: OrdId, V: OrdId>(
+    colloscope_subject: ColloscopeSubject<T, V>,
+    teacher_ids: &BTreeMap<T, BackupTeacherId>,
+    student_ids: &BTreeMap<V, BackupStudentId>,
+) -> Option<ColloscopeSubject<BackupTeacherId, BackupStudentId>> {
+    Some(ColloscopeSubject {
+        time_slots: colloscope_subject
+            .time_slots
+            .into_iter()
+            .map(|x| translate_colloscope_time_slot(x, teacher_ids))
+            .collect::<Option<_>>()?,
+        group_list: translate_colloscope_group_list(colloscope_subject.group_list, student_ids)?,
+    })
+}
+
+fn translate_colloscope<T: OrdId, U: OrdId, V: OrdId>(
+    colloscope: Colloscope<T, U, V>,
+    teacher_ids: &BTreeMap<T, BackupTeacherId>,
+    subject_ids: &BTreeMap<U, BackupSubjectId>,
+    student_ids: &BTreeMap<V, BackupStudentId>,
+) -> Option<Colloscope<BackupTeacherId, BackupSubjectId, BackupStudentId>> {
+    Some(Colloscope {
+        name: colloscope.name,
+        subjects: colloscope
+            .subjects
+            .into_iter()
+            .map(|(subject_id, colloscope_subject)| {
+                let new_subject_id = subject_ids.get(&subject_id).cloned()?;
+
+                let new_colloscope_subject =
+                    translate_colloscope_subject(colloscope_subject, teacher_ids, student_ids)?;
+
+                Some((new_subject_id, new_colloscope_subject))
             })
             .collect::<Option<_>>()?,
     })
