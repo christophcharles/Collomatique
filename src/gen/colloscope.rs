@@ -916,6 +916,83 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_students_per_group_lhs_for_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        k: usize,
+    ) -> Expr<Variable> {
+        let mut expr = Expr::constant(0);
+        for student in subject.groups.not_assigned.iter().copied() {
+            expr = expr
+                + Expr::var(Variable::StudentInGroup {
+                    subject: i,
+                    student,
+                    group: k,
+                });
+        }
+        expr
+    }
+
+    fn build_students_per_group_lower_bound_constraint_for_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        k: usize,
+        group: &GroupDesc,
+    ) -> Option<Constraint<Variable>> {
+        let min = subject.students_per_slot.start().get();
+        if min <= group.students.len() {
+            return None;
+        }
+
+        let min_i32: i32 = (min - group.students.len())
+            .try_into()
+            .expect("Should be less than 2^31 minimum");
+        let lhs = self.build_students_per_group_lhs_for_group(i, subject, k);
+        Some(lhs.geq(&Expr::constant(min_i32)))
+    }
+
+    fn build_students_per_group_upper_bound_constraint_for_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        k: usize,
+        group: &GroupDesc,
+    ) -> Constraint<Variable> {
+        let max = subject.students_per_slot.end().get();
+        assert!(group.students.len() <= max);
+
+        let max_i32: i32 = (max - group.students.len())
+            .try_into()
+            .expect("Should be less than 2^31 maximum");
+        let lhs = self.build_students_per_group_lhs_for_group(i, subject, k);
+        lhs.leq(&Expr::constant(max_i32))
+    }
+
+    fn build_students_per_group_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                if !Self::is_group_fixed(group, subject) {
+                    constraints.extend(
+                        self.build_students_per_group_lower_bound_constraint_for_group(
+                            i, subject, k, group,
+                        ),
+                    );
+                    constraints.insert(
+                        self.build_students_per_group_upper_bound_constraint_for_group(
+                            i, subject, k, group,
+                        ),
+                    );
+                }
+            }
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -926,6 +1003,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
             .add_constraints(self.build_one_interrogation_per_period_contraints())
+            .add_constraints(self.build_students_per_group_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
