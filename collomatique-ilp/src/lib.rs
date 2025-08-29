@@ -62,6 +62,9 @@ use thiserror::Error;
 
 pub use linexpr::{Constraint, LinExpr};
 
+use mat_repr::{ProblemRepr, ConfigRepr};
+pub type DefaultRepr<V> = mat_repr::nd::NdProblem<V>;
+
 /// Trait for displayable, ordonnable, comparable, clonable, sendable data
 ///
 /// The code is using generics to allow for specialized types. So it is for instance
@@ -423,25 +426,27 @@ pub enum ObjectiveSense {
 ///     .unwrap();
 /// ```
 #[derive(Debug, Clone)]
-pub struct ProblemBuilder<V: UsableData, C: UsableData> {
+pub struct ProblemBuilder<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
     objective_func: LinExpr<V>,
     objective_sense: ObjectiveSense,
+    _phantom_data: std::marker::PhantomData<P>,
 }
 
-impl<V: UsableData, C: UsableData> Default for ProblemBuilder<V, C> {
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Default for ProblemBuilder<V, C, P> {
     fn default() -> Self {
         ProblemBuilder {
             constraints: Vec::default(),
             variables: BTreeMap::default(),
             objective_func: LinExpr::default(),
             objective_sense: ObjectiveSense::default(),
+            _phantom_data: std::marker::PhantomData,
         }
     }
 }
 
-impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// Returns a new ProblemBuilder corresponding to an empty ILP problem.
     ///
     /// ```
@@ -663,7 +668,7 @@ pub enum BuildError<V: UsableData, C: UsableData> {
 
 pub type BuildResult<T, V, C> = std::result::Result<T, BuildError<V, C>>;
 
-impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> ProblemBuilder<V, C, P> {
     /// Builds the underlying problem.
     ///
     /// Once you have constructed the problem using [ProblemBuilder::add_constraint],
@@ -707,7 +712,7 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
     ///     .build()
     ///     .expect("No undeclared variables");
     /// ```
-    pub fn build(self) -> BuildResult<Problem<V, C>, V, C> {
+    pub fn build(self) -> BuildResult<Problem<V, C, P>, V, C> {
         // Check that all the variables are declared in constraints
         for (constraint, desc) in &self.constraints {
             if let Some(var) = self.check_variables_in_constraint(constraint) {
@@ -727,11 +732,14 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
             ));
         }
 
+        let repr = P::new(&self.variables, self.constraints.iter().map(|(x,_)| x));
+
         Ok(Problem {
             constraints: self.constraints,
             variables: self.variables,
             objective_func: self.objective_func,
             objective_sense: self.objective_sense,
+            repr,
         })
     }
 
@@ -761,24 +769,26 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
 /// You cannot build it directly. It is built through the builder
 /// pattern, using [ProblemBuilder].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Problem<V: UsableData, C: UsableData> {
+pub struct Problem<V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>> {
     constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
     objective_func: LinExpr<V>,
     objective_sense: ObjectiveSense,
+    repr: P,
 }
 
-impl<V: UsableData, C: UsableData> Problem<V, C> {
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// Transforms the problem back into a [ProblemBuilder].
     ///
     /// This is useful when you have a problem that works that
     /// you want to change a bit (maybe add a constraint or a variable).
-    pub fn into_builder(self) -> ProblemBuilder<V, C> {
+    pub fn into_builder(self) -> ProblemBuilder<V, C, P> {
         ProblemBuilder {
             constraints: self.constraints,
             variables: self.variables,
             objective_func: self.objective_func,
             objective_sense: self.objective_sense,
+            _phantom_data: std::marker::PhantomData,
         }
     }
 
@@ -846,7 +856,7 @@ impl<V: UsableData> ConfigDataVarCheck<V> {
     }
 }
 
-impl<V: UsableData, C: UsableData> Problem<V, C> {
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
     /// Checks if there are mismatches between the variables in a configuration data
     /// (represented by a [ConfigData]) and the variables in the problem.
     ///
@@ -911,7 +921,7 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
     /// This is obviously unsafe. Unless you are sure that the [ConfigData] does indeed
     /// have the right variables, you should first check with [Problem::check_config_data_variables]
     /// or rather call [Problem::build_config] which will have a sanity check first.
-    pub unsafe fn build_config_unchecked(&self, config_data: ConfigData<V>) -> Config<'_, V, C> {
+    pub unsafe fn build_config_unchecked(&self, config_data: ConfigData<V>) -> Config<'_, V, C, P> {
         Config {
             problem: self,
             values: config_data.values,
@@ -928,7 +938,7 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
     pub fn build_config(
         &self,
         config_data: ConfigData<V>,
-    ) -> Result<Config<'_, V, C>, ConfigDataVarCheck<V>> {
+    ) -> Result<Config<'_, V, C, P>, ConfigDataVarCheck<V>> {
         let report = self.check_config_data_variables(&config_data);
 
         if !report.is_empty() {
@@ -1132,14 +1142,14 @@ impl<V: UsableData> ConfigData<V> {
 /// A [Config], because it is linked to a problem, keeps a reference to its
 /// problem which explains the needed lifetime `'a`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Config<'a, V: UsableData, C: UsableData> {
-    problem: &'a Problem<V, C>,
+pub struct Config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    problem: &'a Problem<V, C, P>,
     values: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
 }
 
-impl<'a, V: UsableData, C: UsableData> Config<'a, V, C> {
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     /// Returns the [Problem] this [Config] is associated to.
-    pub fn get_problem(&self) -> &Problem<V, C> {
+    pub fn get_problem(&self) -> &Problem<V, C, P> {
         self.problem
     }
 
