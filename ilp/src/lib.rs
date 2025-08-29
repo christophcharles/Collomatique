@@ -224,15 +224,7 @@ pub type DefaultRepr<V> = mat_repr::sparse::SprsProblem<V>;
 ///
 /// We use this trait to check that indeed some basic properties are garanteed.
 pub trait UsableData:
-    std::fmt::Debug
-    + std::fmt::Display
-    + PartialOrd
-    + Ord
-    + PartialEq
-    + Eq
-    + Clone
-    + Send
-    + Sync
+    std::fmt::Debug + std::fmt::Display + PartialOrd + Ord + PartialEq + Eq + Clone + Send + Sync
 {
 }
 

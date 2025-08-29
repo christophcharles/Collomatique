@@ -30,9 +30,9 @@
 pub mod colloscopes;
 pub mod time;
 
-use collomatique_ilp::{UsableData, Constraint, LinExpr, ObjectiveSense};
+use collomatique_ilp::{Constraint, LinExpr, ObjectiveSense, UsableData};
 
-pub trait BaseConstraints : Send + Sync + std::fmt::Debug + PartialEq + Eq {
+pub trait BaseConstraints: Send + Sync + std::fmt::Debug + PartialEq + Eq {
     type VariableName: UsableData;
     type ConstraintDesc: UsableData;
 
@@ -65,8 +65,18 @@ pub trait ExtraConstraints<T: BaseConstraints> {
     type ConstraintDesc: UsableData;
 
     fn extra_variables(&self) -> Vec<Self::VariableName>;
-    fn structure_constraints(&self) -> Vec<(Constraint<ExtraVariable<T::VariableName, Self::VariableName>>, Self::ConstraintDesc)>;
-    fn extra_constraints(&self) -> Vec<(Constraint<ExtraVariable<T::VariableName, Self::VariableName>>, Self::ConstraintDesc)>;
+    fn structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::VariableName, Self::VariableName>>,
+        Self::ConstraintDesc,
+    )>;
+    fn extra_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::VariableName, Self::VariableName>>,
+        Self::ConstraintDesc,
+    )>;
 }
 
 pub trait ExtraObjective<T: BaseConstraints> {
@@ -74,7 +84,12 @@ pub trait ExtraObjective<T: BaseConstraints> {
     type ConstraintDesc: UsableData;
 
     fn extra_variables(&self) -> Vec<Self::VariableName>;
-    fn structure_constraints(&self) -> Vec<(Constraint<ExtraVariable<T::VariableName, Self::VariableName>>, Self::ConstraintDesc)>;
+    fn structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::VariableName, Self::VariableName>>,
+        Self::ConstraintDesc,
+    )>;
     fn objective_func(&self) -> LinExpr<ExtraVariable<T::VariableName, Self::VariableName>>;
     fn objective_sense(&self) -> ObjectiveSense {
         ObjectiveSense::Minimize
@@ -119,7 +134,7 @@ impl<V: UsableData> std::fmt::Display for VariableName<V> {
         match self {
             Self::Base(v) => write!(f, "{}", v),
             Self::Extra(_id, desc) => write!(f, "{}", desc),
-            Self::Soft(id) => write!(f, "soft_{}", id)
+            Self::Soft(id) => write!(f, "soft_{}", id),
         }
     }
 }
@@ -138,19 +153,30 @@ impl<T: BaseConstraints> ProblemBuilder<T> {
         }
     }
 
-    pub fn add_hard_constraints<'a, E: ExtraConstraints<T>>(&'a mut self, extra: &E) -> HardConstraintsChecker<'a, T, E> {
+    pub fn add_hard_constraints<'a, E: ExtraConstraints<T>>(
+        &'a mut self,
+        extra: &E,
+    ) -> HardConstraintsChecker<'a, T, E> {
         todo!()
     }
 
-    pub fn add_soft_constraints<'a, E: ExtraConstraints<T>>(&'a mut self, extra: &E) -> SoftConstraintsChecker<'a, T, E> {
+    pub fn add_soft_constraints<'a, E: ExtraConstraints<T>>(
+        &'a mut self,
+        extra: &E,
+    ) -> SoftConstraintsChecker<'a, T, E> {
         todo!()
     }
 
-    pub fn add_objective<'a, E: ExtraObjective<T>>(&'a mut self, extra: &E) -> ObjectiveChecker<'a, T, E> {
+    pub fn add_objective<'a, E: ExtraObjective<T>>(
+        &'a mut self,
+        extra: &E,
+    ) -> ObjectiveChecker<'a, T, E> {
         todo!()
     }
 
-    pub fn build_problem(&self) -> collomatique_ilp::Problem<VariableName<T::VariableName>, InternalId> {
+    pub fn build_problem(
+        &self,
+    ) -> collomatique_ilp::Problem<VariableName<T::VariableName>, InternalId> {
         todo!()
     }
 }
