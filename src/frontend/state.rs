@@ -14,6 +14,7 @@ use history::{
 pub enum Operation {
     General(GeneralOperation),
     WeekPatterns(WeekPatternsOperation),
+    Aggregated(Vec<Operation>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -230,6 +231,13 @@ impl<T: backend::Storage> AppState<T> {
         Ok(backward)
     }
 
+    async fn build_backward_aggregated_op(
+        &mut self,
+        _ops: &[AnnotatedOperation],
+    ) -> Result<Vec<AnnotatedOperation>, T::InternalError> {
+        todo!()
+    }
+
     async fn build_rev_op(
         &mut self,
         op: Operation,
@@ -241,6 +249,9 @@ impl<T: backend::Storage> AppState<T> {
             }
             AnnotatedOperation::WeekPatterns(op) => {
                 AnnotatedOperation::WeekPatterns(self.build_backward_week_patterns_op(op).await?)
+            }
+            AnnotatedOperation::Aggregated(ops) => {
+                AnnotatedOperation::Aggregated(self.build_backward_aggregated_op(ops).await?)
             }
         };
         let rev_op = ReversibleOperation { forward, backward };
@@ -385,6 +396,13 @@ impl<T: backend::Storage> AppState<T> {
         }
     }
 
+    async fn update_aggregated_state(
+        &mut self,
+        _ops: &[AnnotatedOperation],
+    ) -> Result<(), UpdateError<T>> {
+        todo!()
+    }
+
     async fn update_internal_state(
         &mut self,
         op: &AnnotatedOperation,
@@ -392,6 +410,7 @@ impl<T: backend::Storage> AppState<T> {
         match op {
             AnnotatedOperation::General(op) => self.update_general_state(op).await?,
             AnnotatedOperation::WeekPatterns(op) => self.update_week_patterns_state(op).await?,
+            AnnotatedOperation::Aggregated(ops) => self.update_aggregated_state(ops).await?,
         }
         Ok(())
     }
