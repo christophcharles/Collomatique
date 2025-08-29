@@ -89,6 +89,7 @@ pub struct SlotMsg {
     pub start_time: chrono::NaiveTime,
     pub extra_info: String,
     pub week_pattern: Option<MsgWeekPatternId>,
+    pub cost: i32,
 }
 
 impl From<SlotMsg> for collomatique_state_colloscopes::slots::SlotExternalData {
@@ -101,6 +102,7 @@ impl From<SlotMsg> for collomatique_state_colloscopes::slots::SlotExternalData {
             },
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| x.0),
+            cost: value.cost,
         }
     }
 }

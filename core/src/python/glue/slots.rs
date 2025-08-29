@@ -72,6 +72,8 @@ pub struct SlotParameters {
     pub extra_info: String,
     #[pyo3(set, get)]
     pub week_pattern: Option<WeekPatternId>,
+    #[pyo3(set, get)]
+    pub cost: i32,
 }
 
 #[pymethods]
@@ -83,6 +85,7 @@ impl SlotParameters {
             start_time,
             extra_info: String::new(),
             week_pattern: None,
+            cost: 0,
         }
     }
 
@@ -99,6 +102,7 @@ impl From<collomatique_state_colloscopes::slots::Slot> for SlotParameters {
             start_time: value.start_time.into(),
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| MsgWeekPatternId::from(x).into()),
+            cost: value.cost,
         }
     }
 }
@@ -112,6 +116,7 @@ impl From<SlotParameters> for crate::rpc::cmd_msg::slots::SlotMsg {
             start_time: value.start_time.start_time.into(),
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| x.into()),
+            cost: value.cost,
         }
     }
 }

@@ -37,6 +37,12 @@ pub struct Slot {
     ///
     /// If None, the interrogation happens everyweek
     pub week_pattern: Option<WeekPatternId>,
+    /// Cost for the interrogation
+    ///
+    /// An optional cost can be defined. By default, this will be 0.
+    /// But a positive cost can be chosen to avoid a slot.
+    /// A negative cost would rather favor a given slot
+    pub cost: i32,
 }
 
 impl Slot {
@@ -52,6 +58,7 @@ impl Slot {
             week_pattern: external_data
                 .week_pattern
                 .map(|x| unsafe { WeekPatternId::new(x) }),
+            cost: external_data.cost,
         }
     }
 }
@@ -241,6 +248,12 @@ pub struct SlotExternalData {
     ///
     /// If None, the interrogation happens everyweek
     pub week_pattern: Option<u64>,
+    /// Cost for the interrogation
+    ///
+    /// An optional cost can be defined. By default, this will be 0.
+    /// But a positive cost can be chosen to avoid a slot.
+    /// A negative cost would rather favor a given slot
+    pub cost: i32,
 }
 
 impl SlotExternalData {
@@ -289,6 +302,7 @@ impl From<Slot> for SlotExternalData {
             start_time: value.start_time,
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| x.inner()),
+            cost: value.cost,
         }
     }
 }
