@@ -714,6 +714,21 @@ impl Data {
         None
     }
 
+    /// Promotes an u64 to a [GroupListId] if it is valid
+    pub fn validate_group_list_id(&self, id: u64) -> Option<GroupListId> {
+        let temp_group_list_id = unsafe { GroupListId::new(id) };
+        if self
+            .inner_data
+            .group_lists
+            .group_list_map
+            .contains_key(&temp_group_list_id)
+        {
+            return Some(temp_group_list_id);
+        }
+
+        None
+    }
+
     /// Promotes a [teachers::TeacherExternalData] to a [teachers::Teacher] if it is valid
     pub fn promote_teacher(
         &self,
@@ -807,6 +822,62 @@ impl Data {
 
         Ok(new_incompat)
     }
+
+    /// Promotes a [group_lists::GroupListParametersExternalData] to a [group_lists::GroupListParameters] if it is valid
+    pub fn promote_group_list_params(
+        &self,
+        params: group_lists::GroupListParametersExternalData,
+    ) -> Result<group_lists::GroupListParameters, PromoteGroupListParametersError> {
+        let mut excluded_students = BTreeSet::new();
+
+        for student_id in params.excluded_students {
+            let Some(new_id) = self.validate_student_id(student_id) else {
+                return Err(PromoteGroupListParametersError::InvalidStudentId(
+                    student_id,
+                ));
+            };
+
+            excluded_students.insert(new_id);
+        }
+
+        let new_params = group_lists::GroupListParameters {
+            name: params.name,
+            students_per_group: params.students_per_group,
+            group_count: params.group_count,
+            excluded_students,
+        };
+
+        Ok(new_params)
+    }
+
+    /// Promotes a [group_lists::GroupListPrefilledGroupsExternalData] to a [group_lists::GroupListPrefilledGroups] if it is valid
+    pub fn promote_group_list_prefilled_groups(
+        &self,
+        prefilled_groups: group_lists::GroupListPrefilledGroupsExternalData,
+    ) -> Result<group_lists::GroupListPrefilledGroups, PromoteGroupListPrefilledGroupsError> {
+        let mut groups = vec![];
+
+        for group in prefilled_groups.groups {
+            let mut students = BTreeSet::new();
+            for student_id in group.students {
+                let Some(new_id) = self.validate_student_id(student_id) else {
+                    return Err(PromoteGroupListPrefilledGroupsError::InvalidStudentId(
+                        student_id,
+                    ));
+                };
+
+                students.insert(new_id);
+            }
+            groups.push(group_lists::PrefilledGroup {
+                students,
+                sealed: group.sealed,
+            });
+        }
+
+        let new_prefilled_groups = group_lists::GroupListPrefilledGroups { groups };
+
+        Ok(new_prefilled_groups)
+    }
 }
 
 /// Error type for [Data::promote_slot]
@@ -825,6 +896,20 @@ pub enum PromoteIncompatError {
     InvalidSubjectId(u64),
     #[error("WeekPattern id {0:?} is invalid")]
     InvalidWeekPatternId(u64),
+}
+
+/// Error type for [Data::promote_group_list_params]
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum PromoteGroupListParametersError {
+    #[error("Student id {0:?} is invalid")]
+    InvalidStudentId(u64),
+}
+
+/// Error type for [Data::promote_group_list_prefilled_groups]
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum PromoteGroupListPrefilledGroupsError {
+    #[error("Student id {0:?} is invalid")]
+    InvalidStudentId(u64),
 }
 
 impl Data {
