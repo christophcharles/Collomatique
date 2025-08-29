@@ -155,7 +155,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: !model.subjects.ordered_subject_list.is_empty(),
+                            set_visible: !model.filtered_subjects.is_empty(),
                         },
                     },
                 },
