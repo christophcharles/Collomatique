@@ -25,6 +25,8 @@ pub struct GeneralData {
     interrogations_per_week_range_for_all_students_cost: i32,
     #[pyo3(get, set)]
     balancing_cost: i32,
+    #[pyo3(get, set)]
+    consecutive_slots_cost: i32,
 }
 
 #[pymethods]
@@ -41,6 +43,7 @@ impl GeneralData {
             interrogations_per_week_range_for_single_student_cost: 1,
             interrogations_per_week_range_for_all_students_cost: 1,
             balancing_cost: 1,
+            consecutive_slots_cost: 1,
         }
     }
 
@@ -51,7 +54,7 @@ impl GeneralData {
             .map(|x| x.to_string())
             .collect();
         let output = format!(
-            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {}, periodicity_cuts = [{}], max_interrogations_per_day_for_single_student_cost = {}, max_interrogations_per_day_for_all_students_cost = {}, interrogations_per_week_range_for_single_student_cost = {}, interrogations_per_week_range_for_all_students_cost = {}, balancing_cost = {} }}",
+            "{{ interrogations_per_week_range = {}, max_interrogations_per_day = {}, week_count = {}, periodicity_cuts = [{}], max_interrogations_per_day_for_single_student_cost = {}, max_interrogations_per_day_for_all_students_cost = {}, interrogations_per_week_range_for_single_student_cost = {}, interrogations_per_week_range_for_all_students_cost = {}, balancing_cost = {}, consecutive_slots_cost = {} }}",
             match self_.interrogations_per_week_range {
                 Some(val) => format!("{}..{}", val.0, val.1 as i64),
                 None => String::from("none"),
@@ -67,6 +70,7 @@ impl GeneralData {
             self_.interrogations_per_week_range_for_single_student_cost,
             self_.interrogations_per_week_range_for_all_students_cost,
             self_.balancing_cost,
+            self_.consecutive_slots_cost,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -96,6 +100,7 @@ impl From<&backend::GeneralData> for GeneralData {
                 .costs_adjustments
                 .interrogations_per_week_range_for_all_students,
             balancing_cost: value.costs_adjustments.balancing,
+            consecutive_slots_cost: value.costs_adjustments.consecutive_slots,
         }
     }
 }
@@ -125,6 +130,7 @@ impl From<&GeneralData> for backend::GeneralData {
                 interrogations_per_week_range_for_all_students: value
                     .interrogations_per_week_range_for_all_students_cost,
                 balancing: value.balancing_cost,
+                consecutive_slots: value.consecutive_slots_cost,
             },
         }
     }

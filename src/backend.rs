@@ -621,6 +621,7 @@ pub struct CostsAdjustments {
     pub interrogations_per_week_range_for_single_student: i32,
     pub interrogations_per_week_range_for_all_students: i32,
     pub balancing: i32,
+    pub consecutive_slots: i32,
 }
 
 impl Default for CostsAdjustments {
@@ -631,6 +632,7 @@ impl Default for CostsAdjustments {
             interrogations_per_week_range_for_single_student: 1,
             interrogations_per_week_range_for_all_students: 1,
             balancing: 1,
+            consecutive_slots: 1,
         }
     }
 }
