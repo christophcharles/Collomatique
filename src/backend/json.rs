@@ -1,15 +1,5 @@
 use super::*;
 
-#[derive(Debug, Error)]
-pub enum BackupError<T: std::fmt::Debug + std::error::Error> {
-    #[error("Error while retrieving data from backend")]
-    InternalError(#[from] T),
-    #[error("Data has inconstent ids")]
-    InconsistentId,
-}
-
-pub type BackupResult<T, E> = std::result::Result<T, BackupError<E>>;
-
 fn get_next_id<T: OrdId, U: OrdId + From<u64>>(
     next_id: &mut u64,
     id_map: &mut BTreeMap<T, U>,
@@ -320,10 +310,20 @@ pub struct JsonData {
     pub student_assignments: BTreeMap<StudentId, Assignments>,
 }
 
+#[derive(Debug, Error)]
+pub enum FromLogicError<T: std::fmt::Debug + std::error::Error> {
+    #[error("Error while retrieving data from backend")]
+    InternalError(#[from] T),
+    #[error("Data has inconstent ids")]
+    InconsistentId,
+}
+
+pub type FromLogicResult<T, E> = std::result::Result<T, FromLogicError<E>>;
+
 impl JsonData {
     pub async fn from_logic<T: Storage>(
         logic: &Logic<T>,
-    ) -> BackupResult<JsonData, T::InternalError> {
+    ) -> FromLogicResult<JsonData, T::InternalError> {
         let mut next_id = 0;
         let general_data = logic.general_data_get().await?;
 
@@ -378,12 +378,13 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut incompat_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
-                    translate_incompat(x, &week_pattern_ids).ok_or(BackupError::InconsistentId)?,
+                    translate_incompat(x, &week_pattern_ids)
+                        .ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut group_list_ids = BTreeMap::<T::GroupListId, GroupListId>::new();
         let group_lists: BTreeMap<_, _> = logic
@@ -392,12 +393,12 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut group_list_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
-                    translate_group_list(x, &student_ids).ok_or(BackupError::InconsistentId)?,
+                    translate_group_list(x, &student_ids).ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut subject_ids = BTreeMap::<T::SubjectId, SubjectId>::new();
         let subjects: BTreeMap<_, _> = logic
@@ -406,13 +407,13 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut subject_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_subject(x, &subject_group_ids, &incompat_ids, &group_list_ids)
-                        .ok_or(BackupError::InconsistentId)?,
+                        .ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut time_slot_ids = BTreeMap::<T::TimeSlotId, TimeSlotId>::new();
         let time_slots: BTreeMap<_, _> = logic
@@ -421,13 +422,13 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut time_slot_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_time_slot(x, &subject_ids, &teacher_ids, &week_pattern_ids)
-                        .ok_or(BackupError::InconsistentId)?,
+                        .ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut grouping_ids = BTreeMap::<T::GroupingId, GroupingId>::new();
         let groupings: BTreeMap<_, _> = logic
@@ -436,12 +437,12 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut grouping_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
-                    translate_grouping(x, &time_slot_ids).ok_or(BackupError::InconsistentId)?,
+                    translate_grouping(x, &time_slot_ids).ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut grouping_incompat_ids =
             BTreeMap::<T::GroupingIncompatId, GroupingIncompatId>::new();
@@ -451,13 +452,13 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut grouping_incompat_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_grouping_incompat(x, &grouping_ids)
-                        .ok_or(BackupError::InconsistentId)?,
+                        .ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut colloscope_ids = BTreeMap::<T::ColloscopeId, ColloscopeId>::new();
         let colloscopes: BTreeMap<_, _> = logic
@@ -466,13 +467,13 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut colloscope_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_colloscope(x, &teacher_ids, &subject_ids, &student_ids)
-                        .ok_or(BackupError::InconsistentId)?,
+                        .ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut slot_selection_ids = BTreeMap::<T::SlotSelectionId, SlotSelectionId>::new();
         let slot_selections: BTreeMap<_, _> = logic
@@ -481,13 +482,13 @@ impl JsonData {
             .into_iter()
             .map(|(id, x)| {
                 let new_id = get_next_id(&mut next_id, &mut slot_selection_ids, id);
-                BackupResult::<_, T::InternalError>::Ok((
+                FromLogicResult::<_, T::InternalError>::Ok((
                     new_id,
                     translate_slot_selection(x, &subject_ids, &time_slot_ids)
-                        .ok_or(BackupError::InconsistentId)?,
+                        .ok_or(FromLogicError::InconsistentId)?,
                 ))
             })
-            .collect::<BackupResult<_, _>>()?;
+            .collect::<FromLogicResult<_, _>>()?;
 
         let mut student_assignments = BTreeMap::<_, _>::new();
         for (old_student_id, new_student_id) in &student_ids {
@@ -497,9 +498,9 @@ impl JsonData {
                     .incompat_for_student_get(*old_student_id, *old_incompat_id)
                     .await
                     .map_err(|e| match e {
-                        Id2Error::InternalError(int_err) => BackupError::InternalError(int_err),
-                        Id2Error::InvalidId1(_) => BackupError::InconsistentId,
-                        Id2Error::InvalidId2(_) => BackupError::InconsistentId,
+                        Id2Error::InternalError(int_err) => FromLogicError::InternalError(int_err),
+                        Id2Error::InvalidId1(_) => FromLogicError::InconsistentId,
+                        Id2Error::InvalidId2(_) => FromLogicError::InconsistentId,
                     })?
                 {
                     incompats.insert(*new_incompat_id);
@@ -512,16 +513,16 @@ impl JsonData {
                     .subject_group_for_student_get(*old_student_id, *old_subject_group_id)
                     .await
                     .map_err(|e| match e {
-                        Id2Error::InternalError(int_err) => BackupError::InternalError(int_err),
-                        Id2Error::InvalidId1(_) => BackupError::InconsistentId,
-                        Id2Error::InvalidId2(_) => BackupError::InconsistentId,
+                        Id2Error::InternalError(int_err) => FromLogicError::InternalError(int_err),
+                        Id2Error::InvalidId1(_) => FromLogicError::InconsistentId,
+                        Id2Error::InvalidId2(_) => FromLogicError::InconsistentId,
                     })?;
 
                 if let Some(old_subject_id) = old_subject_id_opt {
                     let new_subject_id = subject_ids
                         .get(&old_subject_id)
                         .cloned()
-                        .ok_or(BackupError::InconsistentId)?;
+                        .ok_or(FromLogicError::InconsistentId)?;
                     subject_groups.insert(*new_subject_group_id, new_subject_id);
                 }
             }
