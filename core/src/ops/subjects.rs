@@ -268,9 +268,9 @@ impl SubjectsUpdateOp {
                     .clone();
 
                 if *new_status {
-                    subject.excluded_periods.insert(*period_id);
-                } else {
                     subject.excluded_periods.remove(period_id);
+                } else {
+                    subject.excluded_periods.insert(*period_id);
                 }
 
                 let result = data
