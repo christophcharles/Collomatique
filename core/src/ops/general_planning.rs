@@ -229,6 +229,35 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
+                let Some(period_assignments) = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .cloned()
+                else {
+                    return Err(DeletePeriodError::InvalidPeriodId(*period_id).into());
+                };
+
+                for (subject_id, excluded_students) in period_assignments.subject_exclusion_map {
+                    for student_id in excluded_students {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Assignment(
+                                    collomatique_state_colloscopes::AssignmentOp::Assign(
+                                        *period_id, student_id, subject_id, true,
+                                    ),
+                                ),
+                                "Valeur par défaut pour l'affectation d'un élève".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
                 let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
@@ -236,15 +265,8 @@ impl GeneralPlanningUpdateOp {
                         ),
                         "Suppression effective de la période".into(),
                     )
-                    .map_err(|e| match e {
-                        collomatique_state_colloscopes::Error::Period(period_e) => match period_e {
-                            collomatique_state_colloscopes::PeriodError::InvalidPeriodId(id) => {
-                                DeletePeriodError::InvalidPeriodId(id)
-                            }
-                            _ => panic!("Unexpected error {:?}", period_e),
-                        },
-                        _ => panic!("Unexpected error {:?}", e),
-                    })?;
+                    .expect("All data should be valid at this point");
+
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
                 }
@@ -273,17 +295,6 @@ impl GeneralPlanningUpdateOp {
 
                 let mut session = collomatique_state::AppSession::new(data.clone());
 
-                let result = session
-                    .apply(
-                        collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                        ),
-                        "Raccourcir une période".into(),
-                    )
-                    .expect("At this point, period id should be valid");
-                if result.is_some() {
-                    panic!("Unexpected result! {:?}", result);
-                }
                 let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
@@ -339,6 +350,45 @@ impl GeneralPlanningUpdateOp {
                             panic!("Unexpected result! {:?}", result);
                         }
                     }
+                }
+
+                let period_assignments = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .expect("Period id should be valid at this point")
+                    .clone();
+
+                for (subject_id, excluded_students) in period_assignments.subject_exclusion_map {
+                    for student_id in excluded_students {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Assignment(
+                                    collomatique_state_colloscopes::AssignmentOp::Assign(
+                                        new_id, student_id, subject_id, false,
+                                    ),
+                                ),
+                                "Dupliquer l'affectation d'un élève sur la période découpée".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                let result = session
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        ),
+                        "Raccourcir une période".into(),
+                    )
+                    .expect("At this point, period id should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
                 }
 
                 *data = session.commit(self.get_desc());
@@ -417,6 +467,33 @@ impl GeneralPlanningUpdateOp {
                                 "Enlever une référence à la période pour un élève".into(),
                             )
                             .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                let period_assignments = data
+                    .get_data()
+                    .get_assignments()
+                    .period_map
+                    .get(period_id)
+                    .expect("At this point, period_id should be valid")
+                    .clone();
+
+                for (subject_id, excluded_students) in period_assignments.subject_exclusion_map {
+                    for student_id in excluded_students {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Assignment(
+                                    collomatique_state_colloscopes::AssignmentOp::Assign(
+                                        *period_id, student_id, subject_id, true,
+                                    ),
+                                ),
+                                "Valeur par défaut pour l'affectation d'un élève".into(),
+                            )
+                            .expect("All data should be valid at this point");
+
                         if result.is_some() {
                             panic!("Unexpected result! {:?}", result);
                         }
