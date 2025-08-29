@@ -41,6 +41,8 @@ pub enum Error {
     SubjectWithTooFewGroups(usize, RangeInclusive<NonZeroUsize>),
     #[error("Subject {0} has too many groups to satisfy the low bound on the range {1:?}")]
     SubjectWithTooManyGroups(usize, RangeInclusive<NonZeroUsize>),
+    #[error("Subject {0} has a larger periodicity than the number of weeks {1}. A full period is needed for the algorithm to work")]
+    SubjectWithPeriodicityTooBig(u32, u32),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error("Incompatibility {0} has slot {1} after the week count ({2}) of the schedule")]
@@ -182,6 +184,13 @@ impl ValidatedData {
         grouping_incompats: SlotGroupingIncompatList,
     ) -> Result<ValidatedData> {
         for (i, subject) in subjects.iter().enumerate() {
+            if subject.period.get() > general.week_count.get() {
+                return Err(Error::SubjectWithPeriodicityTooBig(
+                    subject.period.get(),
+                    general.week_count.get(),
+                ));
+            }
+
             if subject.students_per_slot.is_empty() {
                 return Err(Error::SubjectWithInvalidStudentsPerSlotRange(
                     i,
