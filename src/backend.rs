@@ -2786,7 +2786,23 @@ impl<T: Storage> Logic<T> {
             );
         }
 
-        todo!()
+        Ok(BackupData {
+            next_id,
+            general_data,
+            week_patterns,
+            teachers,
+            students,
+            subject_groups,
+            incompats,
+            group_lists,
+            subjects,
+            time_slots,
+            groupings,
+            grouping_incompats,
+            colloscopes,
+            slot_selections,
+            student_assignments,
+        })
     }
 }
 
