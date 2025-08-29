@@ -188,8 +188,11 @@ pub enum ExtraVariable<M: UsableData, S: UsableData, E: UsableData> {
     Extra(E),
 }
 
-impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display, E: UsableData + std::fmt::Display>
-    std::fmt::Display for ExtraVariable<M, S, E>
+impl<
+        M: UsableData + std::fmt::Display,
+        S: UsableData + std::fmt::Display,
+        E: UsableData + std::fmt::Display,
+    > std::fmt::Display for ExtraVariable<M, S, E>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
