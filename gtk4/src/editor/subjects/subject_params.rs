@@ -5,7 +5,7 @@ use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 
 pub struct Dialog {
     hidden: bool,
@@ -15,6 +15,7 @@ pub struct Dialog {
     exactly_periodic_params: NonZeroU32,
     once_for_every_block_of_weeks_params: NonZeroU32,
     amount_in_year_params: AmountInYearParams,
+    once_for_every_arbitrary_block_params: Vec<collomatique_state_colloscopes::subjects::WeekBlock>,
 }
 
 pub struct AmountInYearParams {
@@ -52,6 +53,7 @@ pub enum DialogInput {
     UpdateAmountInYearCountMinimum(u32),
     UpdateAmountInYearCountMaximum(u32),
     UpdateAmountInYearWeekSeparation(u32),
+    AddArbitraryBlock,
 }
 
 #[derive(Debug)]
@@ -138,6 +140,16 @@ impl Dialog {
                 interrogation_count_in_year: 2..=2,
                 minimum_week_separation: 1,
             },
+        }
+    }
+
+    fn once_for_every_arbitrary_block_params_from_params(
+        params: &collomatique_state_colloscopes::SubjectParameters,
+    ) -> Vec<collomatique_state_colloscopes::subjects::WeekBlock> {
+        use collomatique_state_colloscopes::SubjectPeriodicity;
+        match &params.periodicity {
+            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => blocks.clone(),
+            _ => vec![],
         }
     }
 }
@@ -483,7 +495,8 @@ impl SimpleComponent for Dialog {
                         gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock,
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock) &&
+                                (!model.once_for_every_arbitrary_block_params.is_empty()),
                             adw::PreferencesGroup {
                                 set_margin_all: 5,
                                 set_hexpand: true,
@@ -582,6 +595,9 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                                 set_title: "Ajouter un bloc",
                                 set_start_icon_name: Some("edit-add"),
+                                connect_activated[sender] => move |_widget| {
+                                    sender.input(DialogInput::AddArbitraryBlock);
+                                },
                             },
                         },
                     },
@@ -604,6 +620,8 @@ impl SimpleComponent for Dialog {
             exactly_periodic_params: Self::periodicity_from_params(&params),
             once_for_every_block_of_weeks_params: Self::periodicity_from_params(&params),
             amount_in_year_params: Self::amount_in_year_params_from_params(&params),
+            once_for_every_arbitrary_block_params:
+                Self::once_for_every_arbitrary_block_params_from_params(&params),
         };
 
         let widgets = view_output!();
@@ -619,6 +637,8 @@ impl SimpleComponent for Dialog {
                 self.exactly_periodic_params = Self::periodicity_from_params(&params);
                 self.once_for_every_block_of_weeks_params = Self::periodicity_from_params(&params);
                 self.amount_in_year_params = Self::amount_in_year_params_from_params(&params);
+                self.once_for_every_arbitrary_block_params =
+                    Self::once_for_every_arbitrary_block_params_from_params(&params);
                 self.params = params;
                 self.global_first_week = global_first_week;
             }
@@ -627,6 +647,29 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::Accept => {
                 self.hidden = true;
+                self.params.periodicity = match self.periodicity_panel {
+                    PeriodicityPanel::ExactlyPeriodic => {
+                        collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: self.exactly_periodic_params,
+                        }
+                    }
+                    PeriodicityPanel::OnceForEveryBlockOfWeeks => {
+                        collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                            weeks_per_block: self.once_for_every_block_of_weeks_params,
+                        }
+                    }
+                    PeriodicityPanel::AmountInYear => {
+                        collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
+                            interrogation_count_in_year: self.amount_in_year_params.interrogation_count_in_year.clone(),
+                            minimum_week_separation: self.amount_in_year_params.minimum_week_separation,
+                        }
+                    }
+                    PeriodicityPanel::OnceForEveryArbitraryBlock => {
+                        collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                            blocks: self.once_for_every_arbitrary_block_params.clone(),
+                        }
+                    }
+                };
                 sender
                     .output(DialogOutput::Accepted(self.params.clone()))
                     .unwrap();
@@ -728,6 +771,14 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.amount_in_year_params.minimum_week_separation = new_sep;
+            }
+            DialogInput::AddArbitraryBlock => {
+                self.once_for_every_arbitrary_block_params.push(
+                    collomatique_state_colloscopes::subjects::WeekBlock {
+                        delay_in_weeks: 0,
+                        size_in_weeks: NonZeroUsize::new(1).unwrap(),
+                    },
+                );
             }
         }
     }
