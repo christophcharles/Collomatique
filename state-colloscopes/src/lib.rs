@@ -966,14 +966,18 @@ impl Data {
                     }
                 }
 
-                for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
-                    for (subject_id, assigned_students) in &period_assignments.subject_map {
-                        if !assigned_students.is_empty() {
-                            return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
-                                *period_id,
-                                *subject_id,
-                            ));
-                        }
+                let period_assignments = self
+                    .inner_data
+                    .assignments
+                    .period_map
+                    .get(period_id)
+                    .expect("At this point, period id should be valid");
+                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    if !assigned_students.is_empty() {
+                        return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
+                            *period_id,
+                            *subject_id,
+                        ));
                     }
                 }
 

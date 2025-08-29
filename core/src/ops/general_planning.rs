@@ -507,7 +507,7 @@ impl GeneralPlanningUpdateOp {
                         ),
                         "Suppression d'une période".into(),
                     )
-                    .expect("At this point, period id should be valid");
+                    .expect("All data should be valid at this point");
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
                 }
