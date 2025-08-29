@@ -520,13 +520,17 @@ impl GenColloscopeTranslator {
                 BC::StrictWithCuts => BalancingConstraints::StrictWithCuts,
                 BC::StrictWithCutsAndOverall => BalancingConstraints::StrictWithCutsAndOverall,
                 BC::Strict => BalancingConstraints::Strict,
-                BC::OptimizeAndNonConsecutive => BalancingConstraints::OptimizeAndNonConsecutive,
-                BC::OverallAndNonConsecutive => BalancingConstraints::OverallAndNonConsecutive,
-                BC::StrictWithCutsAndNonConsecutive => {
-                    BalancingConstraints::StrictWithCutsAndNonConsecutive
+                BC::OptimizeAndConsecutiveDifferentTeachers => {
+                    BalancingConstraints::OptimizeAndConsecutiveDifferentTeachers
                 }
-                BC::StrictWithCutsAndOverallAndNonConsecutive => {
-                    BalancingConstraints::StrictWithCutsAndOverallAndNonConsecutive
+                BC::OverallAndConsecutiveDifferentTeachers => {
+                    BalancingConstraints::OverallAndConsecutiveDifferentTeachers
+                }
+                BC::StrictWithCutsAndConsecutiveDifferentTeachers => {
+                    BalancingConstraints::StrictWithCutsAndConsecutiveDifferentTeachers
+                }
+                BC::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers => {
+                    BalancingConstraints::StrictWithCutsAndOverallAndConsecutiveDifferentTeachers
                 }
             };
 
