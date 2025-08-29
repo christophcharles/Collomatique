@@ -366,7 +366,7 @@ impl SimpleComponent for AppModel {
                 relm4::main_application().quit();
             }
             AppInput::RequestCloseFile => {
-                if self.state != GlobalState::EditorScreen {
+                if self.state == GlobalState::WelcomeScreen {
                     return;
                 }
                 self.send_but_check_dirty(sender, AppInput::CloseFile);
@@ -381,6 +381,11 @@ impl SimpleComponent for AppModel {
                         data: collomatique_state_colloscopes::Data::new(),
                         dirty: false,
                     })
+                    .unwrap();
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::StopLoading)
                     .unwrap();
             }
         }
