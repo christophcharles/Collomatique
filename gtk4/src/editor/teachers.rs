@@ -17,7 +17,7 @@ pub enum TeachersInput {
     EditTeacherClicked(collomatique_state_colloscopes::TeacherId),
     DeleteTeacherClicked(collomatique_state_colloscopes::TeacherId),
     AddTeacherClicked,
-    FilterChanged(usize),
+    FilterChanged(Option<usize>),
     TeacherEditResult(collomatique_state_colloscopes::teachers::Teacher),
 }
 
@@ -212,9 +212,10 @@ impl Component for Teachers {
             }
             TeachersInput::FilterChanged(num) => {
                 self.current_filter = match num {
-                    0 => TeacherFilter::NoFilter,
-                    1 => TeacherFilter::NoSubjectLinked,
-                    x => {
+                    None => TeacherFilter::NoFilter,
+                    Some(0) => TeacherFilter::NoFilter,
+                    Some(1) => TeacherFilter::NoSubjectLinked,
+                    Some(x) => {
                         let index = x - 2;
                         assert!(index < self.subjects.ordered_subject_list.len());
 

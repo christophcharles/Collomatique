@@ -5,6 +5,7 @@ use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
 use relm4::FactorySender;
+use relm4::{Component, ComponentController, Controller};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,10 +28,11 @@ pub struct PeriodEntryData {
 
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
 
-#[derive(Debug)]
 pub struct PeriodEntry {
     index: DynamicIndex,
     data: PeriodEntryData,
+    subjects_dropdown: Controller<crate::widgets::droplist::Widget>,
+    current_subject: Option<collomatique_state_colloscopes::SubjectId>,
     column_view: DynamicColumnView<StudentItem, gtk::SingleSelection>,
 }
 
@@ -43,6 +45,7 @@ pub enum PeriodEntryInput {
         bool,
     ),
     CopyPreviousPeriod,
+    SubjectDropdownChanged(Option<usize>),
 }
 
 #[derive(Debug, Clone)]
@@ -112,6 +115,26 @@ impl FactoryComponent for PeriodEntry {
                 set_label: "<i>Pas d'élèves inscrits sur la période</i>",
                 set_use_markup: true,
             },
+            gtk::Box {
+                set_hexpand: true,
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
+                #[watch]
+                set_visible: !self.data.filtered_students.is_empty() && !self.data.filtered_subjects.is_empty(),
+                append = &gtk::Button {
+                    set_label: "Inscrire",
+                },
+                append = &gtk::Label {
+                    set_label: "ou",
+                },
+                append = &gtk::Button {
+                    set_label: "désinscrire",
+                },
+                append = &gtk::Label {
+                    set_label: "tous les élèves en :",
+                },
+                append: self.subjects_dropdown.widget(),
+            },
             gtk::ScrolledWindow {
                 set_hexpand: true,
                 set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Never),
@@ -126,15 +149,31 @@ impl FactoryComponent for PeriodEntry {
     }
 
     fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
+        let subjects_dropdown = crate::widgets::droplist::Widget::builder()
+            .launch(crate::widgets::droplist::WidgetParams {
+                initial_list: vec![],
+                initial_selected: None,
+                enable_search: false,
+                width_request: 100,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                crate::widgets::droplist::WidgetOutput::SelectionChanged(num) => {
+                    PeriodEntryInput::SubjectDropdownChanged(num)
+                }
+            });
+
         let column_view = DynamicColumnView::new();
 
         let mut model = Self {
             index: index.clone(),
             data,
             column_view,
+            subjects_dropdown,
+            current_subject: None,
         };
 
         model.rebuild_columns();
+        model.update_subjects_dropdown();
         model.update_view_wrapper(sender);
 
         model
@@ -161,6 +200,7 @@ impl FactoryComponent for PeriodEntry {
                 self.data = new_data;
                 if should_rebuild_columns {
                     self.rebuild_columns();
+                    self.update_subjects_dropdown();
                 }
                 self.update_view_wrapper(sender);
             }
@@ -191,6 +231,9 @@ impl FactoryComponent for PeriodEntry {
                     .output(PeriodEntryOutput::CopyPreviousPeriod(self.data.period_id))
                     .unwrap();
             }
+            PeriodEntryInput::SubjectDropdownChanged(num) => {
+                self.current_subject = num.map(|x| self.data.filtered_subjects[x].0.clone());
+            }
         }
     }
 }
@@ -206,6 +249,33 @@ impl PeriodEntry {
                 subject_name: subject.parameters.name.clone(),
             });
         }
+    }
+
+    fn find_subject_pos(&self, id: collomatique_state_colloscopes::SubjectId) -> Option<usize> {
+        for (i, (subject_id, _subject)) in self.data.filtered_subjects.iter().enumerate() {
+            if *subject_id == id {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn update_subjects_dropdown(&mut self) {
+        let mut list = vec![];
+
+        for (_subject_id, subject) in &self.data.filtered_subjects {
+            list.push(subject.parameters.name.clone());
+        }
+
+        let num = match self.current_subject {
+            None => None,
+            Some(id) => self.find_subject_pos(id),
+        };
+
+        self.subjects_dropdown
+            .sender()
+            .send(crate::widgets::droplist::WidgetInput::UpdateList(list, num))
+            .unwrap();
     }
 
     fn update_view_wrapper(&mut self, sender: FactorySender<Self>) {
@@ -239,7 +309,6 @@ impl PeriodEntry {
     }
 }
 
-#[derive(Debug)]
 struct StudentItem {
     student_id: collomatique_state_colloscopes::StudentId,
     surname: String,
