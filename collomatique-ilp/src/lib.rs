@@ -52,6 +52,7 @@
 //! The normal workflow with this crate is to start with a [ProblemBuilder].
 
 pub mod linexpr;
+pub mod mat_repr;
 
 use std::collections::BTreeMap;
 use thiserror::Error;
@@ -756,7 +757,7 @@ impl<V: UsableData, C: UsableData> ProblemBuilder<V, C> {
 /// This data structure represents an ILP problem.
 /// You cannot build it directly. It is built through the builder
 /// pattern, using [ProblemBuilder].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Problem<V: UsableData, C: UsableData> {
     constraints: Vec<(Constraint<V>, C)>,
     variables: BTreeMap<V, Variable>,
@@ -810,3 +811,60 @@ impl<V: UsableData, C: UsableData> Problem<V, C> {
         self.objective_sense
     }
 }
+
+/// ILP configuration data
+///
+/// This data structure is an intermediary structure
+/// representing an association bewteen variables
+/// and their values.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConfigData<V: UsableData> {
+    variables: BTreeMap<V, ordered_float::OrderedFloat<f64>>,
+}
+
+impl<V: UsableData, U: Into<V>, W: Into<f64>, T: IntoIterator<Item=(U, W)>> From<T> for ConfigData<V> {
+    fn from(value: T) -> Self {
+        ConfigData {
+            variables: BTreeMap::from_iter(value.into_iter().map(|(x,y)| (x.into(), ordered_float::OrderedFloat(y.into())))),
+        }
+    }
+}
+
+impl<V: UsableData> ConfigData<V> {
+    pub fn set<U: Into<V>, W: Into<f64>>(mut self, name: U, value: W) -> Self {
+        self.variables.insert(name.into(), ordered_float::OrderedFloat(value.into()));
+        self
+    }
+
+    pub fn set_iter<U: Into<V>, W: Into<f64>, T: IntoIterator<Item=(U,W)>>(mut self, values: T) -> Self {
+        for (name,value) in values {
+            self.variables.insert(name.into(), ordered_float::OrderedFloat(value.into()));
+        }
+        self
+    }
+
+    pub fn remove<U: Into<V>>(mut self, name: U) -> Self {
+        self.variables.remove(&name.into());
+        self
+    }
+
+    pub fn remove_iter<U: Into<V>, T: IntoIterator<Item=U>>(mut self, names: T) -> Self {
+        for name in names {
+            self.variables.remove(&name.into());
+        }
+        self
+    }
+
+    pub fn retain<F>(mut self, mut f: F) -> Self
+    where
+        F: FnMut(&V, f64) -> bool
+    {
+        self.variables.retain(|k,v| f(k, v.into_inner()));
+        self
+    }
+
+    pub fn get<U: Into<V>>(&self, name: U) -> Option<f64> {
+        self.variables.get(&name.into()).map(|x| x.into_inner())
+    }
+}
+
