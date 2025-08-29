@@ -11,6 +11,7 @@ mod students;
 mod subject_groups;
 mod subjects;
 mod teachers;
+mod time_slots;
 mod week_patterns;
 
 #[sqlx::test]

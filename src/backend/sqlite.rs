@@ -315,6 +315,7 @@ mod students;
 mod subject_groups;
 mod subjects;
 mod teachers;
+mod time_slots;
 mod week_patterns;
 
 impl Storage for Store {
@@ -325,6 +326,7 @@ impl Storage for Store {
     type IncompatId = incompats::Id;
     type GroupListId = group_lists::Id;
     type SubjectId = subjects::Id;
+    type TimeSlotId = time_slots::Id;
 
     type InternalError = Error;
 
@@ -739,5 +741,67 @@ impl Storage for Store {
         >,
     > + Send {
         subjects::update(&self.pool, index, subject)
+    }
+
+    fn time_slots_get(
+        &self,
+        index: Self::TimeSlotId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+            IdError<Self::InternalError, Self::TimeSlotId>,
+        >,
+    > + Send {
+        time_slots::get(&self.pool, index)
+    }
+    fn time_slots_get_all(
+        &self,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            BTreeMap<
+                Self::TimeSlotId,
+                TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+            >,
+            Self::InternalError,
+        >,
+    > + Send {
+        time_slots::get_all(&self.pool)
+    }
+    fn time_slots_add(
+        &self,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            Self::TimeSlotId,
+            Cross3Error<Self::InternalError, Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+        >,
+    > + Send {
+        time_slots::add(&self.pool, time_slot)
+    }
+    fn time_slots_remove(
+        &self,
+        index: Self::TimeSlotId,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>,
+    > + Send {
+        time_slots::remove(&self.pool, index)
+    }
+    fn time_slots_update(
+        &self,
+        index: Self::TimeSlotId,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> impl core::future::Future<
+        Output = std::result::Result<
+            (),
+            Cross3IdError<
+                Self::InternalError,
+                Self::TimeSlotId,
+                Self::SubjectId,
+                Self::TeacherId,
+                Self::WeekPatternId,
+            >,
+        >,
+    > + Send {
+        time_slots::update(&self.pool, index, time_slot)
     }
 }

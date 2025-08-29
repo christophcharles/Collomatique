@@ -129,6 +129,7 @@ pub trait Storage {
     type IncompatId: OrdId;
     type GroupListId: OrdId;
     type SubjectId: OrdId;
+    type TimeSlotId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error;
 
@@ -331,6 +332,45 @@ pub trait Storage {
             Self::GroupListId,
         >,
     >;
+
+    async fn time_slots_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::TimeSlotId, TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>>,
+        Self::InternalError,
+    >;
+    async fn time_slots_get(
+        &self,
+        index: Self::TimeSlotId,
+    ) -> std::result::Result<
+        TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+        IdError<Self::InternalError, Self::TimeSlotId>,
+    >;
+    async fn time_slots_add(
+        &self,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> std::result::Result<
+        Self::TimeSlotId,
+        Cross3Error<Self::InternalError, Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    >;
+    async fn time_slots_remove(
+        &self,
+        index: Self::TimeSlotId,
+    ) -> std::result::Result<(), IdError<Self::InternalError, Self::TimeSlotId>>;
+    async fn time_slots_update(
+        &self,
+        index: Self::TimeSlotId,
+        time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
+    ) -> std::result::Result<
+        (),
+        Cross3IdError<
+            Self::InternalError,
+            Self::TimeSlotId,
+            Self::SubjectId,
+            Self::TeacherId,
+            Self::WeekPatternId,
+        >,
+    >;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -382,7 +422,7 @@ pub struct SubjectGroup {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TimeSlot {
+pub struct SlotStart {
     day: crate::time::Weekday,
     time: crate::time::Time,
 }
@@ -390,7 +430,7 @@ pub struct TimeSlot {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatSlot<WeekPatternId: OrdId> {
     week_pattern_id: WeekPatternId,
-    start: TimeSlot,
+    start: SlotStart,
     duration: NonZeroU32,
 }
 
@@ -438,4 +478,13 @@ pub struct Subject<SubjectGroupId: OrdId, IncompatId: OrdId, GroupListId: OrdId>
     pub is_tutorial: bool,
     pub max_groups_per_slot: NonZeroUsize,
     pub balancing_requirements: BalancingRequirements,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimeSlot<SubjectId: OrdId, TeacherId: OrdId, WeekPatternId: OrdId> {
+    pub subject_id: SubjectId,
+    pub teacher_id: TeacherId,
+    pub start: SlotStart,
+    pub week_pattern_id: WeekPatternId,
+    pub room: String,
 }

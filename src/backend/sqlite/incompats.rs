@@ -60,7 +60,7 @@ WHERE incompat_id = ?
                 "Database references invalid start time ({}) for incompat_group_id {}",
                 start_time_u32, x.incompat_group_id
             )))?;
-        let start = TimeSlot { day, time };
+        let start = SlotStart { day, time };
 
         let duration_u32 = u32::try_from(x.duration).map_err(|_| {
             Error::CorruptedDatabase(format!(
@@ -178,7 +178,7 @@ WHERE incompat_id = ?
                     "Database references invalid start time ({}) for incompat_group_id {}",
                     start_time_u32, x.incompat_group_id
                 )))?;
-            let start = TimeSlot { day, time };
+            let start = SlotStart { day, time };
 
             let duration_u32 = u32::try_from(x.duration).map_err(|_| {
                 Error::CorruptedDatabase(format!(

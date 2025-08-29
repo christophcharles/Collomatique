@@ -30,7 +30,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
             IncompatGroup {
                 slots: BTreeSet::from([IncompatSlot {
                     week_pattern_id: super::super::week_patterns::Id(1),
-                    start: TimeSlot {
+                    start: SlotStart {
                         day: crate::time::Weekday::Monday,
                         time: crate::time::Time::from_hm(11, 0).unwrap(),
                     },
@@ -40,7 +40,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
             IncompatGroup {
                 slots: BTreeSet::from([IncompatSlot {
                     week_pattern_id: super::super::week_patterns::Id(1),
-                    start: TimeSlot {
+                    start: SlotStart {
                         day: crate::time::Weekday::Monday,
                         time: crate::time::Time::from_hm(12, 0).unwrap(),
                     },
@@ -50,7 +50,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
             IncompatGroup {
                 slots: BTreeSet::from([IncompatSlot {
                     week_pattern_id: super::super::week_patterns::Id(1),
-                    start: TimeSlot {
+                    start: SlotStart {
                         day: crate::time::Weekday::Monday,
                         time: crate::time::Time::from_hm(13, 0).unwrap(),
                     },
@@ -94,7 +94,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                 slots: BTreeSet::from([
                     IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(2),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(8, 0).unwrap(),
                         },
@@ -102,7 +102,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     },
                     IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(2),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Wednesday,
                             time: crate::time::Time::from_hm(12, 0).unwrap(),
                         },
@@ -113,7 +113,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
             IncompatGroup {
                 slots: BTreeSet::from([IncompatSlot {
                     week_pattern_id: super::super::week_patterns::Id(3),
-                    start: TimeSlot {
+                    start: SlotStart {
                         day: crate::time::Weekday::Friday,
                         time: crate::time::Time::from_hm(14, 0).unwrap(),
                     },
@@ -157,7 +157,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                         slots: BTreeSet::from([
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Monday,
                                     time: crate::time::Time::from_hm(8, 0).unwrap(),
                                 },
@@ -165,7 +165,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                             },
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Wednesday,
                                     time: crate::time::Time::from_hm(12, 0).unwrap(),
                                 },
@@ -176,7 +176,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(3),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Friday,
                                 time: crate::time::Time::from_hm(14, 0).unwrap(),
                             },
@@ -195,7 +195,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -205,7 +205,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -215,7 +215,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(13, 0).unwrap(),
                             },
@@ -274,7 +274,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                     slots: BTreeSet::from([
                         IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(2),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(8, 0).unwrap(),
                             },
@@ -282,7 +282,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                         },
                         IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(2),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Wednesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -293,7 +293,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(3),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Friday,
                             time: crate::time::Time::from_hm(14, 0).unwrap(),
                         },
@@ -391,7 +391,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                     slots: BTreeSet::from([
                         IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(2),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(8, 0).unwrap(),
                             },
@@ -399,7 +399,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                         },
                         IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(2),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Wednesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -410,7 +410,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(3),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Friday,
                             time: crate::time::Time::from_hm(14, 0).unwrap(),
                         },
@@ -432,7 +432,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(1),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(11, 0).unwrap(),
                         },
@@ -442,7 +442,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(1),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(12, 0).unwrap(),
                         },
@@ -452,7 +452,7 @@ INSERT INTO weeks (week_pattern_id, week) VALUES (3,1), (3,3), (3,5), (3,7), (3,
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(1),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(13, 0).unwrap(),
                         },
@@ -604,7 +604,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                         slots: BTreeSet::from([
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Monday,
                                     time: crate::time::Time::from_hm(8, 0).unwrap(),
                                 },
@@ -612,7 +612,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                             },
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Wednesday,
                                     time: crate::time::Time::from_hm(12, 0).unwrap(),
                                 },
@@ -623,7 +623,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(3),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Friday,
                                 time: crate::time::Time::from_hm(14, 0).unwrap(),
                             },
@@ -642,7 +642,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -652,7 +652,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -662,7 +662,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(13, 0).unwrap(),
                             },
@@ -708,7 +708,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(1),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(11, 0).unwrap(),
                         },
@@ -718,7 +718,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(1),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(12, 0).unwrap(),
                         },
@@ -728,7 +728,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                 IncompatGroup {
                     slots: BTreeSet::from([IncompatSlot {
                         week_pattern_id: super::super::week_patterns::Id(1),
-                        start: TimeSlot {
+                        start: SlotStart {
                             day: crate::time::Weekday::Monday,
                             time: crate::time::Time::from_hm(13, 0).unwrap(),
                         },
@@ -755,7 +755,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                         slots: BTreeSet::from([
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Monday,
                                     time: crate::time::Time::from_hm(8, 0).unwrap(),
                                 },
@@ -763,7 +763,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                             },
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Wednesday,
                                     time: crate::time::Time::from_hm(12, 0).unwrap(),
                                 },
@@ -774,7 +774,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(3),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Friday,
                                 time: crate::time::Time::from_hm(14, 0).unwrap(),
                             },
@@ -793,7 +793,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -803,7 +803,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -813,7 +813,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(13, 0).unwrap(),
                             },
@@ -832,7 +832,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -842,7 +842,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -852,7 +852,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Monday,
                                 time: crate::time::Time::from_hm(13, 0).unwrap(),
                             },
@@ -895,7 +895,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Wednesday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -905,7 +905,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Wednesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -931,7 +931,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                         slots: BTreeSet::from([
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Monday,
                                     time: crate::time::Time::from_hm(8, 0).unwrap(),
                                 },
@@ -939,7 +939,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                             },
                             IncompatSlot {
                                 week_pattern_id: super::super::week_patterns::Id(2),
-                                start: TimeSlot {
+                                start: SlotStart {
                                     day: crate::time::Weekday::Wednesday,
                                     time: crate::time::Time::from_hm(12, 0).unwrap(),
                                 },
@@ -950,7 +950,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(3),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Friday,
                                 time: crate::time::Time::from_hm(14, 0).unwrap(),
                             },
@@ -969,7 +969,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Wednesday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -979,7 +979,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Wednesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -998,7 +998,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(11, 0).unwrap(),
                             },
@@ -1008,7 +1008,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(12, 0).unwrap(),
                             },
@@ -1018,7 +1018,7 @@ VALUES (1,2,0,480,60), (1,2,2,720,60), (2,3,4,840,120), (3,1,0,660,60), (4,1,0,7
                     IncompatGroup {
                         slots: BTreeSet::from([IncompatSlot {
                             week_pattern_id: super::super::week_patterns::Id(1),
-                            start: TimeSlot {
+                            start: SlotStart {
                                 day: crate::time::Weekday::Tuesday,
                                 time: crate::time::Time::from_hm(13, 0).unwrap(),
                             },
