@@ -465,7 +465,7 @@ fn generate_bare_subjects(
             let non_zero_min = NonZeroUsize::new(min).expect("Non zero minimum students per group");
             let non_zero_max = NonZeroUsize::new(max).expect("Non zero maximum students per group");
 
-            let students_per_slot = non_zero_min..=non_zero_max;
+            let students_per_group = non_zero_min..=non_zero_max;
 
             let max_groups_per_slot_usize = usize::try_from(x.max_groups_per_slot)
                 .expect("Valid usize for maximum groups per slot");
@@ -473,7 +473,7 @@ fn generate_bare_subjects(
                 .expect("Non zero maximum groups per slot");
 
             Subject {
-                students_per_group: students_per_slot,
+                students_per_group,
                 max_groups_per_slot,
                 period: NonZeroU32::new(
                     u32::try_from(x.period).expect("Valid u32 for subject period"),
