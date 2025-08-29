@@ -86,8 +86,6 @@ impl From<SubjectParametersMsg> for collomatique_state_colloscopes::SubjectParam
     }
 }
 
-use std::collections::BTreeSet;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubjectPeriodicityMsg {
     OnceForEveryBlockOfWeeks {
@@ -101,8 +99,16 @@ pub enum SubjectPeriodicityMsg {
         minimum_week_separation: u32,
     },
     OnceForEveryArbitraryBlock {
-        weeks_at_start_of_new_block: BTreeSet<usize>,
+        blocks: Vec<SubjectWeekBlock>,
     },
+}
+
+use std::num::NonZeroUsize;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubjectWeekBlock {
+    delay: usize,
+    size: NonZeroUsize,
 }
 
 impl From<SubjectPeriodicityMsg> for collomatique_state_colloscopes::SubjectPeriodicity {
@@ -125,11 +131,20 @@ impl From<SubjectPeriodicityMsg> for collomatique_state_colloscopes::SubjectPeri
                 interrogation_count_in_year,
                 minimum_week_separation,
             },
-            SubjectPeriodicityMsg::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
-            } => collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
-            },
+            SubjectPeriodicityMsg::OnceForEveryArbitraryBlock { blocks } => {
+                collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                    blocks: blocks.into_iter().map(|b| b.into()).collect(),
+                }
+            }
+        }
+    }
+}
+
+impl From<SubjectWeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
+    fn from(value: SubjectWeekBlock) -> Self {
+        collomatique_state_colloscopes::subjects::WeekBlock {
+            delay_in_weeks: value.delay,
+            size_in_weeks: value.size,
         }
     }
 }

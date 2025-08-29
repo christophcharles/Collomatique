@@ -1,8 +1,12 @@
 use collomatique_state::{traits::Manager, AppState};
 use collomatique_state_colloscopes::{
-    Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters, SubjectPeriodicity,
+    subjects::WeekBlock, Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters,
+    SubjectPeriodicity,
 };
-use std::{collections::BTreeSet, num::NonZeroU32};
+use std::{
+    collections::BTreeSet,
+    num::{NonZeroU32, NonZeroUsize},
+};
 
 #[test]
 fn add_subject_referencing_period_then_remove_period() {
@@ -152,56 +156,6 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
 }
 
 #[test]
-fn add_subject_referencing_week_then_shrink_week_count() {
-    let mut app_state = AppState::new(Data::new());
-
-    // Prepare periods
-    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![true, true, true, true, true])),
-        "Add first period".into(),
-    ) else {
-        panic!("Unexpected result after adding first period");
-    };
-
-    // Add subject
-    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
-        Op::Subject(SubjectOp::AddAfter(
-            None,
-            Subject {
-                parameters: SubjectParameters {
-                    name: "Math".into(),
-                    students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                    groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                        ..=NonZeroU32::new(1).unwrap(),
-                    duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
-                    take_duration_into_account: true,
-                    periodicity: SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                        weeks_at_start_of_new_block: BTreeSet::from([3]),
-                    },
-                },
-                excluded_periods: BTreeSet::new(),
-            },
-        )),
-        "Add subject".into(),
-    ) else {
-        panic!("Unexpected result after adding the subject");
-    };
-
-    // Shrink period
-    let Err(collomatique_state_colloscopes::Error::Period(period_err)) = app_state.apply(
-        Op::Period(PeriodOp::Update(period_id, vec![true, true, true])),
-        "Shrink period".into(),
-    ) else {
-        panic!("Unexpected result after updating period");
-    };
-
-    assert_eq!(
-        period_err,
-        collomatique_state_colloscopes::PeriodError::SubjectImpliesMinimumWeekCount(subject_id, 4)
-    );
-}
-
-#[test]
 fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
     let mut app_state = AppState::new(Data::new());
 
@@ -226,7 +180,16 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
                     duration: collomatique_time::NonZeroDurationInMinutes::new(60).unwrap(),
                     take_duration_into_account: true,
                     periodicity: SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                        weeks_at_start_of_new_block: BTreeSet::from([3]),
+                        blocks: vec![
+                            WeekBlock {
+                                delay_in_weeks: 0,
+                                size_in_weeks: NonZeroUsize::new(3).unwrap(),
+                            },
+                            WeekBlock {
+                                delay_in_weeks: 0,
+                                size_in_weeks: NonZeroUsize::new(2).unwrap(),
+                            },
+                        ],
                     },
                 },
                 excluded_periods: BTreeSet::new(),

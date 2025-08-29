@@ -2,7 +2,10 @@
 //!
 //! This module defines the relevant types to describes the subjects
 
-use std::{collections::BTreeSet, num::NonZeroU32};
+use std::{
+    collections::BTreeSet,
+    num::{NonZeroU32, NonZeroUsize},
+};
 
 use crate::ids::{PeriodId, SubjectId};
 
@@ -142,16 +145,41 @@ pub enum SubjectPeriodicity {
     /// [SubjectPeriodicity::OnceForEveryBlockOfWeeks] is used *way* more often
     /// and can be represented in a simpler way on screen in a GUI.
     OnceForEveryArbitraryBlock {
-        /// Weeks that separate blocks
+        /// Description of the blocks that should each have one interrogation
         ///
-        /// If this list is empty, there will be a single block that
-        /// starts at the first week of the first period and will end at the
-        /// last week of the last period.
+        /// Blocks are in order and described by a [WeekBlock] structure.
         ///
-        /// Here, we can split this single blocks by giving other dates that
-        /// separate them. So there always is `weeks_at_start_of_new_block.len()+1` blocks.
-        weeks_at_start_of_new_block: BTreeSet<usize>,
+        /// It is technically possible to have 0 blocks. This will imply that there are
+        /// no interrogations for the subject which is a bit weird.
+        ///
+        /// It is also possible to have blocks after the end of the schedule or without
+        /// any actual interrogations planned in them. But of course, no consistent
+        /// colloscope will be found for this.
+        blocks: Vec<WeekBlock>,
     },
+}
+
+/// Description of a block of weeks for [SubjectPeriodicity::OnceForEveryArbitraryBlock]
+///
+/// This describes a single block of weeks that should have one interrogation.
+/// There are two parameters: [WeekBlock::delay_in_weeks] is the number of weeks
+/// between the previous block and the current block. It can be zero if two blocks are consecutive.
+/// For the first block, this correspond to the number of weeks from the start of
+/// the schedule without interrogations.
+///
+/// The second parameter is [WeekBlock::size_in_weeks]. This is the length of the block
+/// in weeks. It cannot be zero sized: a block always has at least one week.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeekBlock {
+    /// Delay (in weeks) between the previous blocks and the current one.
+    ///
+    /// If this is the first block, this is the delay between the start of the schedule
+    /// and the first block.
+    pub delay_in_weeks: usize,
+    /// Number of weeks in the block.
+    ///
+    /// This can't be zero.
+    pub size_in_weeks: NonZeroUsize,
 }
 
 impl Default for SubjectParameters {
@@ -243,10 +271,10 @@ impl SubjectsExternalData {
     /// that the ranges are non-empty and that week references are in bound
     ///
     /// **Beware**, this does not check the validity of the ids for the subjects!
-    pub fn validate_all(&self, period_ids: &BTreeSet<u64>, week_count: usize) -> bool {
+    pub fn validate_all(&self, period_ids: &BTreeSet<u64>) -> bool {
         self.ordered_subject_list
             .iter()
-            .all(|(_id, data)| data.validate(period_ids, week_count))
+            .all(|(_id, data)| data.validate(period_ids))
     }
 }
 
@@ -275,8 +303,8 @@ impl SubjectExternalData {
     /// Checks the validity of a [SubjectExternalData].
     ///
     /// In practice, this means checking that the ids for periods are valid
-    /// that the ranges are non-empty and that week references are in bound
-    pub fn validate(&self, period_ids: &BTreeSet<u64>, week_count: usize) -> bool {
+    /// that the ranges are non-empty
+    pub fn validate(&self, period_ids: &BTreeSet<u64>) -> bool {
         if !self.excluded_periods.iter().all(|x| period_ids.contains(x)) {
             return false;
         }
@@ -284,16 +312,6 @@ impl SubjectExternalData {
             || self.parameters.groups_per_interrogation.is_empty()
         {
             return false;
-        }
-        if let SubjectPeriodicity::OnceForEveryArbitraryBlock {
-            weeks_at_start_of_new_block,
-        } = &self.parameters.periodicity
-        {
-            for week in weeks_at_start_of_new_block {
-                if *week >= week_count {
-                    return false;
-                }
-            }
         }
         true
     }

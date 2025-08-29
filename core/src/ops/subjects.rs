@@ -41,8 +41,6 @@ pub enum AddNewSubjectError {
     StudentsPerGroupRangeIsEmpty,
     #[error("Groups per interrogations range should allow at least one value")]
     GroupsPerInterrogationRangeIsEmpty,
-    #[error("Week number {0} is too large (week count is {1})")]
-    InvalidWeek(usize, usize),
 }
 
 #[derive(Debug, Error)]
@@ -53,8 +51,6 @@ pub enum UpdateSubjectError {
     StudentsPerGroupRangeIsEmpty,
     #[error("Groups per interrogations range should allow at least one value")]
     GroupsPerInterrogationRangeIsEmpty,
-    #[error("Week number {0} is too large (week count is {1})")]
-    InvalidWeek(usize, usize),
 }
 
 #[derive(Debug, Error)]
@@ -127,7 +123,6 @@ impl SubjectsUpdateOp {
                         match se {
                             collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
                             collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::InvalidWeek(week, count) => AddNewSubjectError::InvalidWeek(week, count),
                             _ => panic!("Unexpected subject error during AddNewSubject: {:?}", se),
                         }
                     } else {
@@ -163,7 +158,6 @@ impl SubjectsUpdateOp {
                         match se {
                             collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
                             collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::InvalidWeek(week, count) => AddNewSubjectError::InvalidWeek(week, count),
                             _ => panic!("Unexpected subject error during UpdateSubject: {:?}", se),
                         }
                     } else {

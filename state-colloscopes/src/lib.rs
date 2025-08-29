@@ -131,10 +131,6 @@ pub enum PeriodError {
     /// The period is referenced by a subject
     #[error("period id ({0:?}) is referenced by subject {1:?}")]
     PeriodIsReferencedBySubject(PeriodId, SubjectId),
-
-    /// Cannot reduce the week count because of a subject
-    #[error("subject {0:?} references sepcific week numbers which is implies a minimum week count of {1}")]
-    SubjectImpliesMinimumWeekCount(SubjectId, usize),
 }
 
 /// Errors for subject operations
@@ -165,10 +161,6 @@ pub enum SubjectError {
     /// Invalid parameters : groups per interrogation
     #[error("Groups per interrogations range should allow at least one value")]
     GroupsPerInterrogationRangeIsEmpty,
-
-    /// Invalid parameters: week number
-    #[error("Week number {0} is too large (week count is {1})")]
-    InvalidWeek(usize, usize),
 }
 
 /// Errors for colloscopes modification
@@ -311,7 +303,6 @@ impl Data {
     fn validate_subject_internal(
         subject: &subjects::Subject,
         period_ids: &BTreeSet<PeriodId>,
-        week_count: usize,
     ) -> Result<(), SubjectError> {
         for period_id in &subject.excluded_periods {
             if !period_ids.contains(period_id) {
@@ -326,17 +317,6 @@ impl Data {
             return Err(SubjectError::GroupsPerInterrogationRangeIsEmpty);
         }
 
-        if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-            weeks_at_start_of_new_block,
-        } = &subject.parameters.periodicity
-        {
-            for week in weeks_at_start_of_new_block {
-                if *week >= week_count {
-                    return Err(SubjectError::InvalidWeek(*week, week_count));
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -345,17 +325,16 @@ impl Data {
     /// used to check a subject before commiting a subject op
     fn validate_subject(&self, subject: &subjects::Subject) -> Result<(), SubjectError> {
         let period_ids = self.build_period_ids();
-        let week_count = self.build_week_count();
 
-        Self::validate_subject_internal(subject, &period_ids, week_count)
+        Self::validate_subject_internal(subject, &period_ids)
     }
 
     /// USED INTERNALLY
     ///
     /// checks all the invariants in subject data
-    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>, week_count: usize) {
+    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
         for (_subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
-            Self::validate_subject_internal(subject, period_ids, week_count).unwrap();
+            Self::validate_subject_internal(subject, period_ids).unwrap();
         }
     }
 
@@ -374,27 +353,13 @@ impl Data {
 
     /// USED INTERNALLY
     ///
-    /// Compute the total number of weeks covered in periods
-    ///
-    /// This is useful to check that week numbers are valid
-    fn build_week_count(&self) -> usize {
-        self.inner_data
-            .periods
-            .ordered_period_list
-            .iter()
-            .fold(0usize, |acc, (_id, desc)| acc + desc.len())
-    }
-
-    /// USED INTERNALLY
-    ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
         let period_ids = self.build_period_ids();
-        let week_count = self.build_week_count();
 
-        self.check_subjects_data_consistency(&period_ids, week_count);
+        self.check_subjects_data_consistency(&period_ids);
     }
 }
 
@@ -432,11 +397,7 @@ impl Data {
             .iter()
             .map(|(id, _d)| *id)
             .collect();
-        let week_count = periods
-            .ordered_period_list
-            .iter()
-            .fold(0usize, |acc, (_id, desc)| acc + desc.len());
-        if !subjects.validate_all(&period_ids, week_count) {
+        if !subjects.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId);
         }
 
@@ -568,32 +529,12 @@ impl Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
-                let mut new_week_count = 0usize;
-                for (id, period_desc) in &self.inner_data.periods.ordered_period_list {
-                    if id != period_id {
-                        new_week_count += period_desc.len();
-                    }
-                }
-
                 for (subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySubject(
                             *period_id,
                             *subject_id,
                         ));
-                    }
-                    if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                        weeks_at_start_of_new_block,
-                    } = &subject.parameters.periodicity
-                    {
-                        for week in weeks_at_start_of_new_block {
-                            if *week >= new_week_count {
-                                return Err(PeriodError::SubjectImpliesMinimumWeekCount(
-                                    *subject_id,
-                                    *week + 1,
-                                ));
-                            }
-                        }
                     }
                 }
 
@@ -607,34 +548,12 @@ impl Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
-                let mut new_week_count = 0usize;
-                for (id, period_desc) in &self.inner_data.periods.ordered_period_list {
-                    if id != period_id {
-                        new_week_count += period_desc.len();
-                    } else {
-                        new_week_count += desc.len();
-                    }
-                }
-
                 for (subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySubject(
                             *period_id,
                             *subject_id,
                         ));
-                    }
-                    if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                        weeks_at_start_of_new_block,
-                    } = &subject.parameters.periodicity
-                    {
-                        for week in weeks_at_start_of_new_block {
-                            if *week >= new_week_count {
-                                return Err(PeriodError::SubjectImpliesMinimumWeekCount(
-                                    *subject_id,
-                                    *week + 1,
-                                ));
-                            }
-                        }
                     }
                 }
 
