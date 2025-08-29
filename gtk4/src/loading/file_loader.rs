@@ -115,6 +115,7 @@ impl FileLoader {
             DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
             DecodeError::MismatchedSpecRequirementInEntry => "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans une entrée)".into(),
             DecodeError::ProbablyIllformedEntry => "Le fichier est mal formé et est probablement corrompu.\n(Entrée dans les spécifications mais non reconnue)".into(),
+            DecodeError::InvalidStartDate => "Le fichier est mal formé et est probablement corrompu.\n(Début de semaine pas sur un lundi)".into(),
             DecodeError::UnknownNeededEntry(version) => format!(
                 "Le fichier a été produit avec une version plus récente de Collomatique et ne peut être ouvert.\nUtiliser la version {} pour ouvrir ce fichier.",
                 version

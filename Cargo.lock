@@ -395,8 +395,10 @@ dependencies = [
 name = "collomatique-storage"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-time",
  "non-empty-string",
  "serde",
  "serde_json",

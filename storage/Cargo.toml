@@ -7,9 +7,11 @@ authors.workspace = true
 [dependencies]
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-time = { path = "../time" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = [ "raw_value"] }
 serde_with.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true , features = [ "fs" ] }
 non-empty-string = { workspace = true, features = ["serde"] }
+chrono = { workspace = true, features = [ "serde" ] }
