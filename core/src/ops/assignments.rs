@@ -119,7 +119,10 @@ impl AssignmentsUpdateOp {
         }
     }
 
-    pub fn get_warnings(&self) -> Vec<AssignmentsUpdateWarning> {
+    pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data>>(
+        &self,
+        _data: &T,
+    ) -> Vec<AssignmentsUpdateWarning> {
         vec![]
     }
 

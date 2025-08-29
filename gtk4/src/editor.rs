@@ -24,6 +24,8 @@ mod students;
 mod subjects;
 mod teachers;
 
+mod warning_op;
+
 #[derive(Debug)]
 pub enum EditorInput {
     Ignore,
@@ -38,6 +40,8 @@ pub enum EditorInput {
     UndoClicked,
     RedoClicked,
     UpdateOp(collomatique_core::ops::UpdateOp),
+    CommitUpdateOp(collomatique_core::ops::UpdateOp),
+    ContinueOp,
     RunScriptClicked,
     RunScript(PathBuf, String),
     NewStateFromScript(AppState<Data>),
@@ -128,6 +132,7 @@ pub struct EditorPanel {
     toast_info: Option<ToastInfo>,
     pages_names: Vec<&'static str>,
     pages_titles_map: BTreeMap<&'static str, &'static str>,
+    op_to_commit: Option<collomatique_core::ops::UpdateOp>,
 
     show_particular_panel: Option<PanelNumbers>,
 
@@ -140,6 +145,7 @@ pub struct EditorPanel {
     assignments: Controller<assignments::Assignments>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
+    warning_op_dialog: Controller<warning_op::Dialog>,
 }
 
 impl EditorPanel {
@@ -470,6 +476,13 @@ impl Component for EditorPanel {
             .launch(())
             .detach();
 
+        let warning_op_dialog = warning_op::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_op::DialogOutput::Continue => EditorInput::ContinueOp,
+            });
+
         let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
         let pages_titles_map =
             BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
@@ -482,6 +495,7 @@ impl Component for EditorPanel {
             pages_names,
             pages_titles_map,
             show_particular_panel: None,
+            op_to_commit: None,
             error_dialog,
             general_planning,
             subjects,
@@ -490,6 +504,7 @@ impl Component for EditorPanel {
             assignments,
             check_script_dialog,
             run_script_dialog,
+            warning_op_dialog,
         };
         let widgets = view_output!();
 
@@ -588,6 +603,23 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::UpdateOp(op) => {
+                let warnings = op.get_warnings(&self.data);
+                if warnings.is_empty() {
+                    sender.input(EditorInput::CommitUpdateOp(op));
+                } else {
+                    self.op_to_commit = Some(op);
+                    self.warning_op_dialog
+                        .sender()
+                        .send(warning_op::DialogInput::Show(
+                            warnings
+                                .into_iter()
+                                .map(|x| x.build_desc(&self.data))
+                                .collect(),
+                        ))
+                        .unwrap();
+                }
+            }
+            EditorInput::CommitUpdateOp(op) => {
                 match op.apply(&mut self.data) {
                     Ok(_) => {
                         self.dirty = true;
@@ -602,6 +634,11 @@ impl Component for EditorPanel {
                 // Update interface anyway, this is useful if we need to restore
                 // some GUI element to the correct state in case of error
                 self.send_msg_for_interface_update(sender);
+            }
+            EditorInput::ContinueOp => {
+                if let Some(op) = self.op_to_commit.take() {
+                    sender.input(EditorInput::CommitUpdateOp(op));
+                }
             }
             EditorInput::RunScriptClicked => {
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
