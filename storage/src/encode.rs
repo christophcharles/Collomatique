@@ -112,6 +112,18 @@ fn generate_slot_list(data: &Data) -> slot_list::List {
     }
 }
 
+fn generate_incompat_list(data: &Data) -> incompat_list::List {
+    let orig_incompats = data.get_incompats();
+
+    incompat_list::List {
+        incompat_map: orig_incompats
+            .incompat_map
+            .iter()
+            .map(|(incompat_id, incompat)| (incompat_id.inner(), incompat.into()))
+            .collect(),
+    }
+}
+
 pub fn encode(data: &Data) -> JsonData {
     let header = generate_header();
     let period_list_entry = ValidEntry::PeriodList(generate_period_list(data));
@@ -121,6 +133,7 @@ pub fn encode(data: &Data) -> JsonData {
     let assignment_map_entry = ValidEntry::AssignmentMap(generate_assignment_map(data));
     let week_pattern_list_entry = ValidEntry::WeekPatternList(generate_week_pattern_list(data));
     let slot_list_entry = ValidEntry::SlotList(generate_slot_list(data));
+    let incompat_list_entry = ValidEntry::IncompatList(generate_incompat_list(data));
 
     JsonData {
         header,
@@ -132,6 +145,7 @@ pub fn encode(data: &Data) -> JsonData {
             assignment_map_entry,
             week_pattern_list_entry,
             slot_list_entry,
+            incompat_list_entry,
         ]
         .into_iter()
         .map(|x| Entry {

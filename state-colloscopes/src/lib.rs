@@ -1231,6 +1231,11 @@ impl Data {
         &self.inner_data.slots
     }
 
+    /// Get the incompats
+    pub fn get_incompats(&self) -> &incompats::Incompats {
+        &self.inner_data.incompats
+    }
+
     /// Used internally
     ///
     /// Apply student operations
