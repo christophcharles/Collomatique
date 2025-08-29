@@ -377,16 +377,16 @@ impl<V: UsableData> LinExpr<V> {
 
     /// Reduce an expression by replacing part or all
     /// of its variables by values.
-    /// 
+    ///
     /// This function takes a list of values for some variables
     /// and substitute these values into the expression.
     /// The result is a new expression (which might be constant).
     /// This can be understood as a partial evaluation of the expression.
-    /// 
+    ///
     /// The list of variables can contain variables that do not appear in
     /// the expression. It can also omit variables that do appear since
     /// the evaluation is only partial. As such, this function can't fail.
-    /// 
+    ///
     /// ```
     /// # use collomatique_ilp::linexpr::LinExpr;
     /// # use std::collections::BTreeMap;
@@ -399,7 +399,7 @@ impl<V: UsableData> LinExpr<V> {
     ///     (String::from("A"), -1.0),
     ///     (String::from("C"), 2.0),
     /// ]));
-    /// 
+    ///
     /// let expr_expected = -3.0*&expr2 - 44.0;
     /// assert_eq!(expr_reduced, expr_expected);
     /// ```
