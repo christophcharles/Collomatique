@@ -72,30 +72,30 @@ fn test_is_feasable() {
         .build::<SprsProblem<_>>();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from_bools([("a", true)]).unwrap();
-    let config_2 = pb.config_from_bools([("b", true)]).unwrap();
-    let config_3 = pb.config_from_bools([("a", true), ("b", true)]).unwrap();
-    let config_4 = pb.config_from_bools([("c", true)]).unwrap();
-    let config_5 = pb.config_from_bools([("a", true), ("c", true)]).unwrap();
-    let config_6 = pb.config_from_bools([("b", true), ("c", true)]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
     let config_7 = pb
-        .config_from_bools([("a", true), ("b", true), ("c", true)])
+        .config_from([("a", true), ("b", true), ("c", true)])
         .unwrap();
-    let config_8 = pb.config_from_bools([("d", true)]).unwrap();
-    let config_9 = pb.config_from_bools([("a", true), ("d", true)]).unwrap();
-    let config_a = pb.config_from_bools([("b", true), ("d", true)]).unwrap();
+    let config_8 = pb.config_from([("d", true)]).unwrap();
+    let config_9 = pb.config_from([("a", true), ("d", true)]).unwrap();
+    let config_a = pb.config_from([("b", true), ("d", true)]).unwrap();
     let config_b = pb
-        .config_from_bools([("a", true), ("b", true), ("d", true)])
+        .config_from([("a", true), ("b", true), ("d", true)])
         .unwrap();
-    let config_c = pb.config_from_bools([("c", true), ("d", true)]).unwrap();
+    let config_c = pb.config_from([("c", true), ("d", true)]).unwrap();
     let config_d = pb
-        .config_from_bools([("a", true), ("c", true), ("d", true)])
+        .config_from([("a", true), ("c", true), ("d", true)])
         .unwrap();
     let config_e = pb
-        .config_from_bools([("b", true), ("c", true), ("d", true)])
+        .config_from([("b", true), ("c", true), ("d", true)])
         .unwrap();
     let config_f = pb
-        .config_from_bools([("a", true), ("b", true), ("c", true), ("d", true)])
+        .config_from([("a", true), ("b", true), ("c", true), ("d", true)])
         .unwrap();
 
     let sprs_problem = &pb.pb_repr;
@@ -209,9 +209,9 @@ fn test_is_feasable_no_constraint() {
         .build();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from_bools([("a", true)]).unwrap();
-    let config_2 = pb.config_from_bools([("b", true)]).unwrap();
-    let config_3 = pb.config_from_bools([("a", true), ("b", true)]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
 
     use crate::ilp::mat_repr::ConfigRepr;
     assert_eq!(
@@ -258,14 +258,14 @@ fn sprs_config_ord() {
         .build::<SprsProblem<_>>();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from_bools([("a", true)]).unwrap();
-    let config_2 = pb.config_from_bools([("b", true)]).unwrap();
-    let config_3 = pb.config_from_bools([("a", true), ("b", true)]).unwrap();
-    let config_4 = pb.config_from_bools([("c", true)]).unwrap();
-    let config_5 = pb.config_from_bools([("a", true), ("c", true)]).unwrap();
-    let config_6 = pb.config_from_bools([("b", true), ("c", true)]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
     let config_7 = pb
-        .config_from_bools([("a", true), ("b", true), ("c", true)])
+        .config_from([("a", true), ("b", true), ("c", true)])
         .unwrap();
 
     let sprs_config_0 = config_0.cfg_repr.clone();
@@ -343,30 +343,30 @@ fn compute_lhs() {
         .build::<SprsProblem<_>>();
 
     let config_0 = pb.default_config();
-    let config_1 = pb.config_from_bools([("a", true)]).unwrap();
-    let config_2 = pb.config_from_bools([("b", true)]).unwrap();
-    let config_3 = pb.config_from_bools([("a", true), ("b", true)]).unwrap();
-    let config_4 = pb.config_from_bools([("c", true)]).unwrap();
-    let config_5 = pb.config_from_bools([("a", true), ("c", true)]).unwrap();
-    let config_6 = pb.config_from_bools([("b", true), ("c", true)]).unwrap();
+    let config_1 = pb.config_from([("a", true)]).unwrap();
+    let config_2 = pb.config_from([("b", true)]).unwrap();
+    let config_3 = pb.config_from([("a", true), ("b", true)]).unwrap();
+    let config_4 = pb.config_from([("c", true)]).unwrap();
+    let config_5 = pb.config_from([("a", true), ("c", true)]).unwrap();
+    let config_6 = pb.config_from([("b", true), ("c", true)]).unwrap();
     let config_7 = pb
-        .config_from_bools([("a", true), ("b", true), ("c", true)])
+        .config_from([("a", true), ("b", true), ("c", true)])
         .unwrap();
-    let config_8 = pb.config_from_bools([("d", true)]).unwrap();
-    let config_9 = pb.config_from_bools([("a", true), ("d", true)]).unwrap();
-    let config_a = pb.config_from_bools([("b", true), ("d", true)]).unwrap();
+    let config_8 = pb.config_from([("d", true)]).unwrap();
+    let config_9 = pb.config_from([("a", true), ("d", true)]).unwrap();
+    let config_a = pb.config_from([("b", true), ("d", true)]).unwrap();
     let config_b = pb
-        .config_from_bools([("a", true), ("b", true), ("d", true)])
+        .config_from([("a", true), ("b", true), ("d", true)])
         .unwrap();
-    let config_c = pb.config_from_bools([("c", true), ("d", true)]).unwrap();
+    let config_c = pb.config_from([("c", true), ("d", true)]).unwrap();
     let config_d = pb
-        .config_from_bools([("a", true), ("c", true), ("d", true)])
+        .config_from([("a", true), ("c", true), ("d", true)])
         .unwrap();
     let config_e = pb
-        .config_from_bools([("b", true), ("c", true), ("d", true)])
+        .config_from([("b", true), ("c", true), ("d", true)])
         .unwrap();
     let config_f = pb
-        .config_from_bools([("a", true), ("b", true), ("c", true), ("d", true)])
+        .config_from([("a", true), ("b", true), ("c", true), ("d", true)])
         .unwrap();
 
     let sprs_problem = &pb.pb_repr;

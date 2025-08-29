@@ -99,7 +99,6 @@ impl Solver {
         init_config: &Config<'_, V, P>,
         objective: Objective,
     ) -> HighsProblem {
-        use crate::ilp::VariableType;
         use highs::RowProblem;
         use std::collections::BTreeMap;
 
@@ -108,55 +107,33 @@ impl Solver {
         let cols: BTreeMap<_, _> = problem
             .get_variables()
             .iter()
-            .map(|(var, var_type)| {
-                match var_type {
-                    VariableType::Bool => {
-                        let col_factor = match objective {
-                            Objective::MinimumDistance => {
-                                let value =
-                                    if init_config.get_bool(var).expect("Variable should be valid")
-                                    {
-                                        1.
-                                    } else {
-                                        0.
-                                    };
-                                // Try minimizing the number of changes with respect to the config
-                                // So if a variable is true in the config, false should be penalized
-                                // And if a variable is false in the config, true should be penalized
-                                // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
-                                1. - 2. * value
-                            }
-                            Objective::MinimumObjectiveFn => {
-                                match problem.get_objective_fn().get(var) {
-                                    Some(coef) => coef.into(),
-                                    None => 0.,
-                                }
-                            }
-                            Objective::None => 0.,
+            .map(|var| {
+                let col_factor = match objective {
+                    Objective::MinimumDistance => {
+                        let value = if init_config.get_bool(var).expect("Variable should be valid")
+                        {
+                            1.
+                        } else {
+                            0.
                         };
-
-                        let col = highs_problem.add_integer_column(col_factor, 0..=1);
-                        (var.clone(), col)
+                        // Try minimizing the number of changes with respect to the config
+                        // So if a variable is true in the config, false should be penalized
+                        // And if a variable is false in the config, true should be penalized
+                        // So 1-2*value as a coefficient should work (it gives 1 for false and -1 for true).
+                        1. - 2. * value
                     }
-                    VariableType::Integer(range) => {
-                        let col_factor = match objective {
-                            Objective::MinimumDistance => {
-                                // Ignore dist minimization for integers variables
-                                0.
-                            }
-                            Objective::MinimumObjectiveFn => {
-                                match problem.get_objective_fn().get(var) {
-                                    Some(coef) => coef.into(),
-                                    None => 0.,
-                                }
-                            }
-                            Objective::None => 0.,
-                        };
-
-                        let col = highs_problem.add_integer_column(col_factor, range.clone());
-                        (var.clone(), col)
+                    Objective::MinimumObjectiveFn => {
+                        /*match problem.get_objective_fn().get(var) {
+                            Some(coef) => coef.into(),
+                            None => 0.,
+                        }*/
+                        0.
                     }
-                }
+                    Objective::None => 0.,
+                };
+
+                let col = highs_problem.add_integer_column(col_factor, 0..=1);
+                (var.clone(), col)
             })
             .collect();
 
@@ -189,7 +166,6 @@ impl Solver {
         problem: &'a Problem<V, P>,
         solved_model: &'b highs::SolvedModel,
     ) -> Option<FeasableConfig<'a, V, P>> {
-        use crate::ilp::VariableType;
         use std::collections::BTreeMap;
 
         let solution = solved_model.get_solution();
@@ -199,28 +175,11 @@ impl Solver {
             .get_variables()
             .iter()
             .enumerate()
-            .filter_map(|(i, (var, var_type))| {
-                if *var_type != VariableType::Bool {
-                    return None;
-                }
-                Some((var.clone(), columns[i] > 0.5))
-            })
-            .collect();
-
-        let i32_vars: BTreeMap<_, _> = problem
-            .get_variables()
-            .iter()
-            .enumerate()
-            .filter_map(|(i, (var, var_type))| {
-                let VariableType::Integer(_range) = var_type else {
-                    return None;
-                };
-                Some((var.clone(), columns[i] as i32))
-            })
+            .map(|(i, var)| (var.clone(), columns[i] > 0.5))
             .collect();
 
         let config = problem
-            .config_from(bool_vars, i32_vars)
+            .config_from(bool_vars)
             .expect("Variables should be valid");
         config.into_feasable()
     }
