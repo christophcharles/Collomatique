@@ -19,7 +19,7 @@
 //! and teachers are represented with numbers and that's it. It is the job of other crates
 //! from collomatique to provide necessary utilities to make working the algorithm
 //! somewhat pleasant.
-//! 
+//!
 //! The colloscope logic itself is found in the module [base].
 
 pub mod base;
