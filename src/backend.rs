@@ -1345,10 +1345,7 @@ pub trait Storage: Send + Sync {
     async unsafe fn grouping_incompats_add_unchecked(
         &mut self,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
-    ) -> std::result::Result<
-        Self::GroupingIncompatId,
-        CrossError<Self::InternalError, Self::GroupingId>,
-    >;
+    ) -> std::result::Result<Self::GroupingIncompatId, Self::InternalError>;
     async fn grouping_incompats_remove(
         &mut self,
         index: Self::GroupingIncompatId,
@@ -1357,10 +1354,80 @@ pub trait Storage: Send + Sync {
         &mut self,
         index: Self::GroupingIncompatId,
         grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn grouping_incompats_check_id(
+        &self,
+        index: Self::GroupingIncompatId,
+    ) -> std::result::Result<bool, Self::InternalError> {
+        async move {
+            let grouping_incompats = self.grouping_incompats_get_all().await?;
+
+            Ok(grouping_incompats.contains_key(&index))
+        }
+    }
+    async fn grouping_incompats_check_data(
+        &self,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> std::result::Result<DataStatusWithId<Self::GroupingId>, Self::InternalError> {
+        async move {
+            let groupings = self.groupings_get_all().await?;
+
+            for &grouping_id in &grouping_incompat.groupings {
+                if !groupings.contains_key(&grouping_id) {
+                    return Ok(DataStatusWithId::BadCrossId(grouping_id));
+                }
+            }
+
+            Ok(DataStatusWithId::Ok)
+        }
+    }
+    async fn grouping_incompats_add(
+        &mut self,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
+    ) -> std::result::Result<
+        Self::GroupingIncompatId,
+        CrossError<Self::InternalError, Self::GroupingId>,
+    > {
+        async move {
+            let data_status = self
+                .grouping_incompats_check_data(grouping_incompat)
+                .await?;
+            match data_status {
+                DataStatusWithId::BadCrossId(id) => Err(CrossError::InvalidCrossId(id)),
+                DataStatusWithId::Ok => {
+                    let id =
+                        unsafe { self.grouping_incompats_add_unchecked(grouping_incompat) }.await?;
+                    Ok(id)
+                }
+            }
+        }
+    }
+    async fn grouping_incompats_update(
+        &mut self,
+        index: Self::GroupingIncompatId,
+        grouping_incompat: &GroupingIncompat<Self::GroupingId>,
     ) -> std::result::Result<
         (),
         CrossIdError<Self::InternalError, Self::GroupingIncompatId, Self::GroupingId>,
-    >;
+    > {
+        async move {
+            if !self.grouping_incompats_check_id(index).await? {
+                return Err(CrossIdError::InvalidId(index));
+            }
+
+            let data_status = self
+                .grouping_incompats_check_data(grouping_incompat)
+                .await?;
+            match data_status {
+                DataStatusWithId::BadCrossId(id) => Err(CrossIdError::InvalidCrossId(id)),
+                DataStatusWithId::Ok => {
+                    unsafe { self.grouping_incompats_update_unchecked(index, grouping_incompat) }
+                        .await?;
+                    Ok(())
+                }
+            }
+        }
+    }
 
     async unsafe fn subject_group_for_student_set_unchecked(
         &mut self,

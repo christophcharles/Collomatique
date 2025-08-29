@@ -96,35 +96,10 @@ pub async fn get(
     })
 }
 
-async fn search_invalid_grouping_id(
-    pool: &SqlitePool,
-    grouping_incompat: &GroupingIncompat<super::groupings::Id>,
-) -> Result<Option<groupings::Id>> {
-    let grouping_ids = sqlx::query!("SELECT grouping_id FROM groupings",)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.grouping_id)
-        .collect::<BTreeSet<_>>();
-
-    for grouping in &grouping_incompat.groupings {
-        if !grouping_ids.contains(&grouping.0) {
-            return Ok(Some(grouping.clone()));
-        }
-    }
-
-    Ok(None)
-}
-
 pub async fn add(
     pool: &SqlitePool,
     grouping_incompat: &GroupingIncompat<super::groupings::Id>,
-) -> std::result::Result<Id, CrossError<Error, super::groupings::Id>> {
-    if let Some(grouping_id) = search_invalid_grouping_id(pool, grouping_incompat).await? {
-        return Err(CrossError::InvalidCrossId(grouping_id));
-    }
-
+) -> std::result::Result<Id, Error> {
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let max_count = i64::try_from(grouping_incompat.max_count.get()).map_err(|_| {
@@ -198,11 +173,7 @@ pub async fn update(
     pool: &SqlitePool,
     index: Id,
     grouping_incompat: &GroupingIncompat<super::groupings::Id>,
-) -> std::result::Result<(), CrossIdError<Error, Id, super::groupings::Id>> {
-    if let Some(grouping_id) = search_invalid_grouping_id(pool, grouping_incompat).await? {
-        return Err(CrossIdError::InvalidCrossId(grouping_id));
-    }
-
+) -> std::result::Result<(), Error> {
     let max_count = i64::try_from(grouping_incompat.max_count.get()).map_err(|_| {
         Error::RepresentationError(format!(
             "max_count (= {}) does not fit in i64",
@@ -233,11 +204,10 @@ pub async fn update(
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(CrossIdError::InternalError(Error::CorruptedDatabase(
-            format!("Multiple grouping_incompats with id {:?}", index),
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple grouping_incompats with id {:?}",
+            index
         )));
-    } else if rows_affected == 0 {
-        return Err(CrossIdError::InvalidId(index));
     }
 
     for grouping in &grouping_incompat.groupings {
