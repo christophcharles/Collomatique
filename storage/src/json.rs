@@ -18,8 +18,34 @@ pub struct JsonData {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Header {
     file_type: FileType,
-    produced_with_version: String,
+    produced_with_version: Version,
     file_content: FileContent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+pub struct Version {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+}
+
+impl Version {
+    pub fn current() -> Version {
+        let major_str = env!("CARGO_PKG_VERSION_MAJOR");
+        let minor_str = env!("CARGO_PKG_VERSION_MINOR");
+        let patch_str = env!("CARGO_PKG_VERSION_PATCH");
+
+        use std::str::FromStr;
+        let major = u32::from_str(major_str).expect("Major version should be a valid u32");
+        let minor = u32::from_str(minor_str).expect("Minor version should be a valid u32");
+        let patch = u32::from_str(patch_str).expect("Patch number should be a valid u32");
+
+        Version {
+            major,
+            minor,
+            patch,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
