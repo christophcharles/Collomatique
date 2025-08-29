@@ -9,6 +9,12 @@ pub enum AnnotatedOperation {
     Teachers(AnnotatedTeachersOperation),
     Students(AnnotatedStudentsOperation),
     SubjectGroups(AnnotatedSubjectGroupsOperation),
+    Incompats(AnnotatedIncompatsOperation),
+    GroupLists(AnnotatedGroupListsOperation),
+    Subjects(AnnotatedSubjectsOperation),
+    TimeSlots(AnnotatedTimeSlotsOperation),
+    Groupings(AnnotatedGroupingsOperation),
+    GroupingIncompats(AnnotatedGroupingIncompatsOperation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +43,72 @@ pub enum AnnotatedSubjectGroupsOperation {
     Create(handles::SubjectGroupHandle, backend::SubjectGroup),
     Remove(handles::SubjectGroupHandle),
     Update(handles::SubjectGroupHandle, backend::SubjectGroup),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedIncompatsOperation {
+    Create(
+        handles::IncompatHandle,
+        backend::Incompat<WeekPatternHandle>,
+    ),
+    Remove(handles::IncompatHandle),
+    Update(
+        handles::IncompatHandle,
+        backend::Incompat<WeekPatternHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedGroupListsOperation {
+    Create(handles::GroupListHandle, backend::GroupList<StudentHandle>),
+    Remove(handles::GroupListHandle),
+    Update(handles::GroupListHandle, backend::GroupList<StudentHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedSubjectsOperation {
+    Create(
+        handles::SubjectHandle,
+        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    ),
+    Remove(handles::SubjectHandle),
+    Update(
+        handles::SubjectHandle,
+        backend::Subject<SubjectGroupHandle, IncompatHandle, GroupListHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedTimeSlotsOperation {
+    Create(
+        handles::TimeSlotHandle,
+        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    ),
+    Remove(handles::TimeSlotHandle),
+    Update(
+        handles::TimeSlotHandle,
+        backend::TimeSlot<SubjectHandle, TeacherHandle, WeekPatternHandle>,
+    ),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedGroupingsOperation {
+    Create(handles::GroupingHandle, backend::Grouping<TimeSlotHandle>),
+    Remove(handles::GroupingHandle),
+    Update(handles::GroupingHandle, backend::Grouping<TimeSlotHandle>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotatedGroupingIncompatsOperation {
+    Create(
+        handles::GroupingIncompatHandle,
+        backend::GroupingIncompat<GroupingHandle>,
+    ),
+    Remove(handles::GroupingIncompatHandle),
+    Update(
+        handles::GroupingIncompatHandle,
+        backend::GroupingIncompat<GroupingHandle>,
+    ),
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -106,8 +178,118 @@ impl AnnotatedSubjectGroupsOperation {
             SubjectGroupsOperation::Remove(handle) => {
                 AnnotatedSubjectGroupsOperation::Remove(handle)
             }
-            SubjectGroupsOperation::Update(handle, student) => {
-                AnnotatedSubjectGroupsOperation::Update(handle, student)
+            SubjectGroupsOperation::Update(handle, subject_group) => {
+                AnnotatedSubjectGroupsOperation::Update(handle, subject_group)
+            }
+        }
+    }
+}
+
+impl AnnotatedIncompatsOperation {
+    fn annotate<T: backend::Storage>(
+        op: IncompatsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            IncompatsOperation::Create(incompat) => {
+                let handle = handle_managers.incompats.create_handle();
+                AnnotatedIncompatsOperation::Create(handle, incompat)
+            }
+            IncompatsOperation::Remove(handle) => AnnotatedIncompatsOperation::Remove(handle),
+            IncompatsOperation::Update(handle, incompat) => {
+                AnnotatedIncompatsOperation::Update(handle, incompat)
+            }
+        }
+    }
+}
+
+impl AnnotatedGroupListsOperation {
+    fn annotate<T: backend::Storage>(
+        op: GroupListsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            GroupListsOperation::Create(group_list) => {
+                let handle = handle_managers.group_lists.create_handle();
+                AnnotatedGroupListsOperation::Create(handle, group_list)
+            }
+            GroupListsOperation::Remove(handle) => AnnotatedGroupListsOperation::Remove(handle),
+            GroupListsOperation::Update(handle, group_list) => {
+                AnnotatedGroupListsOperation::Update(handle, group_list)
+            }
+        }
+    }
+}
+
+impl AnnotatedSubjectsOperation {
+    fn annotate<T: backend::Storage>(
+        op: SubjectsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            SubjectsOperation::Create(subject) => {
+                let handle = handle_managers.subjects.create_handle();
+                AnnotatedSubjectsOperation::Create(handle, subject)
+            }
+            SubjectsOperation::Remove(handle) => AnnotatedSubjectsOperation::Remove(handle),
+            SubjectsOperation::Update(handle, subject) => {
+                AnnotatedSubjectsOperation::Update(handle, subject)
+            }
+        }
+    }
+}
+
+impl AnnotatedTimeSlotsOperation {
+    fn annotate<T: backend::Storage>(
+        op: TimeSlotsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            TimeSlotsOperation::Create(time_slot) => {
+                let handle = handle_managers.time_slots.create_handle();
+                AnnotatedTimeSlotsOperation::Create(handle, time_slot)
+            }
+            TimeSlotsOperation::Remove(handle) => AnnotatedTimeSlotsOperation::Remove(handle),
+            TimeSlotsOperation::Update(handle, time_slot) => {
+                AnnotatedTimeSlotsOperation::Update(handle, time_slot)
+            }
+        }
+    }
+}
+
+impl AnnotatedGroupingsOperation {
+    fn annotate<T: backend::Storage>(
+        op: GroupingsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            GroupingsOperation::Create(grouping) => {
+                let handle = handle_managers.groupings.create_handle();
+                AnnotatedGroupingsOperation::Create(handle, grouping)
+            }
+            GroupingsOperation::Remove(handle) => AnnotatedGroupingsOperation::Remove(handle),
+            GroupingsOperation::Update(handle, grouping) => {
+                AnnotatedGroupingsOperation::Update(handle, grouping)
+            }
+        }
+    }
+}
+
+impl AnnotatedGroupingIncompatsOperation {
+    fn annotate<T: backend::Storage>(
+        op: GroupingIncompatsOperation,
+        handle_managers: &mut handles::ManagerCollection<T>,
+    ) -> Self {
+        match op {
+            GroupingIncompatsOperation::Create(grouping_incompat) => {
+                let handle = handle_managers.grouping_incompats.create_handle();
+                AnnotatedGroupingIncompatsOperation::Create(handle, grouping_incompat)
+            }
+            GroupingIncompatsOperation::Remove(handle) => {
+                AnnotatedGroupingIncompatsOperation::Remove(handle)
+            }
+            GroupingIncompatsOperation::Update(handle, grouping_incompat) => {
+                AnnotatedGroupingIncompatsOperation::Update(handle, grouping_incompat)
             }
         }
     }
@@ -131,6 +313,24 @@ impl AnnotatedOperation {
             ),
             Operation::SubjectGroups(op) => AnnotatedOperation::SubjectGroups(
                 AnnotatedSubjectGroupsOperation::annotate(op, handle_managers),
+            ),
+            Operation::Incompats(op) => AnnotatedOperation::Incompats(
+                AnnotatedIncompatsOperation::annotate(op, handle_managers),
+            ),
+            Operation::GroupLists(op) => AnnotatedOperation::GroupLists(
+                AnnotatedGroupListsOperation::annotate(op, handle_managers),
+            ),
+            Operation::Subjects(op) => AnnotatedOperation::Subjects(
+                AnnotatedSubjectsOperation::annotate(op, handle_managers),
+            ),
+            Operation::TimeSlots(op) => AnnotatedOperation::TimeSlots(
+                AnnotatedTimeSlotsOperation::annotate(op, handle_managers),
+            ),
+            Operation::Groupings(op) => AnnotatedOperation::Groupings(
+                AnnotatedGroupingsOperation::annotate(op, handle_managers),
+            ),
+            Operation::GroupingIncompats(op) => AnnotatedOperation::GroupingIncompats(
+                AnnotatedGroupingIncompatsOperation::annotate(op, handle_managers),
             ),
         }
     }
