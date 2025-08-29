@@ -13,6 +13,8 @@ pub struct GeneralData {
     max_interrogations_per_day: Option<NonZeroU32>,
     #[pyo3(get, set)]
     week_count: NonZeroU32,
+    #[pyo3(get, set)]
+    periodicity_cuts: BTreeSet<NonZeroU32>,
 }
 
 #[pymethods]
@@ -44,6 +46,7 @@ impl From<&backend::GeneralData> for GeneralData {
                 .map(|range| (range.start, range.end)),
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
+            periodicity_cuts: value.periodicity_cuts.clone(),
         }
     }
 }
@@ -62,6 +65,7 @@ impl From<&GeneralData> for backend::GeneralData {
                 .map(|tuple| tuple.0..tuple.1),
             max_interrogations_per_day: value.max_interrogations_per_day,
             week_count: value.week_count,
+            periodicity_cuts: value.periodicity_cuts.clone(),
         }
     }
 }

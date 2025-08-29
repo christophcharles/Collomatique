@@ -29,6 +29,7 @@ async fn general_data_get_1(pool: SqlitePool) {
         interrogations_per_week: None,
         max_interrogations_per_day: None,
         week_count: NonZeroU32::new(30).unwrap(),
+        periodicity_cuts: BTreeSet::new(),
     };
 
     assert_eq!(general_data, general_data_expected);
@@ -41,7 +42,7 @@ async fn general_data_get_2(pool: SqlitePool) {
     let _ = sqlx::query!(
         r#"
 UPDATE general_data
-SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2,"week_count":25}'
+SET value = '{"interrogations_per_week":{"start":2,"end":5},"max_interrogations_per_day":2,"week_count":25,"periodicity_cuts":[10]}'
 WHERE id = 1
         "#
     )
@@ -55,6 +56,7 @@ WHERE id = 1
         interrogations_per_week: Some(2..5),
         max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
         week_count: NonZeroU32::new(25).unwrap(),
+        periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
     };
 
     assert_eq!(general_data, general_data_expected);
@@ -69,6 +71,7 @@ async fn general_data_set(pool: SqlitePool) {
             interrogations_per_week: Some(2..5),
             max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
             week_count: NonZeroU32::new(25).unwrap(),
+            periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
         })
     }
     .await
@@ -80,6 +83,7 @@ async fn general_data_set(pool: SqlitePool) {
         interrogations_per_week: Some(2..5),
         max_interrogations_per_day: Some(NonZeroU32::new(2).unwrap()),
         week_count: NonZeroU32::new(25).unwrap(),
+        periodicity_cuts: BTreeSet::from([NonZeroU32::new(10).unwrap()]),
     };
 
     assert_eq!(general_data, general_data_expected);
