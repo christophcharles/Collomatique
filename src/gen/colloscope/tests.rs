@@ -9517,3 +9517,244 @@ fn incompat_group_for_student_constraints() {
 
     assert_eq!(incompat_group_for_student_constraints, expected_result);
 }
+
+#[test]
+fn group_on_week_selection_constraints() {
+    let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
+        teacher_count: 2,
+        week_count: NonZeroU32::new(4).unwrap(),
+        interrogations_per_week: None,
+        max_interrogations_per_day: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        balancing_requirements: Some(BalancingRequirements {
+            strictness: BalancingStrictness::Strict,
+            object: BalancingObject::Teachers(BTreeMap::from([
+                (
+                    WeekSelection {
+                        selection: BTreeSet::from([0, 2]),
+                    },
+                    BTreeMap::from([
+                        (TeacherBalancing { teacher: 0 }, 1),
+                        (TeacherBalancing { teacher: 1 }, 1),
+                    ]),
+                ),
+                (
+                    WeekSelection {
+                        selection: BTreeSet::from([1, 3]),
+                    },
+                    BTreeMap::from([
+                        (TeacherBalancing { teacher: 0 }, 1),
+                        (TeacherBalancing { teacher: 1 }, 1),
+                    ]),
+                ),
+            ])),
+        }),
+        slots: vec![
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 2,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 0,
+                start: SlotStart {
+                    week: 3,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 2,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                cost: 0,
+                teacher: 1,
+                start: SlotStart {
+                    week: 3,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            prefilled_groups: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([]),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+        ..Subject::default()
+    }];
+    let incompatibility_groups = IncompatibilityGroupList::new();
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatSet::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibility_groups,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let group_on_week_selection_constraints =
+        ilp_translator.build_group_on_week_selection_constraints();
+
+    #[rustfmt::skip]
+    let gis_0_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_2_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 2, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_3_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 3, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_4_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 4, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_5_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_6_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 6, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_7_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 7, group: 0 });
+
+    #[rustfmt::skip]
+    let gis_0_0_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_1_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_2_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 2, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_3_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 3, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_4_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 4, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_5_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 5, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_6_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 6, group: 1 });
+    #[rustfmt::skip]
+    let gis_0_7_1 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 7, group: 1 });
+
+    #[rustfmt::skip]
+    let gows_0_0_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_0_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 0, group: 1 });
+    #[rustfmt::skip]
+    let gows_0_1_0 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 1, group: 0 });
+    #[rustfmt::skip]
+    let gows_0_1_1 = Expr::<Variable>::var(Variable::GroupOnWeekSelection { subject: 0, week_selection: 1, group: 1 });
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        gis_0_0_0.leq(&gows_0_0_0),
+        gis_0_2_0.leq(&gows_0_0_0),
+        gis_0_4_0.leq(&gows_0_0_0),
+        gis_0_6_0.leq(&gows_0_0_0),
+        (&gis_0_0_0 + &gis_0_2_0 + &gis_0_4_0 + &gis_0_6_0).geq(&gows_0_0_0),
+
+        gis_0_0_1.leq(&gows_0_0_1),
+        gis_0_2_1.leq(&gows_0_0_1),
+        gis_0_4_1.leq(&gows_0_0_1),
+        gis_0_6_1.leq(&gows_0_0_1),
+        (&gis_0_0_1 + &gis_0_2_1 + &gis_0_4_1 + &gis_0_6_1).geq(&gows_0_0_1),
+
+        gis_0_1_0.leq(&gows_0_1_0),
+        gis_0_3_0.leq(&gows_0_1_0),
+        gis_0_5_0.leq(&gows_0_1_0),
+        gis_0_7_0.leq(&gows_0_1_0),
+        (&gis_0_1_0 + &gis_0_3_0 + &gis_0_5_0 + &gis_0_7_0).geq(&gows_0_1_0),
+
+        gis_0_1_1.leq(&gows_0_1_1),
+        gis_0_3_1.leq(&gows_0_1_1),
+        gis_0_5_1.leq(&gows_0_1_1),
+        gis_0_7_1.leq(&gows_0_1_1),
+        (&gis_0_1_1 + &gis_0_3_1 + &gis_0_5_1 + &gis_0_7_1).geq(&gows_0_1_1),
+    ]);
+
+    assert_eq!(group_on_week_selection_constraints, expected_result);
+}

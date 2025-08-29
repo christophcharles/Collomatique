@@ -2243,6 +2243,72 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_group_on_week_selection_constraints_for_subject_week_selection_and_group(
+        &self,
+        i: usize,
+        subject: &Subject,
+        j: usize,
+        week_selection: &WeekSelection,
+        k: usize,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        let mut expr_sum = Expr::constant(0);
+        let expr_gows = Expr::var(Variable::GroupOnWeekSelection {
+            subject: i,
+            week_selection: j,
+            group: k,
+        });
+
+        for (slot_num, slot) in subject.slots.iter().enumerate() {
+            if !week_selection.selection.contains(&slot.start.week) {
+                continue;
+            }
+
+            let expr_gis = Expr::var(Variable::GroupInSlot {
+                subject: i,
+                slot: slot_num,
+                group: k,
+            });
+
+            expr_sum = expr_sum + &expr_gis;
+
+            let constraint = expr_gis.leq(&expr_gows);
+            constraints.insert(constraint);
+        }
+
+        let constraint = expr_gows.leq(&expr_sum);
+        constraints.insert(constraint);
+
+        constraints
+    }
+
+    fn build_group_on_week_selection_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            if let Some(br) = &subject.balancing_requirements {
+                let week_selection_list = br.object.extract_week_selections();
+
+                for (j, week_selection) in week_selection_list.iter().enumerate() {
+                    for (k, _group) in subject.groups.prefilled_groups.iter().enumerate() {
+                        constraints.extend(
+                            self.build_group_on_week_selection_constraints_for_subject_week_selection_and_group(
+                                i,
+                                subject,
+                                j,
+                                week_selection,
+                                k
+                            )
+                        );
+                    }
+                }
+            }
+        }
+
+        constraints
+    }
+
     fn problem_builder_soft(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -2308,6 +2374,8 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_incompat_group_for_student_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_student_incompat_max_count_constraints())
+            .expect("Variables should be declared")
+            .add_constraints(self.build_group_on_week_selection_constraints())
             .expect("Variables should be declared")
             .add_constraints(self.build_balancing_constraints())
             .expect("Variables should be declared")
