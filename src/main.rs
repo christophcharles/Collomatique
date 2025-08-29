@@ -1,4 +1,4 @@
-use collomatique::linalg::*;
+use collomatique::ilp::linalg::*;
 
 fn main() {
     let expr1 = - (2 * Expr::from("a") - 3 * Expr::from("b") + 4 * Expr::from("c") + 2);
