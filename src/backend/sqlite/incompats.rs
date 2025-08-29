@@ -218,37 +218,10 @@ WHERE incompat_id = ?
     Ok(incompats)
 }
 
-async fn search_invalid_week_pattern_id(
-    pool: &SqlitePool,
-    incompat: &Incompat<week_patterns::Id>,
-) -> Result<Option<week_patterns::Id>> {
-    let week_pattern_ids = sqlx::query!("SELECT week_pattern_id FROM week_patterns",)
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.week_pattern_id)
-        .collect::<BTreeSet<_>>();
-
-    for incompat_group in &incompat.groups {
-        for slot in &incompat_group.slots {
-            if !week_pattern_ids.contains(&slot.week_pattern_id.0) {
-                return Ok(Some(slot.week_pattern_id));
-            }
-        }
-    }
-
-    Ok(None)
-}
-
 pub async fn add(
     pool: &SqlitePool,
     incompat: &Incompat<week_patterns::Id>,
-) -> std::result::Result<Id, CrossError<Error, week_patterns::Id>> {
-    if let Some(week_pattern_id) = search_invalid_week_pattern_id(pool, incompat).await? {
-        return Err(CrossError::InvalidCrossId(week_pattern_id));
-    }
-
+) -> std::result::Result<Id, Error> {
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let max_count_i64 = i64::try_from(incompat.max_count).map_err(|_| {
@@ -304,7 +277,7 @@ VALUES (?1, ?2, ?3, ?4, ?5)
     Ok(Id(incompat_id))
 }
 
-pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdError<Error, Id>> {
+pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), Error> {
     let incompat_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -336,12 +309,10 @@ WHERE incompat_group_id IN
         .rows_affected();
 
     if count > 1 {
-        return Err(IdError::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "Multiple incompats with id {:?}",
             index
-        ))));
-    } else if count == 0 {
-        return Err(IdError::InvalidId(index));
+        )));
     }
 
     Ok(())
@@ -351,11 +322,7 @@ pub async fn update(
     pool: &SqlitePool,
     index: Id,
     incompat: &Incompat<week_patterns::Id>,
-) -> std::result::Result<(), CrossIdError<Error, Id, week_patterns::Id>> {
-    if let Some(week_pattern_id) = search_invalid_week_pattern_id(pool, incompat).await? {
-        return Err(CrossIdError::InvalidCrossId(week_pattern_id));
-    }
-
+) -> std::result::Result<(), Error> {
     let incompat_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -379,11 +346,10 @@ pub async fn update(
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(CrossIdError::InternalError(Error::CorruptedDatabase(
-            format!("Multiple incompats with id {:?}", index),
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple incompats with id {:?}",
+            index
         )));
-    } else if rows_affected == 0 {
-        return Err(CrossIdError::InvalidId(index));
     }
 
     let _ = sqlx::query!(

@@ -196,6 +196,18 @@ pub enum SubjectGroupDependancy<SubjectId: OrdId, StudentId: OrdId> {
     Student(StudentId),
 }
 
+#[derive(Error, Debug)]
+pub enum IncompatDependancy<SubjectId: OrdId, StudentId: OrdId> {
+    Subject(SubjectId),
+    Student(StudentId),
+}
+
+#[derive(Error, Debug)]
+pub enum DataStatusWithId<Id: OrdId> {
+    Ok,
+    BadCrossId(Id),
+}
+
 use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
@@ -528,19 +540,99 @@ pub trait Storage: Send + Sync {
     async unsafe fn incompats_add_unchecked(
         &mut self,
         incompat: &Incompat<Self::WeekPatternId>,
-    ) -> std::result::Result<Self::IncompatId, CrossError<Self::InternalError, Self::WeekPatternId>>;
+    ) -> std::result::Result<Self::IncompatId, Self::InternalError>;
     async unsafe fn incompats_remove_unchecked(
         &mut self,
         index: Self::IncompatId,
-    ) -> std::result::Result<(), IdError<Self::InternalError, Self::IncompatId>>;
+    ) -> std::result::Result<(), Self::InternalError>;
     async unsafe fn incompats_update_unchecked(
         &mut self,
         index: Self::IncompatId,
         incompat: &Incompat<Self::WeekPatternId>,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async fn incompats_check(
+        &self,
+        incompat: &Incompat<Self::WeekPatternId>,
+    ) -> std::result::Result<DataStatusWithId<Self::WeekPatternId>, Self::InternalError> {
+        async move {
+            let week_patterns = self.week_patterns_get_all().await?;
+
+            for incompat_group in &incompat.groups {
+                for incompat_slot in &incompat_group.slots {
+                    if !week_patterns.contains_key(&incompat_slot.week_pattern_id) {
+                        return Ok(DataStatusWithId::BadCrossId(incompat_slot.week_pattern_id));
+                    }
+                }
+            }
+
+            Ok(DataStatusWithId::Ok)
+        }
+    }
+    async fn incompats_can_remove(
+        &mut self,
+        index: Self::IncompatId,
+    ) -> std::result::Result<
+        Vec<IncompatDependancy<Self::SubjectId, Self::StudentId>>,
+        IdError<Self::InternalError, Self::IncompatId>,
+    > {
+        async move {
+            let incompats = self.incompats_get_all().await?;
+
+            if !incompats.contains_key(&index) {
+                return Err(IdError::InvalidId(index));
+            }
+
+            let mut dependancies = Vec::new();
+
+            let subjects = self.subjects_get_all().await?;
+            for (subject_id, subject) in subjects {
+                if subject.incompat_id == Some(index) {
+                    dependancies.push(IncompatDependancy::Subject(subject_id));
+                }
+            }
+
+            let students = self.students_get_all().await?;
+            for (student_id, _student) in students {
+                let incompat_for_student = self.incompat_for_student_get(student_id, index)
+                    .await
+                    .map_err(
+                        |e| match e {
+                            Id2Error::InternalError(int_err) => IdError::InternalError(int_err),
+                            Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid as it was returned from students_get_all", id1),
+                            Id2Error::InvalidId2(id2) => panic!("Subject group id {:?} should be valid as it was tested valid a few instructions ago", id2),
+                        }
+                    )?;
+                if incompat_for_student {
+                    dependancies.push(IncompatDependancy::Student(student_id));
+                }
+            }
+
+            Ok(dependancies)
+        }
+    }
+    async fn incompats_remove(
+        &mut self,
+        index: Self::IncompatId,
     ) -> std::result::Result<
         (),
-        CrossIdError<Self::InternalError, Self::IncompatId, Self::WeekPatternId>,
-    >;
+        CheckedIdError<
+            Self::InternalError,
+            Self::IncompatId,
+            Vec<IncompatDependancy<Self::SubjectId, Self::StudentId>>,
+        >,
+    > {
+        async move {
+            let dependancies = self
+                .incompats_can_remove(index)
+                .await
+                .map_err(CheckedIdError::from_id_error)?;
+            if dependancies.len() != 0 {
+                return Err(CheckedIdError::CheckFailed(dependancies));
+            }
+            unsafe { self.incompats_remove_unchecked(index) }.await?;
+            Ok(())
+        }
+    }
 
     async fn group_lists_get_all(
         &self,
