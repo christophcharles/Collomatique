@@ -1,7 +1,7 @@
 //! Collomatique GTK4 main executable
 //!
 //! At this date, the goal of this code is to be a gtk4 GUI
-//! for the collomatique-core crate.
+//! for the collomatique-state crate.
 
 use clap::Parser;
 use collomatique_gtk4::AppModel;

@@ -9,7 +9,7 @@ use history::ModificationHistory;
 
 /// Representation of the state of a file for the application
 ///
-/// This is the main structure for interfacing core.
+/// This is the main structure for interfacing state.
 /// Build an [AppState] with [AppState::new] starting with some
 /// structure implementing [InMemoryData]. [AppState] takes
 /// ownership of this data and maintains a consistent history of modifications.

@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-collomatique-core = { path = "../core" }
+collomatique-state = { path = "../state" }
