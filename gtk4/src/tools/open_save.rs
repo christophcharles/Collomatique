@@ -55,3 +55,21 @@ pub async fn open_dialog() -> Option<PathBuf> {
         .to_file_path()
         .ok()
 }
+
+pub async fn open_python_dialog() -> Option<PathBuf> {
+    SelectedFiles::open_file()
+        .title("Ouvrir un script")
+        .accept_label("Ouvrir")
+        .filter(FileFilter::new("Scripts Python (*.py)").glob("*.py"))
+        .filter(FileFilter::new("Tous les fichiers").glob("*"))
+        .modal(true)
+        .send()
+        .await
+        .ok()?
+        .response()
+        .ok()?
+        .uris()
+        .first()?
+        .to_file_path()
+        .ok()
+}
