@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use std::collections::BTreeSet;
 use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Parser)]
@@ -141,8 +142,8 @@ enum WeekPatternCommand {
     Add {
         /// Name for the new week pattern
         name: String,
-        /// Possible prefill of the week pattern
-        prefill: Option<WeekPatternPrefill>,
+        /// Possible predefined patterns
+        pattern: Option<WeekPatternFilling>,
         /// Force creating a new week pattern with an existing name
         #[arg(short, long, default_value_t = false)]
         force: bool,
@@ -160,6 +161,21 @@ enum WeekPatternCommand {
         #[arg(short, long, default_value_t = false)]
         force: bool,
     },
+    /// Rename an existing week pattern
+    Rename {
+        /// Old name for the week pattern
+        old_name: String,
+        /// If multiple week patterns have the same (old) name, select which one to use.
+        /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        week_pattern_number: Option<NonZeroUsize>,
+        /// New name for the week pattern
+        new_name: String,
+        /// Force using an existing name
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
+    },
     /// Show all week patterns
     PrintAll,
     /// Show a particular week pattern
@@ -172,10 +188,22 @@ enum WeekPatternCommand {
         #[arg(short = 'n')]
         week_pattern_number: Option<NonZeroUsize>,
     },
+    /// Fill existing week pattern with predefined pattern
+    Fill {
+        /// Name for the new week pattern
+        name: String,
+        /// If multiple week patterns have the same name, select which one to use.
+        /// So if there are 3 week patterns with the same name, 1 would refer to the first one, 2 to the second, etc...
+        /// Be careful the order might change between databases update (even when using undo/redo)
+        #[arg(short = 'n')]
+        week_pattern_number: Option<NonZeroUsize>,
+        /// Possible predefined patterns
+        pattern: WeekPatternFilling,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
-enum WeekPatternPrefill {
+enum WeekPatternFilling {
     /// Fill the week pattern with every week for 1 to week_count
     All,
     /// Fill the week pattern with every even week for 2 to week_count
@@ -642,50 +670,61 @@ async fn get_week_pattern(
     Ok(output.clone())
 }
 
+fn predefined_week_pattern_weeks(
+    filling: WeekPatternFilling,
+    week_count: NonZeroU32,
+) -> BTreeSet<collomatique::backend::Week> {
+    use collomatique::backend::Week;
+    let weeks = (0..week_count.get()).into_iter();
+    match filling {
+        WeekPatternFilling::All => weeks.map(|w| Week::new(w)).collect(),
+        WeekPatternFilling::Odd => weeks.step_by(2).map(|w| Week::new(w)).collect(),
+        WeekPatternFilling::Even => weeks.skip(1).step_by(2).map(|w| Week::new(w)).collect(),
+    }
+}
+
+async fn week_patterns_check_existing_names(
+    app_state: &mut AppState<sqlite::Store>,
+    name: &str,
+) -> Result<()> {
+    let week_patterns = app_state
+        .get_backend_logic()
+        .week_patterns_get_all()
+        .await?;
+    for (_, week_pattern) in &week_patterns {
+        if week_pattern.name == name {
+            return Err(anyhow!(format!(
+                "A week pattern with name \"{}\" already exists",
+                name
+            )));
+        }
+    }
+    Ok(())
+}
+
 async fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::backend::{Week, WeekPattern};
+    use collomatique::backend::WeekPattern;
     use collomatique::frontend::state::{Operation, UpdateError, WeekPatternsOperation};
-    use std::collections::BTreeSet;
 
     match command {
         WeekPatternCommand::Add {
             name,
-            prefill,
+            pattern,
             force,
         } => {
             if !force {
-                let week_patterns = app_state
-                    .get_backend_logic()
-                    .week_patterns_get_all()
-                    .await?;
-                for (_, week_pattern) in &week_patterns {
-                    if week_pattern.name == name {
-                        return Err(anyhow!(format!(
-                            "A week pattern with name \"{}\" already exists",
-                            name
-                        )));
-                    }
-                }
+                week_patterns_check_existing_names(app_state, &name).await?;
             }
             let general_data = app_state.get_backend_logic().general_data_get().await?;
 
             let pattern = WeekPattern {
                 name,
-                weeks: match prefill {
-                    Some(prefill) => {
-                        let weeks = (0..general_data.week_count.get()).into_iter();
-                        match prefill {
-                            WeekPatternPrefill::All => weeks.map(|w| Week::new(w)).collect(),
-                            WeekPatternPrefill::Odd => {
-                                weeks.step_by(2).map(|w| Week::new(w)).collect()
-                            }
-                            WeekPatternPrefill::Even => {
-                                weeks.skip(1).step_by(2).map(|w| Week::new(w)).collect()
-                            }
-                        }
+                weeks: match pattern {
+                    Some(filling) => {
+                        predefined_week_pattern_weeks(filling, general_data.week_count)
                     }
                     None => BTreeSet::new(),
                 },
@@ -697,6 +736,9 @@ async fn week_pattern_command(
             {
                 let err = match e {
                     UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::WeekNumberTooBig(_week) => panic!(
+                        "The week pattern should be valid as it was constructed automatically"
+                    ),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -753,6 +795,43 @@ async fn week_pattern_command(
             }
             Ok(None)
         }
+        WeekPatternCommand::Rename {
+            old_name,
+            week_pattern_number,
+            new_name,
+            force,
+        } => {
+            if !force {
+                week_patterns_check_existing_names(app_state, &new_name).await?;
+            }
+
+            let (id, week_pattern) =
+                get_week_pattern(app_state, &old_name, week_pattern_number).await?;
+            let handle = app_state.get_week_pattern_handle(id);
+
+            let new_week_pattern = WeekPattern {
+                name: new_name,
+                weeks: week_pattern.weeks,
+            };
+
+            if let Err(e) = app_state
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                    handle,
+                    new_week_pattern,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::WeekNumberTooBig(_week) => {
+                        panic!("The week pattern should be valid as only its name has changed")
+                    }
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
+        }
         WeekPatternCommand::PrintAll => {
             let week_patterns = app_state
                 .get_backend_logic()
@@ -780,6 +859,39 @@ async fn week_pattern_command(
             let (_id, week_pattern) =
                 get_week_pattern(app_state, &name, week_pattern_number).await?;
             Ok(Some(week_pattern_to_string(&week_pattern)))
+        }
+        WeekPatternCommand::Fill {
+            name,
+            week_pattern_number,
+            pattern,
+        } => {
+            let (id, _week_pattern) =
+                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let handle = app_state.get_week_pattern_handle(id);
+
+            let general_data = app_state.get_backend_logic().general_data_get().await?;
+            let new_week_pattern = WeekPattern {
+                name,
+                weeks: predefined_week_pattern_weeks(pattern, general_data.week_count),
+            };
+
+            if let Err(e) = app_state
+                .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
+                    handle,
+                    new_week_pattern,
+                )))
+                .await
+            {
+                let err = match e {
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::WeekNumberTooBig(_week) => panic!(
+                        "The week pattern should be valid as it was constructed automatically"
+                    ),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
+                };
+                return Err(err);
+            }
+            Ok(None)
         }
     }
 }
