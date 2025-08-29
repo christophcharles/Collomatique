@@ -39,14 +39,21 @@ pub enum DecodeError {
     SubjectsAlreadyDecoded,
     #[error("Teachers were already decoded from a previous block")]
     TeachersAlreadyDecoded,
+    #[error("Student assignments data is inconsistent")]
+    InconsistentAssignmentData,
 }
 
-impl From<collomatique_state::tools::IdError> for DecodeError {
-    fn from(value: collomatique_state::tools::IdError) -> Self {
+impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
+    fn from(value: collomatique_state_colloscopes::FromDataError) -> Self {
+        use collomatique_state::tools::IdError;
+        use collomatique_state_colloscopes::FromDataError;
         match value {
-            collomatique_state::tools::IdError::DuplicatedId => DecodeError::DuplicatedID,
-            collomatique_state::tools::IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
-            collomatique_state::tools::IdError::InvalidId => DecodeError::InvalidId,
+            FromDataError::IdError(id_error) => match id_error {
+                IdError::DuplicatedId => DecodeError::DuplicatedID,
+                IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
+                IdError::InvalidId => DecodeError::InvalidId,
+            },
+            FromDataError::InconsistentAssignments => DecodeError::InconsistentAssignmentData,
         }
     }
 }
