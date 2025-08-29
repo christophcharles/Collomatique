@@ -1,8 +1,10 @@
-use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, CheckButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
 use relm4::FactorySender;
+
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
@@ -20,7 +22,7 @@ pub struct PeriodEntryData {
     pub period_assignments: collomatique_state_colloscopes::assignments::PeriodAssignments,
 }
 
-use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn};
+use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
 
 #[derive(Debug)]
 pub struct PeriodEntry {
@@ -74,9 +76,7 @@ impl FactoryComponent for PeriodEntry {
     }
 
     fn init_model(data: Self::Init, index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        let mut column_view = DynamicColumnView::new();
-        column_view.append_column(SurnameColumn {});
-        column_view.append_column(FirstnameColumn {});
+        let column_view = DynamicColumnView::new();
 
         let mut model = Self {
             index: index.clone(),
@@ -84,6 +84,7 @@ impl FactoryComponent for PeriodEntry {
             column_view,
         };
 
+        model.rebuild_columns();
         model.update_view_wrapper();
 
         model
@@ -122,17 +123,39 @@ impl PeriodEntry {
         self.column_view.clear_columns();
         self.column_view.append_column(SurnameColumn {});
         self.column_view.append_column(FirstnameColumn {});
+        for (subject_id, subject) in &self.data.filtered_subjects {
+            self.column_view.append_column(SubjectColumn {
+                subject_id: *subject_id,
+                subject_name: subject.parameters.name.clone(),
+            });
+        }
     }
 
     fn update_view_wrapper(&mut self) {
         self.column_view.clear();
         self.column_view
-            .extend_from_iter(self.data.filtered_students.iter().map(|(_id, student)| {
-                StudentItem {
-                    surname: student.desc.surname.clone(),
-                    firstname: student.desc.firstname.clone(),
-                }
-            }));
+            .extend_from_iter(
+                self.data
+                    .filtered_students
+                    .iter()
+                    .map(|(student_id, student)| StudentItem {
+                        surname: student.desc.surname.clone(),
+                        firstname: student.desc.firstname.clone(),
+                        assigned_subjects: self
+                            .data
+                            .period_assignments
+                            .subject_map
+                            .iter()
+                            .filter_map(|(subject_id, assigned_students)| {
+                                if assigned_students.contains(student_id) {
+                                    Some(*subject_id)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect(),
+                    }),
+            );
     }
 }
 
@@ -140,6 +163,7 @@ impl PeriodEntry {
 struct StudentItem {
     surname: String,
     firstname: String,
+    assigned_subjects: BTreeSet<collomatique_state_colloscopes::SubjectId>,
 }
 
 #[derive(Debug, Clone)]
@@ -183,5 +207,32 @@ impl LabelColumn for SurnameColumn {
 
     fn get_cell_value(&self, item: &Self::Item) -> Self::Value {
         item.surname.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SubjectColumn {
+    subject_id: collomatique_state_colloscopes::SubjectId,
+    subject_name: String,
+}
+
+impl RelmColumn for SubjectColumn {
+    type Root = gtk::CheckButton;
+    type Widgets = ();
+    type Item = StudentItem;
+
+    fn column_name(&self) -> String {
+        self.subject_name.clone()
+    }
+
+    fn setup(&self, _item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
+        let root = gtk::CheckButton::new();
+        root.set_halign(gtk::Align::Center);
+
+        (root, ())
+    }
+
+    fn bind(&self, item: &mut Self::Item, _: &mut Self::Widgets, root: &mut Self::Root) {
+        root.set_active(item.assigned_subjects.contains(&self.subject_id));
     }
 }
