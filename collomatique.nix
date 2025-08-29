@@ -11,6 +11,7 @@
     wayland,
     libadwaita,
     adwaita-icon-theme,
+    python3,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
@@ -28,6 +29,7 @@ rustPlatform.buildRustPackage rec {
         pkg-config
         wrapGAppsHook4
         cbc # We need it for tests
+        python3
     ];
 
     buildInputs = [
@@ -38,6 +40,7 @@ rustPlatform.buildRustPackage rec {
         libadwaita
         wayland
         adwaita-icon-theme
+        python3
     ];
 
     preFixup = ''
