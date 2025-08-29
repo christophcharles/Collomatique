@@ -2893,7 +2893,7 @@ impl<'a> IlpTranslator<'a> {
                 crate::ilp::linexpr::Sign::LessThan => {
                     let expr = constraint.get_lhs().clone();
 
-                    BTreeSet::from([expr.clone(), -expr]) //[expr])
+                    BTreeSet::from([expr, Expr::constant(0)])
                 }
             };
 
