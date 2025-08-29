@@ -36,20 +36,27 @@ pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
 }
 
 pub async fn open_dialog() -> Option<PathBuf> {
-    generic_open_dialog(&[
-        ("Fichiers collomatique (*.collomatique)", "collomatique"),
-        ("Tous les fichiers", "*"),
-    ])
+    generic_open_dialog(
+        "Ouvrir",
+        &[
+            ("Fichiers collomatique (*.collomatique)", "collomatique"),
+            ("Tous les fichiers", "*"),
+        ],
+    )
     .await
 }
 
 pub async fn open_python_dialog() -> Option<PathBuf> {
-    generic_open_dialog(&[("Scripts Python (*.py)", "py"), ("Tous les fichiers", "*")]).await
+    generic_open_dialog(
+        "Ouvrir un script",
+        &[("Scripts Python (*.py)", "py"), ("Tous les fichiers", "*")],
+    )
+    .await
 }
 
-pub async fn generic_open_dialog(extensions: &[(&str, &str)]) -> Option<PathBuf> {
+pub async fn generic_open_dialog(title: &str, extensions: &[(&str, &str)]) -> Option<PathBuf> {
     let mut dialog = rfd::AsyncFileDialog::new()
-        .set_title("Ouvrir un script")
+        .set_title(title)
         .set_can_create_directories(false);
 
     for (desc, ext) in extensions {

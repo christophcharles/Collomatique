@@ -2,6 +2,7 @@ use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenFileDialogMsg {
+    pub title: String,
     pub list: Vec<ExtensionDesc>,
 }
 
