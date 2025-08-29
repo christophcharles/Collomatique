@@ -2846,3 +2846,225 @@ fn dynamic_group_variables() {
 
     assert_eq!(dynamic_group_variables, expected_result);
 }
+
+#[test]
+fn in_group_variables() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 1,
+                start: SlotStart {
+                    week: 1,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            assigned_to_group: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::from([3, 4, 5]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([6, 7, 8, 9, 10, 11]),
+        },
+    }];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let in_group_variables = ilp_translator.build_in_group_variables();
+
+    let expected_result = BTreeSet::from([
+        Variable::InGroup {
+            subject: 0,
+            student: 6,
+            group: 2,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 7,
+            group: 2,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 8,
+            group: 2,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 9,
+            group: 2,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 10,
+            group: 2,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 11,
+            group: 2,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 6,
+            group: 3,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 7,
+            group: 3,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 8,
+            group: 3,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 9,
+            group: 3,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 10,
+            group: 3,
+        },
+        Variable::InGroup {
+            subject: 0,
+            student: 11,
+            group: 3,
+        },
+    ]);
+
+    assert_eq!(in_group_variables, expected_result);
+}
