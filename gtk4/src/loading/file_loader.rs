@@ -1,6 +1,6 @@
-use collomatique_storage::{DecodeError, DeserializationError, LoadError};
+use collomatique_storage::{Caveat, DecodeError, DeserializationError, LoadError};
 use relm4::{Component, ComponentParts, ComponentSender};
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 #[derive(Debug)]
 pub enum FileLoadingInput {
@@ -9,13 +9,21 @@ pub enum FileLoadingInput {
 
 #[derive(Debug)]
 pub enum FileLoadingOutput {
-    Loaded(PathBuf, collomatique_state_colloscopes::Data),
+    Loaded(
+        PathBuf,
+        collomatique_state_colloscopes::Data,
+        BTreeSet<Caveat>,
+    ),
     Failed(PathBuf, String),
 }
 
 #[derive(Debug)]
 pub enum FileLoadingCmdOutput {
-    Loaded(PathBuf, collomatique_state_colloscopes::Data),
+    Loaded(
+        PathBuf,
+        collomatique_state_colloscopes::Data,
+        BTreeSet<Caveat>,
+    ),
     Failed(PathBuf, LoadError),
 }
 
@@ -49,7 +57,9 @@ impl Component for FileLoader {
                 .register(async move {
                     out.send(
                         match collomatique_storage::load_data_from_file(&path).await {
-                            Ok((data, _caveats)) => FileLoadingCmdOutput::Loaded(path, data),
+                            Ok((data, caveats)) => {
+                                FileLoadingCmdOutput::Loaded(path, data, caveats)
+                            }
                             Err(e) => FileLoadingCmdOutput::Failed(path, e),
                         },
                     )
@@ -66,9 +76,9 @@ impl Component for FileLoader {
         _root: &Self::Root,
     ) {
         match message {
-            FileLoadingCmdOutput::Loaded(path, data) => {
+            FileLoadingCmdOutput::Loaded(path, data, caveats) => {
                 sender
-                    .output(FileLoadingOutput::Loaded(path, data))
+                    .output(FileLoadingOutput::Loaded(path, data, caveats))
                     .unwrap();
             }
             FileLoadingCmdOutput::Failed(path, error) => {
