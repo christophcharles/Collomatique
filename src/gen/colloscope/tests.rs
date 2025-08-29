@@ -317,7 +317,7 @@ fn invalid_incompatibility_number() {
             slot_groupings,
             grouping_incompats
         ),
-        Err(Error::InvalidIncompatibilityNumber)
+        Err(Error::StudentWithInvalidIncompatibility(0, 1))
     );
 }
 
