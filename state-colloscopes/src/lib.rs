@@ -49,6 +49,16 @@ pub struct PersonWithContact {
     pub email: Option<String>,
 }
 
+/// Internal structure to store the data for [Data]
+///
+/// We have `data1 == data2` if and only if their internal
+/// data is the same. This means they would lead to the same
+/// file on disk. But the internal id issuer might have a different
+/// state.
+///
+/// [InnerData] represents this actual 'on-disk' data so we can
+/// directly use `derive(PartialEq, Eq)` with it. The implementation
+/// of [Eq] and [PartialEq] for [Data] relies on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InnerData {
     student_list: BTreeMap<StudentId, PersonWithContact>,
