@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 #[allow(dead_code)]
 mod dialogs;
+#[allow(dead_code)]
+mod tools;
 
 mod editor;
 mod loading;
