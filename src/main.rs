@@ -1,18 +1,19 @@
-use collomatique::ilp::linexpr::*;
+use collomatique::ilp::linalg::*;
 
 fn main() {
-    let expr1 = - (2 * Expr::from("a") - 3 * Expr::from("b") + 4 * Expr::from("c") + 2);
-    println!("{}", expr1);
+    let mut mat = SqMat::new(5);
 
-    let expr2 = -3 * Expr::from("c") + 42 * Expr::from("d") - 5;
-    println!("{}", expr2);
+    mat[(0,0)] = -5;
+    mat[(2,3)] = 4242;
 
-    let constraint1 = expr1.leq(&expr2);
-    println!("{}", constraint1);
+    println!("{}", mat);
 
-    let constraint2 = expr1.geq(&expr2);
-    println!("{}", constraint2);
+    let mut vect = Vect::new(5);
 
-    let constraint3 = expr1.eq(&expr2);
-    println!("{}", constraint3);
+    vect[0] = 1;
+    vect[3] = 1;
+
+    println!("{}", vect);
+
+    println!("{}", mat*vect);
 }
