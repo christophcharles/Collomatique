@@ -25,6 +25,7 @@ struct AppControllers {
 
     file_error: Controller<dialogs::file_error::Dialog>,
     open_dialog: Controller<dialogs::open_save::Dialog>,
+    warn_dirty: Controller<dialogs::warning_changed::Dialog>,
 }
 
 enum GlobalState {
@@ -46,15 +47,31 @@ impl GlobalState {
 pub struct AppModel {
     controllers: AppControllers,
     state: GlobalState,
+    next_warn_msg: Option<AppInput>,
+}
+
+impl AppModel {
+    fn send_but_check_dirty(&mut self, sender: ComponentSender<Self>, msg: AppInput) {
+        if self.controllers.editor.model().is_dirty() {
+            self.next_warn_msg = Some(msg);
+            sender.input(AppInput::WarnDirty);
+        } else {
+            sender.input(msg);
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum AppInput {
     Ignore,
+    WarnDirty,
+    OkDirty,
+    RequestNewColloscope,
     NewColloscope(Option<PathBuf>),
     LoadColloscope(PathBuf),
     ColloscopeLoaded(PathBuf, collomatique_state_colloscopes::Data),
     ColloscopeLoadingFailed(PathBuf, String),
+    RequestOpenExistingColloscopeWithDialog,
     OpenExistingColloscopeWithDialog,
 }
 
@@ -135,17 +152,29 @@ impl SimpleComponent for AppModel {
                 }
             });
 
+        let warn_dirty = dialogs::warning_changed::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::warning_changed::DialogOutput::Accept => AppInput::OkDirty,
+            });
+
         let controllers = AppControllers {
             welcome,
             loading,
             editor,
             file_error,
             open_dialog,
+            warn_dirty,
         };
 
         let state = GlobalState::WelcomeScreen;
 
-        let model = AppModel { controllers, state };
+        let model = AppModel {
+            controllers,
+            state,
+            next_warn_msg: None,
+        };
         let widgets = view_output!();
 
         let app = relm4::main_application();
@@ -186,10 +215,13 @@ impl SimpleComponent for AppModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
+            }
+            AppInput::RequestNewColloscope => {
+                self.send_but_check_dirty(sender, AppInput::NewColloscope(None));
             }
             AppInput::NewColloscope(path) => {
                 self.state = GlobalState::EditorScreen;
@@ -210,6 +242,9 @@ impl SimpleComponent for AppModel {
                     .sender()
                     .send(loading::LoadingInput::Load(path))
                     .unwrap();
+            }
+            AppInput::RequestOpenExistingColloscopeWithDialog => {
+                self.send_but_check_dirty(sender, AppInput::OpenExistingColloscopeWithDialog);
             }
             AppInput::OpenExistingColloscopeWithDialog => {
                 self.controllers
@@ -241,6 +276,20 @@ impl SimpleComponent for AppModel {
                     ))
                     .unwrap();
                 self.state = GlobalState::WelcomeScreen;
+            }
+            AppInput::WarnDirty => {
+                self.controllers
+                    .warn_dirty
+                    .sender()
+                    .send(dialogs::warning_changed::DialogInput::Show)
+                    .unwrap();
+            }
+            AppInput::OkDirty => {
+                let msg_opt = self.next_warn_msg.take();
+                match msg_opt {
+                    Some(msg) => sender.input(msg),
+                    None => {}
+                }
             }
         }
     }
