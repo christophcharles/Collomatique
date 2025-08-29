@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
@@ -18,12 +19,22 @@ pub enum Error {
     SubjectWithSlotOverlappingNextDay(usize, usize, usize),
     #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
     SubjectWithInvalidTeacher(usize, usize, usize),
-    #[error("Subject {0} has a duplicated student ({1})")]
-    SubjectWithDuplicatedStudent(usize, usize),
+    #[error(
+        "Subject {0} has a duplicated student ({1}) found first in group {2} and in group {3}"
+    )]
+    SubjectWithDuplicatedStudentInGroups(usize, usize, usize, usize),
+    #[error("Subject {0} has a duplicated student ({1}) found first in group {2} and unassigned")]
+    SubjectWithDuplicatedStudentInGroupsAndUnassigned(usize, usize, usize),
     #[error("Subject {0} has and invalid student ({1}) in the not-assigned list")]
     SubjectWithInvalidNotAssignedStudent(usize, usize),
     #[error("Subject {0} has and invalid student ({2}) in the group {1}")]
     SubjectWithInvalidAssignedStudent(usize, usize, usize),
+    #[error(
+        "Subject {0} has an invalid group ({1}) which is too large given the constraint ({2:?})"
+    )]
+    SubjectWithTooLargeAssignedGroup(usize, usize, RangeInclusive<NonZeroUsize>),
+    #[error("Subject {0} has an empty group ({1})")]
+    SubjectWithEmptyGroup(usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error(
@@ -200,23 +211,35 @@ impl ValidatedData {
                 }
             }
 
-            let mut students_no_duplicate = BTreeSet::new();
+            let mut students_no_duplicate = BTreeMap::new();
 
-            for group in &subject.groups.assigned_to_group {
-                for j in group {
-                    if students_no_duplicate.contains(j) {
-                        return Err(Error::SubjectWithDuplicatedStudent(i, *j));
+            for (j, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for k in group {
+                    if let Some(first_j) = students_no_duplicate.get(k) {
+                        return Err(Error::SubjectWithDuplicatedStudentInGroups(
+                            i, *k, *first_j, j,
+                        ));
                     } else {
-                        students_no_duplicate.insert(*j);
+                        students_no_duplicate.insert(*k, j);
                     }
+                }
+                if group.len() > subject.students_per_interrogation.end().get() {
+                    return Err(Error::SubjectWithTooLargeAssignedGroup(
+                        i,
+                        j,
+                        subject.students_per_interrogation.clone(),
+                    ));
+                }
+                if group.is_empty() {
+                    return Err(Error::SubjectWithEmptyGroup(i, j));
                 }
             }
 
-            for j in &subject.groups.not_assigned {
-                if students_no_duplicate.contains(j) {
-                    return Err(Error::SubjectWithDuplicatedStudent(i, *j));
-                } else {
-                    students_no_duplicate.insert(*j);
+            for k in &subject.groups.not_assigned {
+                if let Some(j) = students_no_duplicate.get(&k) {
+                    return Err(Error::SubjectWithDuplicatedStudentInGroupsAndUnassigned(
+                        i, *k, *j,
+                    ));
                 }
             }
         }
