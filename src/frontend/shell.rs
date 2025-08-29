@@ -414,7 +414,7 @@ async fn solve_command(
 
     use crate::ilp::solvers::FeasabilitySolver;
     let solver = crate::ilp::solvers::coin_cbc::Solver::with_disable_logging(!verbose);
-    let config_opt = solver.solve(&problem);
+    let config_opt = solver.solve(&problem, true);
 
     pb.finish_with_message("Done. Found valid colloscope");
 
