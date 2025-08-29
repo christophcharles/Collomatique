@@ -250,3 +250,58 @@ VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 0
 
     assert_eq!(result, expected_result);
 }
+
+#[sqlx::test]
+async fn teachers_update(pool: sqlx::SqlitePool) {
+    let store = prepare_empty_db(pool).await;
+
+    let _ = sqlx::query!(
+        r#"
+INSERT INTO teachers (surname, firstname, contact)
+VALUES ("Durand", "Bernard", "test@example.com"), ("Dupont", "Leonard", "06 07 08 09 10"), ("Tessier", "Lucie", "");
+        "#
+    ).execute(&store.pool).await.unwrap();
+
+    store
+        .teachers_update(
+            super::super::teachers::Id(2),
+            Teacher {
+                surname: String::from("Dupond"),
+                firstname: String::from("Leonard"),
+                contact: String::from("07 06 08 09 10"),
+            },
+        )
+        .await
+        .unwrap();
+
+    let result = store.teachers_get_all().await.unwrap();
+
+    let expected_result = BTreeMap::from([
+        (
+            super::super::teachers::Id(1),
+            Teacher {
+                surname: String::from("Durand"),
+                firstname: String::from("Bernard"),
+                contact: String::from("test@example.com"),
+            },
+        ),
+        (
+            super::super::teachers::Id(2),
+            Teacher {
+                surname: String::from("Dupond"),
+                firstname: String::from("Leonard"),
+                contact: String::from("07 06 08 09 10"),
+            },
+        ),
+        (
+            super::super::teachers::Id(3),
+            Teacher {
+                surname: String::from("Tessier"),
+                firstname: String::from("Lucie"),
+                contact: String::from(""),
+            },
+        ),
+    ]);
+
+    assert_eq!(result, expected_result);
+}
