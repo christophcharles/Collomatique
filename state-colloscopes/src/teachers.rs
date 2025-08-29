@@ -16,7 +16,7 @@ pub struct Teachers {
 }
 
 /// Description of a single teacher
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Teacher {
     /// Description of the teacher in term of name and contact
     pub desc: crate::PersonWithContact,

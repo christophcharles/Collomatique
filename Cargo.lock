@@ -373,6 +373,7 @@ dependencies = [
  "collomatique-time",
  "glib",
  "libadwaita",
+ "non-empty-string",
  "relm4",
  "rfd",
  "rustix",
