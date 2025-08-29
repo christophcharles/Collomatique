@@ -5,7 +5,7 @@ use gtk::{
     gio, glib,
     prelude::{Cast, CastNone, IsA, ListItemExt, ListModelExt, ObjectExt},
 };
-use relm4::gtk;
+use relm4::gtk::{self, prelude::WidgetExt};
 use relm4::typed_view::OrdFn;
 use std::{
     any::Any,
@@ -70,6 +70,11 @@ pub trait LabelColumn: 'static + Clone {
     /// Value of the column
     type Value: PartialOrd + Display;
 
+    /// Horizontal alignment for the label
+    fn halign(&self) -> gtk::Align {
+        gtk::Align::Start
+    }
+
     /// Name of the column
     fn column_name(&self) -> String;
     /// Whether to enable the sorting for this column
@@ -114,7 +119,9 @@ where
     }
 
     fn setup(&self, _: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
-        (gtk::Label::new(None), ())
+        let root = gtk::Label::new(None);
+        root.set_halign(self.halign());
+        (root, ())
     }
 
     fn bind(&self, item: &mut Self::Item, _: &mut Self::Widgets, label: &mut Self::Root) {
