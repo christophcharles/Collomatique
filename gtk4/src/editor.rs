@@ -5,30 +5,35 @@ use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum EditorInput {
-    NewFile(Option<PathBuf>),
-    ExistingFile(PathBuf),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FileDesc {
-    pub file_name: Option<PathBuf>,
+    NewFile {
+        file_name: Option<PathBuf>,
+        data: collomatique_state_colloscopes::Data,
+        dirty: bool,
+    },
 }
 
 pub struct EditorPanel {
-    current_file: FileDesc,
+    file_name: Option<PathBuf>,
+    data: collomatique_state_colloscopes::Data,
+    dirty: bool,
 }
 
 impl EditorPanel {
     fn generate_subtitle(&self) -> String {
         let default_name = "Fichier sans nom".into();
-        match &self.current_file.file_name {
+        let name = match &self.file_name {
             Some(path) => match path.file_name() {
                 Some(file_name) => file_name.to_string_lossy().to_string(),
                 None => default_name,
             },
             None => default_name,
+        };
+        if self.dirty {
+            String::from("*") + &name
+        } else {
+            name
         }
     }
 }
@@ -45,7 +50,7 @@ relm4::new_stateless_action!(CloseAction, EditorActionGroup, "close");
 impl SimpleComponent for EditorPanel {
     type Input = EditorInput;
     type Output = ();
-    type Init = EditorInput;
+    type Init = ();
 
     view! {
         #[root]
@@ -142,17 +147,14 @@ impl SimpleComponent for EditorPanel {
     }
 
     fn init(
-        params: Self::Init,
+        _params: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = EditorPanel {
-            current_file: match params {
-                EditorInput::NewFile(file_name) => FileDesc { file_name },
-                EditorInput::ExistingFile(file_name) => FileDesc {
-                    file_name: Some(file_name),
-                },
-            },
+            file_name: None,
+            data: collomatique_state_colloscopes::Data::new(),
+            dirty: true,
         };
         let widgets = view_output!();
 
@@ -205,11 +207,14 @@ impl SimpleComponent for EditorPanel {
 
     fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
-            EditorInput::NewFile(file_name) => self.current_file = FileDesc { file_name },
-            EditorInput::ExistingFile(file_name) => {
-                self.current_file = FileDesc {
-                    file_name: Some(file_name),
-                }
+            EditorInput::NewFile {
+                file_name,
+                data,
+                dirty,
+            } => {
+                self.file_name = file_name;
+                self.data = data;
+                self.dirty = dirty;
             }
         }
     }

@@ -45,8 +45,11 @@ pub struct AppModel {
 #[derive(Debug)]
 pub enum AppInput {
     Ignore,
-    OpenNewColloscope,
-    OpenExistingColloscope,
+    NewColloscope(Option<PathBuf>),
+    LoadColloscope(PathBuf),
+    ColloscopeLoaded(PathBuf, collomatique_state_colloscopes::Data),
+    ColloscopeLoadingFailed(PathBuf),
+    OpenExistingColloscopeWithDialog,
 }
 
 relm4::new_action_group!(AppActionGroup, "app");
@@ -85,30 +88,27 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let editor_payload = if params.new {
-            editor::EditorInput::NewFile(params.file_name.clone())
-        } else {
-            match &params.file_name {
-                Some(file_name) => editor::EditorInput::ExistingFile(file_name.clone()),
-                None => editor::EditorInput::NewFile(None),
-            }
-        };
-
         let editor = editor::EditorPanel::builder()
-            .launch(editor_payload)
-            .forward(sender.input_sender(), |_msg| AppInput::Ignore);
-
-        let loading = loading::LoadingPanel::builder()
             .launch(())
             .forward(sender.input_sender(), |_msg| AppInput::Ignore);
+
+        let loading =
+            loading::LoadingPanel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    loading::LoadingOutput::Loaded(path, data) => {
+                        AppInput::ColloscopeLoaded(path, data)
+                    }
+                    loading::LoadingOutput::Failed(path) => AppInput::ColloscopeLoadingFailed(path),
+                });
 
         let welcome =
             welcome::WelcomePanel::builder()
                 .launch(())
                 .forward(sender.input_sender(), |msg| match msg {
-                    welcome::WelcomeMessage::OpenNewColloscope => AppInput::OpenNewColloscope,
+                    welcome::WelcomeMessage::OpenNewColloscope => AppInput::NewColloscope(None),
                     welcome::WelcomeMessage::OpenExistingColloscope => {
-                        AppInput::OpenExistingColloscope
+                        AppInput::OpenExistingColloscopeWithDialog
                     }
                 });
 
@@ -118,11 +118,7 @@ impl SimpleComponent for AppModel {
             editor,
         };
 
-        let state = if params.new || params.file_name.is_some() {
-            GlobalState::EditorScreen
-        } else {
-            GlobalState::WelcomeScreen
-        };
+        let state = GlobalState::WelcomeScreen;
 
         let model = AppModel { controllers, state };
         let widgets = view_output!();
@@ -153,6 +149,15 @@ impl SimpleComponent for AppModel {
         group.add_action(about_action);
         group.register_for_main_application();
 
+        sender.input(if params.new {
+            AppInput::NewColloscope(params.file_name.clone())
+        } else {
+            match &params.file_name {
+                Some(file_name) => AppInput::LoadColloscope(file_name.clone()),
+                None => AppInput::Ignore,
+            }
+        });
+
         ComponentParts { model, widgets }
     }
 
@@ -161,16 +166,45 @@ impl SimpleComponent for AppModel {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
             }
-            AppInput::OpenNewColloscope => {
+            AppInput::NewColloscope(path) => {
                 self.state = GlobalState::EditorScreen;
                 self.controllers
                     .editor
                     .sender()
-                    .send(editor::EditorInput::NewFile(None))
+                    .send(editor::EditorInput::NewFile {
+                        file_name: path,
+                        data: collomatique_state_colloscopes::Data::new(),
+                        dirty: true,
+                    })
                     .unwrap();
             }
-            AppInput::OpenExistingColloscope => {
+            AppInput::LoadColloscope(path) => {
+                self.state = GlobalState::LoadingScreen;
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::Load(path))
+                    .unwrap();
+            }
+            AppInput::OpenExistingColloscopeWithDialog => {
                 // Ignore for now
+            }
+            AppInput::ColloscopeLoaded(path, data) => {
+                self.state = GlobalState::EditorScreen;
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile {
+                        file_name: Some(path),
+                        data,
+                        dirty: false,
+                    })
+                    .unwrap();
+            }
+            AppInput::ColloscopeLoadingFailed(_path) => {
+                // Ignore for now
+                // Only restore welcome screen
+                self.state = GlobalState::WelcomeScreen;
             }
         }
     }
