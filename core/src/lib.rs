@@ -218,8 +218,38 @@ pub trait ExtraConstraints<T: BaseConstraints> {
 
     fn reconstruct_extra_structure_variables(
         &self,
+        base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> ConfigData<Self::StructureVariable>;
+    ) -> Option<ConfigData<Self::StructureVariable>> {
+        let structure_constraints = self.extra_structure_constraints(base);
+        let structure_variables = self
+            .extra_structure_variables(base)
+            .into_iter()
+            .map(|(v_name, v_desc)| (ExtraVariable::Extra(v_name), v_desc))
+            .collect();
+        let main_values =
+            ConfigData::new().set_iter(config.get_values().into_iter().map(|(var, value)| {
+                (
+                    match var {
+                        BaseVariable::Main(v) => ExtraVariable::BaseMain(v),
+                        BaseVariable::Structure(v) => ExtraVariable::BaseStructure(v),
+                    },
+                    value,
+                )
+            }));
+
+        let f = |v| match v {
+            ExtraVariable::Extra(v) => Some(v),
+            _ => None,
+        };
+
+        default_structure_variable_reconstruction(
+            structure_constraints,
+            structure_variables,
+            main_values,
+            f,
+        )
+    }
 }
 
 pub trait ExtraObjective<T: BaseConstraints> {
