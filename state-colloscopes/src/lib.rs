@@ -20,7 +20,7 @@ use ops::{
     AnnotatedAssignmentOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp,
     AnnotatedTeacherOp,
 };
-pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
+pub use ops::{AnnotatedOp, AssignmentOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
 pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
 pub mod assignments;
