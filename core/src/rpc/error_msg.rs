@@ -4,11 +4,14 @@ pub mod general_planning;
 pub use general_planning::*;
 pub mod subjects;
 pub use subjects::*;
+pub mod teachers;
+pub use teachers::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
     GeneralPlanning(GeneralPlanningError),
     Subjects(SubjectsError),
+    Teachers(TeachersError),
 }
 
 impl From<crate::ops::UpdateError> for ErrorMsg {
@@ -17,6 +20,7 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
         match value {
             UpdateError::GeneralPlanning(e) => ErrorMsg::GeneralPlanning(e.into()),
             UpdateError::Subjects(e) => ErrorMsg::Subjects(e.into()),
+            UpdateError::Teachers(e) => ErrorMsg::Teachers(e.into()),
         }
     }
 }
@@ -33,11 +37,18 @@ impl From<SubjectsError> for ErrorMsg {
     }
 }
 
+impl From<TeachersError> for ErrorMsg {
+    fn from(value: TeachersError) -> Self {
+        ErrorMsg::Teachers(value)
+    }
+}
+
 impl std::fmt::Display for ErrorMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorMsg::GeneralPlanning(e) => e.fmt(f),
             ErrorMsg::Subjects(e) => e.fmt(f),
+            ErrorMsg::Teachers(e) => e.fmt(f),
         }
     }
 }
