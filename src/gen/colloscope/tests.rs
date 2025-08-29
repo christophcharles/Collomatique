@@ -6492,3 +6492,135 @@ fn grouping_inequalities() {
 
     assert_eq!(grouping_constraints, expected_result);
 }
+
+#[test]
+fn grouping_incompats() {
+    let general = GeneralData {
+        teacher_count: 1,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![Subject {
+        students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: true,
+        duration: NonZeroU32::new(60).unwrap(),
+        slots: vec![
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Monday,
+                    start_time: time::Time::from_hm(8, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Tuesday,
+                    start_time: time::Time::from_hm(17, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(12, 0).unwrap(),
+                },
+            },
+            SlotWithTeacher {
+                teacher: 0,
+                start: SlotStart {
+                    week: 0,
+                    weekday: time::Weekday::Wednesday,
+                    start_time: time::Time::from_hm(13, 0).unwrap(),
+                },
+            },
+        ],
+        groups: GroupsDesc {
+            prefilled_groups: vec![
+                GroupDesc {
+                    students: BTreeSet::from([0, 1, 2]),
+                    can_be_extended: false,
+                },
+                GroupDesc {
+                    students: BTreeSet::new(),
+                    can_be_extended: true,
+                },
+            ],
+            not_assigned: BTreeSet::from([3, 4, 5]),
+        },
+    }];
+    let incompatibilities = IncompatibilityList::new();
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![
+        SlotGrouping {
+            slots: BTreeSet::from([
+                SlotRef {
+                    subject: 0,
+                    slot: 1,
+                },
+                SlotRef {
+                    subject: 0,
+                    slot: 2,
+                },
+            ]),
+        },
+        SlotGrouping {
+            slots: BTreeSet::from([SlotRef {
+                subject: 0,
+                slot: 3,
+            }]),
+        },
+    ];
+    let grouping_incompats = SlotGroupingIncompatList::from([SlotGroupingIncompat {
+        groupings: BTreeSet::from([0, 1]),
+    }]);
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let grouping_incompats_constraints = ilp_translator.build_grouping_incompats_constraints();
+
+    #[rustfmt::skip]
+    let ug_0 = Expr::<Variable>::var(Variable::UseGrouping(0));
+    #[rustfmt::skip]
+    let ug_1 = Expr::<Variable>::var(Variable::UseGrouping(1));
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        (&ug_0 + &ug_1).leq(&Expr::constant(1)),
+    ]);
+
+    assert_eq!(grouping_incompats_constraints, expected_result);
+}

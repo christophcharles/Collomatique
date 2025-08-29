@@ -1470,6 +1470,30 @@ impl<'a> IlpTranslator<'a> {
         constraints
     }
 
+    fn build_grouping_incompats_constraint_for_incompat(
+        &self,
+        grouping_incompat: &SlotGroupingIncompat,
+    ) -> Constraint<Variable> {
+        let mut lhs = Expr::constant(0);
+
+        for i in grouping_incompat.groupings.iter().copied() {
+            lhs = lhs + Expr::var(Variable::UseGrouping(i));
+        }
+
+        lhs.leq(&Expr::constant(1))
+    }
+
+    fn build_grouping_incompats_constraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for grouping_incompat in &self.data.slot_grouping_incompats {
+            constraints
+                .insert(self.build_grouping_incompats_constraint_for_incompat(grouping_incompat));
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -1490,6 +1514,7 @@ impl<'a> IlpTranslator<'a> {
             .add_constraints(self.build_periodicity_constraints())
             .add_constraints(self.build_interrogations_per_week_constraints())
             .add_constraints(self.build_grouping_constraints())
+            .add_constraints(self.build_grouping_incompats_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
