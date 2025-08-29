@@ -158,6 +158,7 @@ async fn general_command(
                         )
                     }
                     UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
             }
