@@ -144,7 +144,8 @@ impl Solver {
                 .get_objective_terms()
                 .iter()
                 .map(|obj_term| {
-                    let col = highs_problem.add_column(obj_term.coef, 0.0..=f64::INFINITY);
+                    let col =
+                        highs_problem.add_column(obj_term.coef, -f64::INFINITY..=f64::INFINITY);
                     col
                 })
                 .collect()
