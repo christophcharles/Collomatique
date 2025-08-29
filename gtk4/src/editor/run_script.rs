@@ -4,6 +4,9 @@ use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
+use collomatique_state::AppState;
+use collomatique_state_colloscopes::Data;
+
 use crate::widgets::rpc_server;
 use std::path::PathBuf;
 
@@ -20,11 +23,12 @@ pub struct Dialog {
     rpc_logger: Controller<rpc_server::RpcLogger>,
     commands: FactoryVecDeque<msg_display::Entry>,
     adjust_scrolling: bool,
+    app_state: AppState<Data>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Run(PathBuf, String),
+    Run(PathBuf, String, AppState<Data>),
     CancelRequest,
     Accept,
 
@@ -39,12 +43,17 @@ pub enum DialogCmdOutput {
     AdjustScrolling,
 }
 
+#[derive(Debug)]
+pub enum DialogOutput {
+    NewData(AppState<Data>),
+}
+
 #[relm4::component(pub)]
 impl Component for Dialog {
     type Init = ();
 
     type Input = DialogInput;
-    type Output = ();
+    type Output = DialogOutput;
     type CommandOutput = DialogCmdOutput;
 
     view! {
@@ -172,6 +181,7 @@ impl Component for Dialog {
             is_running: false,
             commands,
             adjust_scrolling: false,
+            app_state: AppState::new(Data::new()),
         };
 
         let cmds_listbox = model.commands.widget();
@@ -184,9 +194,10 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.adjust_scrolling = false;
         match msg {
-            DialogInput::Run(path, script) => {
+            DialogInput::Run(path, script, app_state) => {
                 self.hidden = false;
                 self.path = path;
+                self.app_state = app_state;
                 self.commands.guard().clear();
                 self.is_running = true;
                 self.rpc_logger
@@ -239,7 +250,12 @@ impl Component for Dialog {
                         .unwrap();
                 }
             },
-            DialogInput::Accept => {}
+            DialogInput::Accept => {
+                self.hidden = true;
+                sender
+                    .output(DialogOutput::NewData(self.app_state.clone()))
+                    .unwrap();
+            }
             DialogInput::ProcessFinished => {
                 self.is_running = false;
             }
