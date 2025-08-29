@@ -40,7 +40,9 @@ pub enum BaseVariable<M: UsableData, S: UsableData> {
     Structure(S),
 }
 
-impl<M: UsableData, S: UsableData> std::fmt::Display for BaseVariable<M, S> {
+impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::fmt::Display
+    for BaseVariable<M, S>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Main(v) => write!(f, "{}", v),
@@ -55,7 +57,9 @@ enum ReconstructionDesc<S: UsableData, V: UsableData> {
     ValueFixer(V, ordered_float::OrderedFloat<f64>),
 }
 
-impl<S: UsableData, V: UsableData> std::fmt::Display for ReconstructionDesc<S, V> {
+impl<S: UsableData + std::fmt::Display, V: UsableData + std::fmt::Display> std::fmt::Display
+    for ReconstructionDesc<S, V>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Structure(d) => write!(f, "{}", d),
@@ -184,7 +188,9 @@ pub enum ExtraVariable<M: UsableData, S: UsableData, E: UsableData> {
     Extra(E),
 }
 
-impl<M: UsableData, S: UsableData, E: UsableData> std::fmt::Display for ExtraVariable<M, S, E> {
+impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display, E: UsableData>
+    std::fmt::Display for ExtraVariable<M, S, E>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BaseMain(v) => write!(f, "{}", v),

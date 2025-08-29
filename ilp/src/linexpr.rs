@@ -472,6 +472,59 @@ impl<V: UsableData> LinExpr<V> {
 
         Ok(reduced.get_constant())
     }
+
+    /// Transmute variables
+    ///
+    /// This method creates a new [LinExpr] with a different
+    /// variable type.
+    ///
+    /// This is useful when an expression was originally written
+    /// using some variable type but must be used in a context of a
+    /// wider variable type.
+    ///
+    /// For instance :
+    /// ```
+    /// # use collomatique_ilp::linexpr::LinExpr;
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let expr_transmute = expr.transmute(|v| match v {
+    ///     V1::A => V2::A,
+    ///     V1::B => V2::B,
+    ///     V1::C => V2::C,
+    /// });
+    ///
+    /// let expected_result = LinExpr::var(V2::A) + 2.0*LinExpr::var(V2::B) + 3.0*LinExpr::var(V2::C);
+    /// assert_eq!(expr_transmute, expected_result);
+    /// ```
+    pub fn transmute<U: UsableData, F: FnMut(&V) -> U>(&self, mut f: F) -> LinExpr<U> {
+        let mut expr = LinExpr::constant(self.get_constant());
+
+        for (v, c) in &self.coefs {
+            expr = expr + c.into_inner() * LinExpr::var(f(v));
+        }
+
+        expr
+    }
 }
 
 impl<V: UsableData> LinExpr<V> {
@@ -853,9 +906,60 @@ impl<V: UsableData> Constraint<V> {
         output.clean();
         output
     }
+
+    /// Transmute variables
+    ///
+    /// This method creates a new [Constraint] with a different
+    /// variable type.
+    ///
+    /// This is useful when a constraint was originally written
+    /// using some variable type but must be used in a context of a
+    /// wider variable type.
+    ///
+    /// For instance :
+    /// ```
+    /// # use collomatique_ilp::linexpr::{LinExpr, Constraint};
+    /// // We write some expression using variables from type V1
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let expr = LinExpr::var(V1::A) + 2.0*LinExpr::var(V1::B) + 3.0*LinExpr::var(V1::C);
+    /// let constraint = expr.leq(&LinExpr::constant(4.0));
+    ///
+    /// // We do something more complex that has more variables
+    /// #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     C,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // We can "transmute" the old expression into the more complex setting
+    /// let constraint_transmute = constraint.transmute(|v| match v {
+    ///     V1::A => V2::A,
+    ///     V1::B => V2::B,
+    ///     V1::C => V2::C,
+    /// });
+    ///
+    /// let expected_result = (LinExpr::var(V2::A) + 2.0*LinExpr::var(V2::B) + 3.0*LinExpr::var(V2::C)).leq(&LinExpr::constant(4.0));
+    /// assert_eq!(constraint_transmute, expected_result);
+    /// ```
+    pub fn transmute<U: UsableData, F: FnMut(&V) -> U>(&self, f: F) -> Constraint<U> {
+        Constraint {
+            symbol: self.symbol,
+            expr: self.expr.transmute(f),
+        }
+    }
 }
 
-impl<V: UsableData> std::fmt::Display for LinExpr<V> {
+impl<V: UsableData + std::fmt::Display> std::fmt::Display for LinExpr<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.coefs.is_empty() && f64_is_zero(self.constant.into_inner()) {
             write!(f, "0.0")?;
@@ -899,7 +1003,7 @@ impl std::fmt::Display for EqSymbol {
     }
 }
 
-impl<V: UsableData> std::fmt::Display for Constraint<V> {
+impl<V: UsableData + std::fmt::Display> std::fmt::Display for Constraint<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {} 0", self.expr, self.symbol)
     }
