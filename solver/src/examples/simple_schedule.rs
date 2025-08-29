@@ -530,7 +530,8 @@ impl SimpleScheduleConstraints {
     }
 }
 
-impl ProblemConstraints<SimpleScheduleDesc> for SimpleScheduleConstraints {
+impl ProblemConstraints for SimpleScheduleConstraints {
+    type Problem = SimpleScheduleDesc;
     type GeneralConstraintDesc = SimpleScheduleConstraint;
     type StructureConstraintDesc = ();
     type StructureVariable = ();

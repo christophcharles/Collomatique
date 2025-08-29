@@ -360,11 +360,11 @@ where
     ///
     /// If the function succeeds, it returns a translator of type [Translator]. This structure contains
     /// the necessary data to identify which extra constraints is not correctly satisfied in a (non-feasible) solution.
-    pub fn add_constraints<E: ProblemConstraints<T> + 'static>(
+    pub fn add_constraints<E: ProblemConstraints<Problem = T> + 'static>(
         &mut self,
         constraints: E,
         obj_coef: f64,
-    ) -> Option<Translator<T, E>> {
+    ) -> Option<Translator<E>> {
         if !constraints.is_fit_for_problem(&self.desc) {
             return None;
         }
@@ -447,7 +447,7 @@ where
 /// It is used to restore the correct types for the constraints descriptions associated to a problem extension
 /// (described by [ProblemConstraints]).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Translator<T: BaseProblem, E: ProblemConstraints<T>> {
+pub struct Translator<E: ProblemConstraints> {
     /// Map between ids and general constraints descriptions for the problem extension
     general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
     /// Map between ids and structure constraints descriptions for the problem extension
@@ -590,9 +590,9 @@ where
     /// to check if all constraints are indeed satisfied or possibly satisfied.
     ///
     /// If no such constraints exist, an empty list is returned.
-    pub fn partial_blame_constraints<E: ProblemConstraints<T>>(
+    pub fn partial_blame_constraints<E: ProblemConstraints<Problem = T>>(
         &self,
-        translator: &Translator<T, E>,
+        translator: &Translator<E>,
     ) -> Vec<E::GeneralConstraintDesc> {
         self.problem
             .ilp_problem
@@ -632,9 +632,9 @@ where
     /// If no such constraints exist, an empty list is returned.
     /// If no programming error is present in the reconstruction functions, this should
     /// *always* return an empty list.
-    pub fn partial_check_structure_constraints<E: ProblemConstraints<T>>(
+    pub fn partial_check_structure_constraints<E: ProblemConstraints<Problem = T>>(
         &self,
-        translator: &Translator<T, E>,
+        translator: &Translator<E>,
     ) -> Vec<E::StructureConstraintDesc> {
         self.problem
             .ilp_problem
@@ -730,9 +730,9 @@ where
     /// The problem extension to consider is given by the translator used.
     ///
     /// If no such constraints exist, an empty list is returned.
-    pub fn blame_constraints<E: ProblemConstraints<T>>(
+    pub fn blame_constraints<E: ProblemConstraints<Problem = T>>(
         &self,
-        translator: &Translator<T, E>,
+        translator: &Translator<E>,
     ) -> Vec<E::GeneralConstraintDesc> {
         self.ilp_config
             .blame()
@@ -762,9 +762,9 @@ where
     /// If no such constraints exist, an empty list is returned.
     /// If no programming error is present in the reconstruction functions, this should
     /// *always* return an empty list.
-    pub fn check_structure_constraints<E: ProblemConstraints<T>>(
+    pub fn check_structure_constraints<E: ProblemConstraints<Problem = T>>(
         &self,
-        translator: &Translator<T, E>,
+        translator: &Translator<E>,
     ) -> Vec<E::StructureConstraintDesc> {
         self.ilp_config
             .blame()

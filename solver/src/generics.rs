@@ -254,7 +254,10 @@ impl<
 ///
 /// Because the space of solutions does not change, there is no equivalent to [BaseProblem::configuration_to_partial_solution]
 /// and [BaseProblem::partial_solution_to_configuration] in [ProblemConstraints].
-pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
+pub trait ProblemConstraints: Send + Sync {
+    /// Problem type the constraints set is associated to
+    type Problem: BaseProblem;
+
     /// Type to represent the structure variables specific to this problem extension.
     ///
     /// The structure variables do not provide any new information and can entirely
@@ -284,21 +287,30 @@ pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
     type GeneralConstraintDesc: UsableData + 'static;
 
     /// Checks if the extension is compatible with the given problem
-    fn is_fit_for_problem(&self, desc: &T) -> bool;
+    fn is_fit_for_problem(&self, desc: &Self::Problem) -> bool;
 
     /// Definition of the structure variables for the problem extension.
     ///
     /// See [ProblemConstraints] for the full discussion.
-    fn extra_structure_variables(&self, desc: &T) -> BTreeMap<Self::StructureVariable, Variable>;
+    fn extra_structure_variables(
+        &self,
+        desc: &Self::Problem,
+    ) -> BTreeMap<Self::StructureVariable, Variable>;
 
     /// Definition of the structure constraints for the problem extension.
     ///
     /// See [ProblemConstraints] for the full discussion.
     fn extra_structure_constraints(
         &self,
-        desc: &T,
+        desc: &Self::Problem,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Constraint<
+            ExtraVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
         Self::StructureConstraintDesc,
     )>;
 
@@ -307,9 +319,15 @@ pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
     /// See [ProblemConstraints] for the full discussion.
     fn general_constraints(
         &self,
-        desc: &T,
+        desc: &Self::Problem,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Constraint<
+            ExtraVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
         Self::GeneralConstraintDesc,
     )>;
 
@@ -322,9 +340,14 @@ pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
     /// See [ProblemConstraints] for the full discussion.
     fn objective(
         &self,
-        _desc: &T,
-    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
-    {
+        _desc: &Self::Problem,
+    ) -> Objective<
+        ExtraVariable<
+            <Self::Problem as BaseProblem>::MainVariable,
+            <Self::Problem as BaseProblem>::StructureVariable,
+            Self::StructureVariable,
+        >,
+    > {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
     }
 
@@ -342,8 +365,13 @@ pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
     /// See [ProblemConstraints] for the full discussion.
     fn reconstruct_extra_structure_variables(
         &self,
-        desc: &T,
-        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+        desc: &Self::Problem,
+        config: &ConfigData<
+            BaseVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+            >,
+        >,
     ) -> ConfigData<Self::StructureVariable>;
 }
 
@@ -366,11 +394,9 @@ pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
 /// This also allows the introduction of weights between different objectives
 /// and thus fine-tune which schedule is preferable.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SoftConstraints<T: BaseProblem, E: ProblemConstraints<T>> {
+pub struct SoftConstraints<E: ProblemConstraints> {
     /// Original [ProblemConstraints] describing the strict constraints.
     internal_constraints: E,
-    /// Phantom type because of generic `T`.
-    phantom: std::marker::PhantomData<T>,
 }
 
 /// Structure variable used for the definition of [SoftConstraints].
@@ -421,17 +447,21 @@ impl<S: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display> std::
     }
 }
 
-impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftConstraints<T, E> {
+impl<E: ProblemConstraints> ProblemConstraints for SoftConstraints<E> {
+    type Problem = E::Problem;
     type StructureConstraintDesc =
         SoftConstraint<E::StructureConstraintDesc, E::GeneralConstraintDesc>;
     type StructureVariable = SoftVariable<E::StructureVariable, E::GeneralConstraintDesc>;
     type GeneralConstraintDesc = ();
 
-    fn is_fit_for_problem(&self, desc: &T) -> bool {
+    fn is_fit_for_problem(&self, desc: &E::Problem) -> bool {
         self.internal_constraints.is_fit_for_problem(desc)
     }
 
-    fn extra_structure_variables(&self, desc: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+    fn extra_structure_variables(
+        &self,
+        desc: &E::Problem,
+    ) -> BTreeMap<Self::StructureVariable, Variable> {
         self.internal_constraints
             .extra_structure_variables(desc)
             .into_iter()
@@ -448,9 +478,15 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn extra_structure_constraints(
         &self,
-        desc: &T,
+        desc: &E::Problem,
     ) -> Vec<(
-        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Constraint<
+            ExtraVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
         Self::StructureConstraintDesc,
     )> {
         self.internal_constraints
@@ -506,12 +542,12 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn general_constraints(
         &self,
-        _desc: &T,
+        _desc: &E::Problem,
     ) -> Vec<(
         Constraint<
             ExtraVariable<
-                <T as BaseProblem>::MainVariable,
-                <T as BaseProblem>::StructureVariable,
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
                 Self::StructureVariable,
             >,
         >,
@@ -522,9 +558,14 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn objective(
         &self,
-        desc: &T,
-    ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
-    {
+        desc: &E::Problem,
+    ) -> Objective<
+        ExtraVariable<
+            <Self::Problem as BaseProblem>::MainVariable,
+            <Self::Problem as BaseProblem>::StructureVariable,
+            Self::StructureVariable,
+        >,
+    > {
         let mut new_obj = LinExpr::constant(0.0);
 
         for (i, (_c, desc)) in self
@@ -551,8 +592,13 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
 
     fn reconstruct_extra_structure_variables(
         &self,
-        desc: &T,
-        config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+        desc: &E::Problem,
+        config: &ConfigData<
+            BaseVariable<
+                <Self::Problem as BaseProblem>::MainVariable,
+                <Self::Problem as BaseProblem>::StructureVariable,
+            >,
+        >,
     ) -> ConfigData<Self::StructureVariable> {
         let orig_structure_variables = self
             .internal_constraints
@@ -597,13 +643,12 @@ impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftCon
     }
 }
 
-impl<T: BaseProblem, E: ProblemConstraints<T>> SoftConstraints<T, E> {
+impl<E: ProblemConstraints> SoftConstraints<E> {
     /// Builds a [SoftConstraints] from an existing strict
     /// constraint set defined in a structure implementing [ProblemConstraints].
     pub fn new(constraints: E) -> Self {
         SoftConstraints {
             internal_constraints: constraints,
-            phantom: std::marker::PhantomData,
         }
     }
 }
@@ -640,7 +685,8 @@ impl<V: UsableData + std::fmt::Display> std::fmt::Display for PartialConstraint<
     }
 }
 
-impl<T: BaseProblem> ProblemConstraints<T> for FixedPartialSolution<T> {
+impl<T: BaseProblem> ProblemConstraints for FixedPartialSolution<T> {
+    type Problem = T;
     type StructureConstraintDesc = ();
     type StructureVariable = ();
     type GeneralConstraintDesc = PartialConstraint<T::MainVariable>;
