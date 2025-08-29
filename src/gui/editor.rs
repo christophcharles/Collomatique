@@ -272,7 +272,12 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
         }
         Message::SaveToFileProcessed(path_result) => match path_result {
             Ok(path) => {
+                let app_state_lock = editor_state.app_state.read_lock();
+                let Some(app_state) = &*app_state_lock else {
+                    panic!("No state to commit as initial state after saving");
+                };
                 editor_state.path = Some(path);
+                editor_state.init_state = app_state.get_logic().get_storage().clone();
                 Task::none()
             }
             Err(e) => Task::done(
