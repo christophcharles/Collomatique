@@ -191,7 +191,7 @@ async fn respond(
 
     let output = match shell_command.command {
         ShellCommand::Global(command) => {
-            collomatique::frontend::shell::execute_cli_command(command, app_state).await?
+            collomatique::frontend::shell::execute_cli_command(command, app_state)?
         }
         ShellCommand::Extra(extra_command) => match extra_command {
             ShellExtraCommand::Undo => {
@@ -255,7 +255,7 @@ async fn async_cli(
         CliCommandOrShell::Global(command) => {
             let mut app_state = AppState::new(logic);
             let output =
-                collomatique::frontend::shell::execute_cli_command(command, &mut app_state).await?;
+                collomatique::frontend::shell::execute_cli_command(command, &mut app_state)?;
             if let Some(msg) = output {
                 print!("{}", msg);
             }

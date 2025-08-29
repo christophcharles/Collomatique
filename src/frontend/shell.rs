@@ -379,7 +379,7 @@ fn find_colloscope_name(
     }
 }
 
-async fn solve_command(
+fn solve_command(
     name: Option<String>,
     force: bool,
     verbose: bool,
@@ -488,7 +488,7 @@ async fn solve_command(
     )))
 }
 
-async fn week_count_command(
+fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
@@ -587,7 +587,7 @@ async fn week_count_command(
     }
 }
 
-async fn max_interrogations_per_day_command(
+fn max_interrogations_per_day_command(
     command: MaxInterrogationsPerDayCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
@@ -633,7 +633,7 @@ async fn max_interrogations_per_day_command(
     }
 }
 
-async fn interrogations_per_week_range_command(
+fn interrogations_per_week_range_command(
     command: InterrogationsPerWeekRangeCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
@@ -710,17 +710,17 @@ async fn interrogations_per_week_range_command(
     }
 }
 
-async fn general_command(
+fn general_command(
     command: GeneralCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     match command {
-        GeneralCommand::WeekCount { command } => week_count_command(command, app_state).await,
+        GeneralCommand::WeekCount { command } => week_count_command(command, app_state),
         GeneralCommand::MaxInterrogationsPerDay { command } => {
-            max_interrogations_per_day_command(command, app_state).await
+            max_interrogations_per_day_command(command, app_state)
         }
         GeneralCommand::InterrogationsPerWeekRange { command } => {
-            interrogations_per_week_range_command(command, app_state).await
+            interrogations_per_week_range_command(command, app_state)
         }
     }
 }
@@ -734,7 +734,7 @@ fn week_pattern_to_string(week_pattern: &crate::backend::WeekPattern) -> String 
         .join(",")
 }
 
-async fn get_week_pattern(
+fn get_week_pattern(
     app_state: &mut AppState<json::JsonStore>,
     name: &str,
     week_pattern_number: Option<NonZeroUsize>,
@@ -789,7 +789,7 @@ fn predefined_week_pattern_weeks(
     }
 }
 
-async fn week_patterns_check_existing_names(
+fn week_patterns_check_existing_names(
     app_state: &mut AppState<json::JsonStore>,
     name: &str,
 ) -> Result<()> {
@@ -807,7 +807,7 @@ async fn week_patterns_check_existing_names(
     Ok(())
 }
 
-async fn week_pattern_command(
+fn week_pattern_command(
     command: WeekPatternCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
@@ -821,7 +821,7 @@ async fn week_pattern_command(
             force,
         } => {
             if !force {
-                week_patterns_check_existing_names(app_state, &name).await?;
+                week_patterns_check_existing_names(app_state, &name)?;
             }
             let general_data = app_state.general_data_get()?;
 
@@ -857,8 +857,7 @@ async fn week_pattern_command(
         } => {
             use crate::backend::IdError;
 
-            let (handle, _week_pattern) =
-                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let (handle, _week_pattern) = get_week_pattern(app_state, &name, week_pattern_number)?;
             let dependancies =
                 app_state
                     .week_patterns_check_can_remove(handle)
@@ -901,11 +900,11 @@ async fn week_pattern_command(
             force,
         } => {
             if !force {
-                week_patterns_check_existing_names(app_state, &new_name).await?;
+                week_patterns_check_existing_names(app_state, &new_name)?;
             }
 
             let (handle, week_pattern) =
-                get_week_pattern(app_state, &old_name, week_pattern_number).await?;
+                get_week_pattern(app_state, &old_name, week_pattern_number)?;
 
             let new_week_pattern = WeekPattern {
                 name: new_name,
@@ -948,8 +947,7 @@ async fn week_pattern_command(
             name,
             week_pattern_number,
         } => {
-            let (_id, week_pattern) =
-                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let (_id, week_pattern) = get_week_pattern(app_state, &name, week_pattern_number)?;
             Ok(Some(week_pattern_to_string(&week_pattern)))
         }
         WeekPatternCommand::Fill {
@@ -957,8 +955,7 @@ async fn week_pattern_command(
             week_pattern_number,
             pattern,
         } => {
-            let (handle, _week_pattern) =
-                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let (handle, _week_pattern) = get_week_pattern(app_state, &name, week_pattern_number)?;
 
             let general_data = app_state.general_data_get()?;
             let new_week_pattern = WeekPattern {
@@ -985,8 +982,7 @@ async fn week_pattern_command(
             name,
             week_pattern_number,
         } => {
-            let (handle, _week_pattern) =
-                get_week_pattern(app_state, &name, week_pattern_number).await?;
+            let (handle, _week_pattern) = get_week_pattern(app_state, &name, week_pattern_number)?;
 
             let new_week_pattern = WeekPattern {
                 name,
@@ -1023,7 +1019,7 @@ async fn week_pattern_command(
             }
 
             let (handle, mut week_pattern) =
-                get_week_pattern(app_state, &name, week_pattern_number).await?;
+                get_week_pattern(app_state, &name, week_pattern_number)?;
 
             week_pattern
                 .weeks
@@ -1052,7 +1048,7 @@ async fn week_pattern_command(
             use crate::backend::Week;
 
             let (handle, mut week_pattern) =
-                get_week_pattern(app_state, &name, week_pattern_number).await?;
+                get_week_pattern(app_state, &name, week_pattern_number)?;
 
             let weeks_to_remove: BTreeSet<_> =
                 weeks.into_iter().map(|w| Week::new(w.get() - 1)).collect();
@@ -1081,7 +1077,7 @@ async fn week_pattern_command(
     }
 }
 
-async fn get_colloscope(
+fn get_colloscope(
     app_state: &mut AppState<json::JsonStore>,
     name: &str,
     colloscope_number: Option<NonZeroUsize>,
@@ -1124,7 +1120,7 @@ async fn get_colloscope(
     Ok(output.clone())
 }
 
-async fn colloscopes_check_existing_names(
+fn colloscopes_check_existing_names(
     app_state: &mut AppState<json::JsonStore>,
     name: &str,
 ) -> Result<()> {
@@ -1142,7 +1138,7 @@ async fn colloscopes_check_existing_names(
     Ok(())
 }
 
-async fn colloscope_command(
+fn colloscope_command(
     command: ColloscopeCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
@@ -1154,7 +1150,7 @@ async fn colloscope_command(
             name,
             colloscope_number,
         } => {
-            let (handle, _colloscope) = get_colloscope(app_state, &name, colloscope_number).await?;
+            let (handle, _colloscope) = get_colloscope(app_state, &name, colloscope_number)?;
 
             if let Err(e) =
                 app_state.apply(Operation::Colloscopes(ColloscopesOperation::Remove(handle)))
@@ -1174,11 +1170,10 @@ async fn colloscope_command(
             force,
         } => {
             if !force {
-                colloscopes_check_existing_names(app_state, &new_name).await?;
+                colloscopes_check_existing_names(app_state, &new_name)?;
             }
 
-            let (handle, colloscope) =
-                get_colloscope(app_state, &old_name, colloscope_number).await?;
+            let (handle, colloscope) = get_colloscope(app_state, &old_name, colloscope_number)?;
 
             let new_colloscope = Colloscope {
                 name: new_name,
@@ -1225,7 +1220,7 @@ async fn colloscope_command(
             colloscope_number,
             output,
         } => {
-            let (_handle, colloscope) = get_colloscope(app_state, &name, colloscope_number).await?;
+            let (_handle, colloscope) = get_colloscope(app_state, &name, colloscope_number)?;
 
             let teachers = app_state.teachers_get_all()?;
             let subjects = app_state.subjects_get_all()?;
@@ -1246,7 +1241,7 @@ async fn colloscope_command(
     }
 }
 
-async fn python_command(
+fn python_command(
     command: PythonCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
@@ -1347,14 +1342,14 @@ async fn python_command(
     }
 }
 
-pub async fn execute_cli_command(
+pub fn execute_cli_command(
     command: CliCommand,
     app_state: &mut AppState<json::JsonStore>,
 ) -> Result<Option<String>> {
     match command {
-        CliCommand::General { command } => general_command(command, app_state).await,
-        CliCommand::WeekPatterns { command } => week_pattern_command(command, app_state).await,
-        CliCommand::Colloscopes { command } => colloscope_command(command, app_state).await,
+        CliCommand::General { command } => general_command(command, app_state),
+        CliCommand::WeekPatterns { command } => week_pattern_command(command, app_state),
+        CliCommand::Colloscopes { command } => colloscope_command(command, app_state),
         CliCommand::Solve {
             name,
             force,
@@ -1363,19 +1358,16 @@ pub async fn execute_cli_command(
             max_time,
             #[cfg(feature = "highs")]
             highs,
-        } => {
-            solve_command(
-                name,
-                force,
-                verbose,
-                quick,
-                max_time,
-                #[cfg(feature = "highs")]
-                highs,
-                app_state,
-            )
-            .await
-        }
-        CliCommand::Python { command } => python_command(command, app_state).await,
+        } => solve_command(
+            name,
+            force,
+            verbose,
+            quick,
+            max_time,
+            #[cfg(feature = "highs")]
+            highs,
+            app_state,
+        ),
+        CliCommand::Python { command } => python_command(command, app_state),
     }
 }
