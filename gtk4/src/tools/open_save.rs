@@ -1,4 +1,3 @@
-use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -10,9 +9,9 @@ pub enum DefaultSaveFile {
 
 pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
     let mut dialog = rfd::AsyncFileDialog::new()
-        .set_title("Enregistrer sous...")
+        .set_title("Enregistrer sous")
         .set_can_create_directories(true)
-        .add_filter("Fichiers collomatique", &["collomatique"])
+        .add_filter("Fichiers collomatique (*.collomatique)", &["collomatique"])
         .add_filter("Tous les fichiers", &["*"]);
 
     match default_name {
@@ -37,37 +36,25 @@ pub async fn save_dialog(default_name: DefaultSaveFile) -> Option<PathBuf> {
 }
 
 pub async fn open_dialog() -> Option<PathBuf> {
-    SelectedFiles::open_file()
-        .title("Ouvrir")
-        .accept_label("Ouvrir")
-        .filter(FileFilter::new("Fichiers collomatique (*.collomatique)").glob("*.collomatique"))
-        .filter(FileFilter::new("Tous les fichiers").glob("*"))
-        .modal(true)
-        .send()
-        .await
-        .ok()?
-        .response()
-        .ok()?
-        .uris()
-        .first()?
-        .to_file_path()
-        .ok()
+    let dialog = rfd::AsyncFileDialog::new()
+        .set_title("Ouvrir")
+        .set_can_create_directories(false)
+        .add_filter("Fichiers collomatique (*.collomatique)", &["collomatique"])
+        .add_filter("Tous les fichiers", &["*"]);
+
+    let file = dialog.pick_file().await;
+
+    file.map(|handle| handle.path().to_owned())
 }
 
 pub async fn open_python_dialog() -> Option<PathBuf> {
-    SelectedFiles::open_file()
-        .title("Ouvrir un script")
-        .accept_label("Ouvrir")
-        .filter(FileFilter::new("Scripts Python (*.py)").glob("*.py"))
-        .filter(FileFilter::new("Tous les fichiers").glob("*"))
-        .modal(true)
-        .send()
-        .await
-        .ok()?
-        .response()
-        .ok()?
-        .uris()
-        .first()?
-        .to_file_path()
-        .ok()
+    let dialog = rfd::AsyncFileDialog::new()
+        .set_title("Ouvrir un script")
+        .set_can_create_directories(false)
+        .add_filter("Scripts Python (*.py)", &["py"])
+        .add_filter("Tous les fichiers", &["*"]);
+
+    let file = dialog.pick_file().await;
+
+    file.map(|handle| handle.path().to_owned())
 }
