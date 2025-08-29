@@ -1203,7 +1203,10 @@ impl reedline::Completer for ReedCompleter {
         let arg_index = args.len() - 1;
         let span = Span::new(pos - args[arg_index].len(), pos);
 
-        let Ok(candidates) = clap_complete::dynamic::complete(&mut cmd, args, arg_index, None)
+        let current_dir = std::env::current_dir().ok();
+        let current_dir_ref = current_dir.as_ref().map(|x| x.as_path());
+        let Ok(candidates) =
+            clap_complete::dynamic::complete(&mut cmd, args, arg_index, current_dir_ref)
         else {
             return vec![];
         };
