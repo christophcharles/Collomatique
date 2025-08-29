@@ -144,6 +144,7 @@ CREATE TABLE "time_slots" (
 	"start_day"	INTEGER NOT NULL,
 	"start_time"	INTEGER NOT NULL,
 	"week_pattern_id"	INTEGER NOT NULL,
+    "room"	TEXT NOT NULL,
 	FOREIGN KEY("week_pattern_id") REFERENCES "week_patterns"("week_pattern_id"),
 	PRIMARY KEY("time_slot_id" AUTOINCREMENT),
 	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
