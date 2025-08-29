@@ -237,23 +237,17 @@ impl EditorPanel {
             .unwrap();
     }
 
-    fn inner_op_to_panel_number(
-        op: &collomatique_state_colloscopes::AnnotatedOp,
-    ) -> Option<PanelNumbers> {
+    fn op_cat_to_panel_number(op: &collomatique_core::ops::OpCategory) -> Option<PanelNumbers> {
         match op {
-            collomatique_state_colloscopes::AnnotatedOp::Period(_) => {
+            collomatique_core::ops::OpCategory::GeneralPlanning => {
                 Some(PanelNumbers::GeneralPlanning)
             }
-            collomatique_state_colloscopes::AnnotatedOp::Subject(_) => Some(PanelNumbers::Subjects),
-            collomatique_state_colloscopes::AnnotatedOp::Teacher(_) => Some(PanelNumbers::Teachers),
-            collomatique_state_colloscopes::AnnotatedOp::Student(_) => Some(PanelNumbers::Students),
-            collomatique_state_colloscopes::AnnotatedOp::Assignment(_) => {
-                Some(PanelNumbers::Assignments)
-            }
-            collomatique_state_colloscopes::AnnotatedOp::WeekPattern(_) => {
-                Some(PanelNumbers::WeekPatterns)
-            }
-            collomatique_state_colloscopes::AnnotatedOp::Slot(_) => None,
+            collomatique_core::ops::OpCategory::Subjects => Some(PanelNumbers::Subjects),
+            collomatique_core::ops::OpCategory::Teachers => Some(PanelNumbers::Teachers),
+            collomatique_core::ops::OpCategory::Students => Some(PanelNumbers::Students),
+            collomatique_core::ops::OpCategory::Assignments => Some(PanelNumbers::Assignments),
+            collomatique_core::ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
+            collomatique_core::ops::OpCategory::Slots => None,
         }
     }
 
@@ -602,22 +596,18 @@ impl Component for EditorPanel {
             }
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
-                    let aggregated_op = self.data.undo().expect("Should be able to undo");
-                    let first_action = aggregated_op.inner().first();
-                    self.show_particular_panel = first_action
-                        .map(|x| Self::inner_op_to_panel_number(x.inner()))
-                        .flatten();
+                    let (cat, _) = self.data.get_undo_name().expect("Should be able to undo");
+                    self.show_particular_panel = Self::op_cat_to_panel_number(&cat);
+                    self.data.undo().expect("Should be able to undo");
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
             }
             EditorInput::RedoClicked => {
                 if self.data.can_redo() {
-                    let aggregated_op = self.data.redo().expect("Should be able to undo");
-                    let last_action = aggregated_op.inner().last();
-                    self.show_particular_panel = last_action
-                        .map(|x| Self::inner_op_to_panel_number(x.inner()))
-                        .flatten();
+                    let (cat, _) = self.data.get_redo_name().expect("Should be able to redo");
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
+                    self.data.redo().expect("Should be able to redo");
                     self.dirty = true;
                     self.send_msg_for_interface_update(sender);
                 }
@@ -688,11 +678,8 @@ impl Component for EditorPanel {
             }
             EditorInput::NewStateFromScript(new_data) => {
                 self.data = new_data;
-                if let Some(last_op) = self.data.get_last_op() {
-                    let last_action = last_op.inner().last();
-                    self.show_particular_panel = last_action
-                        .map(|x| Self::inner_op_to_panel_number(x.inner()))
-                        .flatten();
+                if let Some((cat, _desc)) = self.data.get_undo_name() {
+                    self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                 }
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
