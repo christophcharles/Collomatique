@@ -1,166 +1,26 @@
 #[cfg(test)]
 mod tests;
 
+pub mod heuristics;
+
 use crate::ilp::{Config, FeasableConfig};
 
 use super::VariableName;
 
-#[derive(Debug, Clone, Default)]
-pub struct Solver {}
+#[derive(Debug, Clone)]
+pub struct Solver<H: heuristics::Heuristic> {
+    heuristic: H,
+}
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-impl Solver {
-    pub fn new() -> Self {
-        Solver {}
-    }
-
-    fn is_var_helpful<V: VariableName>(
-        constraint: &crate::ilp::linexpr::Constraint<V>,
-        lhs: i32,
-        coef: i32,
-        current_val: bool,
-    ) -> bool {
-        use crate::ilp::linexpr::Sign;
-        match constraint.get_sign() {
-            Sign::LessThan => {
-                if current_val == true {
-                    coef > 0
-                } else {
-                    coef < 0
-                }
-            }
-            Sign::Equals => {
-                if current_val == true {
-                    coef * lhs > 0
-                } else {
-                    coef * lhs < 0
-                }
-            }
-        }
-    }
-
-    fn compute_help<'a, V: VariableName>(
-        config: &Config<'a, V>,
-        available_variables: &BTreeSet<V>,
-        constraint: &crate::ilp::linexpr::Constraint<V>,
-        lhs: i32,
-    ) -> i32 {
-        let variables = constraint.variables();
-        let mut help = 0;
-        for var in variables.intersection(available_variables) {
-            let coef = constraint.get_var(var).expect("Variable should be valid");
-            let current_val = config.get(var).expect("Variable should be valid");
-
-            if Self::is_var_helpful(constraint, lhs, coef, current_val) {
-                help += coef.abs();
-            }
-        }
-        help
-    }
-
-    fn compute_help_scores<'a, V: VariableName>(
-        config: &Config<'a, V>,
-        available_variables: &BTreeSet<V>,
-    ) -> Result<BTreeMap<V, ordered_float::NotNan<f64>>, Option<V>> {
-        let lhs_map = config.compute_lhs();
-
-        use ordered_float::NotNan;
-        let mut scores = BTreeMap::<V, NotNan<f64>>::new();
-
-        for (c, lhs) in &lhs_map {
-            use crate::ilp::linexpr::Sign;
-            let infeasability = match c.get_sign() {
-                Sign::LessThan => (*lhs).max(0),
-                Sign::Equals => (*lhs).abs(),
-            };
-            assert!(infeasability >= 0);
-
-            if infeasability == 0 {
-                continue;
-            }
-
-            let help = Self::compute_help(config, available_variables, c, *lhs);
-            assert!(help >= 0);
-
-            if infeasability > help {
-                return Err(None);
-            }
-
-            let inf_f64 = NotNan::new(f64::from(infeasability)).unwrap();
-            let help_f64 = NotNan::new(f64::from(help)).unwrap();
-
-            let k = inf_f64 / help_f64;
-
-            let variables = c.variables();
-            for var in variables.intersection(available_variables) {
-                let coef = c.get_var(var).expect("Variable should be valid");
-                let current_val = config.get(var).expect("Variable should be valid");
-                if !Self::is_var_helpful(c, *lhs, coef, current_val) {
-                    continue;
-                }
-
-                let coef_abs = coef.abs();
-                if infeasability > help - coef_abs {
-                    return Err(Some(var.clone()));
-                }
-
-                let coef_f64 = NotNan::new(f64::from(coef_abs)).unwrap();
-                let temp_score = k * coef_f64;
-                match scores.get_mut(var) {
-                    Some(score) => {
-                        *score += temp_score;
-                    }
-                    None => {
-                        scores.insert(var.clone(), temp_score);
-                    }
-                }
-            }
-        }
-
-        Ok(scores)
-    }
-
-    fn choose_variable<'a, V: VariableName>(
-        config: &Config<'a, V>,
-        available_variables: &BTreeSet<V>,
-        previous_var: Option<&V>,
-    ) -> Option<V> {
-        let h_s = Self::compute_help_scores(config, available_variables);
-        match h_s {
-            Ok(scores) => {
-                let mut scores_vec: Vec<_> = scores.into_iter().collect();
-                scores_vec.sort_by_key(|(_v, s)| *s);
-                let scores_vec: Vec<_> = scores_vec.into_iter().map(|(v, _s)| v).collect();
-
-                match previous_var {
-                    Some(var) => {
-                        let mut iterator = scores_vec.iter();
-                        while let Some(v) = iterator.next_back() {
-                            if *v == *var {
-                                break;
-                            }
-                        }
-                        iterator.next_back().cloned()
-                    }
-                    None => scores_vec.last().cloned(),
-                }
-            }
-            Err(opt_v) => match opt_v {
-                None => None,
-                Some(v) => {
-                    if let Some(pv) = previous_var {
-                        if *pv == v {
-                            return None;
-                        }
-                    }
-                    Some(v)
-                }
-            },
-        }
+impl<H: heuristics::Heuristic> Solver<H> {
+    pub fn new(heuristic: H) -> Self {
+        Solver { heuristic }
     }
 
     fn compute_next_step<'a, V: VariableName>(
+        &self,
         config: &Config<'a, V>,
         available_variables: &BTreeSet<V>,
     ) -> NextStep<V> {
@@ -168,18 +28,26 @@ impl Solver {
             return NextStep::Solved;
         }
 
-        match Self::choose_variable(config, available_variables, None) {
-            Some(var) => NextStep::StepInto(var),
-            None => NextStep::Backtrack,
+        let vars = self
+            .heuristic
+            .compute_guess_list(config, available_variables);
+        if vars.is_empty() {
+            NextStep::Backtrack
+        } else {
+            NextStep::StepInto(vars)
         }
     }
 
     fn select_variable<'a, V: VariableName>(
         config: &mut Config<'a, V>,
         available_variables: &mut BTreeSet<V>,
-        choice_stack: &mut Vec<V>,
-        var: V,
+        guess_list_stack: &Vec<(Vec<V>, usize)>,
     ) {
+        let (vars, num) = guess_list_stack
+            .last()
+            .expect("There should be a guess to select");
+        let var = vars.get(*num).expect("guess_list cursor should be valid");
+
         let current_val = config
             .get(&var)
             .expect("Variable should be available to get");
@@ -187,40 +55,46 @@ impl Solver {
             .set(&var, !current_val)
             .expect("Variable should be available to set");
         available_variables.remove(&var);
-        choice_stack.push(var);
     }
 
     fn unselect_variable<'a, V: VariableName>(
         config: &mut Config<'a, V>,
         available_variables: &mut BTreeSet<V>,
-        var: V,
+        guess_list_stack: &Vec<(Vec<V>, usize)>,
     ) {
+        let (vars, num) = guess_list_stack
+            .last()
+            .expect("There should be a guess to unselect");
+        let var = vars.get(*num).expect("guess_list cursor should be valid");
+
         let current_val = config
             .get(&var)
             .expect("Variable should be available to get");
         config
             .set(&var, !current_val)
             .expect("Variable should be available to set");
-        available_variables.insert(var);
+        available_variables.insert(var.clone());
     }
 
     fn backtrack<'a, V: VariableName>(
+        &self,
         config: &mut Config<'a, V>,
         available_variables: &mut BTreeSet<V>,
-        choice_stack: &mut Vec<V>,
+        guess_list_stack: &mut Vec<(Vec<V>, usize)>,
     ) -> bool {
         loop {
-            match choice_stack.pop() {
-                Some(old_var) => {
-                    Self::unselect_variable(config, available_variables, old_var.clone());
+            match guess_list_stack.last() {
+                Some((guess_list, current_num)) => {
+                    Self::unselect_variable(config, available_variables, &*guess_list_stack);
 
-                    if let Some(new_var) =
-                        Self::choose_variable(config, available_variables, Some(&old_var))
-                    {
-                        Self::select_variable(config, available_variables, choice_stack, new_var);
+                    assert!(*current_num < guess_list.len());
+                    if *current_num != guess_list.len() - 1 {
+                        guess_list_stack.last_mut().unwrap().1 += 1;
+                        Self::select_variable(config, available_variables, guess_list_stack);
                         return true;
+                    } else {
+                        guess_list_stack.pop();
                     }
-                    // No else clause: if no more variables, we loop and backtrack further
                 }
                 None => {
                     return false;
@@ -231,18 +105,19 @@ impl Solver {
 }
 
 enum NextStep<V: VariableName> {
-    StepInto(V),
+    StepInto(Vec<V>),
     Backtrack,
     Solved,
 }
 
 use super::FeasabilitySolver;
 
-impl<V: VariableName> FeasabilitySolver<V> for Solver {
-    fn restore_feasability_with_origin<'a>(
+impl<V: VariableName, H: heuristics::Heuristic> FeasabilitySolver<V> for Solver<H> {
+    fn restore_feasability_with_origin_and_max_steps<'a>(
         &self,
         config: &Config<'a, V>,
         origin: Option<&FeasableConfig<'a, V>>,
+        mut max_steps: Option<usize>,
     ) -> Option<FeasableConfig<'a, V>> {
         let mut available_variables = match origin {
             Some(o) => config
@@ -256,23 +131,32 @@ impl<V: VariableName> FeasabilitySolver<V> for Solver {
         };
 
         let mut temp_config = config.clone();
-        let mut choice_stack = vec![];
+        let mut guess_list_stack = vec![];
         loop {
-            match Self::compute_next_step(&temp_config, &available_variables) {
+            if let Some(ms) = max_steps {
+                if ms == 0 {
+                    return None;
+                } else {
+                    max_steps = Some(ms - 1);
+                }
+            }
+            match self.compute_next_step(&temp_config, &available_variables) {
                 NextStep::Solved => return Some(unsafe { temp_config.into_feasable_unchecked() }),
-                NextStep::StepInto(var) => {
+                NextStep::StepInto(vars) => {
+                    assert!(!vars.is_empty());
+
+                    guess_list_stack.push((vars, 0));
                     Self::select_variable(
                         &mut temp_config,
                         &mut available_variables,
-                        &mut choice_stack,
-                        var,
+                        &guess_list_stack,
                     );
                 }
                 NextStep::Backtrack => {
-                    if !Self::backtrack(
+                    if !self.backtrack(
                         &mut temp_config,
                         &mut available_variables,
-                        &mut choice_stack,
+                        &mut guess_list_stack,
                     ) {
                         return None;
                     }

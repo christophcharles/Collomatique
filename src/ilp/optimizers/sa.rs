@@ -20,6 +20,7 @@ pub struct Optimizer<'a, V: VariableName> {
     problem: &'a Problem<V>,
     init_config: Config<'a, V>,
     temp_profile: TemperatureFn,
+    max_steps: Option<usize>,
 }
 
 impl<'a, V: VariableName> Optimizer<'a, V> {
@@ -30,6 +31,7 @@ impl<'a, V: VariableName> Optimizer<'a, V> {
             problem,
             init_config,
             temp_profile: TemperatureFn::default(),
+            max_steps: None,
         }
     }
 
@@ -39,6 +41,10 @@ impl<'a, V: VariableName> Optimizer<'a, V> {
 
     pub fn set_temp_profile(&mut self, temp_profile: TemperatureFn) {
         self.temp_profile = temp_profile;
+    }
+
+    pub fn set_max_steps(&mut self, max_steps: Option<usize>) {
+        self.max_steps = max_steps;
     }
 
     pub fn iterate<'b, 'c, R: RandomGen, S: FeasabilitySolver<V>>(
@@ -54,6 +60,7 @@ impl<'a, V: VariableName> Optimizer<'a, V> {
             current_config: self.init_config.clone(),
             k: 0,
             temp_profile: self.temp_profile.clone(),
+            max_steps: self.max_steps.clone(),
         }
     }
 }
@@ -72,6 +79,7 @@ pub struct OptimizerIterator<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: F
 
     k: usize,
     temp_profile: TemperatureFn,
+    max_steps: Option<usize>,
 }
 
 impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Iterator
@@ -87,10 +95,11 @@ impl<'b, 'a: 'b, 'c, V: VariableName, R: RandomGen, S: FeasabilitySolver<V>> Ite
 
         // If we can't restore then the iterator stops
         // So "None" should be propagated upwards
-        let config = Rc::new(
-            self.solver
-                .restore_feasability_with_origin(&self.current_config, origin)?,
-        );
+        let config = Rc::new(self.solver.restore_feasability_with_origin_and_max_steps(
+            &self.current_config,
+            origin,
+            self.max_steps,
+        )?);
 
         let config_cost = (self.optimizer.problem.eval_fn)(config.as_ref());
 
