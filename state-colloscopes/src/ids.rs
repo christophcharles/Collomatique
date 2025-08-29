@@ -10,7 +10,7 @@ use collomatique_state::tools;
 ///
 /// Every student gets a unique ID. IDs then identify students
 /// internally.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StudentId(u64);
 
 impl StudentId {
@@ -28,7 +28,7 @@ impl StudentId {
 ///
 /// Every period gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PeriodId(u64);
 
 impl PeriodId {

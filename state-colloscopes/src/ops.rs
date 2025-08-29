@@ -9,6 +9,8 @@
 //! [AnnotatedOp] is the corresponding annotated type. See [collomatique_state::history]
 //! for a full discussion of annotation.
 
+use crate::ids::PeriodId;
+
 use super::*;
 
 /// Operation enumeration
@@ -18,6 +20,8 @@ use super::*;
 pub enum Op {
     /// Operation on the student list
     Student(StudentOp),
+    /// Operation on periods
+    Period(PeriodOp),
 }
 
 impl Operation for Op {}
@@ -36,6 +40,24 @@ pub enum StudentOp {
     Update(StudentId, PersonWithContact),
 }
 
+/// Period operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// periods we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PeriodOp {
+    /// Set the start of periods on a specific week
+    ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
+    /// Add a new period at the beginning
+    AddFront(Vec<bool>),
+    /// Add a period after an existing period
+    AddAfter(PeriodId, Vec<bool>),
+    /// Remove an existing period
+    Remove(PeriodId),
+    /// Update an existing period
+    Update(PeriodId, Vec<bool>),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -47,6 +69,8 @@ pub enum StudentOp {
 pub enum AnnotatedOp {
     /// Operation on the student list
     Student(AnnotatedStudentOp),
+    /// Operation on the periods
+    Period(AnnotatedPeriodOp),
 }
 
 /// Student annotated operation enumeration
@@ -66,6 +90,28 @@ pub enum AnnotatedStudentOp {
     Update(StudentId, PersonWithContact),
 }
 
+/// Period annotated operation enumeration
+///
+/// Compared to [PeriodOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedPeriodOp {
+    /// Set the start of periods on a specific week
+    ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
+    /// Add a new period at the beginning
+    AddFront(PeriodId, Vec<bool>),
+    /// Add a period after an existing period
+    /// First parameter is the period id for the new period
+    AddAfter(PeriodId, PeriodId, Vec<bool>),
+    /// Remove an existing period
+    Remove(PeriodId),
+    /// Update an existing period
+    Update(PeriodId, Vec<bool>),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -83,6 +129,9 @@ impl AnnotatedOp {
             Op::Student(student_op) => {
                 AnnotatedOp::Student(AnnotatedStudentOp::annotate(student_op, id_issuer))
             }
+            Op::Period(period_op) => {
+                AnnotatedOp::Period(AnnotatedPeriodOp::annotate(period_op, id_issuer))
+            }
         }
     }
 }
@@ -98,6 +147,25 @@ impl AnnotatedStudentOp {
             StudentOp::Update(student_id, student) => {
                 AnnotatedStudentOp::Update(student_id, student)
             }
+        }
+    }
+}
+
+impl AnnotatedPeriodOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [PeriodOp].
+    fn annotate(period_op: PeriodOp, id_issuer: &mut IdIssuer) -> AnnotatedPeriodOp {
+        match period_op {
+            PeriodOp::ChangeStartDate(date) => AnnotatedPeriodOp::ChangeStartDate(date),
+            PeriodOp::AddFront(desc) => {
+                AnnotatedPeriodOp::AddFront(id_issuer.get_period_id(), desc)
+            }
+            PeriodOp::AddAfter(after_id, desc) => {
+                AnnotatedPeriodOp::AddAfter(id_issuer.get_period_id(), after_id, desc)
+            }
+            PeriodOp::Remove(period_id) => AnnotatedPeriodOp::Remove(period_id),
+            PeriodOp::Update(period_id, desc) => AnnotatedPeriodOp::Update(period_id, desc),
         }
     }
 }
