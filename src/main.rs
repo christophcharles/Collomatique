@@ -3,16 +3,20 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::num::{NonZeroU32, NonZeroUsize};
 
 #[derive(Debug, Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about,
+    after_help = "If no command is provided, an interactive shell is opened."
+)]
+/// Collomatique cli tool
 struct Cli {
     /// Create new database - won't override an existing one
     #[arg(short, long, default_value_t = false)]
     create: bool,
     /// Sqlite file (to open or create) that contains the database
     db: std::path::PathBuf,
-    /// Command to run on the database
     #[command(subcommand)]
-    command: CliCommand,
+    command: Option<CliCommand>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -36,8 +40,6 @@ enum CliCommand {
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
     },
-    /// Open interactive shell
-    Shell,
 }
 
 #[derive(Debug, Parser)]
@@ -609,7 +611,12 @@ async fn main() -> Result<()> {
     let logic = Logic::new(connect_db(args.create, args.db.as_path()).await?);
     let mut app_state = AppState::new(logic);
 
-    match args.command {
+    let Some(command) = args.command else {
+        shell_command(&mut app_state).await?;
+        return Ok(());
+    };
+
+    match command {
         CliCommand::General { command } => general_command(command, &mut app_state, false).await?,
         CliCommand::WeekPatterns { command } => {
             week_pattern_command(command, &mut app_state, false).await?
@@ -618,7 +625,6 @@ async fn main() -> Result<()> {
             steps,
             thread_count,
         } => solve_command(steps, thread_count, &mut app_state, false).await?,
-        CliCommand::Shell => shell_command(&mut app_state).await?,
     }
     Ok(())
 }
