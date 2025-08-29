@@ -158,7 +158,6 @@ where
 {
     base: T,
     id_issuer: IdIssuer,
-    phantom_v: std::marker::PhantomData<V>,
     phantom_p: std::marker::PhantomData<P>,
 }
 
@@ -172,7 +171,6 @@ where
         ProblemBuilder {
             base,
             id_issuer: IdIssuer::new(),
-            phantom_v: std::marker::PhantomData,
             phantom_p: std::marker::PhantomData,
         }
     }
