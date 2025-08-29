@@ -184,24 +184,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
         }
     }
 
-    pub fn simplify_trivial_constraints(self) -> ProblemBuilder<V, P> {
-        let (constraints, constants) = Self::iterate_simplify(&self.constraints);
-
-        let variables: BTreeSet<_> = self
-            .variables
-            .iter()
-            .filter(|&x| !constants.contains_key(x))
-            .cloned()
-            .collect();
-
-        ProblemBuilder {
-            constraints,
-            eval_fn: self.eval_fn,
-            variables,
-            constants,
-        }
-    }
-
     pub fn filter_variables<F>(self, mut predicate: F) -> ProblemBuilder<V, P>
     where
         F: FnMut(&V) -> bool,
@@ -225,61 +207,6 @@ impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
             variables,
             constants,
         }
-    }
-}
-
-impl<V: VariableName, P: ProblemRepr<V>> ProblemBuilder<V, P> {
-    fn simple_simplify(
-        constraints: &mut BTreeSet<linexpr::Constraint<V>>,
-    ) -> linexpr::SimpleSolution<V> {
-        let mut attr_opt = None;
-
-        for constraint in constraints.iter() {
-            use linexpr::SimpleSolution;
-            match constraint.simple_solve() {
-                SimpleSolution::NoSolution => {
-                    return SimpleSolution::NoSolution;
-                }
-                SimpleSolution::NotSimpleSolvable => {}
-                SimpleSolution::Solution(attr) => {
-                    attr_opt = Some((constraint.clone(), attr));
-                    break;
-                }
-            }
-        }
-
-        if let Some((c, attr)) = attr_opt {
-            constraints.remove(&c);
-
-            if let Some((v, val)) = &attr {
-                let attr_map = BTreeMap::from([(v.clone(), *val)]);
-                let output: BTreeSet<_> =
-                    constraints.iter().map(|c| c.reduced(&attr_map)).collect();
-
-                *constraints = output;
-            }
-
-            linexpr::SimpleSolution::Solution(attr)
-        } else {
-            linexpr::SimpleSolution::NotSimpleSolvable
-        }
-    }
-
-    fn iterate_simplify(
-        constraints: &BTreeSet<linexpr::Constraint<V>>,
-    ) -> (BTreeSet<linexpr::Constraint<V>>, BTreeMap<V, bool>) {
-        let mut constraints_output = constraints.clone();
-        let mut vars_output = BTreeMap::new();
-
-        while let linexpr::SimpleSolution::Solution(attr) =
-            Self::simple_simplify(&mut constraints_output)
-        {
-            if let Some((v, val)) = attr {
-                vars_output.insert(v, val);
-            }
-        }
-
-        (constraints_output, vars_output)
     }
 }
 
