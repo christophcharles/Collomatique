@@ -36,6 +36,8 @@ pub enum Op {
     Incompat(IncompatOp),
     /// Operation on group lists
     GroupList(GroupListOp),
+    /// Operation on rules
+    Rule(RuleOp),
 }
 
 impl Operation for Op {}
@@ -176,6 +178,20 @@ pub enum GroupListOp {
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
 
+/// Rule operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// rules we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuleOp {
+    /// Add a rule
+    Add(rules::Rule),
+    /// Remove an existing rule
+    Remove(RuleId),
+    /// Update a rule
+    Update(RuleId, rules::Rule),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -203,6 +219,8 @@ pub enum AnnotatedOp {
     Incompat(AnnotatedIncompatOp),
     /// Operation on group lists
     GroupList(AnnotatedGroupListOp),
+    /// Operation on rules
+    Rule(AnnotatedRuleOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -256,6 +274,12 @@ impl From<AnnotatedIncompatOp> for AnnotatedOp {
 impl From<AnnotatedGroupListOp> for AnnotatedOp {
     fn from(value: AnnotatedGroupListOp) -> Self {
         AnnotatedOp::GroupList(value)
+    }
+}
+
+impl From<AnnotatedRuleOp> for AnnotatedOp {
+    fn from(value: AnnotatedRuleOp) -> Self {
+        AnnotatedOp::Rule(value)
     }
 }
 
@@ -429,6 +453,24 @@ pub enum AnnotatedGroupListOp {
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
 
+/// Rule operation enumeration
+///
+/// Compared to [RuleOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedRuleOp {
+    /// Add a rule
+    /// First parameter is the rule id for the new rule
+    Add(RuleId, rules::Rule),
+    /// Remove an existing rule
+    Remove(RuleId),
+    /// Update a rule
+    Update(RuleId, rules::Rule),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -477,6 +519,10 @@ impl AnnotatedOp {
             }
             Op::GroupList(group_list_op) => {
                 let (op, id) = AnnotatedGroupListOp::annotate(group_list_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Rule(rule_op) => {
+                let (op, id) = AnnotatedRuleOp::annotate(rule_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
         }
@@ -683,6 +729,22 @@ impl AnnotatedGroupListOp {
                 AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id),
                 None,
             ),
+        }
+    }
+}
+
+impl AnnotatedRuleOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [RuleOp].
+    fn annotate(rule_op: RuleOp, id_issuer: &mut IdIssuer) -> (AnnotatedRuleOp, Option<RuleId>) {
+        match rule_op {
+            RuleOp::Add(rule) => {
+                let new_id = id_issuer.get_rule_id();
+                (AnnotatedRuleOp::Add(new_id, rule), Some(new_id))
+            }
+            RuleOp::Remove(rule_id) => (AnnotatedRuleOp::Remove(rule_id), None),
+            RuleOp::Update(rule_id, rule) => (AnnotatedRuleOp::Update(rule_id, rule), None),
         }
     }
 }

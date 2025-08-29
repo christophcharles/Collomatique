@@ -11,6 +11,7 @@ use group_lists::GroupListsExternalData;
 use incompats::Incompats;
 use incompats::IncompatsExternalData;
 use ops::AnnotatedGroupListOp;
+use ops::AnnotatedRuleOp;
 use periods::{Periods, PeriodsExternalData};
 use rules::Rules;
 use rules::RulesExternalData;
@@ -466,6 +467,14 @@ pub enum GroupListError {
 /// These errors can be returned when trying to modify [Data] with a rule op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum RuleError {
+    /// rule id is invalid
+    #[error("invalid rule id ({0:?})")]
+    InvalidRuleId(RuleId),
+
+    /// The rule id already exists
+    #[error("rule id ({0:?}) already exists")]
+    RuleIdAlreadyExists(RuleId),
+
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
@@ -498,6 +507,8 @@ pub enum Error {
     Incompat(#[from] IncompatError),
     #[error(transparent)]
     GroupList(#[from] GroupListError),
+    #[error(transparent)]
+    Rule(#[from] RuleError),
 }
 
 /// Errors for IDs
@@ -623,6 +634,7 @@ impl InMemoryData for Data {
             AnnotatedOp::GroupList(group_list_op) => Ok(AnnotatedOp::GroupList(
                 self.build_rev_group_list(group_list_op)?,
             )),
+            AnnotatedOp::Rule(rule_op) => Ok(AnnotatedOp::Rule(self.build_rev_rule(rule_op)?)),
         }
     }
 
@@ -639,6 +651,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
+            AnnotatedOp::Rule(rule_op) => self.apply_rule(rule_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -2780,6 +2793,45 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply rule operations
+    fn apply_rule(&mut self, rule_op: &AnnotatedRuleOp) -> std::result::Result<(), RuleError> {
+        match rule_op {
+            AnnotatedRuleOp::Add(new_id, rule) => {
+                if self.inner_data.rules.rule_map.contains_key(new_id) {
+                    return Err(RuleError::RuleIdAlreadyExists(*new_id));
+                };
+
+                self.validate_rule(rule)?;
+
+                self.inner_data.rules.rule_map.insert(*new_id, rule.clone());
+
+                Ok(())
+            }
+            AnnotatedRuleOp::Remove(id) => {
+                if !self.inner_data.rules.rule_map.contains_key(id) {
+                    return Err(RuleError::InvalidRuleId(*id));
+                }
+
+                self.inner_data.rules.rule_map.remove(id);
+
+                Ok(())
+            }
+            AnnotatedRuleOp::Update(id, rule) => {
+                if !self.inner_data.rules.rule_map.contains_key(id) {
+                    return Err(RuleError::InvalidRuleId(*id));
+                }
+
+                self.validate_rule(rule)?;
+
+                self.inner_data.rules.rule_map.insert(*id, rule.clone());
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -3322,6 +3374,32 @@ impl Data {
                     *subject_id,
                     old_group_list_id,
                 ))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a rule operation
+    fn build_rev_rule(
+        &self,
+        rule_op: &AnnotatedRuleOp,
+    ) -> std::result::Result<AnnotatedRuleOp, RuleError> {
+        match rule_op {
+            AnnotatedRuleOp::Add(new_id, _rule) => Ok(AnnotatedRuleOp::Remove(new_id.clone())),
+            AnnotatedRuleOp::Remove(rule_id) => {
+                let Some(old_rule) = self.inner_data.rules.rule_map.get(rule_id) else {
+                    return Err(RuleError::InvalidRuleId(*rule_id));
+                };
+
+                Ok(AnnotatedRuleOp::Add(*rule_id, old_rule.clone()))
+            }
+            AnnotatedRuleOp::Update(rule_id, _new_rule) => {
+                let Some(old_rule) = self.inner_data.rules.rule_map.get(rule_id) else {
+                    return Err(RuleError::InvalidRuleId(*rule_id));
+                };
+
+                Ok(AnnotatedRuleOp::Update(*rule_id, old_rule.clone()))
             }
         }
     }
