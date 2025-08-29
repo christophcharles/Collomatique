@@ -5,7 +5,7 @@
 use crate::ids::PeriodId;
 
 /// Description of the periods
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Periods {
     /// Start date for the colloscope
     ///

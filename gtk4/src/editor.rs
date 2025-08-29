@@ -1,5 +1,6 @@
 use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
+use general_planning::GeneralPlanningUpdateOp;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use relm4::prelude::ComponentController;
 use relm4::{adw, gtk};
@@ -28,6 +29,12 @@ pub enum EditorInput {
     SaveClicked,
     UndoClicked,
     RedoClicked,
+    UpdateOp(EditorUpdateOp),
+}
+
+#[derive(Debug)]
+pub enum EditorUpdateOp {
+    GeneralPlanning(GeneralPlanningUpdateOp),
 }
 
 #[derive(Debug)]
@@ -101,6 +108,16 @@ impl EditorPanel {
             Some(x) => x.to_string_lossy().into(),
             None => "(Fichier non enregistré)".into(),
         }
+    }
+
+    fn send_msg_for_interface_update(&self, sender: ComponentSender<Self>) {
+        sender.output(EditorOutput::UpdateActions).unwrap();
+        self.general_planning
+            .sender()
+            .send(general_planning::GeneralPlanningInput::Update(
+                self.data.get_data().get_periods().clone(),
+            ))
+            .unwrap();
     }
 }
 
@@ -247,7 +264,9 @@ impl Component for EditorPanel {
     ) -> ComponentParts<Self> {
         let general_planning = general_planning::GeneralPlanning::builder()
             .launch(())
-            .forward(sender.input_sender(), |_| EditorInput::Ignore);
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(EditorUpdateOp::GeneralPlanning(op))
+            });
 
         let pages_names = vec!["general_planning", "test2", "test3"];
         let pages_titles_map = BTreeMap::from([
@@ -297,7 +316,7 @@ impl Component for EditorPanel {
                 self.file_name = file_name;
                 self.data = AppState::new(data);
                 self.dirty = dirty;
-                sender.output(EditorOutput::UpdateActions).unwrap();
+                self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
                 Some(path) => {
@@ -343,15 +362,26 @@ impl Component for EditorPanel {
                 if self.data.can_undo() {
                     self.data.undo().expect("Should be able to undo");
                     self.dirty = true;
-                    sender.output(EditorOutput::UpdateActions).unwrap();
+                    self.send_msg_for_interface_update(sender);
                 }
             }
             EditorInput::RedoClicked => {
                 if self.data.can_redo() {
                     self.data.redo().expect("Should be able to undo");
                     self.dirty = true;
-                    sender.output(EditorOutput::UpdateActions).unwrap();
+                    self.send_msg_for_interface_update(sender);
                 }
+            }
+            EditorInput::UpdateOp(op) => {
+                match op {
+                    EditorUpdateOp::GeneralPlanning(period_op) => {
+                        period_op
+                            .apply(&mut self.data)
+                            .expect("Operation should be valid");
+                    }
+                }
+                self.dirty = true;
+                self.send_msg_for_interface_update(sender);
             }
         }
     }
