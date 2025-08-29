@@ -161,9 +161,10 @@ impl SubjectsUpdateOp {
                         self.get_desc()
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
                         match se {
-                            collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => AddNewSubjectError::InterrogationCountRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::InvalidSubjectId(_id) => panic!("Subject ID should be valid at this point"),
+                            collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => UpdateSubjectError::StudentsPerGroupRangeIsEmpty,
+                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => UpdateSubjectError::InterrogationCountRangeIsEmpty,
                             _ => panic!("Unexpected subject error during UpdateSubject: {:?}", se),
                         }
                     } else {
