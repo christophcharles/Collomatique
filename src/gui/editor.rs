@@ -176,6 +176,7 @@ pub enum Message {
     NewClicked,
     OpenClicked,
     SaveClicked,
+    SaveAsClicked,
     SaveToFile(std::path::PathBuf),
     SaveToFileProcessed(Result<std::path::PathBuf, SaveToFileError>),
     UndoClicked,
@@ -243,6 +244,17 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
                 ),
             }
         }
+        Message::SaveAsClicked => Task::done(
+            super::dialogs::Message::FileChooserDialog(
+                "Enregistrer le colloscope sous...".into(),
+                true,
+                std::sync::Arc::new(|path| match path {
+                    Some(file) => Message::SaveToFile(file).into(),
+                    None => GuiMessage::Ignore,
+                }),
+            )
+            .into(),
+        ),
         Message::SaveToFile(path) => {
             let app_state_lock = editor_state.app_state.read_lock();
             let Some(app_state) = &*app_state_lock else {
@@ -390,6 +402,12 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 } else {
                     Some(Message::SaveClicked.into())
                 }
+            ),
+            icon_button(
+                tools::Icon::SaveAs,
+                button::primary,
+                "Enregistrer sous",
+                Some(Message::SaveAsClicked.into()),
             ),
             Space::with_height(20),
             icon_button(tools::Icon::Undo, button::primary, "Annuler", {
