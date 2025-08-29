@@ -4,16 +4,8 @@ use super::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotatedOperation {
-    General(AnnotatedGeneralOperation),
     GeneralData(backend::GeneralData),
     WeekPatterns(AnnotatedWeekPatternsOperation),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AnnotatedGeneralOperation {
-    SetWeekCount(NonZeroU32),
-    SetMaxInterrogationsPerDay(Option<NonZeroU32>),
-    SetInterrogationsPerWeekRange(Option<std::ops::Range<u32>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,22 +13,6 @@ pub enum AnnotatedWeekPatternsOperation {
     Create(handles::WeekPatternHandle, backend::WeekPattern),
     Remove(handles::WeekPatternHandle),
     Update(handles::WeekPatternHandle, backend::WeekPattern),
-}
-
-impl AnnotatedGeneralOperation {
-    fn annotate(op: GeneralOperation) -> Self {
-        match op {
-            GeneralOperation::SetWeekCount(week_count) => {
-                AnnotatedGeneralOperation::SetWeekCount(week_count)
-            }
-            GeneralOperation::SetMaxInterrogationsPerDay(max_int_per_day) => {
-                AnnotatedGeneralOperation::SetMaxInterrogationsPerDay(max_int_per_day)
-            }
-            GeneralOperation::SetInterrogationsPerWeekRange(int_per_week) => {
-                AnnotatedGeneralOperation::SetInterrogationsPerWeekRange(int_per_week)
-            }
-        }
-    }
 }
 
 impl AnnotatedWeekPatternsOperation {
@@ -63,9 +39,6 @@ impl AnnotatedOperation {
         handle_managers: &mut handles::ManagerCollection<T>,
     ) -> Self {
         match op {
-            Operation::General(op) => {
-                AnnotatedOperation::General(AnnotatedGeneralOperation::annotate(op))
-            }
             Operation::GeneralData(data) => AnnotatedOperation::GeneralData(data),
             Operation::WeekPatterns(op) => AnnotatedOperation::WeekPatterns(
                 AnnotatedWeekPatternsOperation::annotate(op, handle_managers),
