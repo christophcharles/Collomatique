@@ -281,7 +281,9 @@ impl Component for Dialog {
                     }
                 }
                 Err(e) => {
-                    self.add_command(sender, msg_display::EntryData::Invalid(e));
+                    if !e.is_empty() {
+                        self.add_command(sender, msg_display::EntryData::Invalid(e));
+                    }
                     self.rpc_logger
                         .sender()
                         .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::InvalidMsg))
