@@ -209,10 +209,6 @@ pub enum SubjectError {
     #[error("Interrogation count range should allow at least one value")]
     InterrogationCountRangeIsEmpty,
 
-    /// The subject is referenced by a teacher
-    #[error("subject id ({0:?}) is referenced by teacher {1:?}")]
-    SubjectIsReferencedByTeacher(SubjectId, TeacherId),
-
     /// Some non-default assignments are still present for the subject
     #[error(
         "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed or updated"
@@ -1321,7 +1317,7 @@ impl Data {
 
                 for (teacher_id, teacher) in &self.inner_data.teachers.teacher_map {
                     if teacher.subjects.contains(id) {
-                        return Err(SubjectError::SubjectIsReferencedByTeacher(*id, *teacher_id));
+                        return Err(SubjectError::SubjectStillHasAssociatedTeachers(*teacher_id, *id));
                     }
                 }
 
