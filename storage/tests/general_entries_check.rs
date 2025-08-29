@@ -1,5 +1,6 @@
 use collomatique_state_colloscopes::{
-    periods::PeriodsExternalData, subjects::SubjectsExternalData, teachers::TeachersExternalData,
+    assignments::AssignmentsExternalData, periods::PeriodsExternalData,
+    subjects::SubjectsExternalData, teachers::TeachersExternalData,
 };
 use collomatique_storage::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -142,6 +143,7 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
         SubjectsExternalData::default(),
         TeachersExternalData::default(),
         expected_students,
+        AssignmentsExternalData::default(),
     )
     .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);

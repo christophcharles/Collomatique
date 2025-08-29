@@ -20,6 +20,7 @@ pub fn decode_entry(
     };
 
     assert!(pre_data.periods.ordered_period_list.is_empty());
+    assert!(pre_data.assignments.period_map.is_empty());
     let mut ids = BTreeSet::new();
     for (id, desc) in period_list.ordered_period_list {
         if !ids.insert(id) {

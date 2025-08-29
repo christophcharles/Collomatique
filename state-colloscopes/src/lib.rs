@@ -4,6 +4,7 @@
 //! and the various traits for the specific case of colloscope representation.
 //!
 
+use assignments::{Assignments, AssignmentsExternalData};
 use collomatique_state::{tools, InMemoryData, Operation};
 use periods::{Periods, PeriodsExternalData};
 use std::collections::BTreeSet;
@@ -19,6 +20,7 @@ pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
 use ops::{AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp};
 pub use subjects::{Subject, SubjectParameters, SubjectPeriodicity};
 
+pub mod assignments;
 pub mod periods;
 pub mod students;
 pub mod subjects;
@@ -75,6 +77,7 @@ struct InnerData {
     subjects: subjects::Subjects,
     teachers: teachers::Teachers,
     students: students::Students,
+    assignments: assignments::Assignments,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -546,6 +549,45 @@ impl Data {
 
     /// USED INTERNALLY
     ///
+    /// checks all the invariants in assignments data
+    fn check_assignments_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+        assert!(self.inner_data.assignments.period_map.len() == period_ids.len());
+        for (period_id, period_assignments) in &self.inner_data.assignments.period_map {
+            assert!(period_ids.contains(period_id));
+
+            let mut subject_count_for_period = 0usize;
+            for (subject_id, subject) in &self.inner_data.subjects.ordered_subject_list {
+                if subject.excluded_periods.contains(period_id) {
+                    continue;
+                }
+                subject_count_for_period += 1;
+
+                let subject_assignments = period_assignments
+                    .subject_exclusion_map
+                    .get(subject_id)
+                    .expect(
+                        "All relevant subjects for the period should appear in the exclusion map",
+                    );
+
+                for student_id in subject_assignments {
+                    let student = self.inner_data.students.student_map.get(student_id).expect(
+                        "Every student that appears in the exclusion map should be a valid id",
+                    );
+
+                    if student.excluded_periods.contains(period_id) {
+                        panic!(
+                            "Excluded student {:?} is not present for period {:?}",
+                            student_id, period_id
+                        );
+                    }
+                }
+            }
+            assert!(subject_count_for_period == period_assignments.subject_exclusion_map.len());
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -582,6 +624,7 @@ impl Data {
         self.check_subjects_data_consistency(&period_ids);
         self.check_teachers_data_consistency(&subject_ids);
         self.check_students_data_consistency(&period_ids);
+        self.check_assignments_data_consistency(&period_ids);
     }
 }
 
@@ -596,6 +639,7 @@ impl Data {
             SubjectsExternalData::default(),
             TeachersExternalData::default(),
             StudentsExternalData::default(),
+            AssignmentsExternalData::default(),
         )
         .expect("Default data should be valid")
     }
@@ -609,6 +653,7 @@ impl Data {
         subjects: subjects::SubjectsExternalData,
         teachers: teachers::TeachersExternalData,
         students: students::StudentsExternalData,
+        assignments: assignments::AssignmentsExternalData,
     ) -> Result<Data, tools::IdError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
@@ -635,12 +680,16 @@ impl Data {
         if !students.validate_all(&period_ids) {
             return Err(tools::IdError::InvalidId);
         }
+        if !assignments.validate_all(&period_ids, &students, &subjects) {
+            return Err(tools::IdError::InvalidId);
+        }
 
         // Ids have been validated
         let students = unsafe { Students::from_external_data(students) };
         let periods = unsafe { Periods::from_external_data(periods) };
         let subjects = unsafe { Subjects::from_external_data(subjects) };
         let teachers = unsafe { Teachers::from_external_data(teachers) };
+        let assignments = unsafe { Assignments::from_external_data(assignments) };
 
         let data = Data {
             id_issuer,
@@ -649,6 +698,7 @@ impl Data {
                 subjects,
                 teachers,
                 students,
+                assignments,
             },
         };
 
