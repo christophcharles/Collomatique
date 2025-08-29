@@ -767,6 +767,120 @@ impl<'a> IlpTranslator<'a> {
         output
     }
 
+    fn build_one_interrogation_per_period_contraint_for_not_assigned_student(
+        &self,
+        i: usize,
+        subject: &Subject,
+        period: std::ops::Range<u32>,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for (j, slot) in subject.slots.iter().enumerate() {
+            if period.contains(&slot.start.week) {
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    if !Self::is_group_fixed(group, subject) {
+                        expr = expr
+                            + Expr::var(Variable::DynamicGroupAssignment {
+                                subject: i,
+                                slot: j,
+                                group: k,
+                                student,
+                            });
+                    }
+                }
+            }
+        }
+
+        let current_period_length = period.end - period.start;
+
+        assert!(current_period_length <= subject.period.get());
+        if current_period_length < subject.period.get() {
+            expr = expr
+                + Expr::var(Variable::StudentNotInLastPeriod {
+                    subject: i,
+                    student,
+                });
+        }
+
+        expr.eq(&Expr::constant(1))
+    }
+
+    fn build_one_interrogation_per_period_contraint_for_assigned_student(
+        &self,
+        i: usize,
+        subject: &Subject,
+        period: std::ops::Range<u32>,
+        k: usize,
+        _group: &GroupDesc,
+        student: usize,
+    ) -> Constraint<Variable> {
+        let mut expr = Expr::constant(0);
+
+        for (j, slot) in subject.slots.iter().enumerate() {
+            if period.contains(&slot.start.week) {
+                expr = expr
+                    + Expr::var(Variable::GroupInSlot {
+                        subject: i,
+                        slot: j,
+                        group: k,
+                    });
+            }
+        }
+
+        let current_period_length = period.end - period.start;
+
+        assert!(current_period_length <= subject.period.get());
+        if current_period_length < subject.period.get() {
+            expr = expr
+                + Expr::var(Variable::StudentNotInLastPeriod {
+                    subject: i,
+                    student,
+                });
+        }
+
+        expr.eq(&Expr::constant(1))
+    }
+
+    fn build_one_interrogation_per_period_contraints(&self) -> BTreeSet<Constraint<Variable>> {
+        let mut constraints = BTreeSet::new();
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            let whole_period_count = self.data.general.week_count.get() / subject.period.get();
+            for p in 0..whole_period_count {
+                let period = p..(p + subject.period.get());
+
+                for student in subject.groups.not_assigned.iter().copied() {
+                    constraints.insert(
+                        self.build_one_interrogation_per_period_contraint_for_not_assigned_student(
+                            i,
+                            subject,
+                            period.clone(),
+                            student,
+                        ),
+                    );
+                }
+
+                for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                    for student in group.students.iter().copied() {
+                        constraints.insert(
+                            self.build_one_interrogation_per_period_contraint_for_assigned_student(
+                                i,
+                                subject,
+                                period.clone(),
+                                k,
+                                group,
+                                student,
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        constraints
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -776,6 +890,7 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_student_not_in_last_period())
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
+            .add_constraints(self.build_one_interrogation_per_period_contraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {
