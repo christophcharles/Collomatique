@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
@@ -5,7 +8,7 @@ use super::time;
 
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
     #[error("Subject has an empty range for students_per_interrogation")]
     InvalidStudentsPerInterrogationRange,
@@ -21,26 +24,26 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SlotStart {
     week: u32,
     weekday: time::Weekday,
     start_time: time::Time,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Slot {
     pub start: SlotStart,
     pub duration: NonZeroU32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interrogation {
     pub teacher: usize,
     pub slots: Vec<SlotStart>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_interrogation: RangeInclusive<NonZeroU32>,
     pub period: NonZeroU32,
@@ -50,7 +53,7 @@ pub struct Subject {
 
 pub type SubjectList = Vec<Subject>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
     pub slots: Vec<Slot>,
 }
@@ -59,7 +62,7 @@ pub type IncompatibilityList = Vec<Incompatibility>;
 
 use std::collections::BTreeSet;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Student {
     pub subjects: BTreeSet<usize>,
     pub incompatibilities: BTreeSet<usize>,
@@ -67,13 +70,13 @@ pub struct Student {
 
 pub type StudentList = Vec<Student>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneralData {
     pub teacher_count: usize,
     pub week_count: NonZeroU32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatedData {
     general: GeneralData,
     subjects: SubjectList,
