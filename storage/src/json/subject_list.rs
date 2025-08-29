@@ -5,7 +5,7 @@
 use super::*;
 
 use std::collections::BTreeSet;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 
 /// JSON desc of subjects
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,7 +93,7 @@ pub enum SubjectPeriodicity {
         minimum_week_separation: u32,
     },
     OnceForEveryArbitraryBlock {
-        weeks_at_start_of_new_block: BTreeSet<usize>,
+        blocks: Vec<WeekBlock>,
     },
 }
 
@@ -116,9 +116,9 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
                 minimum_week_separation,
             },
             collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
+                blocks,
             } => SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
             },
         }
     }
@@ -144,11 +144,35 @@ impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodi
                 interrogation_count_in_year,
                 minimum_week_separation,
             },
-            SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
-            } => collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
-            },
+            SubjectPeriodicity::OnceForEveryArbitraryBlock { blocks } => {
+                collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
+                    blocks: blocks.into_iter().map(|b| b.into()).collect(),
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WeekBlock {
+    pub delay: usize,
+    pub size: NonZeroUsize,
+}
+
+impl From<collomatique_state_colloscopes::subjects::WeekBlock> for WeekBlock {
+    fn from(value: collomatique_state_colloscopes::subjects::WeekBlock) -> Self {
+        WeekBlock {
+            delay: value.delay_in_weeks,
+            size: value.size_in_weeks,
+        }
+    }
+}
+
+impl From<WeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
+    fn from(value: WeekBlock) -> Self {
+        collomatique_state_colloscopes::subjects::WeekBlock {
+            delay_in_weeks: value.delay,
+            size_in_weeks: value.size,
         }
     }
 }

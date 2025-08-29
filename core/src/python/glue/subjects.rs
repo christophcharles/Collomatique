@@ -1,7 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -138,8 +138,17 @@ pub enum SubjectPeriodicity {
         minimum_week_separation: u32,
     },
     OnceForEveryArbitraryBlock {
-        weeks_at_start_of_new_block: std::collections::BTreeSet<usize>,
+        blocks: Vec<SubjectWeekBlock>,
     },
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectWeekBlock {
+    #[pyo3(set, get)]
+    pub delay_in_weeks: usize,
+    #[pyo3(set, get)]
+    pub size_in_weeks: NonZeroUsize,
 }
 
 impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodicity {
@@ -162,9 +171,9 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
                 minimum_week_separation,
             },
             collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
+                blocks,
             } => SubjectPeriodicity::OnceForEveryArbitraryBlock {
-                weeks_at_start_of_new_block,
+                blocks: blocks.into_iter().map(|b| b.into()).collect(),
             },
         }
     }
@@ -172,6 +181,23 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
 
 #[pymethods]
 impl SubjectPeriodicity {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBlock {
+    fn from(value: collomatique_state_colloscopes::subjects::WeekBlock) -> Self {
+        SubjectWeekBlock {
+            delay_in_weeks: value.delay_in_weeks,
+            size_in_weeks: value.size_in_weeks,
+        }
+    }
+}
+
+#[pymethods]
+impl SubjectWeekBlock {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())

@@ -81,7 +81,6 @@ impl From<UpdatePeriodStatusError> for SubjectsError {
 pub enum AddNewSubjectError {
     StudentsPerGroupRangeIsEmpty,
     GroupsPerInterrogationRangeIsEmpty,
-    InvalidWeek(usize, usize),
 }
 
 impl std::fmt::Display for AddNewSubjectError {
@@ -99,13 +98,6 @@ impl std::fmt::Display for AddNewSubjectError {
                     "Aucune valeur autorisée pour le nombre de groupes par colle"
                 )
             }
-            AddNewSubjectError::InvalidWeek(week, count) => {
-                write!(
-                    f,
-                    "La semaine {} est au-delà de la dernière semaine ({} semaines au total)",
-                    *week, *count
-                )
-            }
         }
     }
 }
@@ -119,9 +111,6 @@ impl From<crate::ops::AddNewSubjectError> for AddNewSubjectError {
             crate::ops::AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => {
                 AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty
             }
-            crate::ops::AddNewSubjectError::InvalidWeek(week, count) => {
-                AddNewSubjectError::InvalidWeek(week, count)
-            }
         }
     }
 }
@@ -131,7 +120,6 @@ pub enum UpdateSubjectError {
     InvalidSubjectId(MsgSubjectId),
     StudentsPerGroupRangeIsEmpty,
     GroupsPerInterrogationRangeIsEmpty,
-    InvalidWeek(usize, usize),
 }
 
 impl std::fmt::Display for UpdateSubjectError {
@@ -152,13 +140,6 @@ impl std::fmt::Display for UpdateSubjectError {
                     "Aucune valeur autorisée pour le nombre de groupes par colle"
                 )
             }
-            UpdateSubjectError::InvalidWeek(week, count) => {
-                write!(
-                    f,
-                    "La semaine {} est au-delà de la dernière semaine ({} semaines au total)",
-                    *week, *count
-                )
-            }
         }
     }
 }
@@ -174,9 +155,6 @@ impl From<crate::ops::UpdateSubjectError> for UpdateSubjectError {
             }
             crate::ops::UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => {
                 UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty
-            }
-            crate::ops::UpdateSubjectError::InvalidWeek(week, count) => {
-                UpdateSubjectError::InvalidWeek(week, count)
             }
         }
     }
