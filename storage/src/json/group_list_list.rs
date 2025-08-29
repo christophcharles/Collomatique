@@ -29,6 +29,7 @@ pub struct GroupList {
 /// JSON desc of a single group list parameters
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupListParameters {
+    pub name: String,
     pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
     pub group_count: std::ops::RangeInclusive<u32>,
     pub excluded_students: BTreeSet<u64>,
@@ -39,6 +40,7 @@ impl From<&collomatique_state_colloscopes::group_lists::GroupListParameters>
 {
     fn from(value: &collomatique_state_colloscopes::group_lists::GroupListParameters) -> Self {
         GroupListParameters {
+            name: value.name.clone(),
             students_per_group: value.students_per_group.clone(),
             group_count: value.group_count.clone(),
             excluded_students: value
@@ -55,6 +57,7 @@ impl From<GroupListParameters>
 {
     fn from(value: GroupListParameters) -> Self {
         collomatique_state_colloscopes::group_lists::GroupListParametersExternalData {
+            name: value.name,
             students_per_group: value.students_per_group,
             group_count: value.group_count,
             excluded_students: value.excluded_students,

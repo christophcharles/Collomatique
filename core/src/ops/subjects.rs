@@ -17,6 +17,10 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::IncompatId,
     ),
+    LooseGroupListAssociation(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::GroupListId,
+    ),
 }
 
 impl SubjectsUpdateWarning {
@@ -81,6 +85,23 @@ impl SubjectsUpdateWarning {
                     incompat.slot.start().weekday,
                     incompat.slot.start().start_time,
                     subject.parameters.name,
+                )
+            }
+            Self::LooseGroupListAssociation(subject_id, group_list_id) => {
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return String::new();
+                };
+                let Some(group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return String::new();
+                };
+                format!(
+                    "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\"",
+                    subject.parameters.name, group_list.params.name,
                 )
             }
         }
@@ -224,6 +245,18 @@ impl SubjectsUpdateOp {
                         }
                     }
 
+                    if let Some(group_list_id) = data
+                        .get_data()
+                        .get_group_lists()
+                        .subjects_associations
+                        .get(subject_id)
+                    {
+                        output.push(SubjectsUpdateWarning::LooseGroupListAssociation(
+                            *subject_id,
+                            *group_list_id,
+                        ));
+                    }
+
                     if !data
                         .get_data()
                         .get_slots()
@@ -282,6 +315,18 @@ impl SubjectsUpdateOp {
                             *subject_id,
                         ));
                     }
+                }
+
+                if let Some(group_list_id) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(subject_id)
+                {
+                    output.push(SubjectsUpdateWarning::LooseGroupListAssociation(
+                        *subject_id,
+                        *group_list_id,
+                    ));
                 }
 
                 for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
@@ -401,6 +446,28 @@ impl SubjectsUpdateOp {
                         }
                     }
 
+                    if data
+                        .get_data()
+                        .get_group_lists()
+                        .subjects_associations
+                        .contains_key(subject_id)
+                    {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                        *subject_id,
+                                        None
+                                    ),
+                                ),
+                                "Enlever l'association à une liste de groupe pour la matière à mettre à jour".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+
                     let subject_slots = data
                         .get_data()
                         .get_slots()
@@ -473,6 +540,29 @@ impl SubjectsUpdateOp {
                         if result.is_some() {
                             panic!("Unexpected result! {:?}", result);
                         }
+                    }
+                }
+
+                if data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .contains_key(subject_id)
+                {
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::GroupList(
+                                collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                    *subject_id,
+                                    None,
+                                ),
+                            ),
+                            "Enlever l'association à une liste de groupe pour la matière à effacer"
+                                .into(),
+                        )
+                        .expect("All data should be valid at this point");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
                     }
                 }
 
