@@ -43,7 +43,7 @@ pub enum PeriodicityPanel {
     OnceForEveryBlockOfWeeks,
     ExactlyPeriodic,
     AmountInYear,
-    OnceForEveryArbitraryBlock,
+    AmountForEveryArbitraryBlock,
 }
 
 #[derive(Debug)]
@@ -64,13 +64,15 @@ pub enum DialogInput {
     UpdateGroupsPerInterrogationMaximum(NonZeroU32),
     UpdatePeriodicityType(PeriodicityPanel),
     UpdateExactlyPeriodicParams(NonZeroU32),
-    UpdateOnceEveryBlockOfWeeksParams(NonZeroU32),
+    UpdateOnceEveryBlockOfWeeksParamsPeriodicity(NonZeroU32),
+    UpdateOnceEveryBlockOfWeeksParamsSeparation(NonZeroU32),
     UpdateAmountInYearCountMinimum(u32),
     UpdateAmountInYearCountMaximum(u32),
     UpdateAmountInYearWeekSeparation(u32),
     AddArbitraryBlock,
     UpdateEmptyWeeksBeforeBlock(usize, u32),
     UpdateDurationInWeeksOfGivenBlock(usize, NonZeroU32),
+    UpdateAmountForEveryArbitraryBlockSeparation(u32),
     DeleteBlock(usize),
 }
 
@@ -94,7 +96,7 @@ impl Dialog {
             0 => PeriodicityPanel::ExactlyPeriodic,
             1 => PeriodicityPanel::OnceForEveryBlockOfWeeks,
             2 => PeriodicityPanel::AmountInYear,
-            3 => PeriodicityPanel::OnceForEveryArbitraryBlock,
+            3 => PeriodicityPanel::AmountForEveryArbitraryBlock,
             _ => panic!("Invalid selection for periodicity type"),
         }
     }
@@ -104,7 +106,7 @@ impl Dialog {
             PeriodicityPanel::ExactlyPeriodic => 0,
             PeriodicityPanel::OnceForEveryBlockOfWeeks => 1,
             PeriodicityPanel::AmountInYear => 2,
-            PeriodicityPanel::OnceForEveryArbitraryBlock => 3,
+            PeriodicityPanel::AmountForEveryArbitraryBlock => 3,
         }
     }
 
@@ -127,7 +129,7 @@ impl Dialog {
             SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 blocks: _,
                 minimum_week_separation: _,
-            } => PeriodicityPanel::OnceForEveryArbitraryBlock,
+            } => PeriodicityPanel::AmountForEveryArbitraryBlock,
         }
     }
 
@@ -488,7 +490,28 @@ impl SimpleComponent for Dialog {
                                 connect_value_notify[sender] => move |widget| {
                                     let periodicity_u32 = widget.value() as u32;
                                     let periodicity = NonZeroU32::new(periodicity_u32).unwrap();
-                                    sender.input(DialogInput::UpdateOnceEveryBlockOfWeeksParams(periodicity));
+                                    sender.input(DialogInput::UpdateOnceEveryBlockOfWeeksParamsPeriodicity(periodicity));
+                                },
+                            },
+                            adw::SpinRow {
+                                set_hexpand: true,
+                                set_title: "Séparation minimale (en semaines)",
+                                #[wrap(Some)]
+                                set_adjustment = &gtk::Adjustment {
+                                    set_lower: 1.,
+                                    set_upper: u32::MAX as f64,
+                                    set_step_increment: 1.,
+                                    set_page_increment: 5.,
+                                },
+                                set_wrap: false,
+                                set_snap_to_ticks: true,
+                                set_numeric: true,
+                                #[track(model.should_redraw)]
+                                set_value: model.once_for_every_block_of_weeks_params.minimum_week_separation.get() as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let value_u32 = widget.value() as u32;
+                                    let value = NonZeroU32::new(value_u32).unwrap();
+                                    sender.input(DialogInput::UpdateOnceEveryBlockOfWeeksParamsSeparation(value));
                                 },
                             },
                         },
@@ -560,18 +583,44 @@ impl SimpleComponent for Dialog {
                                 },
                             },
                         },
+                        adw::PreferencesGroup {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock,
+                            adw::SpinRow {
+                                set_hexpand: true,
+                                set_title: "Séparation minimale (en semaines)",
+                                #[wrap(Some)]
+                                set_adjustment = &gtk::Adjustment {
+                                    set_lower: 0.,
+                                    set_upper: u32::MAX as f64,
+                                    set_step_increment: 1.,
+                                    set_page_increment: 5.,
+                                },
+                                set_wrap: false,
+                                set_snap_to_ticks: true,
+                                set_numeric: true,
+                                #[track(model.should_redraw)]
+                                set_value: model.amount_for_every_arbitrary_block_params.minimum_week_separation as f64,
+                                connect_value_notify[sender] => move |widget| {
+                                    let value_u32 = widget.value() as u32;
+                                    sender.input(DialogInput::UpdateAmountForEveryArbitraryBlockSeparation(value_u32));
+                                },
+                            },
+                        },
                         #[local_ref]
                         block_list -> gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
                             #[watch]
-                            set_visible: (model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock) &&
+                            set_visible: (model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock) &&
                                 (!model.amount_for_every_arbitrary_block_params.blocks.is_empty()),
                         },
                         adw::PreferencesGroup {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: model.periodicity_panel == PeriodicityPanel::OnceForEveryArbitraryBlock,
+                            set_visible: model.periodicity_panel == PeriodicityPanel::AmountForEveryArbitraryBlock,
                             adw::ButtonRow {
                                 set_hexpand: true,
                                 set_title: "Ajouter un bloc",
@@ -669,7 +718,7 @@ impl SimpleComponent for Dialog {
                             minimum_week_separation: self.amount_in_year_params.minimum_week_separation,
                         }
                     }
-                    PeriodicityPanel::OnceForEveryArbitraryBlock => {
+                    PeriodicityPanel::AmountForEveryArbitraryBlock => {
                         collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
                             minimum_week_separation: self.amount_for_every_arbitrary_block_params.minimum_week_separation,
                             blocks: self.amount_for_every_arbitrary_block_params.blocks.clone(),
@@ -742,7 +791,7 @@ impl SimpleComponent for Dialog {
                 }
                 self.exactly_periodic_params = new_periodicity;
             }
-            DialogInput::UpdateOnceEveryBlockOfWeeksParams(new_periodicity) => {
+            DialogInput::UpdateOnceEveryBlockOfWeeksParamsPeriodicity(new_periodicity) => {
                 if self
                     .once_for_every_block_of_weeks_params
                     .block_size_in_weeks
@@ -752,6 +801,17 @@ impl SimpleComponent for Dialog {
                 }
                 self.once_for_every_block_of_weeks_params
                     .block_size_in_weeks = new_periodicity;
+            }
+            DialogInput::UpdateOnceEveryBlockOfWeeksParamsSeparation(new_separation) => {
+                if self
+                    .once_for_every_block_of_weeks_params
+                    .minimum_week_separation
+                    == new_separation
+                {
+                    return;
+                }
+                self.once_for_every_block_of_weeks_params
+                    .minimum_week_separation = new_separation;
             }
             DialogInput::UpdateAmountInYearCountMinimum(new_min) => {
                 if *self
@@ -808,6 +868,17 @@ impl SimpleComponent for Dialog {
                     .blocks
                     .remove(block_num);
                 self.synchronize_block_factory();
+            }
+            DialogInput::UpdateAmountForEveryArbitraryBlockSeparation(new_separation) => {
+                if self
+                    .amount_for_every_arbitrary_block_params
+                    .minimum_week_separation
+                    == new_separation
+                {
+                    return;
+                }
+                self.amount_for_every_arbitrary_block_params
+                    .minimum_week_separation = new_separation;
             }
         }
     }
