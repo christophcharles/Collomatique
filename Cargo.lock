@@ -414,6 +414,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-solver-groups"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+ "collomatique-solver",
+ "collomatique-time",
+ "ordered-float",
+ "thiserror",
+]
+
+[[package]]
 name = "collomatique-state"
 version = "0.1.0"
 dependencies = [

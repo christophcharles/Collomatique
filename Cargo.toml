@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "core", "gtk4", "state", "ilp", "solver", "solver-colloscopes", "time" , "storage", "state-colloscopes" ]
+members = [ "core", "gtk4", "state", "ilp", "solver", "solver-colloscopes", "solver-groups", "time" , "storage", "state-colloscopes" ]
 
 [workspace.package]
 version = "0.1.0"
