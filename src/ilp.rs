@@ -373,6 +373,10 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     pub fn get_variables(&self) -> &BTreeSet<V> {
         &self.variables
     }
+
+    pub fn get_constants(&self) -> impl Iterator<Item = &V> {
+        self.constants.keys()
+    }
 }
 
 use std::cell::RefCell;

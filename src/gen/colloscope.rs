@@ -1922,10 +1922,31 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
 
         let mut set_variables = BTreeMap::new();
 
+        let first_period_problem_no_periodicity = self.construct_period_problem(
+            problem_builder.clone().filter_variables(|v| {
+                if let Variable::Periodicity {
+                    subject: _,
+                    student: _,
+                    week_modulo: _,
+                } = v
+                {
+                    false
+                } else {
+                    true
+                }
+            }),
+            &set_variables,
+            0,
+        );
+        let first_period_config_no_periodicity =
+            self.construct_init_config(&first_period_problem_no_periodicity)?;
+        Self::update_set_variables(&mut set_variables, &first_period_config_no_periodicity);
+
         for period in 0..self.period_count.get() {
             let period_problem =
                 self.construct_period_problem(problem_builder.clone(), &set_variables, period);
-            let partial_config = self.build_init_config(&period_problem)?;
+
+            let partial_config = self.construct_init_config(&period_problem)?;
             Self::update_set_variables(&mut set_variables, &partial_config);
         }
 
@@ -1939,19 +1960,19 @@ impl<T: GenericInitializer, S: GenericSolver> ConfigInitializer<Variable, Defaul
 }
 
 impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
-    fn build_init_config<'a, 'b>(
+    fn construct_init_config<'a, 'b>(
         &'a mut self,
         problem: &'b Problem<Variable>,
     ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
         for _i in 0..self.retries {
-            if let Some(config) = self.build_init_config_one_try(problem) {
+            if let Some(config) = self.construct_init_config_one_try(problem) {
                 return Some(config);
             }
         }
         None
     }
 
-    fn build_init_config_one_try<'a, 'b>(
+    fn construct_init_config_one_try<'a, 'b>(
         &'a mut self,
         problem: &'b Problem<Variable>,
     ) -> Option<FeasableConfig<'b, Variable, DefaultRepr<Variable>>> {
@@ -1964,7 +1985,12 @@ impl<T: GenericInitializer, S: GenericSolver> IncrementalInitializer<T, S> {
         set_variables: &mut BTreeMap<Variable, bool>,
         config: &FeasableConfig<'_, Variable, DefaultRepr<Variable>>,
     ) {
-        for var in config.get_problem().get_variables() {
+        for var in config
+            .get_problem()
+            .get_variables()
+            .into_iter()
+            .chain(config.get_problem().get_constants())
+        {
             if !set_variables.contains_key(var) {
                 set_variables.insert(
                     var.clone(),
