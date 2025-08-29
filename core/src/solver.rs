@@ -15,8 +15,8 @@ use collomatique_ilp::{ConfigData, Constraint, LinExpr, Objective, UsableData, V
 
 /// Internal IDs
 ///
-/// These IDs are issued by an [IdIssuer] and are
-/// used internally to type erase some data.
+/// These IDs are issued automatically and are
+/// used internally to type-erase some data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InternalId(u64);
 
