@@ -182,36 +182,30 @@ pub trait BaseConstraints: Send + Sync {
     ///   should be reciprocal to each other.
     /// - second, if the solution is partial, this should be correctly reflected by not setting the value of some
     ///   main variables.
-    ///
-    /// This function can fail (and in that case returns None) if the PartialSolution is not adapted to the problem
     fn partial_solution_to_configuration(
         &self,
         sol: &Self::PartialSolution,
-    ) -> Option<ConfigData<Self::MainVariable>>;
+    ) -> ConfigData<Self::MainVariable>;
     /// Converts a set of values for the main variables into a [BaseConstraints::PartialSolution].
     ///
     /// The description should be exactly one to one. This means two things:
     /// - first, [BaseConstraints::partial_solution_to_configuration] and [BaseConstraints::configuration_to_partial_solution]
     ///   should be reciprocal to each other.
     /// - second, if the set of values is partial, this should be correctly reflected in a partial solution output.
-    ///
-    /// This function can fail (and in that case returns None) if the configuration data is not adapted to the problem
     fn configuration_to_partial_solution(
         &self,
         config: &ConfigData<Self::MainVariable>,
-    ) -> Option<Self::PartialSolution>;
+    ) -> Self::PartialSolution;
 
     /// Reconstructs as many structure variables as possible from the main variables.
     ///
     /// A value should only be given if it can indeed be fixed. If the solution is complete (meaning
     /// all main variables have a fixed value) then all structure variables should have a value too
     /// and it should uniquely be fixed by the main variables.
-    ///
-    /// This function can fail (and in that case returns None) if the configuration data is not adapted to the problem
     fn reconstruct_structure_variables(
         &self,
         config: &ConfigData<Self::MainVariable>,
-    ) -> Option<ConfigData<Self::StructureVariable>>;
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 /// Variable type used in [ExtraConstraints] trait definition.
@@ -360,13 +354,11 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
     /// As a convenience, it is possible to use the structure variables from the generic problem ([BaseConstraints::StructureVariable])
     /// to rebuild the extra structure variables.
     /// See [ExtraConstraints] for the full discussion.
-    ///
-    /// This function can fail (and in that case returns None) if the configuration data is not adapted to the problem
     fn reconstruct_extra_structure_variables(
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> Option<ConfigData<Self::StructureVariable>>;
+    ) -> ConfigData<Self::StructureVariable>;
 }
 
 /// Soft enforcement of extra constraints.
@@ -562,10 +554,10 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         &self,
         base: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> Option<ConfigData<Self::StructureVariable>> {
+    ) -> ConfigData<Self::StructureVariable> {
         let orig_structure_variables = self
             .internal_extra
-            .reconstruct_extra_structure_variables(base, config)?;
+            .reconstruct_extra_structure_variables(base, config);
 
         let values = config
             .transmute(|x| match x {
@@ -587,7 +579,9 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
             .into_iter()
             .enumerate()
         {
-            let value = c.get_lhs().eval(&values).ok()?;
+            let Ok(value) = c.get_lhs().eval(&values) else {
+                continue;
+            };
             let var = SoftVariable::Soft(i, desc);
 
             match c.get_symbol() {
@@ -600,7 +594,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
             }
         }
 
-        Some(output)
+        output
     }
 }
 
@@ -679,10 +673,7 @@ impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
         >,
         Self::GeneralConstraintDesc,
     )> {
-        let Some(config_data) = base.partial_solution_to_configuration(&self.partial_solution)
-        else {
-            return vec![];
-        };
+        let config_data = base.partial_solution_to_configuration(&self.partial_solution);
 
         config_data
             .get_values()
@@ -703,9 +694,7 @@ impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
         &self,
         _base: &T,
         _config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-    ) -> Option<ConfigData<Self::StructureVariable>> {
-        // We return an empty ConfigData rather than None
-        // because we are not failing
-        Some(ConfigData::new())
+    ) -> ConfigData<Self::StructureVariable> {
+        ConfigData::new()
     }
 }

@@ -122,7 +122,7 @@ pub struct ProblemBuilder<
             dyn Fn(
                     &T,
                     &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-                ) -> Option<ConfigData<IdVariable>>
+                ) -> ConfigData<IdVariable>
                 + Send
                 + Sync,
         >,
@@ -444,8 +444,13 @@ where
             .collect();
 
         let reconstruct_func = move |base: &T, config: &ConfigData<BaseVariable<M, S>>| {
-            let pre_output = extra.reconstruct_extra_structure_variables(base, config)?;
-            pre_output.try_transmute(|x| lean_rev_v_map.get(x).cloned())
+            let pre_output = extra.reconstruct_extra_structure_variables(base, config);
+            pre_output.transmute(|x| {
+                lean_rev_v_map
+                    .get(x)
+                    .cloned()
+                    .expect("Variable should be mapped")
+            })
         };
 
         self.reconstruction_funcs.push(Box::new(reconstruct_func));
@@ -533,7 +538,7 @@ where
             dyn Fn(
                     &T,
                     &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
-                ) -> Option<ConfigData<IdVariable>>
+                ) -> ConfigData<IdVariable>
                 + Send
                 + Sync,
         >,
@@ -944,19 +949,16 @@ where
     /// This functions takes a partial solution of type [BaseConstraints::PartialSolution]
     /// and "decorates" it. This means that all the internal ILP variables are reconstructed and packaged
     /// into a [DecoratedPartialSolution].
-    ///
-    /// This function can fail (and return `None` in that case) if there are issues with the
-    /// reconstruction (usually unexpected or undefined variables).
     pub fn decorate_partial_solution<'a>(
         &'a self,
         solution: T::PartialSolution,
-    ) -> Option<DecoratedPartialSolution<'a, M, S, T, P>> {
-        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution)?;
+    ) -> DecoratedPartialSolution<'a, M, S, T, P> {
+        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution);
         let mut base_config_data =
             starting_configuration_data.transmute(|x| BaseVariable::Main(x.clone()));
         base_config_data = base_config_data.set_iter(
             self.base
-                .reconstruct_structure_variables(&starting_configuration_data)?
+                .reconstruct_structure_variables(&starting_configuration_data)
                 .get_values()
                 .into_iter()
                 .map(|(var, value)| (BaseVariable::Structure(var), value)),
@@ -968,18 +970,18 @@ where
         });
         for func in &self.reconstruction_funcs {
             config_data = config_data.set_iter(
-                func(&self.base, &base_config_data)?
+                func(&self.base, &base_config_data)
                     .get_values()
                     .into_iter()
                     .map(|(var, value)| (ExtraVariable::Extra(var), value)),
             );
         }
 
-        Some(DecoratedPartialSolution {
+        DecoratedPartialSolution {
             problem: self,
             internal_solution: solution,
             config_data,
-        })
+        }
     }
 
     /// Used internally
@@ -1019,7 +1021,7 @@ where
         let feasable_config = solver.solve(&self.ilp_problem)?;
         let internal_solution = self.base.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&feasable_config),
-        )?;
+        );
 
         DecoratedCompleteSolution {
             problem: self,
@@ -1058,16 +1060,12 @@ where
             .configuration_to_partial_solution(&self.feasable_config_into_config_data(&config));
 
         TimeLimitSolution {
-            solution: internal_solution
-                .map(|is| {
-                    DecoratedCompleteSolution {
-                        problem: self,
-                        internal_solution: is,
-                        ilp_config: config.into_inner(),
-                    }
-                    .into_feasable()
-                })
-                .flatten(),
+            solution: DecoratedCompleteSolution {
+                problem: self,
+                internal_solution,
+                ilp_config: config.into_inner(),
+            }
+            .into_feasable(),
             time_limit_reached: time_limit_sol.time_limit_reached,
         }
     }
