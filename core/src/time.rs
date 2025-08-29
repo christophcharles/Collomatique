@@ -3,6 +3,9 @@
 //! This modules defines a few useful types for handling time in
 //! the context of colloscopes.
 
+#[cfg(test)]
+mod tests;
+
 use std::num::NonZeroU32;
 
 /// DurationInMinutes obviously represents a duration in minutes.

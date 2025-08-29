@@ -28,8 +28,8 @@
 pub mod time;
 
 use std::collections::BTreeSet;
-use std::ops::RangeInclusive;
 use std::num::NonZeroUsize;
+use std::ops::RangeInclusive;
 
 /// Description of the information pertinent to a single student
 /// for the colloscope.
