@@ -254,3 +254,593 @@ async fn subject_group_for_student_set(pool: sqlx::SqlitePool) {
 
     assert_eq!(id, Some(super::super::subjects::Id(8)));
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct StudentSubjectDb {
+    student_id: i64,
+    subject_id: i64,
+}
+
+#[sqlx::test]
+async fn remove_student(pool: sqlx::SqlitePool) {
+    let mut store = prepare_example_db(pool).await;
+
+    let _ = sqlx::query!("DELETE FROM group_items WHERE student_id = 13")
+        .execute(&store.pool)
+        .await
+        .unwrap();
+
+    store
+        .students_remove(super::super::students::Id(13))
+        .await
+        .unwrap();
+
+    let records = sqlx::query_as!(
+        StudentSubjectDb,
+        "SELECT student_id, subject_id FROM student_subjects"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let records_expected = vec![
+        // Student 1
+        StudentSubjectDb {
+            student_id: 1,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 1,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 1,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 1,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 1,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 1,
+            subject_id: 8,
+        },
+        // Student 2
+        StudentSubjectDb {
+            student_id: 2,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 2,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 2,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 2,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 2,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 2,
+            subject_id: 8,
+        },
+        // Student 3
+        StudentSubjectDb {
+            student_id: 3,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 3,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 3,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 3,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 3,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 3,
+            subject_id: 8,
+        },
+        // Student 4
+        StudentSubjectDb {
+            student_id: 4,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 4,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 4,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 4,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 4,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 4,
+            subject_id: 8,
+        },
+        // Student 5
+        StudentSubjectDb {
+            student_id: 5,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 5,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 5,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 5,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 5,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 5,
+            subject_id: 8,
+        },
+        // Student 6
+        StudentSubjectDb {
+            student_id: 6,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 6,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 6,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 6,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 6,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 6,
+            subject_id: 8,
+        },
+        // Student 7
+        StudentSubjectDb {
+            student_id: 7,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 7,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 7,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 7,
+            subject_id: 6,
+        },
+        StudentSubjectDb {
+            student_id: 7,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 7,
+            subject_id: 8,
+        },
+        // Student 8
+        StudentSubjectDb {
+            student_id: 8,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 8,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 8,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 8,
+            subject_id: 6,
+        },
+        StudentSubjectDb {
+            student_id: 8,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 8,
+            subject_id: 8,
+        },
+        // Student 9
+        StudentSubjectDb {
+            student_id: 9,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 9,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 9,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 9,
+            subject_id: 6,
+        },
+        StudentSubjectDb {
+            student_id: 9,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 9,
+            subject_id: 8,
+        },
+        // Student 10
+        StudentSubjectDb {
+            student_id: 10,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 10,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 10,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 10,
+            subject_id: 6,
+        },
+        StudentSubjectDb {
+            student_id: 10,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 10,
+            subject_id: 8,
+        },
+        // Student 11
+        StudentSubjectDb {
+            student_id: 11,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 11,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 11,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 11,
+            subject_id: 6,
+        },
+        StudentSubjectDb {
+            student_id: 11,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 11,
+            subject_id: 8,
+        },
+        // Student 12
+        StudentSubjectDb {
+            student_id: 12,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 12,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 12,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 12,
+            subject_id: 6,
+        },
+        StudentSubjectDb {
+            student_id: 12,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 12,
+            subject_id: 8,
+        },
+        // Student 13 (nothing should be left)
+        // Student 14
+        StudentSubjectDb {
+            student_id: 14,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 14,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 14,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 14,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 14,
+            subject_id: 8,
+        },
+        // Student 15
+        StudentSubjectDb {
+            student_id: 15,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 15,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 15,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 15,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 15,
+            subject_id: 8,
+        },
+        // Student 16
+        StudentSubjectDb {
+            student_id: 16,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 16,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 16,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 16,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 16,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 16,
+            subject_id: 8,
+        },
+        // Student 17
+        StudentSubjectDb {
+            student_id: 17,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 17,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 17,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 17,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 17,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 17,
+            subject_id: 8,
+        },
+        // Student 18
+        StudentSubjectDb {
+            student_id: 18,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 18,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 18,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 18,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 18,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 18,
+            subject_id: 8,
+        },
+        // Student 19
+        StudentSubjectDb {
+            student_id: 19,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 19,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 19,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 19,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 19,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 19,
+            subject_id: 8,
+        },
+        // Student 20
+        StudentSubjectDb {
+            student_id: 20,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 20,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 20,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 20,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 20,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 20,
+            subject_id: 8,
+        },
+        // Student 21
+        StudentSubjectDb {
+            student_id: 21,
+            subject_id: 1,
+        },
+        StudentSubjectDb {
+            student_id: 21,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 21,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 21,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 21,
+            subject_id: 7,
+        },
+        StudentSubjectDb {
+            student_id: 21,
+            subject_id: 8,
+        },
+        // Student 22
+        StudentSubjectDb {
+            student_id: 22,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 22,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 22,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 22,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 22,
+            subject_id: 7,
+        },
+        // Student 23
+        StudentSubjectDb {
+            student_id: 23,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 23,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 23,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 23,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 23,
+            subject_id: 7,
+        },
+        // Student 24
+        StudentSubjectDb {
+            student_id: 24,
+            subject_id: 2,
+        },
+        StudentSubjectDb {
+            student_id: 24,
+            subject_id: 3,
+        },
+        StudentSubjectDb {
+            student_id: 24,
+            subject_id: 4,
+        },
+        StudentSubjectDb {
+            student_id: 24,
+            subject_id: 5,
+        },
+        StudentSubjectDb {
+            student_id: 24,
+            subject_id: 7,
+        },
+    ];
+
+    assert_eq!(records, records_expected);
+}
