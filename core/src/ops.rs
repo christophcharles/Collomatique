@@ -21,9 +21,9 @@ pub enum Op {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StudentOp {
     /// Add a new student
-    Add(Student),
+    Add(PersonWithContacts),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, Student),
+    Update(StudentId, PersonWithContacts),
 }
