@@ -107,11 +107,11 @@ impl From<SlotParameters> for crate::rpc::cmd_msg::slots::SlotMsg {
     fn from(value: SlotParameters) -> Self {
         use crate::rpc::cmd_msg::slots::SlotMsg;
         SlotMsg {
-            teacher_id: MsgTeacherId::from(value.teacher_id).0,
+            teacher_id: value.teacher_id.into(),
             start_day: collomatique_time::Weekday::from(value.start_time.weekday).into_inner(),
             start_time: value.start_time.start_time.into(),
             extra_info: value.extra_info,
-            week_pattern: value.week_pattern.map(|x| MsgWeekPatternId::from(x).0),
+            week_pattern: value.week_pattern.map(|x| x.into()),
         }
     }
 }

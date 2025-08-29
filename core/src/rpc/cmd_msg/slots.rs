@@ -84,23 +84,23 @@ impl SlotsCmdMsg {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotMsg {
-    pub teacher_id: u64,
+    pub teacher_id: MsgTeacherId,
     pub start_day: chrono::Weekday,
     pub start_time: chrono::NaiveTime,
     pub extra_info: String,
-    pub week_pattern: Option<u64>,
+    pub week_pattern: Option<MsgWeekPatternId>,
 }
 
 impl From<SlotMsg> for collomatique_state_colloscopes::slots::SlotExternalData {
     fn from(value: SlotMsg) -> Self {
         collomatique_state_colloscopes::slots::SlotExternalData {
-            teacher_id: value.teacher_id,
+            teacher_id: value.teacher_id.0,
             start_time: collomatique_time::SlotStart {
                 weekday: collomatique_time::Weekday(value.start_day),
                 start_time: value.start_time,
             },
             extra_info: value.extra_info,
-            week_pattern: value.week_pattern,
+            week_pattern: value.week_pattern.map(|x| x.0),
         }
     }
 }
