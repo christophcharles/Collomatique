@@ -9,7 +9,9 @@ pub enum SlotsUpdateWarning {
 }
 
 impl SlotsUpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+    pub fn build_desc_from_data<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
         &self,
         data: &T,
     ) -> Option<String> {

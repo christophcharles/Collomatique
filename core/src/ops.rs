@@ -167,21 +167,23 @@ impl From<RulesUpdateWarning> for UpdateWarning {
 }
 
 impl UpdateWarning {
-    pub fn build_desc<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+    pub fn build_desc_from_data<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
         &self,
         data: &T,
     ) -> Option<String> {
         match self {
-            UpdateWarning::GeneralPlanning(w) => w.build_desc(data),
-            UpdateWarning::Subjects(w) => w.build_desc(data),
-            UpdateWarning::Teachers(w) => w.build_desc(data),
-            UpdateWarning::Students(w) => w.build_desc(data),
-            UpdateWarning::Assignments(w) => w.build_desc(data),
-            UpdateWarning::WeekPatterns(w) => w.build_desc(data),
-            UpdateWarning::Slots(w) => w.build_desc(data),
-            UpdateWarning::Incompatibilities(w) => w.build_desc(data),
-            UpdateWarning::GroupLists(w) => w.build_desc(data),
-            UpdateWarning::Rules(w) => w.build_desc(data),
+            UpdateWarning::GeneralPlanning(w) => w.build_desc_from_data(data),
+            UpdateWarning::Subjects(w) => w.build_desc_from_data(data),
+            UpdateWarning::Teachers(w) => w.build_desc_from_data(data),
+            UpdateWarning::Students(w) => w.build_desc_from_data(data),
+            UpdateWarning::Assignments(w) => w.build_desc_from_data(data),
+            UpdateWarning::WeekPatterns(w) => w.build_desc_from_data(data),
+            UpdateWarning::Slots(w) => w.build_desc_from_data(data),
+            UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
+            UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
+            UpdateWarning::Rules(w) => w.build_desc_from_data(data),
         }
     }
 
@@ -192,7 +194,6 @@ impl UpdateWarning {
 
 #[derive(Clone, Debug)]
 struct CleaningOp<T: Clone + std::fmt::Debug> {
-    warning_desc: String,
     warning: T,
     ops: Vec<UpdateOp>,
 }
@@ -200,7 +201,6 @@ struct CleaningOp<T: Clone + std::fmt::Debug> {
 impl<T: Clone + std::fmt::Debug + Into<UpdateWarning>> CleaningOp<T> {
     fn into_general_warning(self) -> CleaningOp<UpdateWarning> {
         CleaningOp {
-            warning_desc: self.warning_desc,
             warning: self.warning.into(),
             ops: self.ops,
         }
@@ -213,6 +213,22 @@ impl CleaningOp<UpdateWarning> {
     ) -> Option<Self> {
         x.map(|x| x.into_general_warning())
     }
+
+    fn build_desc_from_data<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &T,
+    ) -> Option<CleaningOpDesc> {
+        Some(CleaningOpDesc {
+            warning: self.warning.build_desc_from_data(data)?,
+            ops: self.ops.clone(),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CleaningOpDesc {
+    warning: String,
+    ops: Vec<UpdateOp>,
 }
 
 impl UpdateOp {
