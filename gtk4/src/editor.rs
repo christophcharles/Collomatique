@@ -1,8 +1,8 @@
 use adw::prelude::NavigationPageExt;
 use gtk::prelude::{ButtonExt, WidgetExt};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
-use relm4::component::{AsyncComponentParts, AsyncComponentSender, SimpleAsyncComponent};
 use relm4::{adw, gtk};
+use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,8 +41,8 @@ relm4::new_stateless_action!(UndoAction, EditorActionGroup, "undo");
 relm4::new_stateless_action!(RedoAction, EditorActionGroup, "redo");
 relm4::new_stateless_action!(CloseAction, EditorActionGroup, "close");
 
-#[relm4::component(async, pub)]
-impl SimpleAsyncComponent for EditorPanel {
+#[relm4::component(pub)]
+impl SimpleComponent for EditorPanel {
     type Input = EditorInput;
     type Output = ();
     type Init = EditorInput;
@@ -141,11 +141,11 @@ impl SimpleAsyncComponent for EditorPanel {
         }
     }
 
-    async fn init(
+    fn init(
         params: Self::Init,
         root: Self::Root,
-        _sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
+        _sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let model = EditorPanel {
             current_file: match params {
                 EditorInput::NewFile(file_name) => FileDesc { file_name },
@@ -200,10 +200,10 @@ impl SimpleAsyncComponent for EditorPanel {
         undo_action.set_enabled(false);
         redo_action.set_enabled(false);
 
-        AsyncComponentParts { model, widgets }
+        ComponentParts { model, widgets }
     }
 
-    async fn update(&mut self, message: Self::Input, _sender: AsyncComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
             EditorInput::NewFile(file_name) => self.current_file = FileDesc { file_name },
             EditorInput::ExistingFile(file_name) => {
