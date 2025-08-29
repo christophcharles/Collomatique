@@ -730,12 +730,8 @@ impl Storage for Store {
     unsafe fn time_slots_add_unchecked(
         &mut self,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            Self::TimeSlotId,
-            Cross3Error<Self::InternalError, Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<Self::TimeSlotId, Self::InternalError>>
+           + Send {
         time_slots::add(&self.pool, time_slot)
     }
     unsafe fn time_slots_remove_unchecked(
@@ -750,18 +746,8 @@ impl Storage for Store {
         &mut self,
         index: Self::TimeSlotId,
         time_slot: &TimeSlot<Self::SubjectId, Self::TeacherId, Self::WeekPatternId>,
-    ) -> impl core::future::Future<
-        Output = std::result::Result<
-            (),
-            Cross3IdError<
-                Self::InternalError,
-                Self::TimeSlotId,
-                Self::SubjectId,
-                Self::TeacherId,
-                Self::WeekPatternId,
-            >,
-        >,
-    > + Send {
+    ) -> impl core::future::Future<Output = std::result::Result<(), Self::InternalError>> + Send
+    {
         time_slots::update(&self.pool, index, time_slot)
     }
 

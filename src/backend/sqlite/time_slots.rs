@@ -117,102 +117,10 @@ FROM time_slots WHERE time_slot_id = ?
     Ok(output)
 }
 
-async fn search_invalid_subject_id(
-    pool: &SqlitePool,
-    time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-) -> Result<Option<super::subjects::Id>> {
-    let subject_ids = sqlx::query!("SELECT subject_id FROM subjects")
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.subject_id)
-        .collect::<BTreeSet<_>>();
-
-    if !subject_ids.contains(&time_slot.subject_id.0) {
-        return Ok(Some(time_slot.subject_id));
-    }
-
-    Ok(None)
-}
-
-async fn search_invalid_teacher_id(
-    pool: &SqlitePool,
-    time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-) -> Result<Option<super::teachers::Id>> {
-    let teacher_ids = sqlx::query!("SELECT teacher_id FROM teachers")
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.teacher_id)
-        .collect::<BTreeSet<_>>();
-
-    if !teacher_ids.contains(&time_slot.teacher_id.0) {
-        return Ok(Some(time_slot.teacher_id));
-    }
-
-    Ok(None)
-}
-
-async fn search_invalid_week_pattern_id(
-    pool: &SqlitePool,
-    time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-) -> Result<Option<super::week_patterns::Id>> {
-    let week_pattern_ids = sqlx::query!("SELECT week_pattern_id FROM week_patterns")
-        .fetch_all(pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|x| x.week_pattern_id)
-        .collect::<BTreeSet<_>>();
-
-    if !week_pattern_ids.contains(&time_slot.week_pattern_id.0) {
-        return Ok(Some(time_slot.week_pattern_id));
-    }
-
-    Ok(None)
-}
-
-trait CheckIds: std::fmt::Debug + std::error::Error + Sized {
-    async fn check_ids(
-        pool: &SqlitePool,
-        time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-    ) -> std::result::Result<(), Self>;
-}
-
-impl CheckIds
-    for Cross3Error<Error, super::subjects::Id, super::teachers::Id, super::week_patterns::Id>
-{
-    async fn check_ids(
-        pool: &SqlitePool,
-        time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-    ) -> std::result::Result<(), Self> {
-        if let Some(subject_group_id) = search_invalid_subject_id(pool, time_slot).await? {
-            return Err(Cross3Error::InvalidCrossId1(subject_group_id));
-        }
-
-        if let Some(incompat_id) = search_invalid_teacher_id(pool, time_slot).await? {
-            return Err(Cross3Error::InvalidCrossId2(incompat_id));
-        }
-
-        if let Some(group_list_id) = search_invalid_week_pattern_id(pool, time_slot).await? {
-            return Err(Cross3Error::InvalidCrossId3(group_list_id));
-        }
-
-        Ok(())
-    }
-}
-
 pub async fn add(
     pool: &SqlitePool,
     time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-) -> std::result::Result<
-    Id,
-    Cross3Error<Error, super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-> {
-    Cross3Error::check_ids(pool, time_slot).await?;
-
+) -> std::result::Result<Id, Error> {
     let mut conn = pool.acquire().await.map_err(Error::from)?;
 
     let start_day: i64 = usize::from(time_slot.start.day)
@@ -267,39 +175,11 @@ pub async fn remove(pool: &SqlitePool, index: Id) -> std::result::Result<(), IdE
     Ok(())
 }
 
-impl CheckIds
-    for Cross3IdError<Error, Id, super::subjects::Id, super::teachers::Id, super::week_patterns::Id>
-{
-    async fn check_ids(
-        pool: &SqlitePool,
-        time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-    ) -> std::result::Result<(), Self> {
-        if let Some(subject_group_id) = search_invalid_subject_id(pool, time_slot).await? {
-            return Err(Cross3IdError::InvalidCrossId1(subject_group_id));
-        }
-
-        if let Some(incompat_id) = search_invalid_teacher_id(pool, time_slot).await? {
-            return Err(Cross3IdError::InvalidCrossId2(incompat_id));
-        }
-
-        if let Some(group_list_id) = search_invalid_week_pattern_id(pool, time_slot).await? {
-            return Err(Cross3IdError::InvalidCrossId3(group_list_id));
-        }
-
-        Ok(())
-    }
-}
-
 pub async fn update(
     pool: &SqlitePool,
     index: Id,
     time_slot: &TimeSlot<super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-) -> std::result::Result<
-    (),
-    Cross3IdError<Error, Id, super::subjects::Id, super::teachers::Id, super::week_patterns::Id>,
-> {
-    Cross3IdError::check_ids(pool, time_slot).await?;
-
+) -> std::result::Result<(), Error> {
     let time_slot_id = index.0;
 
     let mut conn = pool.acquire().await.map_err(Error::from)?;
@@ -329,11 +209,10 @@ WHERE time_slot_id = ?7
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(Cross3IdError::InternalError(Error::CorruptedDatabase(
-            format!("Multiple time_slots with id {:?}", index),
+        return Err(Error::CorruptedDatabase(format!(
+            "Multiple time_slots with id {:?}",
+            index
         )));
-    } else if rows_affected == 0 {
-        return Err(Cross3IdError::InvalidId(index));
     }
 
     Ok(())
