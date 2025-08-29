@@ -1,16 +1,92 @@
+use collomatique_state::traits::Manager;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+};
+use select_start_date::DialogOutput;
+
+use collomatique_state::AppState;
+use collomatique_state_colloscopes::Data;
+
+mod select_start_date;
 
 #[derive(Debug)]
-pub enum GeneralPlanningInput {}
+pub enum GeneralPlanningInput {
+    Update(collomatique_state_colloscopes::periods::Periods),
 
-pub struct GeneralPlanning {}
+    DeleteFirstWeekClicked,
+    EditFirstWeekClicked,
+    FirstWeekChanged(collomatique_time::NaiveMondayDate),
+}
+
+#[derive(Debug)]
+pub enum GeneralPlanningUpdateOp {
+    DeleteFirstWeek,
+    UpdateFirstWeek(collomatique_time::NaiveMondayDate),
+}
+
+impl GeneralPlanningUpdateOp {
+    pub fn apply(
+        &self,
+        data: &mut AppState<Data>,
+    ) -> Result<(), collomatique_state_colloscopes::Error> {
+        data.apply(match self {
+            GeneralPlanningUpdateOp::DeleteFirstWeek => collomatique_state_colloscopes::Op::Period(
+                collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
+            ),
+            GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
+                collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(date.clone())),
+                )
+            }
+        })
+    }
+}
+
+pub struct GeneralPlanning {
+    periods: collomatique_state_colloscopes::periods::Periods,
+
+    select_start_date_dialog: Controller<select_start_date::Dialog>,
+}
+
+impl GeneralPlanning {
+    fn generate_first_week_text(&self) -> String {
+        format!(
+            "<b><big>Début de la première semaine de colles :</big></b> {}",
+            match &self.periods.first_week {
+                Some(date) => {
+                    date.inner().to_string()
+                }
+                None => "non sélectionné".to_string(),
+            }
+        )
+    }
+
+    fn count_interrogation_weeks(&self) -> usize {
+        let mut count = 0usize;
+        for (_id, desc) in &self.periods.ordered_period_list {
+            for v in desc {
+                if *v {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    fn generate_interrogation_week_count_text(&self) -> String {
+        format!(
+            "<b>Nombre total de semaines de colles :</b> {}",
+            self.count_interrogation_weeks()
+        )
+    }
+}
 
 #[relm4::component(pub)]
 impl Component for GeneralPlanning {
     type Input = GeneralPlanningInput;
-    type Output = ();
+    type Output = GeneralPlanningUpdateOp;
     type Init = ();
     type CommandOutput = ();
 
@@ -26,40 +102,36 @@ impl Component for GeneralPlanning {
                 set_margin_all: 5,
                 set_spacing: 5,
                 gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
+                    set_orientation: gtk::Orientation::Vertical,
                     gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "<b><big>Début de la première semaine de colles :</big></b> 01/09/2025",
-                                set_use_markup: true,
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-symbolic",
-                                add_css_class: "flat",
-                            },
-                        },
+                        set_orientation: gtk::Orientation::Horizontal,
                         gtk::Label {
                             set_halign: gtk::Align::Start,
-                            set_label: "<b>Nombre total de semaines de colles :</b> 4",
+                            #[watch]
+                            set_label: &model.generate_first_week_text(),
                             set_use_markup: true,
                         },
+                        gtk::Button {
+                            set_icon_name: "edit-symbolic",
+                            add_css_class: "flat",
+                            connect_clicked => GeneralPlanningInput::EditFirstWeekClicked,
+                        },
+                        gtk::Button {
+                            #[watch]
+                            set_sensitive: model.periods.first_week.is_some(),
+                            set_icon_name: "edit-delete",
+                            add_css_class: "flat",
+                            connect_clicked => GeneralPlanningInput::DeleteFirstWeekClicked,
+                        },
                     },
-                    gtk::Box {
-                        set_hexpand: true,
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        #[watch]
+                        set_label: &model.generate_interrogation_week_count_text(),
+                        set_use_markup: true,
                     },
-                    gtk::Button {
-                        add_css_class: "suggested-action",
-                        set_sensitive: false,
-                        adw::ButtonContent {
-                            set_icon_name: "preferences-other-symbolic",
-                            set_label: "Générer automatiquement",
-                        }
-                    }
                 },
-                gtk::Box {
+                /*gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_margin_top: 30,
@@ -208,13 +280,13 @@ impl Component for GeneralPlanning {
                             },
                         }
                     },
-                    gtk::Button {
-                        adw::ButtonContent {
-                            set_icon_name: "edit-add",
-                            set_label: "Ajouter une période",
-                        }
-                    },
-                }
+                },*/
+                gtk::Button {
+                    adw::ButtonContent {
+                        set_icon_name: "edit-add",
+                        set_label: "Ajouter une période",
+                    }
+                },
             }
         }
     }
@@ -222,19 +294,49 @@ impl Component for GeneralPlanning {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = GeneralPlanning {};
+        let select_start_date_dialog = select_start_date::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                DialogOutput::Accepted(date) => GeneralPlanningInput::FirstWeekChanged(date),
+            });
+        let model = GeneralPlanning {
+            periods: collomatique_state_colloscopes::periods::Periods::default(),
+            select_start_date_dialog,
+        };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
     }
 
-    fn update(
-        &mut self,
-        _message: Self::Input,
-        _sender: ComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        match message {
+            GeneralPlanningInput::Update(new_periods) => {
+                self.periods = new_periods;
+            }
+            GeneralPlanningInput::DeleteFirstWeekClicked => {
+                sender
+                    .output(GeneralPlanningUpdateOp::DeleteFirstWeek)
+                    .unwrap();
+            }
+            GeneralPlanningInput::EditFirstWeekClicked => {
+                self.select_start_date_dialog
+                    .sender()
+                    .send(select_start_date::DialogInput::Show(
+                        match &self.periods.first_week {
+                            Some(date) => date.clone(),
+                            None => collomatique_time::NaiveMondayDate::from_today(),
+                        },
+                    ))
+                    .unwrap();
+            }
+            GeneralPlanningInput::FirstWeekChanged(date) => {
+                sender
+                    .output(GeneralPlanningUpdateOp::UpdateFirstWeek(date))
+                    .unwrap();
+            }
+        }
     }
 }

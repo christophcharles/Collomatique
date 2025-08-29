@@ -12,7 +12,7 @@ pub mod ids;
 use ids::IdIssuer;
 pub use ids::{PeriodId, StudentId};
 pub mod ops;
-pub use ops::{AnnotatedOp, Op, StudentOp};
+pub use ops::{AnnotatedOp, Op, PeriodOp, StudentOp};
 use ops::{AnnotatedPeriodOp, AnnotatedStudentOp};
 
 pub mod periods;

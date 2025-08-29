@@ -331,10 +331,12 @@ name = "collomatique-gtk4"
 version = "0.1.0"
 dependencies = [
  "ashpd",
+ "chrono",
  "clap",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-time",
  "libadwaita",
  "relm4",
  "tokio",

@@ -205,6 +205,27 @@ impl NaiveMondayDate {
 
         Some(NaiveMondayDate(date))
     }
+
+    /// Builds a [NaiveMondayDate] from a [chrono::NaiveDate].
+    ///
+    /// The monday is the last monday before (including) the date
+    /// given as parameter
+    pub fn round_from(date: chrono::NaiveDate) -> NaiveMondayDate {
+        let week = date.week(chrono::Weekday::Mon);
+        let first_day = week.checked_first_day().expect("Date should be valid");
+        NaiveMondayDate(first_day)
+    }
+
+    /// Builds a [NaiveMondayDate] from the current date
+    ///
+    /// The monday is the last monday before (including) today
+    pub fn from_today() -> NaiveMondayDate {
+        let today = chrono::Local::now();
+        let naive = today.naive_local();
+
+        let date = naive.date();
+        Self::round_from(date)
+    }
 }
 
 impl NaiveMondayDate {
