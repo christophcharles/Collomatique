@@ -169,12 +169,12 @@ pub struct SimpleSchedulePartialSolution {
 
 impl SimpleSchedulePartialSolution {
     fn compute_index(&self, group: u32, week: u32) -> Option<usize> {
-        if week >= self.week_count {
-            return None;
-        }
-
         let group_usize = group as usize;
         let week_usize = week as usize;
+
+        if week_usize >= self.week_count {
+            return None;
+        }
 
         let index = group_usize * self.week_count + week_usize;
 
@@ -391,14 +391,81 @@ impl BaseConstraints for SimpleScheduleBase {
         &self,
         sol: &Self::PartialSolution,
     ) -> ConfigData<Self::MainVariable> {
-        todo!()
+        let mut config_data = ConfigData::new();
+
+        let mut index = 0usize;
+        for group in 0..self.group_count {
+            for week in 0..self.week_count {
+                for course in 0..self.course_count {
+                    if sol.assigned_courses[index].contains(&course) {
+                        config_data = config_data.set(
+                            SimpleScheduleVariable {
+                                group,
+                                course,
+                                week,
+                            },
+                            1.0,
+                        );
+                    } else if !sol.unassigned_courses[index].contains(&course) {
+                        config_data = config_data.set(
+                            SimpleScheduleVariable {
+                                group,
+                                course,
+                                week,
+                            },
+                            0.0,
+                        );
+                    }
+                }
+                index += 1;
+            }
+        }
+
+        config_data
     }
 
     fn configuration_to_partial_solution(
         &self,
         config: &ConfigData<Self::MainVariable>,
     ) -> Self::PartialSolution {
-        todo!()
+        let week_count_usize = self.week_count as usize;
+        let group_count_usize = self.group_count as usize;
+
+        let vec_size = week_count_usize * group_count_usize;
+
+        let mut assigned_courses = vec![BTreeSet::new(); vec_size];
+        let mut unassigned_courses = vec![BTreeSet::new(); vec_size];
+
+        let mut index = 0usize;
+        for group in 0..self.group_count {
+            for week in 0..self.week_count {
+                for course in 0..self.course_count {
+                    let var = config.get(SimpleScheduleVariable {
+                        group,
+                        course,
+                        week,
+                    });
+
+                    match var {
+                        Some(v) => {
+                            if v > 0.5 {
+                                assigned_courses[index].insert(course);
+                            }
+                        }
+                        None => {
+                            unassigned_courses[index].insert(course);
+                        }
+                    }
+                }
+                index += 1;
+            }
+        }
+
+        SimpleSchedulePartialSolution {
+            week_count: week_count_usize,
+            assigned_courses,
+            unassigned_courses,
+        }
     }
 
     fn reconstruct_structure_variables(
