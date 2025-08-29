@@ -28,7 +28,7 @@ async fn enable(
     pool: &SqlitePool,
     student_id: students::Id,
     incompat_id: incompats::Id,
-) -> std::result::Result<(), Id2Error<Error, students::Id, incompats::Id>> {
+) -> std::result::Result<(), Error> {
     let _ = sqlx::query!(
         r#"
 INSERT INTO student_incompats (student_id, incompat_id)
@@ -48,7 +48,7 @@ async fn disable(
     pool: &SqlitePool,
     student_id: students::Id,
     incompat_id: incompats::Id,
-) -> std::result::Result<(), Id2Error<Error, students::Id, incompats::Id>> {
+) -> std::result::Result<(), Error> {
     let rows_affected = sqlx::query!(
         r#"
 DELETE FROM student_incompats
@@ -63,10 +63,10 @@ WHERE student_id = ?1 AND incompat_id = ?2
     .rows_affected();
 
     if rows_affected > 1 {
-        return Err(Id2Error::InternalError(Error::CorruptedDatabase(format!(
+        return Err(Error::CorruptedDatabase(format!(
             "more than one registration for student_incompat (student_id = {}, incomapt_id = {})",
             student_id.0, incompat_id.0
-        ))));
+        )));
     }
 
     Ok(())
@@ -77,8 +77,13 @@ pub async fn set(
     student_id: students::Id,
     incompat_id: incompats::Id,
     enabled: bool,
-) -> std::result::Result<(), Id2Error<Error, students::Id, incompats::Id>> {
-    let current_value = get(pool, student_id, incompat_id).await?;
+) -> std::result::Result<(), Error> {
+    let current_value = get(pool, student_id, incompat_id)
+        .await
+        .map_err(|e| match e {
+            Id2Error::InternalError(int_err) => int_err,
+            _ => panic!("Unexpected invalid id: {:?}", e),
+        })?;
 
     if current_value != enabled {
         if enabled {
