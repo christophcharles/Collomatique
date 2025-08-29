@@ -617,8 +617,8 @@ impl HorizontalPosition {
     }
 }
 
-const COL_FIRSTNAME: u16 = 0;
-const COL_SURNAME: u16 = 1;
+const COL_SURNAME: u16 = 0;
+const COL_FIRSTNAME: u16 = 1;
 const COL_EMAIL: u16 = 2;
 const COL_PHONE: u16 = 3;
 const COL_FIRST_LIST: u16 = 4;
@@ -638,8 +638,8 @@ fn build_groups_worksheet_first_columns(
         .set_align(FormatAlign::Center)
         .set_border(BORDER_BIG);
 
-    worksheet.write_with_format(ROW_STUDENT_TITLES, COL_FIRSTNAME, "Prénom", &format)?;
     worksheet.write_with_format(ROW_STUDENT_TITLES, COL_SURNAME, "Nom", &format)?;
+    worksheet.write_with_format(ROW_STUDENT_TITLES, COL_FIRSTNAME, "Prénom", &format)?;
     worksheet.write_with_format(ROW_STUDENT_TITLES, COL_EMAIL, "Courriel", &format)?;
     worksheet.write_with_format(ROW_STUDENT_TITLES, COL_PHONE, "Téléphone", &format)?;
 
@@ -670,8 +670,8 @@ fn build_groups_worksheet_first_columns(
                 .set_border_bottom(BORDER_SMALL),
         };
 
-        worksheet.write_with_format(line, COL_FIRSTNAME, &student.firstname, &format)?;
         worksheet.write_with_format(line, COL_SURNAME, &student.surname, &format)?;
+        worksheet.write_with_format(line, COL_FIRSTNAME, &student.firstname, &format)?;
         worksheet.write_with_format(
             line,
             COL_EMAIL,
