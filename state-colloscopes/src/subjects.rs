@@ -327,6 +327,27 @@ impl SubjectExternalData {
         {
             return false;
         }
+        match &self.parameters.periodicity {
+            SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation: _,
+            } => {
+                for block in blocks {
+                    if block.interrogation_count_in_block.is_empty() {
+                        return false;
+                    }
+                }
+            }
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year,
+                minimum_week_separation: _,
+            } => {
+                if interrogation_count_in_year.is_empty() {
+                    return false;
+                }
+            }
+            _ => {}
+        }
         true
     }
 }
