@@ -450,6 +450,10 @@ pub enum GroupListError {
     /// cannot remove group list as there are still prefilled groups
     #[error("Group list still has prefilled groups and cannot be removed")]
     RemainingPrefilledGroups,
+
+    /// students appear multiple times in prefilled groups
+    #[error("Some students appear multiple times in prefilled groups")]
+    DuplicatedStudentInPrefilledGroups,
 }
 
 /// Errors for colloscopes modification
@@ -1203,12 +1207,17 @@ impl Data {
         students: &students::Students,
         excluded_students: &BTreeSet<StudentId>,
     ) -> Result<(), GroupListError> {
-        for (student_id, _group_num) in &prefilled_groups.student_map {
-            if !students.student_map.contains_key(student_id) {
-                return Err(GroupListError::InvalidStudentId(*student_id));
-            }
-            if excluded_students.contains(student_id) {
-                return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+        if !prefilled_groups.check_duplicated_student() {
+            return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
+        }
+        for group in &prefilled_groups.groups {
+            for student_id in &group.students {
+                if !students.student_map.contains_key(student_id) {
+                    return Err(GroupListError::InvalidStudentId(*student_id));
+                }
+                if excluded_students.contains(student_id) {
+                    return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+                }
             }
         }
         Ok(())

@@ -325,7 +325,7 @@ impl StudentsUpdateOp {
                     }
                     if group_list.prefilled_groups.contains_student(*student_id) {
                         let mut new_prefilled_groups = group_list.prefilled_groups.clone();
-                        new_prefilled_groups.student_map.remove(student_id);
+                        new_prefilled_groups.remove_student(*student_id);
                         let result = session
                             .apply(
                                 collomatique_state_colloscopes::Op::GroupList(

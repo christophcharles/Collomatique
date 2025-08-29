@@ -31,30 +31,90 @@ pub struct GroupList {
     pub prefilled_groups: GroupListPrefilledGroups,
 }
 
-/// Parameters for a single group list
+/// Prefilled groups for a single group list
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct GroupListPrefilledGroups {
-    /// student map
-    /// To each student, associate a group number
-    /// A student that appears in [GroupListParameters::excluded_students]
-    /// should not appear here
+    /// group list
+    pub groups: Vec<PrefilledGroup>,
+}
+
+/// Prefilled groups for a single group list
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct PrefilledGroup {
+    /// Students set
     ///
-    /// If a student appears in neither there is no prefilled association
-    pub student_map: BTreeMap<StudentId, u32>,
+    /// Set of students that are in the group
+    pub students: BTreeSet<StudentId>,
+    /// Sealed switch
+    ///
+    /// If `true`, the group is sealed
+    /// and no other students should be added.
+    ///
+    /// This can also be used to force a group to be empty
+    pub sealed: bool,
 }
 
 impl GroupListPrefilledGroups {
+    pub fn check_duplicated_student(&self) -> bool {
+        let mut students_so_far = BTreeSet::new();
+        for group in &self.groups {
+            for student in &group.students {
+                if !students_so_far.insert(*student) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    pub fn iter_students(&self) -> impl Iterator<Item = StudentId> {
+        self.groups.iter().flat_map(|g| g.students.iter().copied())
+    }
+
+    pub fn remove_student(&mut self, student_id: StudentId) -> bool {
+        for group in &mut self.groups {
+            if group.students.remove(&student_id) {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn contains_student(&self, student_id: StudentId) -> bool {
-        self.student_map.contains_key(&student_id)
+        for group in &self.groups {
+            if group.students.contains(&student_id) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn is_empty(&self) -> bool {
-        self.student_map.is_empty()
+        self.groups.is_empty()
+    }
+}
+
+impl PrefilledGroup {
+    /// Builds a single prefilled group from external data
+    ///
+    /// No checks is done for consistency so this is unsafe.
+    /// See [PrefilledGroupExternalData::validate].
+    pub(crate) unsafe fn from_external_data(
+        external_data: PrefilledGroupExternalData,
+    ) -> PrefilledGroup {
+        PrefilledGroup {
+            students: external_data
+                .students
+                .into_iter()
+                .map(|x| unsafe { StudentId::new(x) })
+                .collect(),
+            sealed: external_data.sealed,
+        }
     }
 }
 
 impl GroupListPrefilledGroups {
-    /// Builds an interrogation slot from external data
+    /// Builds prefilled groups from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [GroupListPrefilledGroupsExternalData::validate].
@@ -62,10 +122,10 @@ impl GroupListPrefilledGroups {
         external_data: GroupListPrefilledGroupsExternalData,
     ) -> GroupListPrefilledGroups {
         GroupListPrefilledGroups {
-            student_map: external_data
-                .student_map
+            groups: external_data
+                .groups
                 .into_iter()
-                .map(|(id, group_num)| (unsafe { StudentId::new(id) }, group_num))
+                .map(|g| unsafe { PrefilledGroup::from_external_data(g) })
                 .collect(),
         }
     }
@@ -234,16 +294,27 @@ pub struct GroupListExternalData {
     pub prefilled_groups: GroupListPrefilledGroupsExternalData,
 }
 
-/// Parameters for a single group list but unchecked
+/// Prefilled groups for a single group list but unchecked
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupListPrefilledGroupsExternalData {
-    /// student map
-    /// To each student, associate a group number
-    /// A student that appears in [GroupListParameters::excluded_students]
-    /// should not appear here
+    /// group list
+    pub groups: Vec<PrefilledGroupExternalData>,
+}
+
+/// A single prefilled group but unchecked
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct PrefilledGroupExternalData {
+    /// Students set
     ///
-    /// If a student appears in neither there is no prefilled association
-    pub student_map: BTreeMap<u64, u32>,
+    /// Set of students that are in the group
+    pub students: BTreeSet<u64>,
+    /// Sealed switch
+    ///
+    /// If `true`, the group is sealed
+    /// and no other students should be added.
+    ///
+    /// This can also be used to force a group to be empty
+    pub sealed: bool,
 }
 
 /// Parameters of a single group list but unchecked
@@ -290,10 +361,10 @@ impl From<GroupList> for GroupListExternalData {
     }
 }
 
-impl GroupListPrefilledGroupsExternalData {
-    /// Checks the validity of a [GroupListPrefilledGroupsExternalData]
+impl PrefilledGroupExternalData {
+    /// Checks the validity of a [PrefilledGroupExternalData]
     pub fn validate(&self, student_ids: &BTreeSet<u64>, excluded_students: &BTreeSet<u64>) -> bool {
-        if !self.student_map.iter().all(|(id, _group_num)| {
+        self.students.iter().all(|id| {
             if !student_ids.contains(id) {
                 return false;
             }
@@ -301,8 +372,32 @@ impl GroupListPrefilledGroupsExternalData {
                 return false;
             }
             true
-        }) {
-            return false;
+        })
+    }
+}
+
+impl From<PrefilledGroup> for PrefilledGroupExternalData {
+    fn from(value: PrefilledGroup) -> Self {
+        PrefilledGroupExternalData {
+            students: value.students.into_iter().map(|x| x.inner()).collect(),
+            sealed: value.sealed,
+        }
+    }
+}
+
+impl GroupListPrefilledGroupsExternalData {
+    /// Checks the validity of a [GroupListPrefilledGroupsExternalData]
+    pub fn validate(&self, student_ids: &BTreeSet<u64>, excluded_students: &BTreeSet<u64>) -> bool {
+        let mut students_so_far = BTreeSet::new();
+        for group in &self.groups {
+            if !group.validate(student_ids, excluded_students) {
+                return false;
+            }
+            for student in &group.students {
+                if !students_so_far.insert(*student) {
+                    return false;
+                }
+            }
         }
         true
     }
@@ -311,11 +406,7 @@ impl GroupListPrefilledGroupsExternalData {
 impl From<GroupListPrefilledGroups> for GroupListPrefilledGroupsExternalData {
     fn from(value: GroupListPrefilledGroups) -> Self {
         GroupListPrefilledGroupsExternalData {
-            student_map: value
-                .student_map
-                .into_iter()
-                .map(|(id, group)| (id.inner(), group))
-                .collect(),
+            groups: value.groups.into_iter().map(|g| g.into()).collect(),
         }
     }
 }
