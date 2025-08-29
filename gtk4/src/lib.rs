@@ -1,4 +1,5 @@
 use gtk::prelude::{GtkWindowExt, WidgetExt};
+use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::component::{
     AsyncComponent, AsyncComponentParts, AsyncComponentSender, AsyncController,
     SimpleAsyncComponent,
@@ -47,6 +48,12 @@ pub enum AppInput {
     OpenNewColloscope,
     OpenExistingColloscope,
 }
+
+relm4::new_action_group!(AppActionGroup, "app");
+
+relm4::new_stateless_action!(NewAction, AppActionGroup, "new");
+relm4::new_stateless_action!(OpenAction, AppActionGroup, "open");
+relm4::new_stateless_action!(AboutAction, AppActionGroup, "about");
 
 #[relm4::component(async, pub)]
 impl SimpleAsyncComponent for AppModel {
@@ -109,8 +116,34 @@ impl SimpleAsyncComponent for AppModel {
         };
 
         let model = AppModel { controllers, state };
-
         let widgets = view_output!();
+
+        let app = relm4::main_application();
+        app.set_accelerators_for_action::<NewAction>(&["<primary>N"]);
+        app.set_accelerators_for_action::<OpenAction>(&["<primary>O"]);
+
+        let new_action: RelmAction<NewAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let open_action: RelmAction<OpenAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let about_action: RelmAction<AboutAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+
+        let mut group = RelmActionGroup::<AppActionGroup>::new();
+        group.add_action(new_action);
+        group.add_action(open_action);
+        group.add_action(about_action);
+        group.register_for_main_application();
+
         AsyncComponentParts { model, widgets }
     }
 
