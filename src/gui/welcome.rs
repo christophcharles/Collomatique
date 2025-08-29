@@ -1,5 +1,5 @@
 use iced::widget::{button, center, column, container};
-use iced::{Element, Length, Task};
+use iced::{window, Element, Length, Subscription, Task};
 
 use super::{GuiMessage, GuiState};
 
@@ -7,12 +7,14 @@ use super::{GuiMessage, GuiState};
 pub enum Message {
     NewClicked,
     OpenClicked,
+    ExitRequest(window::Id),
 }
 
 pub fn update(_state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     match message {
         Message::NewClicked => Task::done(super::dialogs::Message::OpenNewFile.into()),
         Message::OpenClicked => Task::done(super::dialogs::Message::OpenExistingFile.into()),
+        Message::ExitRequest(id) => window::close(id),
     }
 }
 
@@ -30,6 +32,10 @@ pub fn view<'a>() -> Element<'a, GuiMessage> {
         .spacing(2),
     )
     .into()
+}
+
+pub fn exit_subscription() -> Subscription<GuiMessage> {
+    iced::window::close_requests().map(|id| Message::ExitRequest(id).into())
 }
 
 pub fn title() -> String {

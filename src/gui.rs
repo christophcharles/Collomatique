@@ -5,7 +5,7 @@ mod editor;
 mod tools;
 mod welcome;
 
-use iced::{Element, Task};
+use iced::{Element, Subscription, Task};
 
 #[derive(Default, Debug, Clone)]
 enum GuiState {
@@ -79,9 +79,19 @@ fn title(state: &GuiState) -> String {
     }
 }
 
+fn exit_subscription(state: &GuiState) -> Subscription<GuiMessage> {
+    match state {
+        GuiState::Welcome => welcome::exit_subscription(),
+        GuiState::Editor(editor_state) => editor::exit_subscription(editor_state),
+        GuiState::DialogShown(dialog_state) => dialogs::exit_subscription(dialog_state),
+    }
+}
+
 pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
     iced::application(title, update, view)
         .font(include_bytes!("../fonts/collomatique-icons.ttf").as_slice())
+        .exit_on_close_request(false)
+        .subscription(exit_subscription)
         .run_with(move || {
             (
                 match &db {
