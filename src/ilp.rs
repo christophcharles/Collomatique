@@ -332,6 +332,10 @@ impl<V: VariableName, P: ProblemRepr<V>> Problem<V, P> {
     pub fn get_variables(&self) -> &BTreeMap<V, VariableType> {
         &self.variables
     }
+
+    pub fn get_objective_fn(&self) -> &linexpr::Expr<V> {
+        &self.objective_fn
+    }
 }
 
 use std::collections::BTreeMap;
