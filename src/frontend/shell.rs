@@ -24,6 +24,12 @@ pub enum CliCommand {
         /// Number of concurrent threads to solve the colloscope - default is the number of CPU core
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
+        /// Name to save the colloscope as
+        #[arg(short = 'o', long = "output")]
+        name: Option<String>,
+        /// Force using the given name if it already exists
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
     },
     /// Create, remove or run python script
     Python {
@@ -371,14 +377,74 @@ fn solve_thread<'a>(
     Some((min_config.as_ref().clone(), min_cost))
 }
 
+fn is_colloscope_name_used(
+    colloscopes: &std::collections::BTreeMap<
+        crate::frontend::state::ColloscopeHandle,
+        crate::backend::Colloscope<
+            crate::frontend::state::TeacherHandle,
+            crate::frontend::state::SubjectHandle,
+            crate::frontend::state::StudentHandle,
+        >,
+    >,
+    name: &str,
+) -> bool {
+    for (_id, colloscope) in colloscopes {
+        if colloscope.name == name {
+            return true;
+        }
+    }
+    false
+}
+
+fn find_colloscope_name(
+    colloscopes: &std::collections::BTreeMap<
+        crate::frontend::state::ColloscopeHandle,
+        crate::backend::Colloscope<
+            crate::frontend::state::TeacherHandle,
+            crate::frontend::state::SubjectHandle,
+            crate::frontend::state::StudentHandle,
+        >,
+    >,
+) -> String {
+    let mut i = 1;
+    loop {
+        let possible_name = String::from("Colloscope") + &i.to_string();
+
+        if !is_colloscope_name_used(colloscopes, &possible_name) {
+            return possible_name;
+        }
+
+        i += 1;
+    }
+}
+
 async fn solve_command(
     steps: Option<usize>,
     thread_count: Option<NonZeroUsize>,
+    name: Option<String>,
+    force: bool,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use crate::frontend::translator::GenColloscopeTranslator;
+    use crate::frontend::{state::update::Manager, translator::GenColloscopeTranslator};
     use indicatif::MultiProgress;
     use std::time::Duration;
+
+    let colloscopes = app_state.colloscopes_get_all().await?;
+
+    let colloscope_name = match name {
+        Some(value) => {
+            if is_colloscope_name_used(&colloscopes, &value) && !force {
+                return Err(anyhow!(
+                    format!(
+                        "Colloscope name \"{}\" is already used. Use \"-f\" flag if you want to force its usage",
+                        value,
+                    )                 
+                ));
+            }
+            value
+        }
+        None => find_colloscope_name(&colloscopes),
+    };
 
     let style =
         ProgressStyle::with_template("[{elapsed_precise:.dim}] {spinner:.blue} {prefix}{msg}")
@@ -469,11 +535,17 @@ async fn solve_command(
         .expect("Solution should be translatable to gen::Colloscope data");
 
     let best_backend_config =
-        gen_colloscope_translator.translate_colloscope(&best_ilp_config, "Test")?;
+        gen_colloscope_translator.translate_colloscope(&best_ilp_config, &colloscope_name)?;
+
+    let _ = app_state
+        .apply(crate::frontend::state::Operation::Colloscopes(
+            crate::frontend::state::ColloscopesOperation::Create(best_backend_config),
+        ))
+        .await?;
 
     Ok(Some(format!(
-        "Best cost found {} is for config: {:?}",
-        best_cost.0, best_backend_config
+        "Best cost found is {}. Colloscope was stored as \"{}\".",
+        best_cost.0, colloscope_name
     )))
 }
 
@@ -1205,7 +1277,9 @@ pub async fn execute_cli_command(
         CliCommand::Solve {
             steps,
             thread_count,
-        } => solve_command(steps, thread_count, app_state).await,
+            name,
+            force,
+        } => solve_command(steps, thread_count, name, force, app_state).await,
         CliCommand::Python { command } => python_command(command, app_state).await,
     }
 }
