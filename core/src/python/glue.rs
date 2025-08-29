@@ -4,19 +4,20 @@ use pyo3::prelude::*;
 
 use crate::rpc::{
     cmd_msg::{
-        ExtensionDesc, MsgIncompatId, MsgSlotId, MsgStudentId, MsgWeekPatternId, OpenFileDialogMsg,
+        ExtensionDesc, MsgGroupListId, MsgIncompatId, MsgSlotId, MsgStudentId, MsgWeekPatternId,
+        OpenFileDialogMsg,
     },
     error_msg::{
-        AddNewIncompatError, AddNewSlotError, AddNewStudentError, AddNewSubjectError,
-        AddNewTeacherError, AssignAllError, AssignError, AssignmentsError, CutPeriodError,
-        DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
-        DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
-        DuplicatePreviousPeriodError, GeneralPlanningError, IncompatibilitiesError,
-        MergeWithPreviousPeriodError, MoveDownError, MoveSlotDownError, MoveSlotUpError,
-        MoveUpError, SlotsError, StudentsError, SubjectsError, TeachersError, UpdateIncompatError,
-        UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError,
-        UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
-        WeekPatternsError,
+        AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
+        AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError, AssignmentsError,
+        CutPeriodError, DeleteGroupListError, DeleteIncompatError, DeletePeriodError,
+        DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
+        DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningError,
+        GroupListsError, IncompatibilitiesError, MergeWithPreviousPeriodError, MoveDownError,
+        MoveSlotDownError, MoveSlotUpError, MoveUpError, SlotsError, StudentsError, SubjectsError,
+        TeachersError, UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
+        UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError, UpdateSubjectError,
+        UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError, WeekPatternsError,
     },
     ErrorMsg, GuiAnswer, ResultMsg,
 };
@@ -38,6 +39,8 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<slots::SlotParameters>()?;
     m.add_class::<week_patterns::WeekPattern>()?;
     m.add_class::<incompatibilities::Incompat>()?;
+    m.add_class::<group_lists::GroupListParameters>()?;
+    m.add_class::<group_lists::PrefilledGroup>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
@@ -99,6 +102,7 @@ mod students;
 use students::{Student, StudentId};
 mod week_patterns;
 use week_patterns::{WeekPattern, WeekPatternId};
+mod group_lists;
 mod incompatibilities;
 mod slots;
 
@@ -1180,6 +1184,109 @@ impl Session {
                 (
                     MsgIncompatId::from(*incompat_id).into(),
                     incompat.clone().into(),
+                )
+            })
+            .collect()
+    }
+
+    fn group_lists_add(
+        self_: PyRef<'_, Self>,
+        params: group_lists::GroupListParameters,
+    ) -> PyResult<group_lists::GroupListId> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GroupLists(
+                crate::rpc::cmd_msg::GroupListsCmdMsg::AddNewGroupList(params.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::GroupListId(id))) => Ok(id.into()),
+            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::AddNewGroupList(e))) => {
+                match e {
+                    AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                        format!("Invalid student id {:?}", id),
+                    )),
+                    AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
+                        Err(PyValueError::new_err("Empty students per group range"))
+                    }
+                    AddNewGroupListError::GroupCountRangeIsEmpty => {
+                        Err(PyValueError::new_err("Empty group count range"))
+                    }
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn group_lists_update(
+        self_: PyRef<'_, Self>,
+        id: group_lists::GroupListId,
+        new_params: group_lists::GroupListParameters,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GroupLists(
+                crate::rpc::cmd_msg::GroupListsCmdMsg::UpdateGroupList(
+                    id.into(),
+                    new_params.into(),
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::UpdateGroupList(e))) => {
+                match e {
+                    UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                        format!("Invalid group list id {:?}", id),
+                    )),
+                    UpdateGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                        format!("Invalid student id {:?}", id),
+                    )),
+                    UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
+                        Err(PyValueError::new_err("Empty students per group range"))
+                    }
+                    UpdateGroupListError::GroupCountRangeIsEmpty => {
+                        Err(PyValueError::new_err("Empty group count range"))
+                    }
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn group_lists_delete(self_: PyRef<'_, Self>, id: group_lists::GroupListId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GroupLists(
+                crate::rpc::cmd_msg::GroupListsCmdMsg::DeleteGroupList(id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::DeleteGroupList(e))) => {
+                match e {
+                    DeleteGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                        format!("Invalid group list id {:?}", id),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn group_lists_get_list(
+        self_: PyRef<'_, Self>,
+    ) -> BTreeMap<group_lists::GroupListId, group_lists::GroupList> {
+        self_
+            .token
+            .get_data()
+            .get_group_lists()
+            .group_list_map
+            .iter()
+            .map(|(group_list_id, group_list)| {
+                (
+                    MsgGroupListId::from(*group_list_id).into(),
+                    group_list.clone().into(),
                 )
             })
             .collect()
