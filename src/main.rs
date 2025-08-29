@@ -384,9 +384,7 @@ async fn week_count_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::CannotSetWeekCountWeekPatternsNeedTruncating(
-                        week_patterns_to_truncate,
-                    ) => {
+                    UpdateError::WeekPatternsNeedTruncating(week_patterns_to_truncate) => {
                         let week_patterns = app_state
                             .get_backend_logic()
                             .week_patterns_get_all()
@@ -404,7 +402,7 @@ async fn week_count_command(
                             )
                         )
                     }
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -436,7 +434,7 @@ async fn max_interrogations_per_day_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -451,7 +449,7 @@ async fn max_interrogations_per_day_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -495,7 +493,7 @@ async fn interrogations_per_week_range_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -520,7 +518,7 @@ async fn interrogations_per_week_range_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -535,7 +533,7 @@ async fn interrogations_per_week_range_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
@@ -623,7 +621,7 @@ async fn week_pattern_command(
                 .await
             {
                 let err = match e {
-                    UpdateError::InternalError(int_err) => anyhow::Error::from(int_err),
+                    UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                     _ => panic!("/!\\ Unexpected error ! {:?}", e),
                 };
                 return Err(err);
