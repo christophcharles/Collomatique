@@ -1,5 +1,15 @@
 use pyo3::prelude::*;
 
+use crate::rpc::{
+    error_msg::{
+        CutPeriodError, DeletePeriodError, GeneralPlanningError, MergeWithPreviousPeriodError,
+        UpdatePeriodWeekCountError, UpdateWeekStatusError,
+    },
+    ErrorMsg, ResultMsg,
+};
+
+use pyo3::exceptions::PyValueError;
+
 #[pymodule]
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Session>()?;
@@ -34,7 +44,7 @@ pub struct Session {
 }
 
 mod general_planning;
-use general_planning::Period;
+use general_planning::{Period, PeriodId};
 mod subjects;
 use subjects::Subject;
 mod time;
@@ -43,24 +53,163 @@ use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId};
 
 #[pymethods]
 impl Session {
-    fn periods(self_: PyRef<'_, Self>) -> general_planning::SessionPeriods {
-        general_planning::SessionPeriods {
-            token: self_.token.clone(),
+    fn periods_add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::AddNewPeriod(week_count),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(id))) => id.into(),
+            _ => panic!("Unexpected result: {:?}", result),
         }
     }
 
-    fn subjects_get(self_: PyRef<'_, Self>) -> Vec<subjects::Subject> {
-        self_
-            .token
-            .get_data()
-            .get_subjects()
-            .ordered_subject_list
-            .iter()
-            .map(|(id, data)| Subject {
-                id: MsgSubjectId::from(*id).into(),
-                parameters: data.parameters.clone().into(),
-            })
-            .collect()
+    fn periods_update(self_: PyRef<'_, Self>, id: PeriodId, new_week_count: usize) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdatePeriodWeekCount(
+                    id.into(),
+                    new_week_count,
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(
+                GeneralPlanningError::UpdatePeriodWeekCount(e),
+            )) => match e {
+                UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id, wc) => {
+                    Err(PyValueError::new_err(format!(
+                        "Minimum week count of {} required by subject {:?}",
+                        wc, id
+                    )))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn periods_delete(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeletePeriod(id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::DeletePeriod(e))) => {
+                match e {
+                    DeletePeriodError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn periods_cut(
+        self_: PyRef<'_, Self>,
+        id: PeriodId,
+        remaining_weeks: usize,
+    ) -> PyResult<PeriodId> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::CutPeriod(id.into(), remaining_weeks),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(new_id))) => Ok(new_id.into()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::CutPeriod(e))) => {
+                match e {
+                    CutPeriodError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                    CutPeriodError::RemainingWeekCountTooBig(w, t) => Err(PyValueError::new_err(
+                        format!("Remaining weeks too big ({} > {})", w, t),
+                    )),
+                }
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn periods_merge_with_previous(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::MergeWithPreviousPeriod(id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(
+                GeneralPlanningError::MergeWithPreviousPeriod(e),
+            )) => match e {
+                MergeWithPreviousPeriodError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith => {
+                    Err(PyValueError::new_err(format!("Cannot merge first period")))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn periods_update_week_status(
+        self_: PyRef<'_, Self>,
+        id: PeriodId,
+        week: usize,
+        new_status: bool,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(
+                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateWeekStatus(
+                    id.into(),
+                    week,
+                    new_status,
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(ErrorMsg::GeneralPlanning(
+                GeneralPlanningError::UpdateWeekStatus(e),
+            )) => match e {
+                UpdateWeekStatusError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                UpdateWeekStatusError::InvalidWeekNumber(w, t) => Err(PyValueError::new_err(
+                    format!("Week number too big ({} >= {}", w, t),
+                )),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn periods_set_first_week(self_: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
+            crate::rpc::UpdateMsg::GeneralPlanning(match first_week {
+                Some(week) => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateFirstWeek(
+                    collomatique_time::NaiveMondayDate::from(week).into_inner(),
+                ),
+                None => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeleteFirstWeek,
+            }),
+        ));
+
+        if result != ResultMsg::Ack(None) {
+            panic!("Unexpected result: {:?}", result)
+        }
     }
 
     fn periods_get_first_week(self_: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
@@ -73,7 +222,7 @@ impl Session {
             .map(|x| x.clone().into())
     }
 
-    fn periods_get(self_: PyRef<'_, Self>) -> Vec<Period> {
+    fn periods_get_list(self_: PyRef<'_, Self>) -> Vec<Period> {
         self_
             .token
             .get_data()
@@ -83,6 +232,20 @@ impl Session {
             .map(|(id, data)| Period {
                 id: MsgPeriodId::from(*id).into(),
                 weeks_status: data.clone(),
+            })
+            .collect()
+    }
+
+    fn subjects_get_list(self_: PyRef<'_, Self>) -> Vec<subjects::Subject> {
+        self_
+            .token
+            .get_data()
+            .get_subjects()
+            .ordered_subject_list
+            .iter()
+            .map(|(id, data)| Subject {
+                id: MsgSubjectId::from(*id).into(),
+                parameters: data.parameters.clone().into(),
             })
             .collect()
     }
