@@ -2,6 +2,8 @@
 //!
 //! This module contains the code for decoding SubjectList entries
 
+use crate::json::subject_list::SubjectDecodeError;
+
 use super::*;
 
 pub fn decode_entry(
@@ -47,10 +49,16 @@ pub fn decode_entry(
             );
         }
 
-        pre_data
-            .subjects
-            .ordered_subject_list
-            .push((id, subject.into()));
+        let sub = match subject.try_into() {
+            Ok(s) => s,
+            Err(SubjectDecodeError::DuplicateSlot) => {
+                return Err(DecodeError::DuplicatedSlotInSubjectIncompatibilities)
+            }
+            Err(SubjectDecodeError::InvalidSlot) => {
+                return Err(DecodeError::IllformedSlotInSubjectIncompatibilities)
+            }
+        };
+        pre_data.subjects.ordered_subject_list.push((id, sub));
     }
 
     Ok(())

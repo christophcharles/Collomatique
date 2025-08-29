@@ -180,6 +180,11 @@ impl SlotWithDuration {
         Some(SlotWithDuration { start, duration })
     }
 
+    /// Returns the start time of a slot
+    pub fn start(&self) -> &SlotStart {
+        &self.start
+    }
+
     /// Returns the end time of a slot
     ///
     /// This end time is just past the end of the slot. So
