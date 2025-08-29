@@ -734,9 +734,11 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::UpdateEmptyWeeksBeforeBlock(block_num, new_count) => {
                 self.once_for_every_arbitrary_block_params[block_num].delay_in_weeks = new_count;
+                self.synchronize_block_factory();
             }
             DialogInput::UpdateDurationInWeeksOfGivenBlock(block_num, new_duration) => {
                 self.once_for_every_arbitrary_block_params[block_num].size_in_weeks = new_duration;
+                self.synchronize_block_factory();
             }
             DialogInput::DeleteBlock(block_num) => {
                 self.once_for_every_arbitrary_block_params.remove(block_num);
@@ -906,6 +908,9 @@ impl FactoryComponent for Block {
                     .unwrap();
             }
             BlockInput::UpdateDurationInWeeks(new_duration) => {
+                if self.data.block_params.size_in_weeks == new_duration {
+                    return;
+                }
                 self.data.block_params.size_in_weeks = new_duration;
                 sender
                     .output_sender()
@@ -916,6 +921,9 @@ impl FactoryComponent for Block {
                     .unwrap();
             }
             BlockInput::UpdateEmptyWeeks(new_count) => {
+                if self.data.block_params.delay_in_weeks == new_count {
+                    return;
+                }
                 self.data.block_params.delay_in_weeks = new_count;
                 sender
                     .output_sender()
