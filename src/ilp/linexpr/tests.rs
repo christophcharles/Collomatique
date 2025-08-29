@@ -67,13 +67,13 @@ fn expr_sub() {
 fn expr_mul() {
     let expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b") + 2;
     let expr2 = -4 * Expr::<String>::var("a") + 6 * Expr::<String>::var("b") + 4;
-    assert_eq!(2 * expr1, expr2);
+    assert_eq!((2 * expr1).cleaned(), expr2.cleaned());
 
     let expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b") + 2;
     let expr2 = 6 * Expr::<String>::var("a") - 9 * Expr::<String>::var("b") - 6;
-    assert_eq!((-3) * expr1, expr2);
+    assert_eq!(((-3) * expr1).cleaned(), expr2.cleaned());
 
     let expr1 = -2 * Expr::<String>::var("a") + 3 * Expr::<String>::var("b") + 2;
     let expr2 = Expr::<String>::constant(0);
-    assert_eq!(0 * expr1, expr2);
+    assert_eq!((0 * expr1).cleaned(), expr2.cleaned());
 }

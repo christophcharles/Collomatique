@@ -49,9 +49,9 @@ fn test_is_feasable() {
         .add_variable("b")
         .add_variable("c")
         .add_variable("d")
-        .add((&a + &b).leq(&Expr::constant(1)))
-        .add((&c + &d).leq(&Expr::constant(1)))
-        .add((&a + &d).eq(&Expr::constant(1)))
+        .add_constraint((&a + &b).leq(&Expr::constant(1)))
+        .add_constraint((&c + &d).leq(&Expr::constant(1)))
+        .add_constraint((&a + &d).eq(&Expr::constant(1)))
         .build()
         .unwrap();
 
@@ -141,7 +141,7 @@ fn problem_undeclared_variable() {
 
     let pb = ProblemBuilder::new()
         .add_variable("X")
-        .add((Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)))
+        .add_constraint((Expr::var("X") + Expr::var("Y")).eq(&Expr::constant(1)))
         .build();
 
     assert_eq!(

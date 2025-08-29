@@ -47,20 +47,20 @@ fn test_dijkstra() {
         .add_variables(["x11", "x12", "x21", "x22"])
         .add_variables(["y11", "y12", "y21", "y22"])
         // Both class should not attend a course at the same time
-        .add((&x11 + &y11).leq(&one))
-        .add((&x12 + &y12).leq(&one))
-        .add((&x21 + &y21).leq(&one))
-        .add((&x22 + &y22).leq(&one))
+        .add_constraint((&x11 + &y11).leq(&one))
+        .add_constraint((&x12 + &y12).leq(&one))
+        .add_constraint((&x21 + &y21).leq(&one))
+        .add_constraint((&x22 + &y22).leq(&one))
         // Each class should not attend more than one course at a given time
-        .add((&x11 + &x21).leq(&one))
-        .add((&x12 + &x22).leq(&one))
-        .add((&y11 + &y21).leq(&one))
-        .add((&y12 + &y22).leq(&one))
+        .add_constraint((&x11 + &x21).leq(&one))
+        .add_constraint((&x12 + &x22).leq(&one))
+        .add_constraint((&y11 + &y21).leq(&one))
+        .add_constraint((&y12 + &y22).leq(&one))
         // Each class must complete each course exactly once
-        .add((&x11 + &x12).eq(&one))
-        .add((&x21 + &x22).eq(&one))
-        .add((&y11 + &y12).eq(&one))
-        .add((&y21 + &y22).eq(&one))
+        .add_constraint((&x11 + &x12).eq(&one))
+        .add_constraint((&x21 + &x22).eq(&one))
+        .add_constraint((&y11 + &y12).eq(&one))
+        .add_constraint((&y21 + &y22).eq(&one))
         .build()
         .unwrap();
     let config = pb.config_from(["x11", "y12", "y21"]).unwrap();

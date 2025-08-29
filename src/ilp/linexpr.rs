@@ -13,31 +13,23 @@ impl<T: std::fmt::Debug + std::fmt::Display + PartialOrd + Ord + PartialEq + Eq 
 {
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Expr<V: VariableName> {
     coefs: BTreeMap<V, i32>,
     constant: i32,
 }
 
-impl<V: VariableName> PartialEq for Expr<V> {
-    fn eq(&self, other: &Self) -> bool {
-        self.constant == other.constant && (self.cleaned().coefs == other.cleaned().coefs)
-    }
-}
-
-impl<V: VariableName> Eq for Expr<V> {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Sign {
     Equals,
     #[default]
     LessThan,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Constraint<V: VariableName> {
-    expr: Expr<V>,
     sign: Sign,
+    expr: Expr<V>,
 }
 
 use std::collections::BTreeSet;

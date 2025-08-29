@@ -16,7 +16,7 @@ pub struct NdProblem {
 impl NdProblem {
     pub fn new<V: linexpr::VariableName>(
         variables_vec: &Vec<V>,
-        constraints: &Vec<linexpr::Constraint<V>>,
+        constraints_vec: &Vec<linexpr::Constraint<V>>,
     ) -> NdProblem {
         let p = variables_vec.len();
 
@@ -26,7 +26,7 @@ impl NdProblem {
         let mut leq_constants_vec = vec![];
         let mut eq_constants_vec = vec![];
 
-        for c in constraints {
+        for c in constraints_vec {
             let mut current_row = Array::zeros(p);
             for (j, var) in variables_vec.iter().enumerate() {
                 if let Some(val) = c.get_var(var.clone()) {

@@ -33,7 +33,7 @@ impl<V: VariableName> Default for EvalFn<V> {
 
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: VariableName> {
-    constraints: Vec<linexpr::Constraint<V>>,
+    constraints: BTreeSet<linexpr::Constraint<V>>,
     eval_fn: EvalFn<V>,
     variables: BTreeSet<V>,
 }
@@ -41,7 +41,7 @@ pub struct ProblemBuilder<V: VariableName> {
 impl<V: VariableName> Default for ProblemBuilder<V> {
     fn default() -> Self {
         ProblemBuilder {
-            constraints: Vec::new(),
+            constraints: BTreeSet::new(),
             eval_fn: EvalFn::default(),
             variables: BTreeSet::new(),
         }
@@ -53,8 +53,17 @@ impl<V: VariableName> ProblemBuilder<V> {
         Self::default()
     }
 
-    pub fn add(mut self, constraint: linexpr::Constraint<V>) -> Self {
-        self.constraints.push(constraint);
+    pub fn add_constraint(mut self, constraint: linexpr::Constraint<V>) -> Self {
+        self.constraints.insert(constraint.cleaned());
+        self
+    }
+
+    pub fn add_constraints<T: IntoIterator<Item = linexpr::Constraint<V>>>(
+        mut self,
+        constraints: T,
+    ) -> Self {
+        self.constraints
+            .extend(constraints.into_iter().map(|x| x.cleaned()));
         self
     }
 
@@ -74,11 +83,7 @@ impl<V: VariableName> ProblemBuilder<V> {
         self
     }
 
-    pub fn build(mut self) -> Result<Problem<V>, V> {
-        for c in self.constraints.iter_mut() {
-            c.clean();
-        }
-
+    pub fn build(self) -> Result<Problem<V>, V> {
         for (i, c) in self.constraints.iter().enumerate() {
             let constraint_vars = c.variables();
             if !self.variables.is_superset(&constraint_vars) {
@@ -97,7 +102,9 @@ impl<V: VariableName> ProblemBuilder<V> {
             variables_lookup.insert(var.clone(), i);
         }
 
-        let nd_problem = ndtools::NdProblem::new(&variables_vec, &self.constraints);
+        let constraints_vec: Vec<_> = self.constraints.iter().cloned().collect();
+
+        let nd_problem = ndtools::NdProblem::new(&variables_vec, &constraints_vec);
         Ok(Problem {
             variables: self.variables,
             variables_vec,
@@ -116,7 +123,7 @@ pub struct Problem<V: VariableName> {
     variables: BTreeSet<V>,
     variables_vec: Vec<V>,
     variables_lookup: BTreeMap<V, usize>,
-    constraints: Vec<linexpr::Constraint<V>>,
+    constraints: BTreeSet<linexpr::Constraint<V>>,
     eval_fn: EvalFn<V>,
     nd_problem: ndtools::NdProblem,
 }
