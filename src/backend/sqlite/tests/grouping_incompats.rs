@@ -408,3 +408,102 @@ async fn grouping_incompats_add_multiple(pool: SqlitePool) {
     assert_eq!(grouping_incompats, grouping_incompats_expected);
     assert_eq!(grouping_incompat_items, grouping_incompat_items_expected);
 }
+
+#[sqlx::test]
+async fn grouping_incompats_remove_one(pool: SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .grouping_incompats_remove(super::super::grouping_incompats::Id(1))
+        .await
+        .unwrap();
+
+    let grouping_incompats = sqlx::query_as!(
+        GroupingIncompatDb,
+        "SELECT grouping_incompat_id, max_count FROM grouping_incompats"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let grouping_incompat_items = sqlx::query_as!(
+        GroupingIncompatItemDb,
+        "SELECT grouping_incompat_id, grouping_id FROM grouping_incompat_items"
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap();
+
+    let grouping_incompats_expected = vec![GroupingIncompatDb {
+        grouping_incompat_id: 2,
+        max_count: 2,
+    }];
+
+    let grouping_incompat_items_expected = vec![
+        GroupingIncompatItemDb {
+            grouping_incompat_id: 2,
+            grouping_id: 3,
+        },
+        GroupingIncompatItemDb {
+            grouping_incompat_id: 2,
+            grouping_id: 4,
+        },
+        GroupingIncompatItemDb {
+            grouping_incompat_id: 2,
+            grouping_id: 5,
+        },
+    ];
+
+    assert_eq!(grouping_incompats, grouping_incompats_expected);
+    assert_eq!(grouping_incompat_items, grouping_incompat_items_expected);
+}
+
+#[sqlx::test]
+async fn grouping_incompats_remove_then_add_one(pool: SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    store
+        .grouping_incompats_remove(super::super::grouping_incompats::Id(1))
+        .await
+        .unwrap();
+
+    let id = store
+        .grouping_incompats_add(&GroupingIncompat {
+            max_count: NonZeroUsize::new(1).unwrap(),
+            groupings: BTreeSet::from([
+                super::super::groupings::Id(1),
+                super::super::groupings::Id(2),
+            ]),
+        })
+        .await
+        .unwrap();
+    assert_eq!(id, super::super::grouping_incompats::Id(3));
+
+    let grouping_incompats = store.grouping_incompats_get_all().await.unwrap();
+
+    let grouping_incompats_expected = BTreeMap::from([
+        (
+            super::super::grouping_incompats::Id(2),
+            GroupingIncompat {
+                max_count: NonZeroUsize::new(2).unwrap(),
+                groupings: BTreeSet::from([
+                    super::super::groupings::Id(3),
+                    super::super::groupings::Id(4),
+                    super::super::groupings::Id(5),
+                ]),
+            },
+        ),
+        (
+            super::super::grouping_incompats::Id(3),
+            GroupingIncompat {
+                max_count: NonZeroUsize::new(1).unwrap(),
+                groupings: BTreeSet::from([
+                    super::super::groupings::Id(1),
+                    super::super::groupings::Id(2),
+                ]),
+            },
+        ),
+    ]);
+
+    assert_eq!(grouping_incompats, grouping_incompats_expected);
+}
