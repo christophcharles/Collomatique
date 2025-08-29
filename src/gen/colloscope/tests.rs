@@ -54,7 +54,10 @@ fn simple_validated_data() {
             },
         }],
     }];
-    let students = StudentList::new();
+    let students = vec![Student {
+        subjects: BTreeSet::from([0]),
+        incompatibilities: BTreeSet::from([0]),
+    }];
 
     let expected_result = ValidatedData {
         general: general.clone(),
