@@ -21,7 +21,9 @@ use std::collections::BTreeMap;
 pub trait ProblemRepr<V: UsableData>:
     Clone + std::fmt::Debug + Send + Sync + PartialEq + Eq + PartialOrd + Ord
 {
-    type Config<'a>: ConfigRepr<'a, V> where Self: 'a;
+    type Config<'a>: ConfigRepr<'a, V>
+    where
+        Self: 'a;
 
     fn new<'a, T>(variables: &BTreeMap<V, Variable>, constraints: T) -> Self
     where
