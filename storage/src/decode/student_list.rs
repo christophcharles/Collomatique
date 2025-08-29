@@ -13,7 +13,7 @@ pub fn decode_entry(
             .student_list
             .insert(
                 id,
-                collomatique_state_colloscopes::PersonWithContacts {
+                collomatique_state_colloscopes::PersonWithContact {
                     firstname: student.firstname,
                     surname: student.surname,
                     tel: student.telephone,

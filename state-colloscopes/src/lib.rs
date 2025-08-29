@@ -21,7 +21,7 @@ pub use ops::{AnnotatedOp, Op, StudentOp};
 /// There are not used for the colloscope solving process
 /// but can help produce a nice colloscope output with contact info.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PersonWithContacts {
+pub struct PersonWithContact {
     /// Surname of the person
     ///
     /// Though this field can be an empty string,
@@ -65,7 +65,7 @@ pub struct PersonWithContacts {
 #[derive(Debug)]
 pub struct Data {
     id_issuer: IdIssuer,
-    student_list: BTreeMap<StudentId, PersonWithContacts>,
+    student_list: BTreeMap<StudentId, PersonWithContact>,
 }
 
 use thiserror::Error;
@@ -126,7 +126,7 @@ impl Data {
     /// This will check the consistency of the lists
     /// and will also do some internal checks, so this might fail.
     pub fn from_lists(
-        student_list: BTreeMap<u64, PersonWithContacts>,
+        student_list: BTreeMap<u64, PersonWithContact>,
     ) -> Result<Data, tools::IdError> {
         let student_ids = student_list.keys();
         let id_issuer = IdIssuer::new(student_ids)?;
@@ -145,7 +145,7 @@ impl Data {
     }
 
     /// Get the student list
-    pub fn get_student_list(&self) -> &BTreeMap<StudentId, PersonWithContacts> {
+    pub fn get_student_list(&self) -> &BTreeMap<StudentId, PersonWithContact> {
         &self.student_list
     }
 
