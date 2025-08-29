@@ -24,14 +24,14 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverWithTimeLimit<V, C, 
         &self,
         problem: &'a Problem<V, C, P>,
         time_limit_in_seconds: u32,
-    ) -> Option<TimeLimitSolution<'a, V, C, P>> {
+    ) -> TimeLimitSolution<'a, V, C, P> {
         self.solve_internal(problem, Some(time_limit_in_seconds))
     }
 }
 
 impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSolver {
     fn solve<'a>(&self, problem: &'a Problem<V, C, P>) -> Option<FeasableConfig<'a, V, C, P>> {
-        self.solve_internal(problem, None).map(|x| x.config)
+        self.solve_internal(problem, None).config
     }
 }
 
@@ -75,7 +75,7 @@ impl CbcSolver {
         &self,
         problem: &'a Problem<V, C, P>,
         time_limit_in_seconds: Option<u32>,
-    ) -> Option<TimeLimitSolution<'a, V, C, P>> {
+    ) -> TimeLimitSolution<'a, V, C, P> {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
         let stdout_gag = gag::Gag::stdout();
@@ -182,7 +182,7 @@ impl CbcSolver {
         problem: &'a Problem<V, C, P>,
         sol: &'b coin_cbc::Solution,
         cols: &'c std::collections::BTreeMap<V, coin_cbc::Col>,
-    ) -> Option<TimeLimitSolution<'a, V, C, P>> {
+    ) -> TimeLimitSolution<'a, V, C, P> {
         let raw_model = sol.raw();
 
         let time_limit_reached = (raw_model.status() == coin_cbc::raw::Status::Stopped)
@@ -191,13 +191,21 @@ impl CbcSolver {
         let config_data =
             ConfigData::new().set_iter(cols.iter().map(|(v, col)| (v.clone(), sol.col(*col))));
 
-        let config = problem.build_config(config_data).ok()?;
+        let config = match problem.build_config(config_data) {
+            Ok(c) => c,
+            Err(_) => {
+                return TimeLimitSolution {
+                    config: None,
+                    time_limit_reached,
+                }
+            }
+        };
 
-        let feasable_config = config.into_feasable()?;
+        let feasable_config = config.into_feasable();
 
-        Some(TimeLimitSolution {
+        TimeLimitSolution {
             config: feasable_config,
             time_limit_reached,
-        })
+        }
     }
 }

@@ -647,7 +647,7 @@ where
     T: BaseConstraints<MainVariable = M, StructureVariable = S>,
 {
     /// The actual decorated solution that is returned
-    pub solution: DecoratedSolution<'a, M, S, T, P>,
+    pub solution: Option<DecoratedSolution<'a, M, S, T, P>>,
     /// Wether the time limit was reached
     ///
     /// If the time limit is reached, the solution might not be optimal.
@@ -767,20 +767,26 @@ where
         &'a self,
         solver: &Solver,
         time_limit_in_seconds: u32,
-    ) -> Option<TimeLimitSolution<'a, M, S, T, P>> {
-        let time_limit_sol =
-            solver.solve_with_time_limit(&self.ilp_problem, time_limit_in_seconds)?;
-        let internal_solution = self.base.configuration_to_partial_solution(
-            &self.feasable_config_into_config_data(&time_limit_sol.config),
-        )?;
+    ) -> TimeLimitSolution<'a, M, S, T, P> {
+        let time_limit_sol = solver.solve_with_time_limit(&self.ilp_problem, time_limit_in_seconds);
+        let Some(config) = time_limit_sol.config else {
+            return TimeLimitSolution {
+                solution: None,
+                time_limit_reached: time_limit_sol.time_limit_reached,
+            };
+        };
 
-        Some(TimeLimitSolution {
-            solution: DecoratedSolution {
+        let internal_solution = self
+            .base
+            .configuration_to_partial_solution(&self.feasable_config_into_config_data(&config));
+
+        TimeLimitSolution {
+            solution: internal_solution.map(|is| DecoratedSolution {
                 problem: self,
-                internal_solution,
-                ilp_config: time_limit_sol.config.into_inner(),
-            },
+                internal_solution: is,
+                ilp_config: config.into_inner(),
+            }),
             time_limit_reached: time_limit_sol.time_limit_reached,
-        })
+        }
     }
 }
