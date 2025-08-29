@@ -13,7 +13,7 @@ pub struct Subjects {
     ///
     /// Each item represent a subject. It is described
     /// by a unique id and a description of type [Subject]
-    pub ordered_period_list: Vec<(SubjectId, Subject)>,
+    pub ordered_subject_list: Vec<(SubjectId, Subject)>,
 }
 
 /// Description of one subject
@@ -193,7 +193,7 @@ impl Subjects {
     /// See [SubjectsExternalData::validate_all] and [SubjectExternalData::validate].
     pub(crate) unsafe fn from_external_data(external_data: SubjectsExternalData) -> Subjects {
         Subjects {
-            ordered_period_list: external_data
+            ordered_subject_list: external_data
                 .ordered_period_list
                 .into_iter()
                 .map(|(id, data)| {
@@ -207,7 +207,7 @@ impl Subjects {
 
     /// Finds the position of a subject by id
     pub fn find_subject_position(&self, id: SubjectId) -> Option<usize> {
-        self.ordered_period_list
+        self.ordered_subject_list
             .iter()
             .position(|(current_id, _desc)| *current_id == id)
     }
@@ -289,5 +289,18 @@ impl SubjectExternalData {
             }
         }
         true
+    }
+}
+
+impl From<Subject> for SubjectExternalData {
+    fn from(value: Subject) -> Self {
+        SubjectExternalData {
+            parameters: value.parameters,
+            excluded_periods: value
+                .excluded_periods
+                .into_iter()
+                .map(|x| x.inner())
+                .collect(),
+        }
     }
 }
