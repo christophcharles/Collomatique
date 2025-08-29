@@ -320,12 +320,14 @@ impl Component for EditorPanel {
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
                     self.data.undo().expect("Should be able to undo");
+                    self.dirty = true;
                     sender.output(EditorOutput::UpdateActions).unwrap();
                 }
             }
             EditorInput::RedoClicked => {
                 if self.data.can_redo() {
                     self.data.redo().expect("Should be able to undo");
+                    self.dirty = true;
                     sender.output(EditorOutput::UpdateActions).unwrap();
                 }
             }
