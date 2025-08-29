@@ -6,8 +6,8 @@ use relm4::FactorySender;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryData {
     Success(String),
-    Warning(String),
-    Error(String),
+    Failed(String),
+    Invalid(String),
 }
 
 #[derive(Debug)]
@@ -19,16 +19,16 @@ impl Entry {
     fn generate_icon_name(&self) -> String {
         match &self.data {
             EntryData::Success(_) => "emblem-success".into(),
-            EntryData::Warning(_) => "emblem-warning".into(),
-            EntryData::Error(_) => "emblem-error".into(),
+            EntryData::Invalid(_) => "emblem-warning".into(),
+            EntryData::Failed(_) => "emblem-error".into(),
         }
     }
 
     fn generate_label(&self) -> String {
         match &self.data {
             EntryData::Success(s) => s.clone(),
-            EntryData::Warning(s) => s.clone() + &" (échec)",
-            EntryData::Error(s) => String::from("OPÉRATION INVALIDE : ") + s,
+            EntryData::Invalid(s) => String::from("(invalide) ") + s,
+            EntryData::Failed(s) => String::from("(échec) ") + s,
         }
     }
 }
@@ -48,8 +48,8 @@ impl FactoryComponent for Entry {
             set_orientation: gtk::Orientation::Horizontal,
             add_css_class: match &self.data {
                 EntryData::Success(_) => "success",
-                EntryData::Warning(_) => "warning",
-                EntryData::Error(_) => "error",
+                EntryData::Invalid(_) => "warning",
+                EntryData::Failed(_) => "error",
             },
             gtk::Image {
                 set_margin_end: 5,
