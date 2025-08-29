@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use super::*;
+use crate::ilp::{linexpr, random};
+use std::collections::BTreeMap;
 
 use ndarray::{Array, Array1, Array2, ArrayView};
 
