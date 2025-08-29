@@ -170,7 +170,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Student(student_op) => self.apply_student(student_op)?,
             AnnotatedOp::Period(period_op) => self.apply_period(period_op)?,
         }
-        assert!(self.check_invariants());
+        self.check_invariants();
         Ok(())
     }
 }
@@ -205,42 +205,31 @@ impl Data {
     /// Checks that there are no duplicate ids in data
     ///
     /// Even ids for different type of data should be different
-    fn check_no_duplicate_ids(&self) -> bool {
+    fn check_no_duplicate_ids(&self) {
         let mut ids_so_far = BTreeSet::new();
 
         for (id, _) in &self.inner_data.periods.ordered_period_list {
-            if !ids_so_far.insert(id.inner()) {
-                return false;
-            }
+            assert!(ids_so_far.insert(id.inner()));
         }
 
         for (id, _) in &self.inner_data.subjects.ordered_period_list {
-            if !ids_so_far.insert(id.inner()) {
-                return false;
-            }
+            assert!(ids_so_far.insert(id.inner()));
         }
 
         for (id, _) in &self.inner_data.student_list {
-            if !ids_so_far.insert(id.inner()) {
-                return false;
-            }
+            assert!(ids_so_far.insert(id.inner()));
         }
-
-        true
     }
 
     /// USED INTERNALLY
     ///
     /// Checks that all the periods ids used in subjects data are valid
-    fn check_subjects_data_has_correct_period_ids(&self, period_ids: &BTreeSet<PeriodId>) -> bool {
+    fn check_subjects_data_has_correct_period_ids(&self, period_ids: &BTreeSet<PeriodId>) {
         for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
             for period_id in &subject.excluded_periods {
-                if !period_ids.contains(period_id) {
-                    return false;
-                }
+                assert!(period_ids.contains(period_id));
             }
         }
-        true
     }
 
     /// USED INTERNALLY
@@ -248,55 +237,36 @@ impl Data {
     /// Checks the various ranges in subjects
     /// In particular, students per group and groups per interrogation should
     ///
-    fn check_subjects_data_has_correct_ranges(&self) -> bool {
+    fn check_subjects_data_has_correct_ranges(&self) {
         for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
-            if subject.parameters.students_per_group.is_empty() {
-                return false;
-            }
-            if subject.parameters.groups_per_interrogation.is_empty() {
-                return false;
-            }
+            assert!(!subject.parameters.students_per_group.is_empty());
+            assert!(!subject.parameters.groups_per_interrogation.is_empty());
         }
-        true
     }
 
     /// USED INTERNALLY
     ///
     /// checks all that subjects have valid week numbers when used
-    fn check_subjects_have_valid_week_numbers(&self, week_count: usize) -> bool {
+    fn check_subjects_have_valid_week_numbers(&self, week_count: usize) {
         for (_subject_id, subject) in &self.inner_data.subjects.ordered_period_list {
             if let subjects::SubjectPeriodicity::OnceForEveryArbitraryBlock {
                 weeks_at_start_of_new_block,
             } = &subject.parameters.periodicity
             {
                 for week in weeks_at_start_of_new_block {
-                    if *week >= week_count {
-                        return false;
-                    }
+                    assert!(*week < week_count);
                 }
             }
         }
-        true
     }
 
     /// USED INTERNALLY
     ///
     /// checks all the invariants in subject data
-    fn check_subjects_data_consistency(
-        &self,
-        period_ids: &BTreeSet<PeriodId>,
-        week_count: usize,
-    ) -> bool {
-        if !self.check_subjects_data_has_correct_period_ids(period_ids) {
-            return false;
-        }
-        if !self.check_subjects_data_has_correct_ranges() {
-            return false;
-        }
-        if !self.check_subjects_have_valid_week_numbers(week_count) {
-            return false;
-        }
-        true
+    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>, week_count: usize) {
+        self.check_subjects_data_has_correct_period_ids(period_ids);
+        self.check_subjects_data_has_correct_ranges();
+        self.check_subjects_have_valid_week_numbers(week_count);
     }
 
     /// USED INTERNALLY
@@ -328,16 +298,13 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// Checks all the invariants of data
-    fn check_invariants(&self) -> bool {
-        if !self.check_no_duplicate_ids() {
-            return false;
-        }
+    fn check_invariants(&self) {
+        self.check_no_duplicate_ids();
+
         let period_ids = self.build_period_ids();
         let week_count = self.build_week_count();
-        if !self.check_subjects_data_consistency(&period_ids, week_count) {
-            return false;
-        }
-        true
+
+        self.check_subjects_data_consistency(&period_ids, week_count);
     }
 }
 
@@ -402,7 +369,7 @@ impl Data {
             },
         };
 
-        assert!(data.check_invariants());
+        data.check_invariants();
 
         Ok(data)
     }
