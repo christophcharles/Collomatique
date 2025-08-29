@@ -77,10 +77,11 @@ enum ToastInfo {
 #[repr(usize)]
 enum PanelNumbers {
     GeneralPlanning = 0,
-    Subjects = 1,
-    Teachers = 2,
-    Students = 3,
-    Assignments = 4,
+    WeekPatterns = 1,
+    Subjects = 2,
+    Teachers = 3,
+    Students = 4,
+    Assignments = 5,
 }
 
 pub struct EditorPanel {
@@ -195,7 +196,9 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp::Assignment(_) => {
                 Some(PanelNumbers::Assignments)
             }
-            collomatique_state_colloscopes::AnnotatedOp::WeekPattern(_) => None,
+            collomatique_state_colloscopes::AnnotatedOp::WeekPattern(_) => {
+                Some(PanelNumbers::WeekPatterns)
+            }
         }
     }
 
@@ -432,6 +435,7 @@ impl Component for EditorPanel {
 
         let pages_names = vec![
             "general_planning",
+            "week_patterns",
             "subjects",
             "teachers",
             "students",
@@ -439,6 +443,7 @@ impl Component for EditorPanel {
         ];
         let pages_titles_map = BTreeMap::from([
             ("general_planning", "Planning général"),
+            ("week_patterns", "Modèles de périodicité"),
             ("subjects", "Matières"),
             ("teachers", "Colleurs"),
             ("students", "Élèves"),
@@ -466,28 +471,51 @@ impl Component for EditorPanel {
 
         widgets.main_stack.add_titled(
             model.general_planning.widget(),
-            Some(model.pages_names[0]),
-            model.pages_titles_map.get(model.pages_names[0]).unwrap(),
+            Some(model.pages_names[PanelNumbers::GeneralPlanning as usize]),
+            model
+                .pages_titles_map
+                .get(model.pages_names[PanelNumbers::GeneralPlanning as usize])
+                .unwrap(),
+        );
+        widgets.main_stack.add_titled(
+            &gtk::Label::new(Some("Placeholder")),
+            Some(model.pages_names[PanelNumbers::WeekPatterns as usize]),
+            model
+                .pages_titles_map
+                .get(model.pages_names[PanelNumbers::WeekPatterns as usize])
+                .unwrap(),
         );
         widgets.main_stack.add_titled(
             model.subjects.widget(),
-            Some(model.pages_names[1]),
-            model.pages_titles_map.get(model.pages_names[1]).unwrap(),
+            Some(model.pages_names[PanelNumbers::Subjects as usize]),
+            model
+                .pages_titles_map
+                .get(model.pages_names[PanelNumbers::Subjects as usize])
+                .unwrap(),
         );
         widgets.main_stack.add_titled(
             model.teachers.widget(),
-            Some(model.pages_names[2]),
-            model.pages_titles_map.get(model.pages_names[2]).unwrap(),
+            Some(model.pages_names[PanelNumbers::Teachers as usize]),
+            model
+                .pages_titles_map
+                .get(model.pages_names[PanelNumbers::Teachers as usize])
+                .unwrap(),
         );
         widgets.main_stack.add_titled(
             model.students.widget(),
-            Some(model.pages_names[3]),
-            model.pages_titles_map.get(model.pages_names[3]).unwrap(),
+            Some(model.pages_names[PanelNumbers::Students as usize]),
+            model
+                .pages_titles_map
+                .get(model.pages_names[PanelNumbers::Students as usize])
+                .unwrap(),
         );
         widgets.main_stack.add_titled(
             model.assignments.widget(),
-            Some(model.pages_names[4]),
-            model.pages_titles_map.get(model.pages_names[4]).unwrap(),
+            Some(model.pages_names[PanelNumbers::Assignments as usize]),
+            model
+                .pages_titles_map
+                .get(model.pages_names[PanelNumbers::Assignments as usize])
+                .unwrap(),
         );
 
         ComponentParts { model, widgets }
