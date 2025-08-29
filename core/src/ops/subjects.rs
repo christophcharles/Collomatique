@@ -12,6 +12,7 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::PeriodId,
         collomatique_state_colloscopes::SubjectId,
     ),
+    LooseInterrogationSlots(collomatique_state_colloscopes::SubjectId),
 }
 
 impl SubjectsUpdateWarning {
@@ -48,6 +49,15 @@ impl SubjectsUpdateWarning {
                     "Perte des inscriptions des élèves pour la matière \"{}\" sur la période {}",
                     subject.parameters.name,
                     period_index + 1
+                )
+            }
+            Self::LooseInterrogationSlots(subject_id) => {
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return String::new();
+                };
+                format!(
+                    "Perte des créneaux de colles pour la matière \"{}\"",
+                    subject.parameters.name,
                 )
             }
         }
@@ -190,6 +200,18 @@ impl SubjectsUpdateOp {
                             ));
                         }
                     }
+
+                    if !data
+                        .get_data()
+                        .get_slots()
+                        .subject_map
+                        .get(subject_id)
+                        .expect("Subject should have associated slots at this point")
+                        .ordered_slots
+                        .is_empty()
+                    {
+                        output.push(SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id));
+                    }
                 }
 
                 output
@@ -236,6 +258,13 @@ impl SubjectsUpdateOp {
                             *teacher_id,
                             *subject_id,
                         ));
+                    }
+                }
+
+                if let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
+                {
+                    if !subject_slots.ordered_slots.is_empty() {
+                        output.push(SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id));
                     }
                 }
 
@@ -339,6 +368,26 @@ impl SubjectsUpdateOp {
                             }
                         }
                     }
+
+                    let subject_slots = data
+                        .get_data()
+                        .get_slots()
+                        .subject_map
+                        .get(subject_id)
+                        .expect("Subject should have associated slots at this point");
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Slot(
+                                    collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
+                                ),
+                                "Enlever un créneau pour la matière à mettre à jour".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
                 }
 
                 let result = session
@@ -387,6 +436,23 @@ impl SubjectsUpdateOp {
                                     ),
                                 ),
                                 "Enlever une référence à la matière à effacer".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                if let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
+                {
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::Slot(
+                                    collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
+                                ),
+                                "Enlever un créneau pour la matière à mettre à jour".into(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
