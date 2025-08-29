@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
-use super::time;
+use crate::time;
 
 use thiserror::Error;
 
@@ -887,8 +887,8 @@ impl<'a> IlpTranslator<'a> {
 
     fn is_time_unit_in_slot(
         week: u32,
-        weekday: super::time::Weekday,
-        time: super::time::Time,
+        weekday: time::Weekday,
+        time: time::Time,
         _time_resolution: u32,
         subject: &Subject,
         slot: &SlotWithTeacher,
@@ -929,8 +929,8 @@ impl<'a> IlpTranslator<'a> {
     fn build_at_most_one_interrogation_constraint_for_one_time_unit_and_one_student(
         &self,
         week: u32,
-        weekday: super::time::Weekday,
-        time: super::time::Time,
+        weekday: time::Weekday,
+        time: time::Time,
         time_resolution: u32,
         student: usize,
     ) -> Option<Constraint<Variable>> {
@@ -982,8 +982,8 @@ impl<'a> IlpTranslator<'a> {
     fn build_at_most_one_interrogation_for_this_time_unit_constraints(
         &self,
         week: u32,
-        weekday: super::time::Weekday,
-        time: super::time::Time,
+        weekday: time::Weekday,
+        time: time::Time,
         time_resolution: u32,
     ) -> BTreeSet<Constraint<Variable>> {
         self.data
@@ -1010,8 +1010,8 @@ impl<'a> IlpTranslator<'a> {
         let mut output = BTreeSet::new();
 
         for week in 0u32..self.data.general.week_count.get() {
-            for weekday in super::time::Weekday::iter() {
-                let init_time = super::time::Time::from_hm(0, 0).unwrap();
+            for weekday in time::Weekday::iter() {
+                let init_time = time::Time::from_hm(0, 0).unwrap();
                 for time in init_time.iterate_until_end_of_day(time_resolution) {
                     output.extend(
                         self.build_at_most_one_interrogation_for_this_time_unit_constraints(
