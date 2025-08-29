@@ -175,28 +175,33 @@ impl GroupListsUpdateOp {
         todo!()
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            GroupListsUpdateOp::AddNewGroupList(_params) => "Ajouter une liste de groupes".into(),
-            GroupListsUpdateOp::UpdateGroupList(_id, _params) => {
-                "Modifier les paramètres d'une liste de groupes".into()
-            }
-            GroupListsUpdateOp::DeleteGroupList(_id) => "Supprimer une liste de groupes".into(),
-            GroupListsUpdateOp::PrefillGroupList(_id, _prefilled_groups) => {
-                "Modifier le préremplissage d'une liste de groupes".into()
-            }
-            GroupListsUpdateOp::AssignGroupListToSubject(
-                _period_id,
-                _subject_id,
-                group_list_id,
-            ) => {
-                if group_list_id.is_some() {
-                    "Affecter une liste de groupes à une matière".into()
-                } else {
-                    "Supprimer l'affectation d'une liste de groupes à une matière".into()
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::GroupLists,
+            match self {
+                GroupListsUpdateOp::AddNewGroupList(_params) => {
+                    "Ajouter une liste de groupes".into()
                 }
-            }
-        }
+                GroupListsUpdateOp::UpdateGroupList(_id, _params) => {
+                    "Modifier les paramètres d'une liste de groupes".into()
+                }
+                GroupListsUpdateOp::DeleteGroupList(_id) => "Supprimer une liste de groupes".into(),
+                GroupListsUpdateOp::PrefillGroupList(_id, _prefilled_groups) => {
+                    "Modifier le préremplissage d'une liste de groupes".into()
+                }
+                GroupListsUpdateOp::AssignGroupListToSubject(
+                    _period_id,
+                    _subject_id,
+                    group_list_id,
+                ) => {
+                    if group_list_id.is_some() {
+                        "Affecter une liste de groupes à une matière".into()
+                    } else {
+                        "Supprimer l'affectation d'une liste de groupes à une matière".into()
+                    }
+                }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -285,7 +290,7 @@ impl GroupListsUpdateOp {
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::Add(params.clone()),
                         ),
-                        (OpCategory::GroupLists, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("All data should be valid at this point");
                 let Some(collomatique_state_colloscopes::NewId::GroupListId(new_id)) = result
@@ -360,7 +365,7 @@ impl GroupListsUpdateOp {
                     .expect("All data should be valid at this point");
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::GroupLists, self.get_desc()));
+                *data = session.commit(self.get_desc());
                 Ok(None)
             }
             Self::DeleteGroupList(group_list_id) => {
@@ -422,7 +427,7 @@ impl GroupListsUpdateOp {
                     .expect("All data should be valid at this point");
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::GroupLists, self.get_desc()));
+                *data = session.commit(self.get_desc());
                 Ok(None)
             }
             Self::PrefillGroupList(group_list_id, prefilled_groups) => {
@@ -461,7 +466,7 @@ impl GroupListsUpdateOp {
                                 prefilled_groups.clone(),
                             ),
                         ),
-                        (OpCategory::GroupLists, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("All data should be valid at this point");
                 assert!(result.is_none());
@@ -520,7 +525,7 @@ impl GroupListsUpdateOp {
                                 *group_list_id_opt,
                             ),
                         ),
-                        (OpCategory::GroupLists, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("All data should be valid at this point");
                 assert!(result.is_none());

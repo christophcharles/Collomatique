@@ -140,12 +140,15 @@ impl StudentsUpdateOp {
         todo!()
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            StudentsUpdateOp::AddNewStudent(_desc) => "Ajouter un élève".into(),
-            StudentsUpdateOp::UpdateStudent(_id, _desc) => "Modifier un élève".into(),
-            StudentsUpdateOp::DeleteStudent(_id) => "Supprimer un élève".into(),
-        }
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::Students,
+            match self {
+                StudentsUpdateOp::AddNewStudent(_desc) => "Ajouter un élève".into(),
+                StudentsUpdateOp::UpdateStudent(_id, _desc) => "Modifier un élève".into(),
+                StudentsUpdateOp::DeleteStudent(_id) => "Supprimer un élève".into(),
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -223,7 +226,7 @@ impl StudentsUpdateOp {
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Add(student.clone()),
                         ),
-                        (OpCategory::Students, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Student(se) = e {
@@ -315,7 +318,7 @@ impl StudentsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Students, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
@@ -409,7 +412,7 @@ impl StudentsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Students, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }

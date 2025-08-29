@@ -220,21 +220,24 @@ impl SubjectsUpdateOp {
         todo!()
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            SubjectsUpdateOp::AddNewSubject(_desc) => "Ajouter une matière".into(),
-            SubjectsUpdateOp::UpdateSubject(_id, _desc) => "Modifier une matière".into(),
-            SubjectsUpdateOp::DeleteSubject(_id) => "Supprimer une matière".into(),
-            SubjectsUpdateOp::MoveSubjectUp(_id) => "Remonter une matière".into(),
-            SubjectsUpdateOp::MoveSubjectDown(_id) => "Descendre une matière".into(),
-            Self::UpdatePeriodStatus(_subject_id, _period_id, status) => {
-                if *status {
-                    "Dispenser une matière sur une période".into()
-                } else {
-                    "Ne pas dispenser une matière sur une période".into()
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::Subjects,
+            match self {
+                SubjectsUpdateOp::AddNewSubject(_desc) => "Ajouter une matière".into(),
+                SubjectsUpdateOp::UpdateSubject(_id, _desc) => "Modifier une matière".into(),
+                SubjectsUpdateOp::DeleteSubject(_id) => "Supprimer une matière".into(),
+                SubjectsUpdateOp::MoveSubjectUp(_id) => "Remonter une matière".into(),
+                SubjectsUpdateOp::MoveSubjectDown(_id) => "Descendre une matière".into(),
+                Self::UpdatePeriodStatus(_subject_id, _period_id, status) => {
+                    if *status {
+                        "Dispenser une matière sur une période".into()
+                    } else {
+                        "Ne pas dispenser une matière sur une période".into()
+                    }
                 }
-            }
-        }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -416,7 +419,7 @@ impl SubjectsUpdateOp {
                                 }
                             )
                         ),
-                        (OpCategory::Subjects, self.get_desc())
+                        self.get_desc()
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
                         match se {
                             collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
@@ -541,7 +544,7 @@ impl SubjectsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Subjects, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
@@ -674,7 +677,7 @@ impl SubjectsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Subjects, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
@@ -697,7 +700,7 @@ impl SubjectsUpdateOp {
                                 current_position - 1,
                             ),
                         ),
-                        (OpCategory::Subjects, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("No error should be possible at this point");
 
@@ -725,7 +728,7 @@ impl SubjectsUpdateOp {
                                 current_position + 1,
                             ),
                         ),
-                        (OpCategory::Subjects, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("No error should be possible at this point");
 
@@ -826,7 +829,7 @@ impl SubjectsUpdateOp {
                     .expect("No error should be possible at this point");
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Subjects, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }

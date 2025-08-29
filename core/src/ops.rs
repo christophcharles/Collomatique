@@ -302,26 +302,16 @@ impl UpdateOp {
 impl UpdateOp {
     pub fn get_desc(&self) -> (OpCategory, String) {
         match self {
-            UpdateOp::GeneralPlanning(period_op) => {
-                (OpCategory::GeneralPlanning, period_op.get_desc())
-            }
-            UpdateOp::Subjects(subject_op) => (OpCategory::Subjects, subject_op.get_desc()),
-            UpdateOp::Teachers(teacher_op) => (OpCategory::Teachers, teacher_op.get_desc()),
-            UpdateOp::Students(student_op) => (OpCategory::Students, student_op.get_desc()),
-            UpdateOp::Assignments(assignment_op) => {
-                (OpCategory::Assignments, assignment_op.get_desc())
-            }
-            UpdateOp::WeekPatterns(week_pattern_op) => {
-                (OpCategory::WeekPatterns, week_pattern_op.get_desc())
-            }
-            UpdateOp::Slots(slot_op) => (OpCategory::Slots, slot_op.get_desc()),
-            UpdateOp::Incompatibilities(incompat_op) => {
-                (OpCategory::Incompatibilities, incompat_op.get_desc())
-            }
-            UpdateOp::GroupLists(group_list_op) => {
-                (OpCategory::GroupLists, group_list_op.get_desc())
-            }
-            UpdateOp::Rules(rule_op) => (OpCategory::Rules, rule_op.get_desc()),
+            UpdateOp::GeneralPlanning(period_op) => period_op.get_desc(),
+            UpdateOp::Subjects(subject_op) => subject_op.get_desc(),
+            UpdateOp::Teachers(teacher_op) => teacher_op.get_desc(),
+            UpdateOp::Students(student_op) => student_op.get_desc(),
+            UpdateOp::Assignments(assignment_op) => assignment_op.get_desc(),
+            UpdateOp::WeekPatterns(week_pattern_op) => week_pattern_op.get_desc(),
+            UpdateOp::Slots(slot_op) => slot_op.get_desc(),
+            UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
+            UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
+            UpdateOp::Rules(rule_op) => rule_op.get_desc(),
         }
     }
 

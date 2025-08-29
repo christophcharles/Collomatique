@@ -137,14 +137,17 @@ impl SlotsUpdateOp {
         todo!()
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            SlotsUpdateOp::AddNewSlot(_desc, _slot) => "Ajouter un créneau de colle".into(),
-            SlotsUpdateOp::UpdateSlot(_id, _slot) => "Modifier un créneau de colle".into(),
-            SlotsUpdateOp::DeleteSlot(_id) => "Supprimer un créneau de colle".into(),
-            SlotsUpdateOp::MoveSlotUp(_id) => "Remonter un créneau de colle".into(),
-            SlotsUpdateOp::MoveSlotDown(_id) => "Descendre un créneau de colle".into(),
-        }
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::Slots,
+            match self {
+                SlotsUpdateOp::AddNewSlot(_desc, _slot) => "Ajouter un créneau de colle".into(),
+                SlotsUpdateOp::UpdateSlot(_id, _slot) => "Modifier un créneau de colle".into(),
+                SlotsUpdateOp::DeleteSlot(_id) => "Supprimer un créneau de colle".into(),
+                SlotsUpdateOp::MoveSlotUp(_id) => "Remonter un créneau de colle".into(),
+                SlotsUpdateOp::MoveSlotDown(_id) => "Descendre un créneau de colle".into(),
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -202,7 +205,7 @@ impl SlotsUpdateOp {
                                 slot.clone(),
                             )
                         ),
-                        (OpCategory::Slots, self.get_desc()),
+                        self.get_desc(),
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Slot(se) = e {
                         match se {
                             collomatique_state_colloscopes::SlotError::InvalidSubjectId(_) => panic!("Subject id should be valid at this point"),
@@ -230,7 +233,7 @@ impl SlotsUpdateOp {
                                 slot.clone(),
                             )
                         ),
-                        (OpCategory::Slots, self.get_desc())
+                        self.get_desc()
                     ).map_err(|e| if let collomatique_state_colloscopes::Error::Slot(se) = e {
                         match se {
                             collomatique_state_colloscopes::SlotError::InvalidSlotId(id) => UpdateSlotError::InvalidSlotId(id),
@@ -291,7 +294,7 @@ impl SlotsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::Slots, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
@@ -314,7 +317,7 @@ impl SlotsUpdateOp {
                                 current_position - 1,
                             ),
                         ),
-                        (OpCategory::Slots, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("No error should be possible at this point");
 
@@ -351,7 +354,7 @@ impl SlotsUpdateOp {
                                 current_position + 1,
                             ),
                         ),
-                        (OpCategory::Slots, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("No error should be possible at this point");
 

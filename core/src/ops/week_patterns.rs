@@ -121,18 +121,21 @@ impl WeekPatternsUpdateOp {
         todo!()
     }
 
-    pub fn get_desc(&self) -> String {
-        match self {
-            WeekPatternsUpdateOp::AddNewWeekPattern(_desc) => {
-                "Ajouter un modèle de périodicité".into()
-            }
-            WeekPatternsUpdateOp::UpdateWeekPattern(_id, _desc) => {
-                "Modifier un modèle de périodicité".into()
-            }
-            WeekPatternsUpdateOp::DeleteWeekPattern(_id) => {
-                "Supprimer un modèle de périodicité".into()
-            }
-        }
+    pub fn get_desc(&self) -> (OpCategory, String) {
+        (
+            OpCategory::WeekPatterns,
+            match self {
+                WeekPatternsUpdateOp::AddNewWeekPattern(_desc) => {
+                    "Ajouter un modèle de périodicité".into()
+                }
+                WeekPatternsUpdateOp::UpdateWeekPattern(_id, _desc) => {
+                    "Modifier un modèle de périodicité".into()
+                }
+                WeekPatternsUpdateOp::DeleteWeekPattern(_id) => {
+                    "Supprimer un modèle de périodicité".into()
+                }
+            },
+        )
     }
 
     pub fn get_warnings<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
@@ -181,7 +184,7 @@ impl WeekPatternsUpdateOp {
                                 week_pattern.clone(),
                             ),
                         ),
-                        (OpCategory::WeekPatterns, self.get_desc()),
+                        self.get_desc(),
                     )
                     .expect("Unexpected error during AddNewWeekPattern");
                 let Some(collomatique_state_colloscopes::NewId::WeekPatternId(new_id)) = result
@@ -199,7 +202,7 @@ impl WeekPatternsUpdateOp {
                                 week_pattern.clone(),
                             ),
                         ),
-                        (OpCategory::WeekPatterns, self.get_desc()),
+                        self.get_desc(),
                     )
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
@@ -283,7 +286,7 @@ impl WeekPatternsUpdateOp {
 
                 assert!(result.is_none());
 
-                *data = session.commit((OpCategory::WeekPatterns, self.get_desc()));
+                *data = session.commit(self.get_desc());
 
                 Ok(None)
             }
