@@ -1446,7 +1446,7 @@ impl From<TimeSlot>
     }
 }
 
-/*#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupingHandle {
     pub handle: state::GroupingHandle,
@@ -1455,9 +1455,7 @@ pub struct GroupingHandle {
 #[pymethods]
 impl GroupingHandle {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!(
-            "{:?}", *self_
-        );
+        let output = format!("{:?}", *self_);
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
@@ -1494,7 +1492,7 @@ pub struct Grouping {
     #[pyo3(set, get)]
     name: String,
     #[pyo3(set, get)]
-    optional: bool,
+    slots: BTreeSet<TimeSlotHandle>,
 }
 
 #[pymethods]
@@ -1503,48 +1501,54 @@ impl Grouping {
     fn new(name: String) -> Self {
         Grouping {
             name,
-            optional: false,
+            slots: BTreeSet::new(),
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{{ name = {}, optional = {} }}", self_.name, self_.optional,);
+        let slots_strings: Vec<_> = self_.slots.iter().map(|x| format!("{:?}", x)).collect();
+
+        let output = format!(
+            "{{ name = {}, slots = [{}] }}",
+            self_.name,
+            slots_strings.join(","),
+        );
 
         PyString::new_bound(self_.py(), output.as_str())
     }
 }
 
-impl From<&backend::Grouping> for Grouping {
-    fn from(value: &backend::Grouping) -> Self {
+impl From<&backend::Grouping<state::TimeSlotHandle>> for Grouping {
+    fn from(value: &backend::Grouping<state::TimeSlotHandle>) -> Self {
         Grouping {
             name: value.name.clone(),
-            optional: value.optional,
+            slots: value.slots.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<backend::Grouping> for Grouping {
-    fn from(value: backend::Grouping) -> Self {
+impl From<backend::Grouping<state::TimeSlotHandle>> for Grouping {
+    fn from(value: backend::Grouping<state::TimeSlotHandle>) -> Self {
         Grouping::from(&value)
     }
 }
 
-impl From<&Grouping> for backend::Grouping {
+impl From<&Grouping> for backend::Grouping<state::TimeSlotHandle> {
     fn from(value: &Grouping) -> Self {
         backend::Grouping {
             name: value.name.clone(),
-            optional: value.optional,
+            slots: value.slots.iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<Grouping> for backend::Grouping {
+impl From<Grouping> for backend::Grouping<state::TimeSlotHandle> {
     fn from(value: Grouping) -> Self {
         backend::Grouping::from(&value)
     }
 }
 
-#[pyclass(eq, hash, frozen)]
+/*#[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupingIncompatHandle {
     pub handle: state::GroupingIncompatHandle,
