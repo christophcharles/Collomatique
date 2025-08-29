@@ -1,6 +1,8 @@
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use pyo3::prelude::*;
+
+mod csv_file;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonCode {
@@ -55,11 +57,11 @@ impl PythonCode {
         self.run_internal(func, None)
     }
 
-    pub fn run_with_csv_file(&self, func: &str, csv_file: super::csv::Extract) -> PyResult<()> {
-        self.run_internal(func, Some(csv_file))
+    pub fn run_with_csv_file(&self, func: &str, csv_extract: super::csv::Extract) -> PyResult<()> {
+        self.run_internal(func, Some(csv_extract))
     }
 
-    fn run_internal(&self, func: &str, csv_file: Option<super::csv::Extract>) -> PyResult<()> {
+    fn run_internal(&self, func: &str, csv_extract: Option<super::csv::Extract>) -> PyResult<()> {
         Python::with_gil(|py| {
             let python_code = PyModule::from_code_bound(
                 py,
@@ -74,7 +76,7 @@ impl PythonCode {
             )?;
 
             let func: Py<PyAny> = python_code.getattr(func)?.into();
-            Self::call_func(py, &func, csv_file)?;
+            Self::call_func(py, &func, csv_extract)?;
 
             Ok(())
         })
@@ -83,12 +85,27 @@ impl PythonCode {
     fn call_func(
         py: Python,
         func: &Py<PyAny>,
-        _csv_file: Option<super::csv::Extract>,
+        csv_extract: Option<super::csv::Extract>,
     ) -> PyResult<()> {
         use pyo3::types::PyTuple;
 
+        let csv_file: PyObject = match csv_extract {
+            Some(extract) => Py::new(py, csv_file::CsvFile::from_extract(extract))?.into_any(),
+            None => py.None(),
+        };
+        let csv_names = BTreeSet::from(["csv", "csv_file", "csv_data"]);
+
         let arg_names = extract_function_arguments(py, &func)?;
-        let args = PyTuple::new_bound(py, arg_names.iter().map(|_| py.None()));
+        let args = PyTuple::new_bound(
+            py,
+            arg_names.iter().map(|name| {
+                if csv_names.contains(name.as_str()) {
+                    csv_file.clone_ref(py)
+                } else {
+                    py.None()
+                }
+            }),
+        );
 
         func.call1(py, args)?;
 
