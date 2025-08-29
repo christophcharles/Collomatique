@@ -268,11 +268,13 @@ impl Component for GeneralPlanning {
                 periods_box -> gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
-                    set_margin_top: 30,
-                    set_margin_bottom: 30,
+                    set_margin_top: 20,
                     set_spacing: 30,
+                    #[watch]
+                    set_visible: !model.periods.ordered_period_list.is_empty(),
                 },
                 gtk::Button {
+                    set_margin_top: 10,
                     connect_clicked => GeneralPlanningInput::AddPeriodClicked,
                     adw::ButtonContent {
                         set_icon_name: "edit-add",
