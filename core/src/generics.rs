@@ -1,7 +1,10 @@
 //! This module defines useful traits that should be implemented to represent a problem.
 //!
-//! A problem is represented by a structure that implements [BaseProblem].
-//! Extension to this problem can be implemented using other structures that implement [ProblemConstraints].
+//! A problem is represented by a structure that implements [BaseProblem]. This structures only
+//! represents the base problem and defines what solutions to the problem looks like.
+//!
+//! Constraints that actually define the problem or extensions to this problem can be implemented
+//! using other structures that implement [ProblemConstraints].
 //!
 //! It also implements a few generic [ProblemConstraints] that are useful in a lot of situations.
 //! See [SoftConstraints] and [FixedPartialSolution].
@@ -68,14 +71,14 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 ///
 ///   Finally the type is called [BaseProblem::PartialSolution] because the description might
 ///   be partial and not complete. In the ILP realm, this means some variables do not have a definite
-///   value set (and must still be solved in some way). The programatic description must be adapted
+///   value set (and must still be solved in some way). The programmatic description must be adapted
 ///   accordingly.
 ///
 ///   This is actually not completely counter-intuitive: this is helpful in at least two cases.
 ///   First, we want to build a colloscope building software. We need the possibility of partially
 ///   built colloscopes, that still need to be completed. The same situation exists for a soduko grid:
 ///   we want to be able to describe a grid that has not fully been solved yet.
-///   Second, this is actually useful to complete an started solution. In the case of soduko, this might
+///   Second, this is actually useful to complete a start solution. In the case of soduko, this might
 ///   represent the numbers put on the initial grid as help. In the case of a colloscope, that might
 ///   be a partial descriptions of student groups because some students want to be together.
 ///
@@ -89,7 +92,7 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 ///   variables.
 ///
 ///   Second, there is [BaseProblem::reconstruct_structure_variables] which does basically the same thing
-///   but programmatically but allows for partial solutions (and so gives only a partial set of structure
+///   but programmatically and allows for partial solutions (and so gives only a partial set of structure
 ///   variables).
 ///
 pub trait BaseProblem: Send + Sync {
@@ -224,7 +227,7 @@ impl<
 /// be available on mondays because of personnal reasons.
 /// This is an extension of the *constraints* of the problem.
 ///
-/// The form of the solution itself does not but the set of possible
+/// The form of the solution itself does not change but the set of possible
 /// solutions is reduced due to some extra constraints.
 ///
 /// Sometimes these extra constraints are so prevalent that they
