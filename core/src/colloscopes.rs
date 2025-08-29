@@ -95,7 +95,7 @@ impl InMemoryData for Data {
 
     fn build_rev_with_current_state(
         &self,
-        op: Self::AnnotatedOperation,
+        op: &Self::AnnotatedOperation,
     ) -> std::result::Result<Self::AnnotatedOperation, Self::Error> {
         match op {
             AnnotatedOp::Student(student_op) => {
@@ -104,7 +104,7 @@ impl InMemoryData for Data {
         }
     }
 
-    fn apply(&mut self, op: Self::AnnotatedOperation) -> std::result::Result<(), Self::Error> {
+    fn apply(&mut self, op: &Self::AnnotatedOperation) -> std::result::Result<(), Self::Error> {
         match op {
             AnnotatedOp::Student(student_op) => self.apply_student(student_op),
         }
@@ -143,28 +143,29 @@ impl Data {
     /// Used internally
     ///
     /// Apply student operations
-    fn apply_student(&mut self, student_op: AnnotatedStudentOp) -> std::result::Result<(), Error> {
+    fn apply_student(&mut self, student_op: &AnnotatedStudentOp) -> std::result::Result<(), Error> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, student) => {
-                if self.student_list.contains_key(&student_id) {
-                    return Err(Error::StudentIdAlreadyExists(student_id));
+                if self.student_list.contains_key(student_id) {
+                    return Err(Error::StudentIdAlreadyExists(student_id.clone()));
                 }
 
-                self.student_list.insert(student_id, student);
+                self.student_list
+                    .insert(student_id.clone(), student.clone());
                 Ok(())
             }
             AnnotatedStudentOp::Remove(student_id) => {
                 if self.student_list.remove(&student_id).is_none() {
-                    return Err(Error::InvalidStudentId(student_id));
+                    return Err(Error::InvalidStudentId(student_id.clone()));
                 }
                 Ok(())
             }
             AnnotatedStudentOp::Update(student_id, student) => {
                 let Some(old_student) = self.student_list.get_mut(&student_id) else {
-                    return Err(Error::InvalidStudentId(student_id));
+                    return Err(Error::InvalidStudentId(student_id.clone()));
                 };
 
-                *old_student = student;
+                *old_student = student.clone();
                 Ok(())
             }
         }
@@ -175,29 +176,29 @@ impl Data {
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
-        student_op: AnnotatedStudentOp,
+        student_op: &AnnotatedStudentOp,
     ) -> std::result::Result<AnnotatedStudentOp, Error> {
         match student_op {
             AnnotatedStudentOp::Add(student_id, _student) => {
-                if self.student_list.contains_key(&student_id) {
-                    return Err(Error::StudentIdAlreadyExists(student_id));
+                if self.student_list.contains_key(student_id) {
+                    return Err(Error::StudentIdAlreadyExists(student_id.clone()));
                 }
 
-                Ok(AnnotatedStudentOp::Remove(student_id))
+                Ok(AnnotatedStudentOp::Remove(student_id.clone()))
             }
             AnnotatedStudentOp::Remove(student_id) => {
                 let Some(old_student) = self.student_list.get(&student_id).cloned() else {
-                    return Err(Error::InvalidStudentId(student_id));
+                    return Err(Error::InvalidStudentId(student_id.clone()));
                 };
 
-                Ok(AnnotatedStudentOp::Add(student_id, old_student))
+                Ok(AnnotatedStudentOp::Add(student_id.clone(), old_student))
             }
             AnnotatedStudentOp::Update(student_id, _student) => {
                 let Some(old_student) = self.student_list.get(&student_id).cloned() else {
-                    return Err(Error::InvalidStudentId(student_id));
+                    return Err(Error::InvalidStudentId(student_id.clone()));
                 };
 
-                Ok(AnnotatedStudentOp::Update(student_id, old_student))
+                Ok(AnnotatedStudentOp::Update(student_id.clone(), old_student))
             }
         }
     }

@@ -287,11 +287,11 @@ impl<T: Operation> ModificationHistory<T> {
     /// if some operation was cancelled and remained in history
     /// to be able to apply them, they will be discarded and this branch
     /// of history is lost.
-    pub fn store(&mut self, aggregated_ops: AggregatedOp<T>) {
+    pub fn store(&mut self, aggregated_op: AggregatedOp<T>) {
         self.history.truncate(self.history_pointer);
 
         self.history_pointer += 1;
-        self.history.push_back(aggregated_ops);
+        self.history.push_back(aggregated_op);
 
         self.truncate_history_as_needed();
     }
@@ -364,7 +364,7 @@ impl<T: Operation> ModificationHistory<T> {
     /// main one. If the script fails, this allows cancellation of its operations.
     /// If the script succeeds, we can aggregate its operation into a single one and move it to
     /// the main history.
-    pub fn build_aggregated_ops(&self) -> AggregatedOp<T> {
+    pub fn build_aggregated_op(&self) -> AggregatedOp<T> {
         AggregatedOp::new(
             self.history
                 .iter()
