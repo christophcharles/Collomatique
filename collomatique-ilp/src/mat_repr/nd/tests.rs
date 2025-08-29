@@ -271,8 +271,11 @@ fn nd_repr_checks_unsatisfied_constraints_on_simple_example() {
         (String::from("c"), ordered_float::OrderedFloat(1.0)),
         (String::from("d"), ordered_float::OrderedFloat(1.0)),
     ]);
-    
+
     let config = pb.config_from(&config_vars);
-    
-    assert_eq!(config.unsatisfied_constraints(), BTreeSet::from([1usize,2usize]));
+
+    assert_eq!(
+        config.unsatisfied_constraints(),
+        BTreeSet::from([1usize, 2usize])
+    );
 }
