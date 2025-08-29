@@ -215,16 +215,20 @@ impl<ProblemVariable: UsableData + 'static> AgregateVariable<ProblemVariable>
     }
 
     fn reconstruct_structure_variable(&self, config: &ConfigData<ProblemVariable>) -> Option<f64> {
-        let mut all_none = true;
+        let mut at_least_one_none = false;
         for orig_var in &self.original_variables {
-            if let Some(val) = config.get(orig_var.clone()) {
-                all_none = false;
-                if val > 0.5 {
-                    return Some(1.);
+            match config.get(orig_var.clone()) {
+                Some(val) => {
+                    if val > 0.5 {
+                        return Some(1.);
+                    }
+                }
+                None => {
+                    at_least_one_none = true;
                 }
             }
         }
-        if all_none {
+        if at_least_one_none {
             None
         } else {
             Some(0.)
