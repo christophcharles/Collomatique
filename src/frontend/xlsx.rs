@@ -645,8 +645,17 @@ fn build_groups_worksheet_first_columns(
 
     let mut line_map = BTreeMap::new();
 
+    let mut students_sorted: Vec<_> = students.into_iter().collect();
+    students_sorted.sort_by(|(_, s1), (_, s2)| {
+        use std::cmp::Ordering;
+        match s1.surname.cmp(&s2.surname) {
+            Ordering::Equal => s1.firstname.cmp(&s2.firstname),
+            x => x,
+        }
+    });
+
     let count = students.len();
-    for (i, (student_handle, student)) in students.into_iter().enumerate() {
+    for (i, (student_handle, student)) in students_sorted.into_iter().enumerate() {
         let line = ROW_FIRST_STUDENT + u32::try_from(i).map_err(|_| Error::TooManyStudents)?;
         line_map.insert(*student_handle, line);
 
