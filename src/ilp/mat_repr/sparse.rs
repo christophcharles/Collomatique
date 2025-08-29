@@ -15,6 +15,13 @@ pub struct SprsProblem<V: VariableName> {
     eq_constants: CsVec<i32>,
     leq_constraints_vec: Vec<linexpr::Constraint<V>>,
     eq_constraints_vec: Vec<linexpr::Constraint<V>>,
+    constraints_ref: Vec<BTreeSet<ConstraintRef>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum ConstraintRef {
+    Leq(usize),
+    Eq(usize),
 }
 
 impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
@@ -59,6 +66,8 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
         let mut leq_constraints_vec = Vec::with_capacity(leq_count);
         let mut eq_constraints_vec = Vec::with_capacity(eq_count);
 
+        let mut constraints_ref = vec![BTreeSet::new(); p];
+
         let mut leq_index = 0usize;
         let mut eq_index = 0usize;
 
@@ -68,6 +77,8 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
                     for (var, val) in c.coefs() {
                         let j = variable_map[var];
                         eq_mat_tri.add_triplet(eq_index, j, *val);
+
+                        constraints_ref[j].insert(ConstraintRef::Eq(eq_index));
                     }
                     eq_constraints_vec.push(c.clone());
 
@@ -83,6 +94,8 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
                     for (var, val) in c.coefs() {
                         let j = variable_map[var];
                         leq_mat_tri.add_triplet(leq_index, j, *val);
+
+                        constraints_ref[j].insert(ConstraintRef::Leq(leq_index));
                     }
                     leq_constraints_vec.push(c.clone());
 
@@ -109,6 +122,7 @@ impl<V: VariableName> super::ProblemRepr<V> for SprsProblem<V> {
             eq_constants,
             leq_constraints_vec,
             eq_constraints_vec,
+            constraints_ref,
         }
     }
 
@@ -187,6 +201,7 @@ impl<V: VariableName> PartialOrd for SprsConfig<V> {
 
 impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
     type Problem = SprsProblem<V>;
+    type Precomputation = (CsVec<i32>, CsVec<i32>);
 
     fn max_distance_to_constraint(&self, problem: &SprsProblem<V>) -> f32 {
         let mut max_dist = 0.0f32;
@@ -224,9 +239,58 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
         max_dist
     }
 
-    fn compute_lhs(&self, problem: &SprsProblem<V>) -> BTreeMap<linexpr::Constraint<V>, i32> {
+    fn precompute(&self, problem: &Self::Problem) -> Self::Precomputation {
         let leq_column = &problem.leq_mat * &self.values + &problem.leq_constants;
         let eq_column = &problem.eq_mat * &self.values + &problem.eq_constants;
+
+        (leq_column, eq_column)
+    }
+
+    fn update_precomputation(
+        &self,
+        problem: &Self::Problem,
+        data: &mut Self::Precomputation,
+        vars: &BTreeSet<usize>,
+    ) {
+        let lines_to_update: BTreeSet<_> = vars
+            .iter()
+            .flat_map(|x| problem.constraints_ref[*x].iter())
+            .collect();
+
+        for line in lines_to_update {
+            match line {
+                ConstraintRef::Eq(c) => {
+                    let partial_mat = problem.eq_mat.slice_outer(*c..*c + 1);
+                    let partial_constants = problem.eq_constants.get(*c).copied().unwrap_or(0);
+
+                    let temp = &partial_mat * &self.values;
+                    assert_eq!(temp.dim(), 1);
+
+                    let new_val = temp.get(0).copied().unwrap_or(0) + partial_constants;
+
+                    Self::change_bit(&mut data.1, *c, new_val);
+                }
+                ConstraintRef::Leq(c) => {
+                    let partial_mat = problem.leq_mat.slice_outer(*c..*c + 1);
+                    let partial_constants = problem.leq_constants.get(*c).copied().unwrap_or(0);
+
+                    let temp = &partial_mat * &self.values;
+                    assert_eq!(temp.dim(), 1);
+
+                    let new_val = temp.get(0).copied().unwrap_or(0) + partial_constants;
+
+                    Self::change_bit(&mut data.0, *c, new_val);
+                }
+            }
+        }
+    }
+
+    fn compute_lhs(
+        &self,
+        problem: &SprsProblem<V>,
+        precomputation: &Self::Precomputation,
+    ) -> BTreeMap<linexpr::Constraint<V>, i32> {
+        let (leq_column, eq_column) = precomputation;
 
         let mut output = BTreeMap::new();
 
@@ -259,9 +323,12 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
         output
     }
 
-    fn is_feasable(&self, problem: &SprsProblem<V>) -> bool {
-        let leq_column = &problem.leq_mat * &self.values + &problem.leq_constants;
-        let eq_column = &problem.eq_mat * &self.values + &problem.eq_constants;
+    fn is_feasable(
+        &self,
+        _problem: &SprsProblem<V>,
+        precomputation: &Self::Precomputation,
+    ) -> bool {
+        let (leq_column, eq_column) = precomputation;
 
         for (_, v) in leq_column.iter() {
             if *v > 0 {
@@ -276,19 +343,7 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
         true
     }
 
-    fn neighbours(&self) -> Vec<SprsConfig<V>> {
-        let mut output = vec![];
-
-        for i in 0..self.values.dim() {
-            let neighbour = self.flip(i);
-            output.push(neighbour);
-        }
-
-        output
-    }
-
-    fn random_neighbour<T: random::RandomGen>(&self, random_gen: &mut T) -> SprsConfig<V> {
-        let i = random_gen.rand_in_range(0..self.values.dim());
+    fn neighbour(&self, i: usize) -> Self {
         self.flip(i)
     }
 
@@ -317,6 +372,40 @@ impl<V: VariableName> super::ConfigRepr<V> for SprsConfig<V> {
 }
 
 impl<V: VariableName> SprsConfig<V> {
+    fn change_bit(values: &mut CsVec<i32>, i: usize, new_val: i32) {
+        let mut indices = vec![];
+        let mut data = vec![];
+
+        let mut prev = 0usize;
+        for (j, v) in values.iter() {
+            if j == i {
+                if new_val != 0 {
+                    indices.push(j);
+                    data.push(new_val);
+                }
+            } else {
+                if prev <= i && j > i {
+                    if new_val != 0 {
+                        indices.push(i);
+                        data.push(new_val);
+                    }
+                }
+
+                indices.push(j);
+                data.push(*v);
+            }
+
+            prev = j + 1;
+        }
+        if prev <= i && values.dim() > i {
+            if new_val != 0 {
+                indices.push(i);
+                data.push(new_val);
+            }
+        }
+        *values = CsVec::new(values.dim(), indices, data);
+    }
+
     fn flip(&self, i: usize) -> SprsConfig<V> {
         let mut indices = vec![];
         let mut data = vec![];
