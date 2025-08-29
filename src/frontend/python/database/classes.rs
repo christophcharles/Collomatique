@@ -398,6 +398,8 @@ pub struct Student {
     email: Option<String>,
     #[pyo3(set, get)]
     phone: Option<String>,
+    #[pyo3(set, get)]
+    no_consecutive_slots: bool,
 }
 
 #[pymethods]
@@ -409,12 +411,13 @@ impl Student {
             firstname,
             email: None,
             phone: None,
+            no_consecutive_slots: false,
         }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!(
-            "{{ surname = {}, firstname = {}, email = {}, phone = {} }}",
+            "{{ surname = {}, firstname = {}, email = {}, phone = {}, no_consecutive_slots = {} }}",
             self_.surname,
             self_.firstname,
             match &self_.email {
@@ -425,6 +428,7 @@ impl Student {
                 Some(phone) => phone.clone(),
                 None => "none".to_string(),
             },
+            self_.no_consecutive_slots,
         );
 
         PyString::new_bound(self_.py(), output.as_str())
@@ -438,6 +442,7 @@ impl From<&backend::Student> for Student {
             firstname: value.firstname.clone(),
             email: value.email.clone(),
             phone: value.phone.clone(),
+            no_consecutive_slots: value.no_consecutive_slots,
         }
     }
 }
@@ -455,6 +460,7 @@ impl From<&Student> for backend::Student {
             firstname: value.firstname.clone(),
             email: value.email.clone(),
             phone: value.phone.clone(),
+            no_consecutive_slots: value.no_consecutive_slots,
         }
     }
 }

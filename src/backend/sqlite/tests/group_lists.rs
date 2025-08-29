@@ -5,13 +5,12 @@ async fn build_students(pool: sqlx::SqlitePool) -> Store {
 
     let _ = sqlx::query!(
         r#"
-INSERT INTO students (surname, firstname)
-VALUES ("Roth", ""), ("Marin", ""), ("Bordes", ""), ("Bresson", ""), ("Gosset",""),
-("Martel", ""), ("Delarue", ""), ("Chauvet", ""), ("Bourdon", ""), ("Lafond", ""),
-("Rondeau", ""), ("Vigneron", ""), ("Davy", ""), ("Gosselin", ""), ("Jeannin", ""),
-("Sicard", ""), ("Mounier", ""), ("Lafon", ""), ("Brun", ""), ("Hardy", ""),
-("Girault", ""), ("Delahaye", ""), ("Levasseur", ""), ("Gonthier", "");
-        "#
+INSERT INTO students (surname, firstname, no_consecutive_slots)
+VALUES ("Roth", "", 0), ("Marin", "", 0), ("Bordes", "", 0), ("Bresson", "", 0), ("Gosset","", 0),
+("Martel", "", 0), ("Delarue", "", 0), ("Chauvet", "", 0), ("Bourdon", "", 0), ("Lafond", "", 0),
+("Rondeau", "", 0), ("Vigneron", "", 0), ("Davy", "", 0), ("Gosselin", "", 0), ("Jeannin", "", 0),
+("Sicard", "", 0), ("Mounier", "", 0), ("Lafon", "", 0), ("Brun", "", 0), ("Hardy", "", 0),
+("Girault", "", 0), ("Delahaye", "", 0), ("Levasseur", "", 0), ("Gonthier", "", 0);"#
     )
     .execute(&store.pool)
     .await
