@@ -291,7 +291,7 @@ pub struct Assignments {
     pub incompats: BTreeSet<IncompatId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct JsonData {
     general_data: GeneralData,
     week_patterns: BTreeMap<WeekPatternId, WeekPattern>,
@@ -307,6 +307,12 @@ pub struct JsonData {
     colloscopes: BTreeMap<ColloscopeId, Colloscope<TeacherId, SubjectId, StudentId>>,
     slot_selections: BTreeMap<SlotSelectionId, SlotSelection<SubjectId, TimeSlotId>>,
     student_assignments: BTreeMap<StudentId, Assignments>,
+}
+
+impl JsonData {
+    pub fn new() -> Self {
+        JsonData::default()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -560,6 +566,21 @@ impl JsonStore {
                 student_assignments,
             },
         })
+    }
+}
+
+impl Default for JsonStore {
+    fn default() -> Self {
+        JsonStore {
+            next_id: 0,
+            data: JsonData::new(),
+        }
+    }
+}
+
+impl JsonStore {
+    pub fn new() -> Self {
+        JsonStore::default()
     }
 }
 

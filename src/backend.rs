@@ -647,6 +647,18 @@ pub struct GeneralData {
     pub costs_adjustments: CostsAdjustments,
 }
 
+impl Default for GeneralData {
+    fn default() -> Self {
+        GeneralData {
+            interrogations_per_week: None,
+            max_interrogations_per_day: None,
+            week_count: NonZeroU32::new(25).unwrap(),
+            periodicity_cuts: BTreeSet::new(),
+            costs_adjustments: CostsAdjustments::default(),
+        }
+    }
+}
+
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
