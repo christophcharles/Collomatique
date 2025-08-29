@@ -239,6 +239,7 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
     type TimeSlotId: OrdId;
     type GroupingId: OrdId;
     type GroupingIncompatId: OrdId;
+    type ColloscopeId: OrdId;
 
     type InternalError: std::fmt::Debug + std::error::Error + Send;
 
@@ -523,6 +524,33 @@ pub trait Storage: Send + Sync + std::fmt::Debug {
         student_id: Self::StudentId,
         incompat_id: Self::IncompatId,
     ) -> std::result::Result<bool, Id2Error<Self::InternalError, Self::StudentId, Self::IncompatId>>;
+
+    async fn colloscopes_get_all(
+        &self,
+    ) -> std::result::Result<
+        BTreeMap<Self::ColloscopeId, Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>>,
+        Self::InternalError,
+    >;
+    async fn colloscopes_get(
+        &self,
+        index: Self::ColloscopeId,
+    ) -> std::result::Result<
+        Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+        IdError<Self::InternalError, Self::ColloscopeId>,
+    >;
+    async unsafe fn colloscopes_add_unchecked(
+        &mut self,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> std::result::Result<Self::ColloscopeId, Self::InternalError>;
+    async unsafe fn colloscopes_remove_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+    ) -> std::result::Result<(), Self::InternalError>;
+    async unsafe fn colloscopes_update_unchecked(
+        &mut self,
+        index: Self::ColloscopeId,
+        colloscope: &Colloscope<Self::TeacherId, Self::SubjectId, Self::StudentId>,
+    ) -> std::result::Result<(), Self::InternalError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -683,6 +711,33 @@ impl<GroupingId: OrdId> GroupingIncompat<GroupingId> {
     pub fn references_grouping(&self, grouping_id: GroupingId) -> bool {
         self.groupings.contains(&grouping_id)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeTimeSlot<TeacherId: OrdId> {
+    pub teacher_id: TeacherId,
+    pub start: SlotStart,
+    pub room: String,
+    pub group_assignments: BTreeMap<Week, Vec<usize>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeGroupList<StudentId: OrdId> {
+    pub name: String,
+    pub groups: Vec<String>,
+    pub students_mapping: BTreeMap<StudentId, usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeSubject<TeacherId: OrdId, StudentId: OrdId> {
+    pub time_slots: Vec<ColloscopeTimeSlot<TeacherId>>,
+    pub group_list: ColloscopeGroupList<StudentId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Colloscope<TeacherId: OrdId, SubjectId: OrdId, StudentId: OrdId> {
+    pub name: String,
+    pub subjects: BTreeMap<SubjectId, ColloscopeSubject<TeacherId, StudentId>>,
 }
 
 #[derive(Clone, Debug)]
