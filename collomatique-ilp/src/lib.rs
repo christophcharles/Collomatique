@@ -333,6 +333,84 @@ pub enum ObjectiveSense {
 ///
 /// Once the problem is fully specified, you can call [ProblemBuilder::build]. This will return a [Problem] struct
 /// that you can use with a solver.
+/// 
+/// Here is an example usage defining a very simple schedule problem :
+///
+/// We have two student groups x and y.
+/// They must both attend exactly once two different courses (1 and 2)
+/// on the span of two weeks.
+/// But the courses happen simultaneously.
+///
+/// This means we must fill a timetable of the following form:
+/// |          | Week 1 | Week 2 |
+/// |----------|--------|--------|
+/// | Course 1 |        |        |
+/// | Course 2 |        |        |
+///
+/// by putting an x or a y in each cell.
+///
+/// We have three broad conditions :
+/// - we should not put an x and a y in the same cell. But a cell can possibly be empty
+/// - we should not put two xs or two ys in the same column (but column could have zero)
+/// - we must put exactly one x and one y on each line
+///
+/// We represent this with 8 boolean variables.
+/// The variable xij is 1 if X is written in the cell on the line i and column j, 0 otherwise.
+/// The same pattern is used for yij.
+///
+/// ```
+/// # use collomatique_ilp::{ProblemBuilder, LinExpr, Variable, ObjectiveSense};
+/// let x11 = LinExpr::<String>::var("x11"); // Group x has course 1 on week 1
+/// let x12 = LinExpr::<String>::var("x12"); // Group x has course 1 on week 2
+/// let x21 = LinExpr::<String>::var("x21"); // Group x has course 2 on week 1
+/// let x22 = LinExpr::<String>::var("x22"); // Group x has course 2 on week 2
+/// 
+/// let y11 = LinExpr::<String>::var("y11"); // Group y has course 1 on week 1
+/// let y12 = LinExpr::<String>::var("y12"); // Group y has course 1 on week 2
+/// let y21 = LinExpr::<String>::var("y21"); // Group y has course 2 on week 1
+/// let y22 = LinExpr::<String>::var("y22"); // Group y has course 2 on week 2
+/// 
+/// let one = LinExpr::<String>::constant(1.0); // Constant for easier writing of constraints
+/// 
+/// let pb = ProblemBuilder::<String, String>::new()
+///     .set_variables([
+///         ("x11", Variable::binary()),
+///         ("x12", Variable::binary()),
+///         ("x21", Variable::binary()),
+///         ("x22", Variable::binary())
+///     ])
+///     .set_variables([
+///         ("y11", Variable::binary()),
+///         ("y12", Variable::binary()),
+///         ("y21", Variable::binary()),
+///         ("y22", Variable::binary())
+///     ])
+///     // Both class should not attend a course at the same time
+///     .set_constraints([
+///         ((&x11 + &y11).leq(&one), "At most one group in course 1 on week 1"),
+///         ((&x12 + &y12).leq(&one), "At most one group in course 1 on week 2"),
+///         ((&x21 + &y21).leq(&one), "At most one group in course 2 on week 1"),
+///         ((&x22 + &y22).leq(&one), "At most one group in course 2 on week 2")
+///     ])
+///     // Each class should not attend more than one course at a given time
+///     .set_constraints([
+///         ((&x11 + &x21).leq(&one), "At most one course for group x on week 1"),
+///         ((&x12 + &x22).leq(&one), "At most one course for group x on week 2"),
+///         ((&y11 + &y21).leq(&one), "At most one course for group y on week 1"),
+///         ((&y12 + &y22).leq(&one), "At most one course for group y on week 2")
+///     ])
+///     // Each class must complete each course exactly once
+///     .set_constraints([
+///         ((&x11 + &x12).eq(&one), "Group x should have course 1 exactly once"),
+///         ((&x21 + &x22).eq(&one), "Group x should have course 2 exactly once"),
+///         ((&y11 + &y12).eq(&one), "Group y should have course 1 exactly once"),
+///         ((&y21 + &y22).eq(&one), "Group y should have course 2 exactly once")
+///     ])
+///     // Objective function : prefer group x in course 1 on week 1
+///     .set_objective_function(x11.clone(), ObjectiveSense::Maximize)
+///     .build()
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone)]
 pub struct ProblemBuilder<V: UsableData, C: UsableData> {
     constraints: BTreeMap<Constraint<V>, C>,
