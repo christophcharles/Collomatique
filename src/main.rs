@@ -1158,27 +1158,27 @@ async fn python_command(
             name: _name,
             file: _file,
             force: _force,
-        } => {
-            return Err(anyhow!("python create command not yet implemented"));
-        }
+        } => Err(anyhow!("python create command not yet implemented")),
         PythonCommand::Remove {
             name: _name,
             python_script_number: _python_script_number,
-        } => {
-            return Err(anyhow!("python remove command not yet implemented"));
-        }
+        } => Err(anyhow!("python remove command not yet implemented")),
         PythonCommand::Run {
             name: _name,
             csv: _csv,
             python_script_number: _python_script_number,
-        } => {
-            return Err(anyhow!("python run command not yet implemented"));
-        }
-        PythonCommand::RunFile {
-            script: _script,
-            csv: _csv,
-        } => {
-            return Err(anyhow!("python run-file command not yet implemented"));
+        } => Err(anyhow!("python run command not yet implemented")),
+        PythonCommand::RunFile { script, csv } => {
+            if csv.is_some() {
+                return Err(anyhow!(
+                    "csv loading not yet implented for python run-file command"
+                ));
+            }
+
+            let python_code = collomatique::frontend::python::PythonCode::from_file(&script)?;
+            python_code.run()?;
+
+            Ok(None)
         }
     }
 }
