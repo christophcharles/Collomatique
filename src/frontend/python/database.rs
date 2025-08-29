@@ -21,6 +21,26 @@ pub struct Database {
 
 #[pymethods]
 impl Database {
+    fn undo(self_: PyRef<'_, Self>) -> PyResult<()> {
+        let Answer::Undo =
+            SessionConnection::send_command(self_.py(), &self_.sender, Command::Undo)?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
+    fn redo(self_: PyRef<'_, Self>) -> PyResult<()> {
+        let Answer::Redo =
+            SessionConnection::send_command(self_.py(), &self_.sender, Command::Redo)?
+        else {
+            panic!("Bad answer type");
+        };
+
+        Ok(())
+    }
+
     fn general_data_get(self_: PyRef<'_, Self>) -> PyResult<GeneralData> {
         let Answer::GeneralData(GeneralDataAnswer::Get(val)) = SessionConnection::send_command(
             self_.py(),
@@ -269,7 +289,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::backend::{self, IdError};
 use crate::frontend::state::update::ReturnHandle;
-use crate::frontend::state::{self, Operation, UpdateError};
+use crate::frontend::state::{self, Operation, RedoError, UndoError, UpdateError};
 
 #[derive(Debug, Clone)]
 pub enum Command {
@@ -277,6 +297,8 @@ pub enum Command {
     WeekPatterns(WeekPatternsCommand),
     Teachers(TeachersCommand),
     Students(StudentsCommand),
+    Undo,
+    Redo,
     Exit,
 }
 
@@ -332,6 +354,8 @@ pub enum Answer {
     WeekPatterns(WeekPatternsAnswer),
     Teachers(TeachersAnswer),
     Students(StudentsAnswer),
+    Undo,
+    Redo,
 }
 
 #[derive(Debug)]
@@ -752,6 +776,24 @@ impl<'scope> SessionConnection<'scope> {
             Command::Students(students_command) => {
                 let answer = Self::execute_students_job(students_command, manager).await?;
                 Ok(Answer::Students(answer))
+            }
+            Command::Undo => {
+                manager.undo().await.map_err(|e| match e {
+                    UndoError::HistoryDepleted => PyException::new_err("History depleted"),
+                    UndoError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                })?;
+
+                Ok(Answer::Undo)
+            }
+            Command::Redo => {
+                manager.redo().await.map_err(|e| match e {
+                    RedoError::HistoryFullyRewounded => {
+                        PyException::new_err("History fully rewounded")
+                    }
+                    RedoError::InternalError(int_err) => PyException::new_err(int_err.to_string()),
+                })?;
+
+                Ok(Answer::Redo)
             }
             Command::Exit => panic!("Exit command should be treated on level above"),
         }
