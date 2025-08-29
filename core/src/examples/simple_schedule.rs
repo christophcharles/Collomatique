@@ -101,3 +101,21 @@ pub enum SimpleScheduleConstraint {
         group: u32,
     },
 }
+
+impl std::fmt::Display for SimpleScheduleConstraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AtMostOneCoursePerWeekForAGivenGroup { group, week } => {
+                write!(f, "At most one course on week {} for group {}", week, group)
+            }
+            Self::AtMostOneGroupPerCourseOnAGivenWeek { course, week } => write!(
+                f,
+                "At most one group for course {} on week {}",
+                course, week
+            ),
+            Self::EachGroupShouldAttendEachCourseExactlyOnce { course, group } => {
+                write!(f, "Group {} attends course {} exactly once", group, course)
+            }
+        }
+    }
+}
