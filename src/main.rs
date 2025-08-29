@@ -993,61 +993,6 @@ async fn generate_colloscope_data(
     )?)
 }
 
-fn cbc_solve<T: collomatique::ilp::linexpr::VariableName>(
-    problem: &collomatique::ilp::Problem<T>,
-) -> Option<collomatique::ilp::FeasableConfig<T>> {
-    use coin_cbc::{raw::Status, Model};
-    use std::collections::{BTreeMap, BTreeSet};
-
-    let mut m = Model::default();
-
-    let cols: BTreeMap<_, _> = problem
-        .get_variables()
-        .iter()
-        .map(|v| (v, m.add_binary()))
-        .collect();
-
-    for constraint in problem.get_constraints() {
-        let row = m.add_row();
-        for v in constraint.variables() {
-            let col = cols[&v];
-            let weight = constraint.get_var(v).unwrap();
-            m.set_weight(row, col, weight.into());
-        }
-        match constraint.get_sign() {
-            collomatique::ilp::linexpr::Sign::Equals => {
-                m.set_row_equal(row, (-constraint.get_constant()).into());
-            }
-            collomatique::ilp::linexpr::Sign::LessThan => {
-                m.set_row_upper(row, (-constraint.get_constant()).into());
-            }
-        }
-    }
-
-    m.set_parameter("log", "0");
-
-    let sol = m.solve();
-
-    assert_eq!(Status::Finished, sol.raw().status());
-    use coin_cbc::raw::SecondaryStatus;
-    if sol.raw().secondary_status() != SecondaryStatus::HasSolution {
-        return None;
-    }
-
-    let vars: BTreeSet<_> = cols
-        .iter()
-        .filter_map(|(&v, col)| {
-            if sol.col(*col) == 1. {
-                Some(v.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    Some(problem.config_from(&vars).unwrap().into_feasable().unwrap())
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -1061,22 +1006,20 @@ async fn main() -> Result<()> {
 
     println!("{}", problem);
 
-    let sol = cbc_solve(&problem).expect("There should be a solution");
+    let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
 
-    println!("{}", sol);
-
-    /*let mut sa_optimizer = collomatique::ilp::optimizers::sa::Optimizer::new(&problem);
-
-    let random_gen = collomatique::ilp::random::DefaultRndGen::new();
-    let general_initializer =
-        collomatique::ilp::initializers::Random::with_one_out_of(random_gen, 100).unwrap();
-    //let general_initializer = collomatique::ilp::initializers::Null::new();
-    use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
-    let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
-    let max_steps = Some(10000);
+    let general_initializer = collomatique::ilp::initializers::Random::with_one_out_of(
+        collomatique::ilp::random::DefaultRndGen::new(),
+        100,
+    )
+    .unwrap();
+    let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
+    let max_steps = None;
     let retries = 20;
     let mut incremental_initializer =
         ilp_translator.incremental_initializer(general_initializer, solver, max_steps, retries);
+
+    let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
 
     for i in 1.. {
         println!("Attempt n°{}...", i);
@@ -1087,12 +1030,10 @@ async fn main() -> Result<()> {
             None => continue,
         };
         sa_optimizer.set_init_config(init_config);
-        sa_optimizer.set_max_steps(Some(1000));
-        sa_optimizer.set_init_max_steps(Some(1000));
+        sa_optimizer.set_max_steps(None);
+        sa_optimizer.set_init_max_steps(None);
 
-        use collomatique::ilp::solvers::backtracking::heuristics::Knuth2000;
-        let solver = collomatique::ilp::solvers::backtracking::Solver::new(Knuth2000::default());
-        let mut random_gen = collomatique::ilp::random::DefaultRndGen::new();
+        let solver = collomatique::ilp::solvers::coin_cbc::Solver::new();
         let iterator = sa_optimizer.iterate(solver, &mut random_gen);
 
         for (i, (sol, cost)) in iterator.enumerate() {
@@ -1103,7 +1044,7 @@ async fn main() -> Result<()> {
                 ilp_translator.read_solution(sol.as_ref())
             );
         }
-    }*/
+    }
 
     Ok(())
 }
