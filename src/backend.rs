@@ -1874,15 +1874,42 @@ struct GenColloscopeData<T: Storage> {
     week_patterns: BTreeMap<T::WeekPatternId, WeekPattern>,
     teachers: BTreeMap<T::TeacherId, Teacher>,
     incompats: BTreeMap<T::IncompatId, Incompat<T::WeekPatternId>>,
+    students: BTreeMap<T::StudentId, Student>,
+    incompat_for_student_data: BTreeSet<(T::StudentId, T::IncompatId)>,
 }
 
 impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
     async fn extract_data(&self) -> GenColloscopeResult<GenColloscopeData<T>, T> {
+        let incompats = self.data_storage.incompats_get_all().await?;
+        let students = self.data_storage.students_get_all().await?;
+
+        let mut incompat_for_student_data = BTreeSet::new();
+        for (&student_id, _student) in &students {
+            for (&incompat_id, _incompat) in &incompats {
+                if self
+                    .data_storage
+                    .incompat_for_student_get(student_id, incompat_id)
+                    .await
+                    .map_err(|e| match e {
+                        Id2Error::InvalidId1(id1) => panic!("Student id {:?} should be valid", id1),
+                        Id2Error::InvalidId2(id2) => {
+                            panic!("Incompat id {:?} should be valid", id2)
+                        }
+                        Id2Error::InternalError(int_err) => int_err,
+                    })?
+                {
+                    incompat_for_student_data.insert((student_id, incompat_id));
+                }
+            }
+        }
+
         Ok(GenColloscopeData {
             general_data: self.data_storage.general_data_get().await?,
             week_patterns: self.data_storage.week_patterns_get_all().await?,
             teachers: self.data_storage.teachers_get_all().await?,
-            incompats: self.data_storage.incompats_get_all().await?,
+            incompats,
+            students,
+            incompat_for_student_data,
         })
     }
 
@@ -1923,7 +1950,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
 struct IncompatibilitiesData<T: Storage> {
     incompat_list: crate::gen::colloscope::IncompatibilityList,
     incompat_group_list: crate::gen::colloscope::IncompatibilityGroupList,
-    id_map: BTreeMap<T::IncompatId, std::collections::BTreeSet<usize>>,
+    id_map: BTreeMap<T::IncompatId, BTreeSet<usize>>,
 }
 
 impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
@@ -1996,12 +2023,52 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
 
         Ok(output)
     }
+}
 
-    fn build_students(
+#[derive(Clone, Debug)]
+struct StudentData<T: Storage> {
+    student_list: crate::gen::colloscope::StudentList,
+    id_map: BTreeMap<T::StudentId, usize>,
+}
+
+impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
+    fn build_student_data(
         &self,
-        _data: &GenColloscopeData<T>,
-    ) -> GenColloscopeResult<crate::gen::colloscope::StudentList, T> {
-        todo!()
+        data: &GenColloscopeData<T>,
+        incompat_id_map: &BTreeMap<T::IncompatId, BTreeSet<usize>>,
+    ) -> GenColloscopeResult<StudentData<T>, T> {
+        use crate::gen::colloscope::Student;
+
+        let mut output = StudentData {
+            student_list: vec![],
+            id_map: BTreeMap::new(),
+        };
+
+        for (&student_id, _student) in &data.students {
+            let mut new_student = Student {
+                incompatibilities: BTreeSet::new(),
+            };
+
+            for (&incompat_id, _incompat) in &data.incompats {
+                if data
+                    .incompat_for_student_data
+                    .contains(&(student_id, incompat_id))
+                {
+                    new_student.incompatibilities.extend(
+                        incompat_id_map
+                            .get(&incompat_id)
+                            .expect("Incompat id should be valid in map")
+                            .iter()
+                            .cloned(),
+                    )
+                }
+            }
+
+            output.id_map.insert(student_id, output.student_list.len());
+            output.student_list.push(new_student);
+        }
+
+        Ok(output)
     }
 
     fn build_subjects(
@@ -2032,7 +2099,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
 
         let general = self.build_general_data(&data)?;
         let incompatibility_data = self.build_incompatibility_data(&data, general.week_count)?;
-        let students = self.build_students(&data)?;
+        let student_data = self.build_student_data(&data, &incompatibility_data.id_map)?;
         let subjects = self.build_subjects(&data)?;
         let slot_groupings = self.build_slot_groupings(&data)?;
         let grouping_incompats = self.build_grouping_incompats(&data)?;
@@ -2042,7 +2109,7 @@ impl<'a, T: Storage> GenColloscopeTranslator<'a, T> {
             subjects,
             incompatibility_data.incompat_group_list,
             incompatibility_data.incompat_list,
-            students,
+            student_data.student_list,
             slot_groupings,
             grouping_incompats,
         )
