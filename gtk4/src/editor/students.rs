@@ -93,7 +93,7 @@ impl Component for Students {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 5,
                     append = &gtk::Label {
-                        set_label: "Afficher les élèves présent à :",
+                        set_label: "Afficher les élèves de :",
                     },
                     append: model.filter_dropdown.widget(),
                     append = &gtk::Box {
