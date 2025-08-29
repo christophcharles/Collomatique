@@ -29,7 +29,6 @@ struct AppControllers {
 
     file_error: Controller<dialogs::file_error::Dialog>,
     file_caveats: Controller<dialogs::file_caveats::Dialog>,
-    open_dialog: Controller<dialogs::open_save::Dialog>,
     warn_dirty: Controller<dialogs::warning_changed::Dialog>,
 }
 
@@ -103,6 +102,12 @@ pub enum AppInput {
     UpdateActions,
 }
 
+#[derive(Debug)]
+pub enum AppCommandOutput {
+    OpenFileNotSelected,
+    OpenFileSelected(PathBuf),
+}
+
 relm4::new_action_group!(AppActionGroup, "app");
 
 relm4::new_stateless_action!(NewAction, AppActionGroup, "new");
@@ -119,7 +124,7 @@ impl Component for AppModel {
     type Input = AppInput;
     type Output = ();
     type Init = AppInit;
-    type CommandOutput = ();
+    type CommandOutput = AppCommandOutput;
 
     view! {
         #[root]
@@ -200,16 +205,6 @@ impl Component for AppModel {
             .launch(())
             .forward(sender.input_sender(), |_| AppInput::Ignore);
 
-        let open_dialog = dialogs::open_save::Dialog::builder()
-            .transient_for_native(&root)
-            .launch(dialogs::open_save::Type::Open)
-            .forward(sender.input_sender(), |msg| match msg {
-                dialogs::open_save::DialogOutput::Cancel => AppInput::Ignore,
-                dialogs::open_save::DialogOutput::FileSelected(path) => {
-                    AppInput::LoadColloscope(path)
-                }
-            });
-
         let warn_dirty = dialogs::warning_changed::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -223,7 +218,6 @@ impl Component for AppModel {
             editor,
             file_error,
             file_caveats,
-            open_dialog,
             warn_dirty,
         };
 
@@ -379,11 +373,12 @@ impl Component for AppModel {
                 self.send_but_check_dirty(sender, AppInput::OpenExistingColloscopeWithDialog);
             }
             AppInput::OpenExistingColloscopeWithDialog => {
-                self.controllers
-                    .open_dialog
-                    .sender()
-                    .send(dialogs::open_save::DialogInput::Show)
-                    .unwrap();
+                sender.oneshot_command(async move {
+                    match tools::open_save::open_dialog().await {
+                        Some(path) => AppCommandOutput::OpenFileSelected(path),
+                        None => AppCommandOutput::OpenFileNotSelected,
+                    }
+                });
             }
             AppInput::ColloscopeLoaded(path, data, caveats) => {
                 if self.state != GlobalState::LoadingScreen {
@@ -543,6 +538,20 @@ impl Component for AppModel {
         self.update(message, sender.clone(), root);
         self.update_about_dialog(widgets);
         self.update_view(widgets, sender);
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            AppCommandOutput::OpenFileNotSelected => {}
+            AppCommandOutput::OpenFileSelected(path) => {
+                sender.input(AppInput::LoadColloscope(path));
+            }
+        }
     }
 }
 
