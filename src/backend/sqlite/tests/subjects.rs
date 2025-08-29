@@ -59,6 +59,33 @@ VALUES (1,1,1,600,60), (2,1,0,720,60), (2, 1, 3, 720, 120), (3, 1, 0, 480, 120),
     store
 }
 
+async fn prepare_example_db(pool: sqlx::SqlitePool) -> Store {
+    let store = prepare_db(pool).await;
+
+    let _ = sqlx::query!(
+        r#"
+INSERT INTO subjects
+(name, subject_group_id, incompat_id, group_list_id,
+duration, min_students_per_group, max_students_per_group, period, period_is_strict,
+is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots)
+VALUES
+("HGG", 1, NULL, 2, 60, 2, 3, 2, 0, 0, 1, 0, 0),
+("ESH", 1, 1, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
+("Lettres-Philo", 5, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
+("LV1 - Anglais", 3, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("LV2 - Espagnol", 2, 2, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
+("LV2 - Allemand", 2, 3, 1, 60, 2, 3, 2, 0, 0, 1, 0, 0),
+("Mathématiques Approfondies", 4, NULL, 1, 60, 2, 3, 2, 0, 0, 1, 1, 1),
+("TP Info", 6, NULL, 3, 120, 10, 19, 2, 0, 1, 1, 0, 0);
+        "#
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap();
+
+    store
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SubjectDb {
     subject_id: i64,
@@ -344,4 +371,120 @@ async fn subjects_add_multiple(pool: sqlx::SqlitePool) {
     ];
 
     assert_eq!(subjects, subjects_expected);
+}
+
+#[sqlx::test]
+async fn subjects_get_one_1(pool: sqlx::SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    let subject = store
+        .subjects_get(super::super::subjects::Id(1))
+        .await
+        .unwrap();
+
+    let subject_expected = Subject {
+        name: String::from("HGG"),
+        subject_group_id: super::super::subject_groups::Id(1),
+        duration: NonZeroU32::new(60).unwrap(),
+        incompat_id: None,
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: false,
+        is_tutorial: false,
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+        balancing_requirements: BalancingRequirements {
+            teachers: false,
+            timeslots: false,
+        },
+        group_list_id: Some(super::super::group_lists::Id(2)),
+    };
+
+    assert_eq!(subject, subject_expected);
+}
+
+#[sqlx::test]
+async fn subjects_get_one_2(pool: sqlx::SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    let subject = store
+        .subjects_get(super::super::subjects::Id(2))
+        .await
+        .unwrap();
+
+    let subject_expected = Subject {
+        name: String::from("ESH"),
+        subject_group_id: super::super::subject_groups::Id(1),
+        duration: NonZeroU32::new(60).unwrap(),
+        incompat_id: Some(super::super::incompats::Id(1)),
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: false,
+        is_tutorial: false,
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+        balancing_requirements: BalancingRequirements {
+            teachers: false,
+            timeslots: false,
+        },
+        group_list_id: Some(super::super::group_lists::Id(1)),
+    };
+
+    assert_eq!(subject, subject_expected);
+}
+
+#[sqlx::test]
+async fn subjects_get_one_3(pool: sqlx::SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    let subject = store
+        .subjects_get(super::super::subjects::Id(3))
+        .await
+        .unwrap();
+
+    let subject_expected = Subject {
+        name: String::from("Lettres-Philo"),
+        subject_group_id: super::super::subject_groups::Id(5),
+        duration: NonZeroU32::new(60).unwrap(),
+        incompat_id: None,
+        students_per_group: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: false,
+        is_tutorial: false,
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+        balancing_requirements: BalancingRequirements {
+            teachers: false,
+            timeslots: false,
+        },
+        group_list_id: Some(super::super::group_lists::Id(1)),
+    };
+
+    assert_eq!(subject, subject_expected);
+}
+
+#[sqlx::test]
+async fn subjects_get_one_4(pool: sqlx::SqlitePool) {
+    let store = prepare_example_db(pool).await;
+
+    let subject = store
+        .subjects_get(super::super::subjects::Id(8))
+        .await
+        .unwrap();
+
+    let subject_expected = Subject {
+        name: String::from("TP Info"),
+        subject_group_id: super::super::subject_groups::Id(6),
+        duration: NonZeroU32::new(120).unwrap(),
+        incompat_id: None,
+        students_per_group: NonZeroUsize::new(10).unwrap()..=NonZeroUsize::new(19).unwrap(),
+        period: NonZeroU32::new(2).unwrap(),
+        period_is_strict: false,
+        is_tutorial: true,
+        max_groups_per_slot: NonZeroUsize::new(1).unwrap(),
+        balancing_requirements: BalancingRequirements {
+            teachers: false,
+            timeslots: false,
+        },
+        group_list_id: Some(super::super::group_lists::Id(3)),
+    };
+
+    assert_eq!(subject, subject_expected);
 }

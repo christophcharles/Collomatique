@@ -13,13 +13,100 @@ pub async fn get_all(
 }
 
 pub async fn get(
-    _pool: &SqlitePool,
-    _index: Id,
+    pool: &SqlitePool,
+    index: Id,
 ) -> std::result::Result<
     Subject<super::subject_groups::Id, super::incompats::Id, super::group_lists::Id>,
     IdError<Error, Id>,
 > {
-    todo!()
+    let record_opt = sqlx::query!(
+        r#"
+SELECT name, subject_group_id, incompat_id, group_list_id, duration,
+min_students_per_group, max_students_per_group, period, period_is_strict, is_tutorial, max_groups_per_slot, balance_teachers, balance_timeslots
+FROM subjects WHERE subject_id = ?
+        "#,
+        index.0
+    )
+    .fetch_optional(pool)
+    .await.map_err(Error::from)?;
+
+    let record = record_opt.ok_or(IdError::InvalidId(index))?;
+
+    let duration = NonZeroU32::new(u32::try_from(record.duration).map_err(|_| {
+        Error::CorruptedDatabase(format!(
+            "invalid duration ({}) stored in database",
+            record.duration
+        ))
+    })?)
+    .ok_or(Error::CorruptedDatabase(format!(
+        "invalid duration ({}) stored in database",
+        record.duration
+    )))?;
+    let min_students_per_group =
+        NonZeroUsize::new(usize::try_from(record.min_students_per_group).map_err(|_| {
+            Error::CorruptedDatabase(format!(
+                "invalid min_students_per_group ({}) stored in database",
+                record.duration
+            ))
+        })?)
+        .ok_or(Error::CorruptedDatabase(format!(
+            "invalid min_students_per_group ({}) stored in database",
+            record.duration
+        )))?;
+    let max_students_per_group =
+        NonZeroUsize::new(usize::try_from(record.max_students_per_group).map_err(|_| {
+            Error::CorruptedDatabase(format!(
+                "invalid max_students_per_group ({}) stored in database",
+                record.duration
+            ))
+        })?)
+        .ok_or(Error::CorruptedDatabase(format!(
+            "invalid max_students_per_group ({}) stored in database",
+            record.duration
+        )))?;
+    let students_per_group = min_students_per_group..=max_students_per_group;
+
+    let period = NonZeroU32::new(u32::try_from(record.period).map_err(|_| {
+        Error::CorruptedDatabase(format!(
+            "invalid period ({}) stored in database",
+            record.duration
+        ))
+    })?)
+    .ok_or(Error::CorruptedDatabase(format!(
+        "invalid period ({}) stored in database",
+        record.duration
+    )))?;
+
+    let max_groups_per_slot =
+        NonZeroUsize::new(usize::try_from(record.max_groups_per_slot).map_err(|_| {
+            Error::CorruptedDatabase(format!(
+                "invalid max_groups_per_slot ({}) stored in database",
+                record.duration
+            ))
+        })?)
+        .ok_or(Error::CorruptedDatabase(format!(
+            "invalid max_groups_per_slot ({}) stored in database",
+            record.duration
+        )))?;
+
+    let output = Subject {
+        name: record.name,
+        subject_group_id: subject_groups::Id(record.subject_group_id),
+        incompat_id: record.incompat_id.map(|id| incompats::Id(id)),
+        group_list_id: record.group_list_id.map(|id| group_lists::Id(id)),
+        duration,
+        students_per_group: students_per_group,
+        period: period,
+        period_is_strict: record.period_is_strict != 0,
+        is_tutorial: record.is_tutorial != 0,
+        max_groups_per_slot,
+        balancing_requirements: BalancingRequirements {
+            teachers: record.balance_teachers != 0,
+            timeslots: record.balance_timeslots != 0,
+        },
+    };
+
+    Ok(output)
 }
 
 async fn search_invalid_subject_group_id(
