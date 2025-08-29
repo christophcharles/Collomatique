@@ -68,13 +68,6 @@ impl Store {
     async fn fill_empty_db(pool: &SqlitePool) -> sqlx::Result<()> {
         sqlx::query(
             r#"
-CREATE TABLE "colloscopes" (
-    "colloscope_id"	INTEGER NOT NULL,
-    "name"	TEXT NOT NULL UNIQUE,
-    PRIMARY KEY("colloscope_id" AUTOINCREMENT)
-);
-INSERT INTO "colloscopes" ( "name" ) VALUES ( "Colloscope_1" );
-
 CREATE TABLE "incompats" (
     "incompat_id"	INTEGER NOT NULL,
     "name"	TEXT NOT NULL,
@@ -254,6 +247,72 @@ CREATE TABLE "group_items" (
     FOREIGN KEY("student_id") REFERENCES "students"("student_id"),
     PRIMARY KEY("student_id","group_list_id","group_id"),
     FOREIGN KEY ("group_list_id", "group_id") REFERENCES group_list_items("group_list_id", "group_id")
+);
+
+CREATE TABLE "colloscopes" (
+    "colloscope_id"	INTEGER NOT NULL,
+    "name"	TEXT NOT NULL,
+    PRIMARY KEY("colloscope_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "collo_subjects" (
+	"collo_subject_id"	INTEGER NOT NULL,
+	"colloscope_id"	INTEGER NOT NULL,
+	"subject_id"	INTEGER NOT NULL,
+	"group_list_name"	TEXT NOT NULL,
+	PRIMARY KEY("collo_subject_id" AUTOINCREMENT),
+	FOREIGN KEY("colloscope_id") REFERENCES "colloscopes"("colloscope_id"),
+	FOREIGN KEY("subject_id") REFERENCES "subjects"("subject_id"),
+	UNIQUE("colloscope_id","subject_id")
+);
+
+CREATE TABLE "collo_time_slots" (
+	"collo_time_slot_id"	INTEGER NOT NULL,
+	"collo_subject_id"	INTEGER NOT NULL,
+	"teacher_id"	INTEGER NOT NULL,
+	"start_day"	INTEGER NOT NULL,
+	"start_time"	INTEGER NOT NULL,
+	"room"	TEXT NOT NULL,
+	FOREIGN KEY("teacher_id") REFERENCES "teachers"("teacher_id"),
+	PRIMARY KEY("collo_time_slot_id" AUTOINCREMENT),
+	FOREIGN KEY("collo_subject_id") REFERENCES "collo_subjects"("collo_subject_id")
+);
+
+CREATE TABLE "collo_ts_assignments" (
+	"collo_ts_assignment_id"	INTEGER NOT NULL,
+	"collo_time_slot_id"	INTEGER NOT NULL,
+	PRIMARY KEY("collo_ts_assignment_id" AUTOINCREMENT),
+	FOREIGN KEY("collo_time_slot_id") REFERENCES "collo_time_slots"("collo_time_slot_id")
+);
+
+CREATE TABLE "collo_weeks" (
+	"collo_week_id"	INTEGER NOT NULL,
+	"collo_ts_assignment_id"	INTEGER NOT NULL,
+	"week"	INTEGER NOT NULL,
+	FOREIGN KEY("collo_ts_assignment_id") REFERENCES "collo_ts_assignments"("collo_ts_assignment_id"),
+	PRIMARY KEY("collo_week_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "collo_groups" (
+	"collo_group_id"	INTEGER NOT NULL,
+	"collo_subject_id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	FOREIGN KEY("collo_subject_id") REFERENCES "subjects"("subject_id"),
+	PRIMARY KEY("collo_group_id" AUTOINCREMENT)
+);
+
+CREATE TABLE "collo_week_items" (
+	"collo_week_id"	INTEGER NOT NULL,
+	"collo_group_id"	INTEGER NOT NULL,
+	FOREIGN KEY("collo_group_id") REFERENCES "collo_groups"("collo_group_id"),
+	FOREIGN KEY("collo_week_id") REFERENCES "collo_weeks"("collo_week_id")
+);
+
+CREATE TABLE "collo_group_items" (
+	"collo_group_id"	INTEGER NOT NULL,
+	"student_id"	INTEGER NOT NULL,
+	FOREIGN KEY("collo_group_id") REFERENCES "collo_groups"("collo_group_id"),
+	FOREIGN KEY("student_id") REFERENCES "students"("student_id")
 );"#,
         )
         .bind(serde_json::to_string(&GeneralDataDb {
