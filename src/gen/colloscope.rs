@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use std::collections::BTreeMap;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
@@ -19,8 +18,12 @@ pub enum Error {
     SubjectWithSlotOverlappingNextDay(usize, usize, usize),
     #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
     SubjectWithInvalidTeacher(usize, usize, usize),
-    #[error("Student {0} references an invalid subject number ({1})")]
-    StudentWithInvalidSubject(usize, usize),
+    #[error("Subject {0} has a duplicated student ({1})")]
+    SubjectWithDuplicatedStudent(usize, usize),
+    #[error("Subject {0} has and invalid student ({1}) in the not-assigned list")]
+    SubjectWithInvalidNotAssignedStudent(usize, usize),
+    #[error("Subject {0} has and invalid student ({2}) in the group {1}")]
+    SubjectWithInvalidAssignedStudent(usize, usize, usize),
     #[error("Student {0} references an invalid incompatibility number ({1})")]
     StudentWithInvalidIncompatibility(usize, usize),
     #[error(
@@ -38,9 +41,9 @@ pub enum Error {
     #[error("The slot grouping {0} has an invalid slot ref {1:?} with invalid slot reference")]
     SlotGroupingWithInvalidSlot(usize, SlotRef),
     #[error("The grouping incompatibility {0} has an invalid slot grouping reference {1}")]
-    GroupingIncompatWithInvalidSlotGrouping(usize, usize),
+    SlotGroupingIncompatWithInvalidSlotGrouping(usize, usize),
     #[error("The range {0:?} for the number of interrogations per week is empty")]
-    GeneralDataWithInvalidInterrogationsPerWeek(std::ops::Range<u32>),
+    SlotGeneralDataWithInvalidInterrogationsPerWeek(std::ops::Range<u32>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -65,11 +68,18 @@ pub struct Interrogation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupsDesc {
+    assigned_to_group: Vec<BTreeSet<usize>>,
+    not_assigned: BTreeSet<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     pub students_per_interrogation: RangeInclusive<NonZeroUsize>,
     pub period: NonZeroU32,
     pub duration: NonZeroU32,
     pub interrogations: Vec<Interrogation>,
+    pub groups: GroupsDesc,
 }
 
 pub type SubjectList = Vec<Subject>;
@@ -89,11 +99,11 @@ pub struct SlotGrouping {
 pub type SlotGroupingList = Vec<SlotGrouping>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct GroupingIncompat {
+pub struct SlotGroupingIncompat {
     pub groupings: BTreeSet<usize>,
 }
 
-pub type GroupingIncompatList = Vec<GroupingIncompat>;
+pub type SlotGroupingIncompatList = Vec<SlotGroupingIncompat>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompatibility {
@@ -106,7 +116,6 @@ use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Student {
-    pub subjects: BTreeSet<usize>,
     pub incompatibilities: BTreeSet<usize>,
 }
 
@@ -126,7 +135,7 @@ pub struct ValidatedData {
     incompatibilities: IncompatibilityList,
     students: StudentList,
     slot_groupings: SlotGroupingList,
-    grouping_incompats: GroupingIncompatList,
+    slot_grouping_incompats: SlotGroupingIncompatList,
 }
 
 impl ValidatedData {
@@ -144,7 +153,7 @@ impl ValidatedData {
         incompatibilities: IncompatibilityList,
         students: StudentList,
         slot_groupings: SlotGroupingList,
-        grouping_incompats: GroupingIncompatList,
+        grouping_incompats: SlotGroupingIncompatList,
     ) -> Result<ValidatedData> {
         for (i, subject) in subjects.iter().enumerate() {
             if subject.students_per_interrogation.is_empty() {
@@ -176,6 +185,40 @@ impl ValidatedData {
                     }
                 }
             }
+
+            for (j, group) in subject.groups.assigned_to_group.iter().enumerate() {
+                for k in group {
+                    if *k >= students.len() {
+                        return Err(Error::SubjectWithInvalidAssignedStudent(i, j, *k));
+                    }
+                }
+            }
+
+            for j in &subject.groups.not_assigned {
+                if *j >= students.len() {
+                    return Err(Error::SubjectWithInvalidNotAssignedStudent(i, *j));
+                }
+            }
+
+            let mut students_no_duplicate = BTreeSet::new();
+
+            for group in &subject.groups.assigned_to_group {
+                for j in group {
+                    if students_no_duplicate.contains(j) {
+                        return Err(Error::SubjectWithDuplicatedStudent(i, *j));
+                    } else {
+                        students_no_duplicate.insert(*j);
+                    }
+                }
+            }
+
+            for j in &subject.groups.not_assigned {
+                if students_no_duplicate.contains(j) {
+                    return Err(Error::SubjectWithDuplicatedStudent(i, *j));
+                } else {
+                    students_no_duplicate.insert(*j);
+                }
+            }
         }
 
         for (i, incompatibility) in incompatibilities.iter().enumerate() {
@@ -194,12 +237,6 @@ impl ValidatedData {
         }
 
         for (i, student) in students.iter().enumerate() {
-            for &subject in &student.subjects {
-                if subject >= subjects.len() {
-                    return Err(Error::StudentWithInvalidSubject(i, subject));
-                }
-            }
-
             for &incompatibility in &student.incompatibilities {
                 if incompatibility >= incompatibilities.len() {
                     return Err(Error::StudentWithInvalidIncompatibility(i, incompatibility));
@@ -231,14 +268,16 @@ impl ValidatedData {
         for (i, grouping_incompat) in grouping_incompats.iter().enumerate() {
             for &grouping in &grouping_incompat.groupings {
                 if grouping >= slot_groupings.len() {
-                    return Err(Error::GroupingIncompatWithInvalidSlotGrouping(i, grouping));
+                    return Err(Error::SlotGroupingIncompatWithInvalidSlotGrouping(
+                        i, grouping,
+                    ));
                 }
             }
         }
 
         if let Some(interrogations_range) = general.interrogations_per_week.clone() {
             if interrogations_range.is_empty() {
-                return Err(Error::GeneralDataWithInvalidInterrogationsPerWeek(
+                return Err(Error::SlotGeneralDataWithInvalidInterrogationsPerWeek(
                     interrogations_range,
                 ));
             }
@@ -250,28 +289,7 @@ impl ValidatedData {
             incompatibilities,
             students,
             slot_groupings,
-            grouping_incompats,
+            slot_grouping_incompats: grouping_incompats,
         })
-    }
-}
-
-impl ValidatedData {
-    fn count_student_specializations(&self) -> BTreeMap<Student, NonZeroUsize> {
-        let mut output: BTreeMap<Student, NonZeroUsize> = BTreeMap::new();
-
-        for student in &self.students {
-            match output.get_mut(student) {
-                Some(counter) => {
-                    *counter = counter
-                        .checked_add(1)
-                        .expect("There should be less than 2^32 student");
-                }
-                None => {
-                    output.insert(student.clone(), NonZeroUsize::new(1).unwrap());
-                }
-            }
-        }
-
-        output
     }
 }
