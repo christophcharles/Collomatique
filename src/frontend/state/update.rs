@@ -2,21 +2,18 @@ use super::*;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Error)]
-pub enum UpdateError<T: backend::Storage, IntError = <T as backend::Storage>::InternalError>
-where
-    IntError: std::fmt::Debug + std::error::Error + Send,
-{
+pub enum UpdateError<IntError: std::error::Error + std::fmt::Debug> {
     #[error("Error in storage backend: {0:?}")]
     Internal(#[from] IntError),
     #[error("Cannot set week_count: some week_patterns must be truncated")]
-    WeekPatternsNeedTruncating(Vec<T::WeekPatternId>),
+    WeekPatternsNeedTruncating(Vec<WeekPatternHandle>),
     #[error("Cannot set interrogations_per_week range: the range must be non-empty")]
     InterrogationsPerWeekRangeIsEmpty,
     #[error("Cannot add the week pattern: it references weeks beyond week_count")]
     WeekNumberTooBig(u32),
     #[error("Cannot remove the week pattern: it is referenced by the database")]
     WeekPatternDependanciesRemaining(
-        Vec<backend::WeekPatternDependancy<T::IncompatId, T::TimeSlotId>>,
+        Vec<backend::WeekPatternDependancy<IncompatHandle, TimeSlotHandle>>,
     ),
 }
 
@@ -50,7 +47,10 @@ pub trait Manager: ManagerInternal {
         IdError<<Self::Storage as backend::Storage>::InternalError, WeekPatternHandle>,
     >;
 
-    async fn apply(&mut self, op: Operation) -> Result<(), UpdateError<Self::Storage>>;
+    async fn apply(
+        &mut self,
+        op: Operation,
+    ) -> Result<(), UpdateError<<Self::Storage as backend::Storage>::InternalError>>;
     fn can_undo(&self) -> bool;
     fn can_redo(&self) -> bool;
     async fn undo(
@@ -179,7 +179,9 @@ impl<T: ManagerInternal> Manager for T {
     fn apply(
         &mut self,
         op: Operation,
-    ) -> impl core::future::Future<Output = Result<(), UpdateError<Self::Storage>>> + Send {
+    ) -> impl core::future::Future<
+        Output = Result<(), UpdateError<<Self::Storage as backend::Storage>::InternalError>>,
+    > + Send {
         async {
             let rev_op = private::build_rev_op(self, op).await?;
 
@@ -261,7 +263,7 @@ pub(super) mod private {
     pub async fn update_general_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedGeneralOperation,
-    ) -> Result<(), UpdateError<T::Storage>> {
+    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
             AnnotatedGeneralOperation::SetWeekCount(new_week_count) => {
                 let mut general_data = manager.get_backend_logic().general_data_get().await?;
@@ -272,7 +274,16 @@ pub(super) mod private {
                     .await
                     .map_err(|e| match e {
                         backend::CheckedError::CheckFailed(data) => {
-                            UpdateError::WeekPatternsNeedTruncating(data)
+                            let translated_data = data
+                                .into_iter()
+                                .map(|id| {
+                                    manager
+                                        .get_handle_managers_mut()
+                                        .week_patterns
+                                        .get_handle(id)
+                                })
+                                .collect();
+                            UpdateError::WeekPatternsNeedTruncating(translated_data)
                         }
                         backend::CheckedError::InternalError(int_error) => {
                             UpdateError::Internal(int_error)
@@ -327,7 +338,7 @@ pub(super) mod private {
     pub async fn update_week_patterns_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedWeekPatternsOperation,
-    ) -> Result<(), UpdateError<T::Storage>> {
+    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
             AnnotatedWeekPatternsOperation::Create(week_pattern_handle, pattern) => {
                 let new_id = manager
@@ -366,7 +377,28 @@ pub(super) mod private {
                             UpdateError::Internal(int_err)
                         }
                         backend::CheckedIdError::CheckFailed(dependancies) => {
-                            UpdateError::WeekPatternDependanciesRemaining(dependancies)
+                            let new_dependancies = dependancies
+                                .into_iter()
+                                .map(|dep| match dep {
+                                    WeekPatternDependancy::Incompat(id) => {
+                                        WeekPatternDependancy::Incompat(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .incompats
+                                                .get_handle(id),
+                                        )
+                                    }
+                                    WeekPatternDependancy::TimeSlot(id) => {
+                                        WeekPatternDependancy::TimeSlot(
+                                            manager
+                                                .get_handle_managers_mut()
+                                                .time_slots
+                                                .get_handle(id),
+                                        )
+                                    }
+                                })
+                                .collect();
+                            UpdateError::WeekPatternDependanciesRemaining(new_dependancies)
                         }
                     })?;
                 manager
@@ -404,7 +436,7 @@ pub(super) mod private {
     pub async fn update_internal_state<T: ManagerInternal>(
         manager: &mut T,
         op: &AnnotatedOperation,
-    ) -> Result<(), UpdateError<T::Storage>> {
+    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         match op {
             AnnotatedOperation::General(op) => update_general_state(manager, op).await?,
             AnnotatedOperation::WeekPatterns(op) => update_week_patterns_state(manager, op).await?,
@@ -415,7 +447,7 @@ pub(super) mod private {
     pub async fn update_internal_state_with_aggregated<T: ManagerInternal>(
         manager: &mut T,
         aggregated_ops: &AggregatedOperations,
-    ) -> Result<(), UpdateError<T::Storage>> {
+    ) -> Result<(), UpdateError<<T::Storage as backend::Storage>::InternalError>> {
         let ops = aggregated_ops.inner();
 
         let mut error = None;
