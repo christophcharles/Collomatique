@@ -104,7 +104,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                 tools::Icon::Close,
                 button::danger,
                 "Fermer le colloscope",
-                Some(GuiMessage::EditorMessage(Message::CloseClicked))
+                Some(Message::CloseClicked.into())
             ),
         ]
         .spacing(2)
@@ -119,9 +119,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                         } else {
                             button::text
                         })
-                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                            Panel::SubjectGroups
-                        ))),
+                        .on_press(Message::PanelChanged(Panel::SubjectGroups).into()),
                     button("Matières")
                         .width(Length::Fill)
                         .style(if state.panel == Panel::Subjects {
@@ -129,9 +127,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                         } else {
                             button::text
                         })
-                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                            Panel::Subjects
-                        ))),
+                        .on_press(Message::PanelChanged(Panel::Subjects).into()),
                     button("Enseignants")
                         .width(Length::Fill)
                         .style(if state.panel == Panel::Teachers {
@@ -139,9 +135,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                         } else {
                             button::text
                         })
-                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                            Panel::Teachers
-                        ))),
+                        .on_press(Message::PanelChanged(Panel::Teachers).into()),
                     button("Élèves")
                         .width(Length::Fill)
                         .style(if state.panel == Panel::Students {
@@ -149,9 +143,7 @@ pub fn view(state: &State) -> Element<GuiMessage> {
                         } else {
                             button::text
                         })
-                        .on_press(GuiMessage::EditorMessage(Message::PanelChanged(
-                            Panel::Students
-                        ))),
+                        .on_press(Message::PanelChanged(Panel::Students).into()),
                 ]
                 .width(Length::Fill)
                 .spacing(2)

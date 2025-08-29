@@ -27,17 +27,13 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
             *state = GuiState::DialogShown(State {
                 previous_state: Box::new(state.clone()),
             });
-            Task::perform(open_file_dialog(true), |x| {
-                GuiMessage::DialogMessage(Message::FileSelected(x))
-            })
+            Task::perform(open_file_dialog(true), |x| Message::FileSelected(x).into())
         }
         Message::OpenExistingFile => {
             *state = GuiState::DialogShown(State {
                 previous_state: Box::new(state.clone()),
             });
-            Task::perform(open_file_dialog(false), |x| {
-                GuiMessage::DialogMessage(Message::FileSelected(x))
-            })
+            Task::perform(open_file_dialog(false), |x| Message::FileSelected(x).into())
         }
         Message::FileSelected(file_desc) => {
             let GuiState::DialogShown(dialog_state) = state else {

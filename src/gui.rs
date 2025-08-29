@@ -23,6 +23,24 @@ enum GuiMessage {
     FileSelected(Option<dialogs::FileDesc>),
 }
 
+impl From<welcome::Message> for GuiMessage {
+    fn from(value: welcome::Message) -> Self {
+        GuiMessage::WelcomeMessage(value)
+    }
+}
+
+impl From<editor::Message> for GuiMessage {
+    fn from(value: editor::Message) -> Self {
+        GuiMessage::EditorMessage(value)
+    }
+}
+
+impl From<dialogs::Message> for GuiMessage {
+    fn from(value: dialogs::Message) -> Self {
+        GuiMessage::DialogMessage(value)
+    }
+}
+
 fn update(state: &mut GuiState, message: GuiMessage) -> Task<GuiMessage> {
     match message {
         GuiMessage::EditorMessage(msg) => editor::update(state, msg),
@@ -64,7 +82,7 @@ pub fn run_gui(create: bool, db: Option<std::path::PathBuf>) -> Result<()> {
                     None => GuiState::Welcome,
                 },
                 if create && db.is_none() {
-                    iced::Task::done(GuiMessage::DialogMessage(dialogs::Message::OpenNewFile))
+                    iced::Task::done(dialogs::Message::OpenNewFile.into())
                 } else {
                     iced::Task::none()
                 },
