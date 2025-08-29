@@ -1,19 +1,11 @@
-use collomatique::ilp::linalg::*;
+use collomatique::*;
+use collomatique::ilp::linexpr::Expr;
 
 fn main() {
-    let mut mat = SqMat::new(5);
+    let pb = ilp::ProblemBuilder::new()
+        .add((2 * Expr::from("a") - 3 * Expr::from("b") + 4 * Expr::from("c")).leq(&(2 * Expr::from("a") - 5 * Expr::from("d"))))
+        .add((2 * Expr::from("c") - 3 * Expr::from("d") + 4 * Expr::from("e")).eq(&(-1 * Expr::from("e") + Expr::from("c"))))
+        .build();
 
-    mat[(0,0)] = -5;
-    mat[(2,3)] = 4242;
-
-    println!("{}", mat);
-
-    let mut vect = Vect::new(5);
-
-    vect[0] = 1;
-    vect[3] = 1;
-
-    println!("{}", vect);
-
-    println!("{}", mat*vect);
+    println!("{}", pb);
 }
