@@ -439,6 +439,12 @@ pub enum Variable {
     UseGrouping(usize),
 }
 
+impl<'a> From<&'a Variable> for Variable {
+    fn from(value: &'a Variable) -> Self {
+        value.clone()
+    }
+}
+
 impl std::fmt::Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
