@@ -199,7 +199,7 @@ async fn async_cli(create: bool, db: std::path::PathBuf, command: CliCommandOrSh
             interactive_shell(&mut app_state).await?;
         }
         CliCommandOrShell::Backup { out } => {
-            let backup = logic.backup().await?;
+            let backup = collomatique::backend::json::BackupData::from_logic(&logic).await?;
 
             let file = std::fs::File::create(out)?;
             serde_json::to_writer_pretty(file, &backup)?;
