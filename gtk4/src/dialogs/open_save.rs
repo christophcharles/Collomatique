@@ -37,7 +37,7 @@ impl DefaultFile {
             path.clone()
         } else {
             let mut path = std::env::current_dir().unwrap_or(PathBuf::from(""));
-            path.push("Test.colloscope");
+            path.push("Test.collomatique");
             path
         }
     }
@@ -92,8 +92,8 @@ impl SimpleComponent for Dialog {
             },
             set_cancel_label: Some(&"Annuler"),
             add_filter = &gtk::FileFilter {
-                set_name: Some(&"Fichiers colloscopes (*.colloscope)"),
-                add_suffix: &"colloscope",
+                set_name: Some(&"Fichiers collomatique (*.collomatique)"),
+                add_suffix: &"collomatique",
             },
             add_filter = &gtk::FileFilter {
                 set_name: Some(&"Tous les fichiers"),
