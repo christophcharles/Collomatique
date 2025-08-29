@@ -125,9 +125,28 @@ impl SlotsUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<PreCleaningOp<SlotsUpdateWarning>> {
-        todo!()
+        match self {
+            SlotsUpdateOp::AddNewSlot(_desc, _slot) => None,
+            SlotsUpdateOp::UpdateSlot(_id, _slot) => None,
+            SlotsUpdateOp::DeleteSlot(slot_id) => {
+                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                    if rule.desc.references_slot(*slot_id) {
+                        return Some(PreCleaningOp {
+                            warning: SlotsUpdateWarning::LooseRuleReferencingSlot(
+                                *slot_id, *rule_id,
+                            ),
+                            ops: vec![UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id))],
+                        });
+                    }
+                }
+
+                None
+            }
+            SlotsUpdateOp::MoveSlotUp(_id) => None,
+            SlotsUpdateOp::MoveSlotDown(_id) => None,
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
@@ -136,7 +155,173 @@ impl SlotsUpdateOp {
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::SlotId>, SlotsUpdateError> {
-        todo!()
+        match self {
+            Self::AddNewSlot(subject_id, slot) => {
+                if data
+                    .get_data()
+                    .get_subjects()
+                    .find_subject_position(*subject_id)
+                    .is_none()
+                {
+                    return Err(AddNewSlotError::InvalidSubjectId(*subject_id).into());
+                }
+                let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
+                else {
+                    return Err(AddNewSlotError::SubjectHasNoInterrogation(*subject_id).into());
+                };
+
+                let last_slot_id = subject_slots.ordered_slots.last().map(|(id, _)| id.clone());
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Slot(
+                            collomatique_state_colloscopes::SlotOp::AddAfter(
+                                *subject_id,
+                                last_slot_id,
+                                slot.clone(),
+                            )
+                        ),
+                        self.get_desc(),
+                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Slot(se) = e {
+                        match se {
+                            collomatique_state_colloscopes::SlotError::InvalidSubjectId(_) => panic!("Subject id should be valid at this point"),
+                            collomatique_state_colloscopes::SlotError::SubjectHasNoInterrogation(_) => panic!("Subject should have interrogations at this point"),
+                            collomatique_state_colloscopes::SlotError::InvalidTeacherId(id) => AddNewSlotError::InvalidTeacherId(id),
+                            collomatique_state_colloscopes::SlotError::InvalidWeekPatternId(id) => AddNewSlotError::InvalidWeekPatternId(id),
+                            collomatique_state_colloscopes::SlotError::TeacherDoesNotTeachInSubject(tid, sid) => AddNewSlotError::TeacherDoesNotTeachInSubject(tid, sid),
+                            collomatique_state_colloscopes::SlotError::SlotOverlapsWithNextDay => AddNewSlotError::SlotOverlapsWithNextDay,
+                            _ => panic!("Unexpected slot error during AddNewSlot: {:?}", se),
+                        }
+                    } else {
+                        panic!("Unexpected error during AddNewSlot: {:?}", e);
+                    })?;
+                let Some(collomatique_state_colloscopes::NewId::SlotId(new_id)) = result else {
+                    panic!("Unexpected result from SlotOp::AddAfter");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateSlot(slot_id, slot) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Slot(
+                            collomatique_state_colloscopes::SlotOp::Update(
+                                *slot_id,
+                                slot.clone(),
+                            )
+                        ),
+                        self.get_desc()
+                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Slot(se) = e {
+                        match se {
+                            collomatique_state_colloscopes::SlotError::InvalidSlotId(id) => UpdateSlotError::InvalidSlotId(id),
+                            collomatique_state_colloscopes::SlotError::InvalidSubjectId(id) => UpdateSlotError::InvalidSubjectId(id),
+                            collomatique_state_colloscopes::SlotError::SubjectHasNoInterrogation(id) => UpdateSlotError::SubjectHasNoInterrogation(id),
+                            collomatique_state_colloscopes::SlotError::InvalidTeacherId(id) => UpdateSlotError::InvalidTeacherId(id),
+                            collomatique_state_colloscopes::SlotError::InvalidWeekPatternId(id) => UpdateSlotError::InvalidWeekPatternId(id),
+                            collomatique_state_colloscopes::SlotError::TeacherDoesNotTeachInSubject(tid, sid) => UpdateSlotError::TeacherDoesNotTeachInSubject(tid, sid),
+                            collomatique_state_colloscopes::SlotError::SlotOverlapsWithNextDay => UpdateSlotError::SlotOverlapsWithNextDay,
+                            _ => panic!("Unexpected slot error during UpdateSlot: {:?}", se),
+                        }
+                    } else {
+                        panic!("Unexpected error during UpdateSlot: {:?}", e);
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteSlot(slot_id) => {
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Slot(
+                            collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
+                        ),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Slot(se) = e {
+                            match se {
+                                collomatique_state_colloscopes::SlotError::InvalidSlotId(id) => {
+                                    DeleteSlotError::InvalidSlotId(id)
+                                }
+                                collomatique_state_colloscopes::SlotError::SlotIsReferencedByRule(_slot_id, _rule_id) => {
+                                    panic!("Rules should be cleaned before removing a slot");
+                                }
+                                _ => panic!("Unexpected slot error during DeleteSlot: {:?}", se),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteSlot: {:?}", e);
+                        }
+                    })?;
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::MoveSlotUp(slot_id) => {
+                let (_subject_id, current_position) = data
+                    .get_data()
+                    .get_slots()
+                    .find_slot_subject_and_position(*slot_id)
+                    .ok_or(MoveSlotUpError::InvalidSlotId(*slot_id))?;
+
+                if current_position == 0 {
+                    Err(MoveSlotUpError::NoUpperPosition)?;
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Slot(
+                            collomatique_state_colloscopes::SlotOp::ChangePosition(
+                                *slot_id,
+                                current_position - 1,
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("No error should be possible at this point");
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::MoveSlotDown(slot_id) => {
+                let (subject_id, current_position) = data
+                    .get_data()
+                    .get_slots()
+                    .find_slot_subject_and_position(*slot_id)
+                    .ok_or(MoveSlotUpError::InvalidSlotId(*slot_id))?;
+
+                if current_position
+                    == data
+                        .get_data()
+                        .get_slots()
+                        .subject_map
+                        .get(&subject_id)
+                        .expect("Subject id should be valid at this point")
+                        .ordered_slots
+                        .len()
+                        - 1
+                {
+                    Err(MoveSlotDownError::NoLowerPosition)?;
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Slot(
+                            collomatique_state_colloscopes::SlotOp::ChangePosition(
+                                *slot_id,
+                                current_position + 1,
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("No error should be possible at this point");
+
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
