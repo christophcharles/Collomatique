@@ -155,21 +155,21 @@ impl<T: BaseConstraints> ProblemBuilder<T> {
 
     pub fn add_hard_constraints<'a, E: ExtraConstraints<T>>(
         &'a mut self,
-        extra: &E,
+        extra: E,
     ) -> HardConstraintsChecker<'a, T, E> {
         todo!()
     }
 
     pub fn add_soft_constraints<'a, E: ExtraConstraints<T>>(
         &'a mut self,
-        extra: &E,
+        extra: E,
     ) -> SoftConstraintsChecker<'a, T, E> {
         todo!()
     }
 
     pub fn add_objective<'a, E: ExtraObjective<T>>(
         &'a mut self,
-        extra: &E,
+        extra: E,
     ) -> ObjectiveChecker<'a, T, E> {
         todo!()
     }
