@@ -427,7 +427,7 @@ impl Variable {
         self
     }
 
-    /// Sets a minimum bound for a variable.
+    /// Sets a maximum bound for a variable.
     ///
     /// ```
     /// # use collomatique_ilp::Variable;
