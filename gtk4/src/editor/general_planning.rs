@@ -1,14 +1,17 @@
 use collomatique_state::traits::Manager;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk};
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
-use select_start_date::DialogOutput;
 
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
+mod period_cut;
+mod period_duration;
+mod periods_display;
 mod select_start_date;
 
 #[derive(Debug)]
@@ -18,12 +21,30 @@ pub enum GeneralPlanningInput {
     DeleteFirstWeekClicked,
     EditFirstWeekClicked,
     FirstWeekChanged(collomatique_time::NaiveMondayDate),
+
+    AddPeriodClicked,
+    WeekCountSelected(usize),
+
+    EditPeriodClicked(collomatique_state_colloscopes::PeriodId),
+    CutPeriodClicked(collomatique_state_colloscopes::PeriodId),
+    DeletePeriodClicked(collomatique_state_colloscopes::PeriodId),
+}
+
+#[derive(Debug)]
+enum WeekCountSelectionReason {
+    New,
+    Edit(collomatique_state_colloscopes::PeriodId),
+    Cut(collomatique_state_colloscopes::PeriodId),
 }
 
 #[derive(Debug)]
 pub enum GeneralPlanningUpdateOp {
     DeleteFirstWeek,
     UpdateFirstWeek(collomatique_time::NaiveMondayDate),
+    AddNewPeriod(usize),
+    UpdatePeriodWeekCount(collomatique_state_colloscopes::PeriodId, usize),
+    DeletePeriod(collomatique_state_colloscopes::PeriodId),
+    CutPeriod(collomatique_state_colloscopes::PeriodId, usize),
 }
 
 impl GeneralPlanningUpdateOp {
@@ -31,23 +52,84 @@ impl GeneralPlanningUpdateOp {
         &self,
         data: &mut AppState<Data>,
     ) -> Result<(), collomatique_state_colloscopes::Error> {
-        data.apply(match self {
-            GeneralPlanningUpdateOp::DeleteFirstWeek => collomatique_state_colloscopes::Op::Period(
-                collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
-            ),
-            GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
-                collomatique_state_colloscopes::Op::Period(
-                    collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(date.clone())),
-                )
+        match self {
+            GeneralPlanningUpdateOp::DeleteFirstWeek => {
+                data.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
+                ))
             }
-        })
+            GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
+                data.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(date.clone())),
+                ))
+            }
+            GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
+                let new_desc = vec![true; *week_count];
+                data.apply(collomatique_state_colloscopes::Op::Period(
+                    match data.get_data().get_periods().ordered_period_list.last() {
+                        Some((id, _)) => {
+                            collomatique_state_colloscopes::PeriodOp::AddAfter(*id, new_desc)
+                        }
+                        None => collomatique_state_colloscopes::PeriodOp::AddFront(new_desc),
+                    },
+                ))
+            }
+            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .expect("period id should be valid");
+                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                desc.resize(*week_count, desc.last().copied().unwrap_or(true));
+
+                data.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                ))
+            }
+            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                data.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
+                ))
+            }
+            GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
+                let pos = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                    .expect("period id should be valid");
+                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                    .1
+                    .clone();
+                let new_desc = desc.split_off(*new_week_count);
+
+                let mut session = collomatique_state::AppSession::new(data);
+
+                session.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                ))?;
+                session.apply(collomatique_state_colloscopes::Op::Period(
+                    collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, new_desc),
+                ))?;
+
+                session.commit();
+                Ok(())
+            }
+        }
     }
 }
 
 pub struct GeneralPlanning {
     periods: collomatique_state_colloscopes::periods::Periods,
+    week_selection_reason: WeekCountSelectionReason,
+    periods_list: FactoryVecDeque<periods_display::Entry>,
 
     select_start_date_dialog: Controller<select_start_date::Dialog>,
+    period_duration_dialog: Controller<period_duration::Dialog>,
+    period_cut_dialog: Controller<period_cut::Dialog>,
 }
 
 impl GeneralPlanning {
@@ -131,161 +213,20 @@ impl Component for GeneralPlanning {
                         set_use_markup: true,
                     },
                 },
-                /*gtk::Box {
+                #[local_ref]
+                periods_box -> gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_margin_top: 30,
+                    set_margin_bottom: 30,
                     set_spacing: 30,
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_spacing: 10,
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "<b><big>Période 1 du 01/09/2025 au 21/09/2025 (semaines 1 à 3)</big></b>",
-                                set_use_markup: true,
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-symbolic",
-                                add_css_class: "flat",
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-cut-symbolic",
-                                add_css_class: "flat",
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-delete",
-                                add_css_class: "flat",
-                            },
-                        },
-                        gtk::ListBox {
-                            set_hexpand: true,
-                            add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
-                            append = &gtk::Box {
-                                set_hexpand: true,
-                                set_margin_all: 5,
-                                set_orientation: gtk::Orientation::Horizontal,
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "Semaine 1 du 01/09/2025 au 07/09/2025"
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Switch {
-                                    set_active: true,
-                                },
-                            },
-                            append = &gtk::Box {
-                                set_hexpand: true,
-                                set_margin_all: 5,
-                                set_orientation: gtk::Orientation::Horizontal,
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "Semaine 2 du 08/09/2025 au 14/09/2025"
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Switch {
-                                    set_active: true,
-                                },
-                            },
-                            append = &gtk::Box {
-                                set_hexpand: true,
-                                set_margin_all: 5,
-                                set_orientation: gtk::Orientation::Horizontal,
-                                add_css_class: "dimmed",
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "Semaine 3 du 15/09/2025 au 21/09/2025"
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Switch {
-                                    set_active: false,
-                                },
-                            },
-                        }
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_spacing: 10,
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_label: "<b><big>Période 2 du 22/09/2025 au 05/10/2025  (semaines 4 à 5)</big></b>",
-                                set_use_markup: true,
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-symbolic",
-                                add_css_class: "flat",
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-cut-symbolic",
-                                add_css_class: "flat",
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-delete",
-                                add_css_class: "flat",
-                            },
-                        },
-                        gtk::ListBox {
-                            set_hexpand: true,
-                            add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
-                            append = &gtk::Box {
-                                set_hexpand: true,
-                                set_margin_all: 5,
-                                set_orientation: gtk::Orientation::Horizontal,
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "Semaine 4 du 22/09/2025 au 28/09/2025"
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Switch {
-                                    set_active: true,
-                                },
-                            },
-                            append = &gtk::Box {
-                                set_hexpand: true,
-                                set_margin_all: 5,
-                                set_orientation: gtk::Orientation::Horizontal,
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "Semaine 5 du 29/09/2025 au 05/10/2025"
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Switch {
-                                    set_active: true,
-                                },
-                            },
-                        }
-                    },
-                },*/
+                },
                 gtk::Button {
+                    connect_clicked => GeneralPlanningInput::AddPeriodClicked,
                     adw::ButtonContent {
                         set_icon_name: "edit-add",
                         set_label: "Ajouter une période",
-                    }
+                    },
                 },
             }
         }
@@ -300,12 +241,48 @@ impl Component for GeneralPlanning {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                DialogOutput::Accepted(date) => GeneralPlanningInput::FirstWeekChanged(date),
+                select_start_date::DialogOutput::Accepted(date) => {
+                    GeneralPlanningInput::FirstWeekChanged(date)
+                }
+            });
+        let period_duration_dialog = period_duration::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                period_duration::DialogOutput::Accepted(week_count) => {
+                    GeneralPlanningInput::WeekCountSelected(week_count)
+                }
+            });
+        let period_cut_dialog = period_cut::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                period_cut::DialogOutput::Accepted(week_count) => {
+                    GeneralPlanningInput::WeekCountSelected(week_count)
+                }
+            });
+        let periods_list = FactoryVecDeque::builder()
+            .launch(gtk::Box::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                periods_display::EntryOutput::EditClicked(period_id) => {
+                    GeneralPlanningInput::EditPeriodClicked(period_id)
+                }
+                periods_display::EntryOutput::CutClicked(period_id) => {
+                    GeneralPlanningInput::CutPeriodClicked(period_id)
+                }
+                periods_display::EntryOutput::DeleteClicked(period_id) => {
+                    GeneralPlanningInput::DeletePeriodClicked(period_id)
+                }
             });
         let model = GeneralPlanning {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            week_selection_reason: WeekCountSelectionReason::New,
+            periods_list,
             select_start_date_dialog,
+            period_duration_dialog,
+            period_cut_dialog,
         };
+        let periods_box = model.periods_list.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -315,6 +292,28 @@ impl Component for GeneralPlanning {
         match message {
             GeneralPlanningInput::Update(new_periods) => {
                 self.periods = new_periods;
+
+                let new_data = self
+                    .periods
+                    .ordered_period_list
+                    .iter()
+                    .scan(0usize, |acc, (id, desc)| {
+                        let current_first_week = *acc;
+                        *acc += desc.len();
+                        Some(periods_display::EntryData {
+                            global_first_week: self.periods.first_week.clone(),
+                            first_week_num: current_first_week,
+                            desc: desc.clone(),
+                            period_id: id.clone(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+
+                crate::tools::factories::update_vec_deque(
+                    &mut self.periods_list,
+                    new_data.iter(),
+                    |data| periods_display::EntryInput::UpdateData(data.clone()),
+                );
             }
             GeneralPlanningInput::DeleteFirstWeekClicked => {
                 sender
@@ -337,6 +336,53 @@ impl Component for GeneralPlanning {
                     .output(GeneralPlanningUpdateOp::UpdateFirstWeek(date))
                     .unwrap();
             }
+            GeneralPlanningInput::AddPeriodClicked => {
+                self.week_selection_reason = WeekCountSelectionReason::New;
+                self.period_duration_dialog
+                    .sender()
+                    .send(period_duration::DialogInput::Show(10))
+                    .unwrap();
+            }
+            GeneralPlanningInput::WeekCountSelected(week_count) => sender
+                .output(match self.week_selection_reason {
+                    WeekCountSelectionReason::New => {
+                        GeneralPlanningUpdateOp::AddNewPeriod(week_count)
+                    }
+                    WeekCountSelectionReason::Edit(id) => {
+                        GeneralPlanningUpdateOp::UpdatePeriodWeekCount(id, week_count)
+                    }
+                    WeekCountSelectionReason::Cut(id) => {
+                        GeneralPlanningUpdateOp::CutPeriod(id, week_count)
+                    }
+                })
+                .unwrap(),
+            GeneralPlanningInput::EditPeriodClicked(period_id) => {
+                self.week_selection_reason = WeekCountSelectionReason::Edit(period_id);
+                let pos = self
+                    .periods
+                    .find_period_position(period_id)
+                    .expect("valid position");
+                let current_week_count = self.periods.ordered_period_list[pos].1.len();
+                self.period_duration_dialog
+                    .sender()
+                    .send(period_duration::DialogInput::Show(current_week_count))
+                    .unwrap();
+            }
+            GeneralPlanningInput::CutPeriodClicked(period_id) => {
+                self.week_selection_reason = WeekCountSelectionReason::Cut(period_id);
+                let pos = self
+                    .periods
+                    .find_period_position(period_id)
+                    .expect("valid position");
+                let current_week_count = self.periods.ordered_period_list[pos].1.len();
+                self.period_cut_dialog
+                    .sender()
+                    .send(period_cut::DialogInput::Show(current_week_count))
+                    .unwrap();
+            }
+            GeneralPlanningInput::DeletePeriodClicked(period_id) => sender
+                .output(GeneralPlanningUpdateOp::DeletePeriod(period_id))
+                .unwrap(),
         }
     }
 }
