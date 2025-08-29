@@ -12,8 +12,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("Subject {0} has empty students_per_interrogation: {1:?}")]
     SubjectWithInvalidStudentsPerInterrogationRange(usize, RangeInclusive<NonZeroU32>),
-    #[error("Subject has an interrogation slot overlapping next day")]
-    SubjectWithSlotOverlappingNextDay,
+    #[error("Subject {0} has in interrogation {1} the slot {2} overlapping next day")]
+    SubjectWithSlotOverlappingNextDay(usize, usize, usize),
     #[error("Subject {0} has invalid subject number ({2}) in interrogation {1}")]
     SubjectWithInvalidTeacher(usize, usize, usize),
     #[error("Student {0} references an invalid subject number ({1})")]
@@ -155,9 +155,9 @@ impl ValidatedData {
                         interrogation.teacher,
                     ));
                 }
-                for slot_start in &interrogation.slots {
+                for (k, slot_start) in interrogation.slots.iter().enumerate() {
                     if !Self::validate_slot(&general, slot_start, subject.duration) {
-                        return Err(Error::SubjectWithSlotOverlappingNextDay);
+                        return Err(Error::SubjectWithSlotOverlappingNextDay(i, j, k));
                     }
                 }
             }
