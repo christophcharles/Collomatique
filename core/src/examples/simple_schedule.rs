@@ -18,6 +18,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::*;
 
+#[cfg(test)]
+mod tests;
+
 /// Basic description of the simple scheduling problem
 ///
 /// As described in the module documentation (see [self]),
