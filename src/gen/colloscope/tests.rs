@@ -49,6 +49,7 @@ fn simple_validated_data() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -191,6 +192,7 @@ fn invalid_students_per_interrogation() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(1).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 0,
@@ -238,6 +240,7 @@ fn subject_slot_overlaps_next_day() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 0,
@@ -316,6 +319,7 @@ fn invalid_teacher_number() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![SlotWithTeacher {
             teacher: 1,
@@ -399,6 +403,7 @@ fn slot_ref_has_invalid_subject() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -417,6 +422,7 @@ fn slot_ref_has_invalid_subject() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -480,6 +486,7 @@ fn slot_ref_has_invalid_slot() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -498,6 +505,7 @@ fn slot_ref_has_invalid_slot() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -561,6 +569,7 @@ fn slot_grouping_overlap() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -589,6 +598,7 @@ fn slot_grouping_overlap() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -667,6 +677,7 @@ fn grouping_incompact_invalid_ref() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -685,6 +696,7 @@ fn grouping_incompact_invalid_ref() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![SlotWithTeacher {
                 teacher: 0,
@@ -774,6 +786,7 @@ fn duplicated_groups() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -877,6 +890,7 @@ fn duplicated_student() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -989,6 +1003,7 @@ fn duplicated_student_not_assigned() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1099,6 +1114,7 @@ fn invalid_student_in_group() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1198,6 +1214,7 @@ fn invalid_student_not_assigned() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1291,6 +1308,7 @@ fn empty_group() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1407,6 +1425,7 @@ fn extensible_empty_group() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1519,6 +1538,7 @@ fn group_too_large() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1631,6 +1651,7 @@ fn non_extensible_too_small_group() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1747,6 +1768,7 @@ fn too_few_groups() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1858,6 +1880,7 @@ fn too_many_groups() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -1981,6 +2004,7 @@ fn no_full_period() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2064,6 +2088,7 @@ fn group_in_slot_variables() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2259,6 +2284,7 @@ fn dynamic_group_assignment_variables() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2534,6 +2560,7 @@ fn student_in_group_variables() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -2711,6 +2738,7 @@ fn with_student_not_in_last_period_variables() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2772,6 +2800,7 @@ fn with_student_not_in_last_period_variables() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2930,6 +2959,7 @@ fn without_student_not_in_last_period_variables() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -2991,6 +3021,7 @@ fn without_student_not_in_last_period_variables() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3123,6 +3154,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3184,6 +3216,7 @@ fn mixed_case_for_student_not_in_last_period_variables() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -3329,6 +3362,7 @@ fn periodicity_variables_for_strict_period() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3516,6 +3550,7 @@ fn periodicity_variables_for_loose_unfinished_period() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3703,6 +3738,7 @@ fn without_periodicity_variables_for_loose_complete_period() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: false,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3864,6 +3900,7 @@ fn use_grouping() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -3980,6 +4017,7 @@ fn at_most_one_group_per_slot_constraints() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -4227,6 +4265,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4264,6 +4303,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4411,6 +4451,7 @@ fn one_interrogation_per_period() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4464,6 +4505,7 @@ fn one_interrogation_per_period() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4660,6 +4702,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4705,6 +4748,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -4906,6 +4950,7 @@ fn students_per_group_count() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5086,6 +5131,7 @@ fn student_in_single_group() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5265,6 +5311,7 @@ fn dynamic_groups_student_in_group_inequalities() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5385,6 +5432,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -5503,6 +5551,7 @@ fn one_periodicity_choice_per_student() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5548,6 +5597,7 @@ fn one_periodicity_choice_per_student() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5593,6 +5643,7 @@ fn one_periodicity_choice_per_student() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5776,6 +5827,7 @@ fn periodicity_inequalities() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5821,6 +5873,7 @@ fn periodicity_inequalities() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -5866,6 +5919,7 @@ fn periodicity_inequalities() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(3).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6149,6 +6203,7 @@ fn interrogations_per_week() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6186,6 +6241,7 @@ fn interrogations_per_week() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: true,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6341,6 +6397,7 @@ fn grouping_inequalities() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6491,6 +6548,7 @@ fn grouping_incompats() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6621,6 +6679,7 @@ fn students_incompats() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
@@ -6842,6 +6901,7 @@ fn simple_colloscope() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -6879,6 +6939,7 @@ fn simple_colloscope() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7003,6 +7064,7 @@ fn colloscope_with_dynamic_groups() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7040,6 +7102,7 @@ fn colloscope_with_dynamic_groups() {
             students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
             period: NonZeroU32::new(2).unwrap(),
             period_is_strict: false,
+            is_tutorial: false,
             duration: NonZeroU32::new(60).unwrap(),
             slots: vec![
                 SlotWithTeacher {
@@ -7303,6 +7366,7 @@ fn at_most_one_interrogation_per_empty_group() {
         students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
         period: NonZeroU32::new(2).unwrap(),
         period_is_strict: true,
+        is_tutorial: false,
         duration: NonZeroU32::new(60).unwrap(),
         slots: vec![
             SlotWithTeacher {
