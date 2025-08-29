@@ -15,6 +15,7 @@ use crate::tools;
 
 mod error_dialog;
 
+mod assignments;
 mod check_script;
 mod general_planning;
 mod run_script;
@@ -79,6 +80,7 @@ enum PanelNumbers {
     Subjects = 1,
     Teachers = 2,
     Students = 3,
+    Assignments = 4,
 }
 
 pub struct EditorPanel {
@@ -97,6 +99,7 @@ pub struct EditorPanel {
     subjects: Controller<subjects::Subjects>,
     teachers: Controller<teachers::Teachers>,
     students: Controller<students::Students>,
+    assignments: Controller<assignments::Assignments>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
 }
@@ -168,6 +171,15 @@ impl EditorPanel {
                 self.data.get_data().get_students().clone(),
             ))
             .unwrap();
+        self.assignments
+            .sender()
+            .send(assignments::AssignmentsInput::Update(
+                self.data.get_data().get_periods().clone(),
+                self.data.get_data().get_subjects().clone(),
+                self.data.get_data().get_students().clone(),
+                self.data.get_data().get_assignments().clone(),
+            ))
+            .unwrap();
     }
 
     fn inner_op_to_panel_number(
@@ -180,7 +192,9 @@ impl EditorPanel {
             collomatique_state_colloscopes::AnnotatedOp::Subject(_) => Some(PanelNumbers::Subjects),
             collomatique_state_colloscopes::AnnotatedOp::Teacher(_) => Some(PanelNumbers::Teachers),
             collomatique_state_colloscopes::AnnotatedOp::Student(_) => Some(PanelNumbers::Students),
-            collomatique_state_colloscopes::AnnotatedOp::Assignment(_) => None,
+            collomatique_state_colloscopes::AnnotatedOp::Assignment(_) => {
+                Some(PanelNumbers::Assignments)
+            }
         }
     }
 
@@ -386,6 +400,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Students(op))
             });
 
+        let assignments = assignments::Assignments::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Assignments(op))
+            });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -409,12 +429,19 @@ impl Component for EditorPanel {
             .launch(())
             .detach();
 
-        let pages_names = vec!["general_planning", "subjects", "teachers", "students"];
+        let pages_names = vec![
+            "general_planning",
+            "subjects",
+            "teachers",
+            "students",
+            "assignments",
+        ];
         let pages_titles_map = BTreeMap::from([
             ("general_planning", "Planning général"),
             ("subjects", "Matières"),
             ("teachers", "Colleurs"),
             ("students", "Élèves"),
+            ("assignments", "Matières suivies"),
         ]);
 
         let model = EditorPanel {
@@ -430,6 +457,7 @@ impl Component for EditorPanel {
             subjects,
             teachers,
             students,
+            assignments,
             check_script_dialog,
             run_script_dialog,
         };
@@ -454,6 +482,11 @@ impl Component for EditorPanel {
             model.students.widget(),
             Some(model.pages_names[3]),
             model.pages_titles_map.get(model.pages_names[3]).unwrap(),
+        );
+        widgets.main_stack.add_titled(
+            model.assignments.widget(),
+            Some(model.pages_names[4]),
+            model.pages_titles_map.get(model.pages_names[4]).unwrap(),
         );
 
         ComponentParts { model, widgets }
