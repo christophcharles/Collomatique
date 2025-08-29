@@ -377,7 +377,7 @@ pub enum Variable {
         student: usize,
         group: usize,
     },
-    ExactPeriodicity {
+    Periodicity {
         subject: usize,
         student: usize,
         week_modulo: u32,
@@ -406,11 +406,11 @@ impl std::fmt::Display for Variable {
                 student,
                 group,
             } => write!(f, "SiG_{}_{}_{}", *subject, *student, *group),
-            Variable::ExactPeriodicity {
+            Variable::Periodicity {
                 subject,
                 student,
                 week_modulo,
-            } => write!(f, "EP_{}_{}_{}", *subject, *student, *week_modulo),
+            } => write!(f, "P_{}_{}_{}", *subject, *student, *week_modulo),
         }
     }
 }
@@ -460,6 +460,10 @@ impl<'a> IlpTranslator<'a> {
         }
 
         result
+    }
+
+    fn is_last_period_incomplete(&self, subject: &Subject) -> bool {
+        self.data.general.week_count.get() % subject.period.get() != 0
     }
 
     fn build_group_in_slot_variables(&self) -> BTreeSet<Variable> {
@@ -548,13 +552,13 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_exact_periodicity_variables(&self) -> BTreeSet<Variable> {
+    fn build_periodicity_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
             .enumerate()
             .filter_map(|(i, subject)| {
-                if !subject.period_is_strict {
+                if (!subject.period_is_strict) && (!self.is_last_period_incomplete(subject)) {
                     return None;
                 }
 
@@ -563,7 +567,7 @@ impl<'a> IlpTranslator<'a> {
                 Some(student_iterator.flat_map(move |j| {
                     (0..subject.period.get())
                         .into_iter()
-                        .map(move |k| Variable::ExactPeriodicity {
+                        .map(move |k| Variable::Periodicity {
                             subject: i,
                             student: *j,
                             week_modulo: k,
@@ -572,10 +576,6 @@ impl<'a> IlpTranslator<'a> {
             })
             .flatten()
             .collect()
-    }
-
-    fn is_last_period_incomplete(&self, subject: &Subject) -> bool {
-        self.data.general.week_count.get() % subject.period.get() != 0
     }
 
     fn build_student_not_in_last_period(&self) -> BTreeSet<Variable> {
@@ -772,7 +772,7 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_group_in_slot_variables())
             .add_variables(self.build_dynamic_group_assignment_variables())
             .add_variables(self.build_student_in_group_variables())
-            .add_variables(self.build_exact_periodicity_variables())
+            .add_variables(self.build_periodicity_variables())
             .add_variables(self.build_student_not_in_last_period())
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
             .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
