@@ -61,13 +61,13 @@ impl GeneralPlanningUpdateOp {
                 collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
                 ),
-                "Effacer première semaine".into(),
+                "Effacer le début des colles".into(),
             ),
             GeneralPlanningUpdateOp::UpdateFirstWeek(date) => data.apply(
                 collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(date.clone())),
                 ),
-                "Changer première semaine".into(),
+                "Changer le début des colles".into(),
             ),
             GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
                 let new_desc = vec![true; *week_count];
@@ -106,7 +106,7 @@ impl GeneralPlanningUpdateOp {
                 collomatique_state_colloscopes::Op::Period(
                     collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
                 ),
-                "Effacer une période".into(),
+                "Supprimer une période".into(),
             ),
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
                 let pos = data
@@ -191,7 +191,7 @@ impl GeneralPlanningUpdateOp {
                     if *state {
                         "Ajouter une semaine de colle".into()
                     } else {
-                        "Enlever une semaine de colle".into()
+                        "Supprimer une semaine de colle".into()
                     },
                 )
             }
