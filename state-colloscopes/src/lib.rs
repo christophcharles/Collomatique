@@ -422,10 +422,6 @@ pub enum GroupListError {
     #[error("Student id {0:?} is both excluded and included in prefilled groups")]
     StudentBothIncludedAndExcluded(StudentId),
 
-    /// student prefilled group number is invalid
-    #[error("Student id {0:?} is associated to a bad prefilled group number {1:?}")]
-    StudentPrefilledGroupIsInvalid(StudentId, u32),
-
     /// cannot remove group list as there are still prefilled groups
     #[error("Group list still has prefilled groups and cannot be removed")]
     RemainingPrefilledGroups,
@@ -1182,19 +1178,12 @@ impl Data {
         students: &students::Students,
     ) -> Result<(), GroupListError> {
         Self::validate_group_list_params_internal(&group_list.params, students)?;
-        let max_group = group_list.params.group_count.end().clone();
-        for (student_id, group_num) in &group_list.prefilled_groups {
+        for (student_id, _group_num) in &group_list.prefilled_groups {
             if !students.student_map.contains_key(student_id) {
                 return Err(GroupListError::InvalidStudentId(*student_id));
             }
             if group_list.params.excluded_students.contains(student_id) {
                 return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
-            }
-            if *group_num >= max_group {
-                return Err(GroupListError::StudentPrefilledGroupIsInvalid(
-                    *student_id,
-                    *group_num,
-                ));
             }
         }
         Ok(())

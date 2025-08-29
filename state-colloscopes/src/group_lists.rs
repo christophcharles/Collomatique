@@ -29,9 +29,7 @@ pub struct GroupList {
     pub params: GroupListParameters,
     /// Prefilled groups
     /// To each student, associate a group number
-    /// Group numbers should be in the values allowed by [GroupList::group_count]
-    ///
-    /// A student that appears in [GroupList::excluded_students]
+    /// A student that appears in [GroupListParameters::excluded_students]
     /// should not appear here
     ///
     /// If a student appears in neither there is no prefilled association
@@ -213,15 +211,11 @@ impl GroupListExternalData {
         if !self.params.validate(student_ids) {
             return false;
         }
-        let max_group = self.params.group_count.end().clone();
-        if !self.prefilled_groups.iter().all(|(id, group_num)| {
+        if !self.prefilled_groups.iter().all(|(id, _group_num)| {
             if !student_ids.contains(id) {
                 return false;
             }
             if self.params.excluded_students.contains(id) {
-                return false;
-            }
-            if *group_num >= max_group {
                 return false;
             }
             true
