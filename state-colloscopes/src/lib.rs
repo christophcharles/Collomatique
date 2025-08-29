@@ -1274,6 +1274,7 @@ impl Data {
                     .ordered_subject_list
                     .insert(position, (*new_id, params.clone()));
                 if params.parameters.interrogation_parameters.is_some() {
+                    println!("Test");
                     self.inner_data.slots.subject_map.insert(
                         *new_id,
                         slots::SubjectSlots {
@@ -1455,7 +1456,20 @@ impl Data {
                 }
 
                 self.inner_data.subjects.ordered_subject_list[position].1 = new_params.clone();
-                self.inner_data.slots.subject_map.remove(id);
+                if new_params.parameters.interrogation_parameters.is_some()
+                    != old_params.parameters.interrogation_parameters.is_some()
+                {
+                    if new_params.parameters.interrogation_parameters.is_some() {
+                        self.inner_data.slots.subject_map.insert(
+                            *id,
+                            slots::SubjectSlots {
+                                ordered_slots: vec![],
+                            },
+                        );
+                    } else {
+                        self.inner_data.slots.subject_map.remove(id);
+                    }
+                }
 
                 for (period_id, _period) in &self.inner_data.periods.ordered_period_list {
                     // Only change in period status should be considered
