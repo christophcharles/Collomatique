@@ -237,6 +237,63 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
     }
 }
 
+/// Variable implementing a logical 'NOT'.
+///
+/// [NotVariable] implements [AggregatedVariables] and can help
+/// build a logical 'NOT' in problems. It takes a name for
+/// the new variable and an existing variable (that should be binary
+/// otherwise the result is undefined) that should be NOTed against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotVariable<ProblemVariable>
+where
+    ProblemVariable: UsableData + 'static,
+{
+    /// Name for the construction variable
+    pub variable_name: ProblemVariable,
+    /// Name of the original variable to inverse
+    pub original_variable: ProblemVariable,
+}
+
+impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
+    for NotVariable<ProblemVariable>
+{
+    fn get_variables_def(&self) -> Vec<(ProblemVariable, Variable)> {
+        vec![(self.variable_name.clone(), Variable::binary())]
+    }
+
+    fn get_structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ProblemVariable>,
+        AggregatedVariablesConstraintDesc<ProblemVariable>,
+    )> {
+        let var_expr = LinExpr::<ProblemVariable>::var(self.variable_name.clone());
+        let orig_var_expr = LinExpr::var(self.original_variable.clone());
+        let one = LinExpr::constant(1.);
+
+        let constraint = var_expr.eq(&(one - orig_var_expr));
+
+        vec![(
+            constraint,
+            AggregatedVariablesConstraintDesc {
+                variable_names: vec![self.variable_name.clone()],
+                internal_number: 0,
+                desc: "New variable should be 1 minus the old one".into(),
+            },
+        )]
+    }
+
+    fn reconstruct_structure_variables(
+        &self,
+        config: &ConfigData<ProblemVariable>,
+    ) -> Vec<Option<f64>> {
+        vec![match config.get(self.original_variable.clone()) {
+            Some(val) => Some(1. - val),
+            None => None,
+        }]
+    }
+}
+
 /// Variable implementing a conversion from integer variable to a collection
 /// of binary variables.
 ///
