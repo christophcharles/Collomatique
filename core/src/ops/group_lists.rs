@@ -172,7 +172,221 @@ impl GroupListsUpdateOp {
         &self,
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::GroupListId>, GroupListsUpdateError> {
-        todo!()
+        match self {
+            Self::AddNewGroupList(params) => {
+                for student_id in &params.excluded_students {
+                    if !data
+                        .get_data()
+                        .get_students()
+                        .student_map
+                        .contains_key(student_id)
+                    {
+                        return Err(AddNewGroupListError::InvalidStudentId(*student_id).into());
+                    }
+                }
+
+                if params.group_count.is_empty() {
+                    return Err(AddNewGroupListError::GroupCountRangeIsEmpty.into());
+                }
+                if params.students_per_group.is_empty() {
+                    return Err(AddNewGroupListError::StudentsPerGroupRangeIsEmpty.into());
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::GroupList(
+                            collomatique_state_colloscopes::GroupListOp::Add(params.clone()),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
+                let Some(collomatique_state_colloscopes::NewId::GroupListId(new_id)) = result
+                else {
+                    panic!("Unexpected result from GroupListOp::Add");
+                };
+                Ok(Some(new_id))
+            }
+            Self::UpdateGroupList(group_list_id, params) => {
+                for student_id in &params.excluded_students {
+                    if !data
+                        .get_data()
+                        .get_students()
+                        .student_map
+                        .contains_key(student_id)
+                    {
+                        return Err(UpdateGroupListError::InvalidStudentId(*student_id).into());
+                    }
+                }
+
+                if params.group_count.is_empty() {
+                    return Err(UpdateGroupListError::GroupCountRangeIsEmpty.into());
+                }
+                if params.students_per_group.is_empty() {
+                    return Err(UpdateGroupListError::StudentsPerGroupRangeIsEmpty.into());
+                }
+
+                if !data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .contains_key(group_list_id)
+                {
+                    return Err(UpdateGroupListError::InvalidGroupListId(*group_list_id).into());
+                };
+
+                let result = match data
+                    .apply(
+                        collomatique_state_colloscopes::Op::GroupList(
+                            collomatique_state_colloscopes::GroupListOp::Update(
+                                *group_list_id,
+                                params.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    ) {
+                        Ok(r) => r,
+                        Err(collomatique_state_colloscopes::Error::GroupList(ge)) => match ge {
+                            collomatique_state_colloscopes::GroupListError::StudentBothIncludedAndExcluded(_) => panic!("Prefilled groups should be properly cleaned"),
+                            _ => panic!("Unexpected error when calling GroupListOp::Update")
+                        }
+                        _ => panic!("Unexpected error when calling GroupListOp::Update")
+                    };
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::DeleteGroupList(group_list_id) => {
+                if !data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .contains_key(group_list_id)
+                {
+                    return Err(DeleteGroupListError::InvalidGroupListId(*group_list_id).into());
+                };
+
+                let result = match data
+                    .apply(
+                        collomatique_state_colloscopes::Op::GroupList(
+                            collomatique_state_colloscopes::GroupListOp::Remove(*group_list_id),
+                        ),
+                        self.get_desc(),
+                    ) {
+                        Ok(r) => r,
+                        Err(collomatique_state_colloscopes::Error::GroupList(ge)) => match ge {
+                            collomatique_state_colloscopes::GroupListError::RemainingPrefilledGroups => panic!("Prefilled groups should be properly cleaned"),
+                            collomatique_state_colloscopes::GroupListError::RemainingAssociatedSubjects => panic!("Associated subjects should be properly cleaned"),
+                            _ => panic!("Unexpected error when calling GroupListOp::Remove")
+                        }
+                        _ => panic!("Unexpected error when calling GroupListOp::Remove")
+                    };
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::PrefillGroupList(group_list_id, prefilled_groups) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(PrefillGroupListError::InvalidGroupListId(*group_list_id).into());
+                };
+
+                for student_id in prefilled_groups.iter_students() {
+                    if group_list.params.excluded_students.contains(&student_id) {
+                        return Err(PrefillGroupListError::StudentIsExcluded(
+                            *group_list_id,
+                            student_id,
+                        )
+                        .into());
+                    }
+                    if !data
+                        .get_data()
+                        .get_students()
+                        .student_map
+                        .contains_key(&student_id)
+                    {
+                        return Err(PrefillGroupListError::InvalidStudentId(student_id).into());
+                    }
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::GroupList(
+                            collomatique_state_colloscopes::GroupListOp::PreFill(
+                                *group_list_id,
+                                prefilled_groups.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+            Self::AssignGroupListToSubject(period_id, subject_id, group_list_id_opt) => {
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return Err(AssignGroupListToSubjectError::InvalidSubjectId(*subject_id).into());
+                };
+
+                if subject.parameters.interrogation_parameters.is_none() {
+                    return Err(AssignGroupListToSubjectError::SubjectHasNoInterrogation(
+                        *subject_id,
+                    )
+                    .into());
+                }
+
+                if subject.excluded_periods.contains(period_id) {
+                    return Err(AssignGroupListToSubjectError::SubjectDoesNotRunOnPeriod(
+                        *subject_id,
+                        *period_id,
+                    )
+                    .into());
+                }
+
+                if !data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .contains_key(period_id)
+                {
+                    return Err(AssignGroupListToSubjectError::InvalidPeriodId(*period_id).into());
+                }
+
+                if let Some(group_list_id) = group_list_id_opt {
+                    if !data
+                        .get_data()
+                        .get_group_lists()
+                        .group_list_map
+                        .contains_key(group_list_id)
+                    {
+                        return Err(AssignGroupListToSubjectError::InvalidGroupListId(
+                            *group_list_id,
+                        )
+                        .into());
+                    }
+                }
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::GroupList(
+                            collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                *period_id,
+                                *subject_id,
+                                *group_list_id_opt,
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
+                assert!(result.is_none());
+
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {

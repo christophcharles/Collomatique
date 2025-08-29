@@ -467,6 +467,10 @@ pub enum GroupListError {
     /// students appear multiple times in prefilled groups
     #[error("Some students appear multiple times in prefilled groups")]
     DuplicatedStudentInPrefilledGroups,
+
+    /// cannot remove group list as there are still associated subjects
+    #[error("Group list still is associated to subjects and cannot be removed")]
+    RemainingAssociatedSubjects,
 }
 
 /// Errors for rules operations
@@ -2725,6 +2729,15 @@ impl Data {
                 };
                 if !old_group_list.prefilled_groups.is_empty() {
                     return Err(GroupListError::RemainingPrefilledGroups);
+                }
+
+                for (_period_id, subject_map) in &self.inner_data.group_lists.subjects_associations
+                {
+                    for (_subject_id, group_list_id) in subject_map {
+                        if *group_list_id == *id {
+                            return Err(GroupListError::RemainingAssociatedSubjects);
+                        }
+                    }
                 }
 
                 self.inner_data.group_lists.group_list_map.remove(id);
