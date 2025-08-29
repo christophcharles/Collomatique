@@ -134,11 +134,17 @@ CREATE TABLE "groupings" (
 );
 
 CREATE TABLE "grouping_incompats" (
-	"id1"	INTEGER NOT NULL,
-	"id2"	INTEGER NOT NULL,
-	FOREIGN KEY("id1") REFERENCES "groupings"("grouping_id"),
-	PRIMARY KEY("id1","id2"),
-	FOREIGN KEY("id2") REFERENCES "groupings"("grouping_id")
+	"grouping_incompat_id"	INTEGER NOT NULL UNIQUE,
+	"max_count"	INTEGER NOT NULL,
+	PRIMARY KEY("grouping_incompat_id")
+);
+
+CREATE TABLE "grouping_incompat_items" (
+	"grouping_incompat_id"	INTEGER NOT NULL,
+	"grouping_id"	INTEGER NOT NULL,
+	FOREIGN KEY("grouping_id") REFERENCES "groupings"("grouping_id"),
+	FOREIGN KEY("grouping_incompat_id") REFERENCES "grouping_incompats"("grouping_incompat_id"),
+	PRIMARY KEY("grouping_incompat_id","grouping_id")
 );
 
 CREATE TABLE "time_slots" (
@@ -932,33 +938,50 @@ async fn generate_grouping_incompats(
 ) -> Result<collomatique::gen::colloscope::SlotGroupingIncompatSet> {
     use collomatique::gen::colloscope::{SlotGroupingIncompat, SlotGroupingIncompatSet};
 
-    let grouping_incompats_data = sqlx::query!("SELECT id1, id2 FROM grouping_incompats")
-        .fetch_all(db_conn)
-        .await?;
+    let grouping_incompats_data =
+        sqlx::query!("SELECT grouping_incompat_id, max_count FROM grouping_incompats")
+            .fetch_all(db_conn)
+            .await?;
+    let grouping_incompat_items_data =
+        sqlx::query!("SELECT grouping_incompat_id, grouping_id FROM grouping_incompat_items")
+            .fetch_all(db_conn)
+            .await?;
 
     let mut set = SlotGroupingIncompatSet::new();
 
     for record in &grouping_incompats_data {
-        let week_map1 = id_map
-            .get(&record.id1)
-            .ok_or(anyhow!("Invalid grouping ID"))?;
-        let week_map2 = id_map
-            .get(&record.id2)
-            .ok_or(anyhow!("Invalid grouping ID"))?;
-
+        let mut week_maps = Vec::new();
         use std::collections::BTreeSet;
-        let weeks1: BTreeSet<_> = week_map1.keys().copied().collect();
-        let weeks2: BTreeSet<_> = week_map2.keys().copied().collect();
+        let mut weeks = BTreeSet::new();
+        for x in &grouping_incompat_items_data {
+            if x.grouping_incompat_id != record.grouping_incompat_id {
+                continue;
+            }
+            let week_map = id_map
+                .get(&x.grouping_id)
+                .ok_or(anyhow!("Invalid grouping ID"))?;
+            weeks.extend(week_map.keys().copied());
+            week_maps.push(week_map);
+        }
 
-        let common_weeks = weeks1.intersection(&weeks2);
+        let max_count_maybe_zero = usize::try_from(record.max_count)
+            .map_err(|_| anyhow!("Invalid (non usize) max count"))?;
+        let max_count =
+            NonZeroUsize::new(max_count_maybe_zero).ok_or(anyhow!("Invalid (zero) max count"))?;
 
-        for week in common_weeks {
-            let id1 = week_map1[week];
-            let id2 = week_map2[week];
+        for week in weeks {
+            let groupings: BTreeSet<_> = week_maps
+                .iter()
+                .filter_map(|&week_map| week_map.get(&week).copied())
+                .collect();
+
+            if groupings.len() <= max_count.get() {
+                continue;
+            }
 
             let incompat = SlotGroupingIncompat {
-                groupings: BTreeSet::from([id1, id2]),
-                max_count: NonZeroUsize::new(1).unwrap(),
+                groupings,
+                max_count,
             };
             set.insert(incompat);
         }
