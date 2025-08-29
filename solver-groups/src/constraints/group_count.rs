@@ -4,20 +4,35 @@
 
 use crate::base::Identifier;
 
-pub struct GroupCountMinimizer<SubjectId: Identifier + 'static, StudentId: Identifier + 'static> {
+pub struct GroupCountMinimizer<
+    PeriodId: Identifier + 'static,
+    SubjectId: Identifier + 'static,
+    StudentId: Identifier + 'static,
+> {
+    period_id: PeriodId,
     subject_id: SubjectId,
     _phantom: std::marker::PhantomData<StudentId>,
 }
 
-impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
-    collomatique_solver::SimpleProblemConstraints for GroupCountMinimizer<SubjectId, StudentId>
+impl<
+        PeriodId: Identifier + 'static,
+        SubjectId: Identifier + 'static,
+        StudentId: Identifier + 'static,
+    > collomatique_solver::SimpleProblemConstraints
+    for GroupCountMinimizer<PeriodId, SubjectId, StudentId>
 {
-    type Problem = crate::base::GroupListProblem<SubjectId, StudentId>;
+    type Problem = crate::base::GroupListProblem<PeriodId, SubjectId, StudentId>;
     type GeneralConstraintDesc = ();
     type StructureVariable = ();
 
     fn is_fit_for_problem(&self, desc: &Self::Problem) -> bool {
-        desc.subject_descriptions.contains_key(&self.subject_id)
+        if let Some(period_desc) = desc.period_descriptions.get(&self.period_id) {
+            period_desc
+                .subject_descriptions
+                .contains_key(&self.subject_id)
+        } else {
+            false
+        }
     }
 
     fn extra_aggregated_variables(
@@ -65,18 +80,21 @@ impl<SubjectId: Identifier + 'static, StudentId: Identifier + 'static>
     > {
         let mut counting_group_expr = collomatique_ilp::LinExpr::constant(0.);
 
-        if let Some(subject_desc) = desc.subject_descriptions.get(&self.subject_id) {
-            let max_group = subject_desc.group_count.end().get() - 1;
-            for group in 0..=max_group {
-                counting_group_expr = counting_group_expr
-                    + collomatique_ilp::LinExpr::var(
-                        collomatique_solver::ExtraVariable::BaseStructure(
-                            crate::base::variables::StructureVariable::NonEmptyGroup {
-                                subject: self.subject_id.clone(),
-                                group,
-                            },
-                        ),
-                    );
+        if let Some(period_desc) = desc.period_descriptions.get(&self.period_id) {
+            if let Some(subject_desc) = period_desc.subject_descriptions.get(&self.subject_id) {
+                let max_group = subject_desc.group_count.end().get() - 1;
+                for group in 0..=max_group {
+                    counting_group_expr = counting_group_expr
+                        + collomatique_ilp::LinExpr::var(
+                            collomatique_solver::ExtraVariable::BaseStructure(
+                                crate::base::variables::StructureVariable::NonEmptyGroup {
+                                    period: self.period_id.clone(),
+                                    subject: self.subject_id.clone(),
+                                    group,
+                                },
+                            ),
+                        );
+                }
             }
         }
 
