@@ -5,6 +5,7 @@ fn nd_problem_definition() {
 
     let pb = crate::ilp::ProblemBuilder::<String>::new()
         .add_variables(["a", "b", "c", "d", "e"])
+        .unwrap()
         .add_constraint(
             (2 * Expr::var("a") - 3 * Expr::var("b") + 4 * Expr::var("c") - 3)
                 .leq(&(2 * Expr::var("a") - 5 * Expr::var("d"))),
@@ -43,6 +44,7 @@ fn test_is_feasable() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c", "d"])
+        .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
         .add_constraint((&c + &d).leq(&Expr::constant(1)))
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
@@ -90,6 +92,7 @@ fn test_is_feasable() {
 fn test_is_feasable_no_constraint() {
     let pb: Problem<String> = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b"])
+        .unwrap()
         .build()
         .unwrap();
 
@@ -115,6 +118,7 @@ fn test_neighbours() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c", "d"])
+        .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
         .add_constraint((&c + &d).leq(&Expr::constant(1)))
         .add_constraint((&a + &d).eq(&Expr::constant(1)))
@@ -156,6 +160,7 @@ fn nd_config_ord() {
 
     let pb = crate::ilp::ProblemBuilder::new()
         .add_variables(["a", "b", "c"])
+        .unwrap()
         .add_constraint((&a + &b).leq(&Expr::constant(1)))
         .add_constraint((&c + &b).leq(&Expr::constant(1)))
         .build()
