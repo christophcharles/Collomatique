@@ -1,5 +1,5 @@
 use iced::widget::{button, column, container, row, text};
-use iced::{Element, Length};
+use iced::{Element, Length, Task};
 
 use super::{GuiMessage, GuiState};
 
@@ -11,6 +11,7 @@ pub enum Panel {
     Students,
 }
 
+#[derive(Debug, Clone)]
 pub struct State {
     panel: Panel,
     db: Option<std::path::PathBuf>,
@@ -39,14 +40,15 @@ pub enum Message {
     PanelChanged(Panel),
 }
 
-pub fn update(state: &mut GuiState, message: Message) {
+pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
     let GuiState::Editor(editor_state) = state else {
-        return;
+        panic!("Editor message received but GUI not in an editor state");
     };
 
     match message {
         Message::PanelChanged(new_panel) => {
             editor_state.panel = new_panel;
+            Task::none()
         }
     }
 }
