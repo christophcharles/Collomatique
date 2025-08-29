@@ -41,6 +41,8 @@ enum CliCommand {
         #[arg(short = 'n')]
         thread_count: Option<NonZeroUsize>,
     },
+    /// Python testing
+    Python,
 }
 
 #[derive(Debug, Parser)]
@@ -454,7 +456,9 @@ async fn week_count_command(
     command: WeekCountCommand,
     app_state: &mut AppState<sqlite::Store>,
 ) -> Result<Option<String>> {
-    use collomatique::frontend::state::{GeneralOperation, Manager, Operation, UpdateError, AppSession, WeekPatternsOperation};
+    use collomatique::frontend::state::{
+        AppSession, GeneralOperation, Manager, Operation, UpdateError, WeekPatternsOperation,
+    };
 
     match command {
         WeekCountCommand::Set { week_count, force } => {
@@ -474,8 +478,7 @@ async fn week_count_command(
 
                     if let Err(e) = session
                         .apply(Operation::WeekPatterns(WeekPatternsOperation::Update(
-                            handle,
-                            wp,
+                            handle, wp,
                         )))
                         .await
                     {
@@ -484,7 +487,9 @@ async fn week_count_command(
                         let err = match e {
                             UpdateError::Internal(int_err) => anyhow::Error::from(int_err),
                             UpdateError::WeekNumberTooBig(_week) => {
-                                panic!("The week pattern should be valid as it was checked beforehand")
+                                panic!(
+                                    "The week pattern should be valid as it was checked beforehand"
+                                )
                             }
                             _ => panic!("/!\\ Unexpected error ! {:?}", e),
                         };
@@ -1243,6 +1248,10 @@ async fn execute_cli_command(
             steps,
             thread_count,
         } => solve_command(steps, thread_count, app_state).await,
+        CliCommand::Python => {
+            collomatique::frontend::python::python_test()?;
+            Ok(None)
+        }
     }
 }
 
