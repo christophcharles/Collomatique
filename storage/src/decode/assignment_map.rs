@@ -17,14 +17,12 @@ pub fn decode_entry(
             .expect("pre_data should always be consistent and therefore period assignment should exist for all periods");
 
         for (subject_id, subject_assignments) in &period_assignments.subject_map {
-            let Some(excluded_students) = period_assignments_data
-                .subject_exclusion_map
-                .get_mut(subject_id)
+            let Some(assigned_students) = period_assignments_data.subject_map.get_mut(subject_id)
             else {
                 return Err(DecodeError::InconsistentAssignmentData);
             };
 
-            excluded_students.extend(subject_assignments.excluded_students.clone());
+            assigned_students.extend(subject_assignments.assigned_students.clone());
         }
     }
 

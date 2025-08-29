@@ -23,8 +23,8 @@ pub struct PeriodAssignments {
     ///
     /// Each item associates a subject id to an assignment description
     /// There should be an entry for each valid subject in the period
-    /// The set is the list of students who do *not* attend during the period
-    pub subject_exclusion_map: BTreeMap<SubjectId, BTreeSet<StudentId>>,
+    /// The set is the list of students who do attend during the period
+    pub subject_map: BTreeMap<SubjectId, BTreeSet<StudentId>>,
 }
 
 impl PeriodAssignments {
@@ -36,8 +36,8 @@ impl PeriodAssignments {
         external_data: PeriodAssignmentsExternalData,
     ) -> PeriodAssignments {
         PeriodAssignments {
-            subject_exclusion_map: external_data
-                .subject_exclusion_map
+            subject_map: external_data
+                .subject_map
                 .into_iter()
                 .map(|(subject_id, student_set)| {
                     (
@@ -125,8 +125,8 @@ pub struct PeriodAssignmentsExternalData {
     ///
     /// Each item associates a subject id to an assignment description
     /// There should be an entry for each valid subject in the period
-    /// The set is the list of students who do *not* attend during the period
-    pub subject_exclusion_map: BTreeMap<u64, BTreeSet<u64>>,
+    /// The set is the list of students who do attend during the period
+    pub subject_map: BTreeMap<u64, BTreeSet<u64>>,
 }
 
 impl PeriodAssignmentsExternalData {
@@ -145,7 +145,7 @@ impl PeriodAssignmentsExternalData {
 
             subject_count_for_period += 1;
 
-            let Some(subject_assignments) = self.subject_exclusion_map.get(subject_id) else {
+            let Some(subject_assignments) = self.subject_map.get(subject_id) else {
                 return false;
             };
 
@@ -159,7 +159,7 @@ impl PeriodAssignmentsExternalData {
                 }
             }
         }
-        if subject_count_for_period != self.subject_exclusion_map.len() {
+        if subject_count_for_period != self.subject_map.len() {
             return false;
         }
         true
@@ -169,8 +169,8 @@ impl PeriodAssignmentsExternalData {
 impl From<PeriodAssignments> for PeriodAssignmentsExternalData {
     fn from(value: PeriodAssignments) -> Self {
         PeriodAssignmentsExternalData {
-            subject_exclusion_map: value
-                .subject_exclusion_map
+            subject_map: value
+                .subject_map
                 .into_iter()
                 .map(|(subject_id, student_map)| {
                     (

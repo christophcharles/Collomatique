@@ -41,7 +41,7 @@ pub fn decode_entry(
         pre_data.assignments.period_map.insert(
             id,
             PeriodAssignmentsExternalData {
-                subject_exclusion_map: BTreeMap::new(),
+                subject_map: BTreeMap::new(),
             },
         );
     }

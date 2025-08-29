@@ -211,10 +211,10 @@ impl SubjectsUpdateOp {
                     if excluded_periods.contains(period_id) {
                         continue;
                     }
-                    let excluded_students = period_assignments.subject_exclusion_map.get(subject_id)
+                    let assigned_students = period_assignments.subject_map.get(subject_id)
                         .expect("Assignment data is inconsistent and does not have a required subject entry");
 
-                    for student_id in excluded_students {
+                    for student_id in assigned_students {
                         let result = session
                             .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
@@ -222,7 +222,7 @@ impl SubjectsUpdateOp {
                                         *period_id,
                                         *student_id,
                                         *subject_id,
-                                        true,
+                                        false,
                                     ),
                                 ),
                                 "Valeur par défaut pour l'affectation d'un élève".into(),
@@ -337,12 +337,12 @@ impl SubjectsUpdateOp {
                             .get(period_id)
                             .expect("Period id should be valid at this point");
 
-                        let excluded_students = period_assignments
-                            .subject_exclusion_map
+                        let assigned_students = period_assignments
+                            .subject_map
                             .get(subject_id)
-                            .expect("subject_id should be available in subject exclusion map at this point");
+                            .expect("subject_id should be available in subject map at this point");
 
-                        for student_id in excluded_students {
+                        for student_id in assigned_students {
                             let result = session
                                 .apply(
                                     collomatique_state_colloscopes::Op::Assignment(
@@ -350,7 +350,7 @@ impl SubjectsUpdateOp {
                                             *period_id,
                                             *student_id,
                                             *subject_id,
-                                            true,
+                                            false,
                                         ),
                                     ),
                                     "Restauration de l'état par défaut d'un élève".into(),
