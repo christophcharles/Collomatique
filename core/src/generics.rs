@@ -2,7 +2,7 @@
 //!
 //! A problem is represented by a structure that implements [BaseConstraints].
 //! Extension to this problem can be implemented using other structures that implement [ExtraConstraints].
-//! 
+//!
 //! It also implements a few generic [ExtraConstraints] that are useful in a lot of situations.
 //! See [SoftConstraints].
 
@@ -612,5 +612,100 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> SoftConstraints<T, E> {
             internal_extra: extra,
             phantom: std::marker::PhantomData,
         }
+    }
+}
+
+/// Fixes a partial solution
+///
+/// In a lot of problems, we actually want to complete
+/// an already existing partial solution.
+///
+/// This can be the case for instance if we have a partial list of
+/// interrogation groups (for colloscopes), or if we have a partially
+/// completed schedule (because of other constraints).
+///
+/// This structure implements [ExtraConstraints] and for any problem
+/// can force a partial solution to be completed.
+///
+/// It can also be combined with [SoftConstraints] to rather look for the closest
+/// solution possible to the partial solution rather than looking for an exact match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FixedPartialSolution<T: BaseConstraints> {
+    /// Partial solution represented as [BaseConstraints::PartialSolution]
+    /// to enforce
+    partial_solution: T::PartialSolution,
+}
+
+/// General constraint used for the definition of [FixedPartialSolution].
+/// It takes two parameters: the variable being enforced and the corresponding set value.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PartialConstraint<V: UsableData>(pub V, pub ordered_float::OrderedFloat<f64>);
+
+impl<V: UsableData + std::fmt::Display> std::fmt::Display for PartialConstraint<V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} = {}", self.0, self.1)
+    }
+}
+
+impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
+    type StructureConstraintDesc = ();
+    type StructureVariable = ();
+    type GeneralConstraintDesc = PartialConstraint<T::MainVariable>;
+
+    fn extra_structure_variables(&self, _base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
+        BTreeMap::new()
+    }
+
+    fn extra_structure_constraints(
+        &self,
+        _base: &T,
+    ) -> Vec<(
+        Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
+        Self::StructureConstraintDesc,
+    )> {
+        vec![]
+    }
+
+    fn extra_general_constraints(
+        &self,
+        base: &T,
+    ) -> Vec<(
+        Constraint<
+            ExtraVariable<
+                <T as BaseConstraints>::MainVariable,
+                <T as BaseConstraints>::StructureVariable,
+                Self::StructureVariable,
+            >,
+        >,
+        Self::GeneralConstraintDesc,
+    )> {
+        let Some(config_data) = base.partial_solution_to_configuration(&self.partial_solution)
+        else {
+            return vec![];
+        };
+
+        config_data
+            .get_values()
+            .into_iter()
+            .map(|(var, value)| {
+                let lhs = LinExpr::var(ExtraVariable::BaseMain(var.clone()));
+                let rhs = LinExpr::constant(value);
+                let constraint = lhs.eq(&rhs);
+
+                let desc = PartialConstraint(var, ordered_float::OrderedFloat(value));
+
+                (constraint, desc)
+            })
+            .collect()
+    }
+
+    fn reconstruct_extra_structure_variables(
+        &self,
+        _base: &T,
+        _config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
+    ) -> Option<ConfigData<Self::StructureVariable>> {
+        // We return an empty ConfigData rather than None
+        // because we are not failing
+        Some(ConfigData::new())
     }
 }
