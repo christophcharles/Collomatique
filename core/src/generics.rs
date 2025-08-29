@@ -1,9 +1,9 @@
 //! This module defines useful traits that should be implemented to represent a problem.
 //!
-//! A problem is represented by a structure that implements [BaseConstraints].
-//! Extension to this problem can be implemented using other structures that implement [ExtraConstraints].
+//! A problem is represented by a structure that implements [BaseProblem].
+//! Extension to this problem can be implemented using other structures that implement [ProblemConstraints].
 //!
-//! It also implements a few generic [ExtraConstraints] that are useful in a lot of situations.
+//! It also implements a few generic [ProblemConstraints] that are useful in a lot of situations.
 //! See [SoftConstraints] and [FixedPartialSolution].
 
 use collomatique_ilp::{
@@ -11,10 +11,10 @@ use collomatique_ilp::{
 };
 use std::collections::BTreeMap;
 
-/// Variable type used in [BaseConstraints] trait definition.
+/// Variable type used in [BaseProblem] trait definition.
 ///
-/// [BaseConstraints] distinguishes between [BaseConstraints::MainVariable]
-/// and [BaseConstraints::StructureVariable]. To express some constraints,
+/// [BaseProblem] distinguishes between [BaseProblem::MainVariable]
+/// and [BaseProblem::StructureVariable]. To express some constraints,
 /// we need to mix these variables and this is the purpose of this type.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BaseVariable<M: UsableData, S: UsableData> {
@@ -35,6 +35,9 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 
 /// Base trait that should be implemented by any structure representing a problem.
 ///
+/// This structure does not represent any constraints that should be imposed. This is
+/// done through [ProblemConstraints].
+///
 /// The type of problems that can be represented is volontarily restricted. But it is
 /// large enough to represent most schedule (and colloscope !) resolution problem.
 ///
@@ -43,10 +46,10 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 ///   values for this set is one-to-one with the space of possible solutions of the problem.
 ///
 ///   This constraint means we can convert back and forth between two representations of the problem.
-///   The conversion is done by the two functions [BaseConstraints::partial_solution_to_configuration]
-///   and [BaseConstraints::configuration_to_partial_solution].
+///   The conversion is done by the two functions [BaseProblem::partial_solution_to_configuration]
+///   and [BaseProblem::configuration_to_partial_solution].
 ///   One representation is the one we use in the rest of the program and is described
-///   by [BaseConstraints::PartialSolution] and the other one is a set of values for these
+///   by [BaseProblem::PartialSolution] and the other one is a set of values for these
 ///   variables (represented using [ConfigData]).
 ///
 ///   A few things must be noted here. First, we are talking about a space of possible solutions
@@ -63,7 +66,7 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 ///   one-to-one correspond between the ILP description and the programmatic description for the
 ///   rest of the program.
 ///
-///   Finally the type is called [BaseConstraints::PartialSolution] because the description might
+///   Finally the type is called [BaseProblem::PartialSolution] because the description might
 ///   be partial and not complete. In the ILP realm, this means some variables do not have a definite
 ///   value set (and must still be solved in some way). The programatic description must be adapted
 ///   accordingly.
@@ -76,77 +79,66 @@ impl<M: UsableData + std::fmt::Display, S: UsableData + std::fmt::Display> std::
 ///   represent the numbers put on the initial grid as help. In the case of a colloscope, that might
 ///   be a partial descriptions of student groups because some students want to be together.
 ///
-/// - we can define a second set of (ILP) variables that we call [BaseConstraints::StructureVariable].
-///   These variables can be entirely deduced from the [BaseConstraints::MainVariable].
+/// - we can define a second set of (ILP) variables that we call [BaseProblem::StructureVariable].
+///   These variables can be entirely deduced from the [BaseProblem::MainVariable].
 ///   There are useful only to write the problem in a linear fashion.
 ///
-///   Two functions are noteworthy with regard to these variables. First there is [BaseConstraints::structure_constraints].
-///   It returns a set of (ILP) constraints such that, if given a set of [BaseConstraints::MainVariable],
-///   when solved will lead to the unique corresponding set of values fot the [BaseConstraints::StructureVariable]
+///   Two functions are noteworthy with regard to these variables. First there is [BaseProblem::structure_constraints].
+///   It returns a set of (ILP) constraints such that, if given a set of [BaseProblem::MainVariable],
+///   when solved will lead to the unique corresponding set of values fot the [BaseProblem::StructureVariable]
 ///   variables.
 ///
-///   Second, there is [BaseConstraints::reconstruct_structure_variables] which does basically the same thing
+///   Second, there is [BaseProblem::reconstruct_structure_variables] which does basically the same thing
 ///   but programmatically but allows for partial solutions (and so gives only a partial set of structure
 ///   variables).
 ///
-/// - The problem itself can be described linearly using both [BaseConstraints::MainVariable] and
-///   [BaseConstraints::MainVariable] with linear constraints. These are returned by
-///   [BaseConstraints::general_constraints].
-pub trait BaseConstraints: Send + Sync {
+pub trait BaseProblem: Send + Sync {
     /// Type to represent the main variables
     ///
     /// The main variables are the variables whose set of values is in one to one correspondance
     /// with the set of possible solutions.
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     type MainVariable: UsableData + 'static;
 
     /// Type to represent the structure variables
     ///
     /// The structure variables do not provide any new information and can entirely
-    /// be rebuild from the main variables (represented by [BaseConstraints::MainVariable]).
+    /// be rebuild from the main variables (represented by [BaseProblem::MainVariable]).
     /// They only have a practical utility and help representing the problem as an ILP problem.
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     type StructureVariable: UsableData + 'static;
 
     /// Type to represent the description of structure constraints
     ///
-    /// Structure constraints define the structure variables ([BaseConstraints::StructureVariable])
-    /// from the main variables ([BaseConstraints::MainVariable]).
+    /// Structure constraints define the structure variables ([BaseProblem::StructureVariable])
+    /// from the main variables ([BaseProblem::MainVariable]).
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     type StructureConstraintDesc: UsableData + 'static;
-
-    /// Type to represent the description of general constraints
-    ///
-    /// Genral constraints actually define the problem using both main variables ([BaseConstraints::MainVariable])
-    /// and the structure variables ([BaseConstraints::StructureVariable]).
-    ///
-    /// See [BaseConstraints] for the full discussion.
-    type GeneralConstraintDesc: UsableData + 'static;
 
     /// Partial solution type associated to the problem.
     ///
     /// This type is used in the rest of the program to represent a solution (actually a partial
     /// solution) to the problem.
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     type PartialSolution: Send + Sync + Clone + std::fmt::Debug + PartialEq + Eq;
 
     /// Definition of the main variables for the problem.
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     fn main_variables(&self) -> BTreeMap<Self::MainVariable, Variable>;
 
     /// Definition of the structure variables for the problem.
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     fn structure_variables(&self) -> BTreeMap<Self::StructureVariable, Variable>;
 
     /// Definition of the structure constraints for the problem.
     ///
-    /// See [BaseConstraints] for the full discussion.
+    /// See [BaseProblem] for the full discussion.
     fn structure_constraints(
         &self,
     ) -> Vec<(
@@ -154,31 +146,10 @@ pub trait BaseConstraints: Send + Sync {
         Self::StructureConstraintDesc,
     )>;
 
-    /// Definition of the general constraints for the problem.
-    ///
-    /// See [BaseConstraints] for the full discussion.
-    fn general_constraints(
-        &self,
-    ) -> Vec<(
-        Constraint<BaseVariable<Self::MainVariable, Self::StructureVariable>>,
-        Self::GeneralConstraintDesc,
-    )>;
-
-    /// Definition of a linear objective for the problem.
-    ///
-    /// An ILP problem has an objective to optimize. By default it is
-    /// a constant function which means there is nothing to optimize.
-    /// But you can define such an objective by using both main and structure variables.
-    ///
-    /// See [BaseConstraints] for the full discussion on the different types of variables.
-    fn objective(&self) -> Objective<BaseVariable<Self::MainVariable, Self::StructureVariable>> {
-        Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
-    }
-
-    /// Converts a [BaseConstraints::PartialSolution] into a set of values for the main variables.
+    /// Converts a [BaseProblem::PartialSolution] into a set of values for the main variables.
     ///
     /// The description should be exactly one to one. This means two things:
-    /// - first, [BaseConstraints::partial_solution_to_configuration] and [BaseConstraints::configuration_to_partial_solution]
+    /// - first, [BaseProblem::partial_solution_to_configuration] and [BaseProblem::configuration_to_partial_solution]
     ///   should be reciprocal to each other.
     /// - second, if the solution is partial, this should be correctly reflected by not setting the value of some
     ///   main variables.
@@ -189,10 +160,10 @@ pub trait BaseConstraints: Send + Sync {
         sol: &Self::PartialSolution,
     ) -> Option<ConfigData<Self::MainVariable>>;
 
-    /// Converts a set of values for the main variables into a [BaseConstraints::PartialSolution].
+    /// Converts a set of values for the main variables into a [BaseProblem::PartialSolution].
     ///
     /// The description should be exactly one to one. This means two things:
-    /// - first, [BaseConstraints::partial_solution_to_configuration] and [BaseConstraints::configuration_to_partial_solution]
+    /// - first, [BaseProblem::partial_solution_to_configuration] and [BaseProblem::configuration_to_partial_solution]
     ///   should be reciprocal to each other.
     /// - second, if the set of values is partial, this should be correctly reflected in a partial solution output.
     fn configuration_to_partial_solution(
@@ -211,12 +182,12 @@ pub trait BaseConstraints: Send + Sync {
     ) -> ConfigData<Self::StructureVariable>;
 }
 
-/// Variable type used in [ExtraConstraints] trait definition.
+/// Variable type used in [ProblemConstraints] trait definition.
 ///
-/// [ExtraConstraints] can introduce its own structure variables.
+/// [ProblemConstraints] can introduce its own structure variables.
 /// To express some constraints, we need to mix these variables
 /// with the main and structure variables of the corresponding
-/// [BaseConstraints]. This is the purpose of this type.
+/// [BaseProblem]. This is the purpose of this type.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ExtraVariable<M: UsableData, S: UsableData, E: UsableData> {
     BaseMain(M),
@@ -239,9 +210,14 @@ impl<
     }
 }
 
-/// Extra constraints for a given [BaseConstraints].
+/// Constraints for a given [BaseProblem].
 ///
-/// Sometimes a generic problem might have possible extensions.
+/// This trait defines constraints that should apply
+/// to a problem description.
+///
+/// Usually, we will have a simple empty structure imposing
+/// basic constraints. But we can also have various problem extensions.
+///
 /// For a scheduling problem for instance, we might have a generic
 /// problem of distributing courses to different students.
 /// But there can be extra constraints. For instance a student might not
@@ -256,78 +232,79 @@ impl<
 /// often, these are exceptional cases and we should not burden the user
 /// into describing constraints he does not need.
 ///
-/// For exceptional cases like this, we can define extra structures
-/// implementing the current trait [ExtraConstraints].
+/// So this allows the separation of the various constraints into different
+/// independant structures that can be included at will.
+/// These independant structures should then implement the current trait [ProblemConstraints].
 ///
-/// Such a trait does not define any new main variables (described by [BaseConstraints::MainVariable]).
+/// Such a trait does not define any new main variables (described by [BaseProblem::MainVariable]).
 /// Indeed, the space of possible solutions does not change.
 /// However, we might need extra constraints and, to express them linearly,
 /// extra structure variables. These extra structure variables will be described by
-/// [ExtraConstraints::StructureVariable].
+/// [ProblemConstraints::StructureVariable].
 ///
-/// The corresponding structure constraints will be given by [ExtraConstraints::extra_structure_constraints]
-/// and the structure variables can be rebuilt programmatically using [ExtraConstraints::reconstruct_extra_structure_variables].
+/// The corresponding structure constraints will be given by [ProblemConstraints::extra_structure_constraints]
+/// and the structure variables can be rebuilt programmatically using [ProblemConstraints::reconstruct_extra_structure_variables].
 ///
-/// The additionnal constraints will be given by [ExtraConstraints::extra_general_constraints].
+/// The additionnal constraints will be given by [ProblemConstraints::general_constraints].
 ///
-/// It is also possible to add an objective with [ExtraConstraints::extra_objective].
+/// It is also possible to add an objective with [ProblemConstraints::objective].
 ///
-/// Because the space of solutions does not change, there is no equivalent to [BaseConstraints::configuration_to_partial_solution]
-/// and [BaseConstraints::partial_solution_to_configuration] in [ExtraConstraints].
-pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
+/// Because the space of solutions does not change, there is no equivalent to [BaseProblem::configuration_to_partial_solution]
+/// and [BaseProblem::partial_solution_to_configuration] in [ProblemConstraints].
+pub trait ProblemConstraints<T: BaseProblem>: Send + Sync {
     /// Type to represent the structure variables specific to this problem extension.
     ///
     /// The structure variables do not provide any new information and can entirely
-    /// be rebuild from the main variables (represented by [BaseConstraints::MainVariable]).
+    /// be rebuild from the main variables (represented by [BaseProblem::MainVariable]).
     /// They only have a practical utility and help representing the problem as an ILP problem.
     ///
-    /// See [ExtraConstraints] and [BaseConstraints] for the full discussion.
+    /// See [ProblemConstraints] and [BaseProblem] for the full discussion.
     type StructureVariable: UsableData + 'static;
 
     /// Type to represent the description of the extra structure constraints
     ///
-    /// Structure constraints define the structure variables ([ExtraConstraints::StructureVariable])
-    /// from the main variables ([BaseConstraints::MainVariable]) and possibly the already
-    /// existing structure constraints from the main problem ([BaseConstraints::StructureVariable]).
+    /// Structure constraints define the structure variables ([ProblemConstraints::StructureVariable])
+    /// from the main variables ([BaseProblem::MainVariable]) and possibly the already
+    /// existing structure constraints from the main problem ([BaseProblem::StructureVariable]).
     ///
-    /// See [ExtraConstraints] and [BaseConstraints] for the full discussion.
+    /// See [ProblemConstraints] and [BaseProblem] for the full discussion.
     type StructureConstraintDesc: UsableData + 'static;
 
     /// Type to represent the description of general constraints for the extension.
     ///
     /// Genral constraints actually define the extension to the problem using main variables
-    /// ([BaseConstraints::MainVariable]), structure variables ([BaseConstraints::StructureVariable])
-    /// from the original problem but also extra structure variables ([ExtraConstraints::StructureVariable])
+    /// ([BaseProblem::MainVariable]), structure variables ([BaseProblem::StructureVariable])
+    /// from the original problem but also extra structure variables ([ProblemConstraints::StructureVariable])
     /// from the problem extension.
     ///
-    /// See [ExtraConstraints] for the full discussion.
+    /// See [ProblemConstraints] for the full discussion.
     type GeneralConstraintDesc: UsableData + 'static;
 
     /// Checks if the extension is compatible with the given problem
-    fn is_fit_for_problem(&self, base: &T) -> bool;
+    fn is_fit_for_problem(&self, desc: &T) -> bool;
 
     /// Definition of the structure variables for the problem extension.
     ///
-    /// See [ExtraConstraints] for the full discussion.
-    fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable>;
+    /// See [ProblemConstraints] for the full discussion.
+    fn extra_structure_variables(&self, desc: &T) -> BTreeMap<Self::StructureVariable, Variable>;
 
     /// Definition of the structure constraints for the problem extension.
     ///
-    /// See [ExtraConstraints] for the full discussion.
+    /// See [ProblemConstraints] for the full discussion.
     fn extra_structure_constraints(
         &self,
-        base: &T,
+        desc: &T,
     ) -> Vec<(
         Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
         Self::StructureConstraintDesc,
     )>;
 
-    /// Definition of the general constraints for the problem extension.
+    /// Definition of the general constraints
     ///
-    /// See [ExtraConstraints] for the full discussion.
-    fn extra_general_constraints(
+    /// See [ProblemConstraints] for the full discussion.
+    fn general_constraints(
         &self,
-        base: &T,
+        desc: &T,
     ) -> Vec<(
         Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
         Self::GeneralConstraintDesc,
@@ -339,10 +316,10 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
     /// By default, you do not have to implement this function and it returns
     /// a trivial objective.
     ///
-    /// See [ExtraConstraints] for the full discussion.
-    fn extra_objective(
+    /// See [ProblemConstraints] for the full discussion.
+    fn objective(
         &self,
-        _base: &T,
+        _desc: &T,
     ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
     {
         Objective::new(LinExpr::constant(0.), ObjectiveSense::Minimize)
@@ -354,15 +331,15 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
     /// all main variables have a fixed value) then all extra structure variables should have a value too
     /// and it should uniquely be fixed by the main variables.
     ///
-    /// Here we only want to build the structure variables specific to the problem extension ([ExtraConstraints::StructureVariable]).
-    /// The structure variable for the generic problem are already handled by [BaseConstraints::reconstruct_structure_variables].
+    /// Here we only want to build the structure variables specific to the problem extension ([ProblemConstraints::StructureVariable]).
+    /// The structure variable for the generic problem are already handled by [BaseProblem::reconstruct_structure_variables].
     ///
-    /// As a convenience, it is possible to use the structure variables from the generic problem ([BaseConstraints::StructureVariable])
+    /// As a convenience, it is possible to use the structure variables from the generic problem ([BaseProblem::StructureVariable])
     /// to rebuild the extra structure variables.
-    /// See [ExtraConstraints] for the full discussion.
+    /// See [ProblemConstraints] for the full discussion.
     fn reconstruct_extra_structure_variables(
         &self,
-        base: &T,
+        desc: &T,
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
     ) -> ConfigData<Self::StructureVariable>;
 }
@@ -377,7 +354,7 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
 /// regularity. However, such a strict regularity might not be possible
 /// or even desirable if it conflicts with some other constraints.
 ///
-/// This structure is built from some [ExtraConstraints] that implements
+/// This structure is built from some [ProblemConstraints] that implements
 /// strictly a set of constraints. It transforms those constraints into
 /// an objective that should be optimized. If the objective is perfectly
 /// optimized then the constraints are perfectly satisfied. But it is
@@ -386,9 +363,9 @@ pub trait ExtraConstraints<T: BaseConstraints>: Send + Sync {
 /// This also allows the introduction of weights between different objectives
 /// and thus fine-tune which schedule is preferable.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SoftConstraints<T: BaseConstraints, E: ExtraConstraints<T>> {
-    /// Original [ExtraConstraints] describing the strict constraints.
-    internal_extra: E,
+pub struct SoftConstraints<T: BaseProblem, E: ProblemConstraints<T>> {
+    /// Original [ProblemConstraints] describing the strict constraints.
+    internal_constraints: E,
     /// Phantom type because of generic `T`.
     phantom: std::marker::PhantomData<T>,
 }
@@ -441,24 +418,24 @@ impl<S: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display> std::
     }
 }
 
-impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftConstraints<T, E> {
+impl<T: BaseProblem, E: ProblemConstraints<T>> ProblemConstraints<T> for SoftConstraints<T, E> {
     type StructureConstraintDesc =
         SoftConstraint<E::StructureConstraintDesc, E::GeneralConstraintDesc>;
     type StructureVariable = SoftVariable<E::StructureVariable, E::GeneralConstraintDesc>;
     type GeneralConstraintDesc = ();
 
     fn is_fit_for_problem(&self, base: &T) -> bool {
-        self.internal_extra.is_fit_for_problem(base)
+        self.internal_constraints.is_fit_for_problem(base)
     }
 
     fn extra_structure_variables(&self, base: &T) -> BTreeMap<Self::StructureVariable, Variable> {
-        self.internal_extra
+        self.internal_constraints
             .extra_structure_variables(base)
             .into_iter()
             .map(|(x, v)| (SoftVariable::Orig(x), v))
             .chain(
-                self.internal_extra
-                    .extra_general_constraints(base)
+                self.internal_constraints
+                    .general_constraints(base)
                     .into_iter()
                     .enumerate()
                     .map(|(i, (_c, desc))| (SoftVariable::Soft(i, desc), Variable::non_negative())),
@@ -473,7 +450,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         Constraint<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>,
         Self::StructureConstraintDesc,
     )> {
-        self.internal_extra
+        self.internal_constraints
             .extra_structure_constraints(base)
             .into_iter()
             .map(|(c, desc)| {
@@ -489,8 +466,8 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
                 )
             })
             .chain(
-                self.internal_extra
-                    .extra_general_constraints(base)
+                self.internal_constraints
+                    .general_constraints(base)
                     .into_iter()
                     .enumerate()
                     .flat_map(|(i, (c, desc))| {
@@ -524,14 +501,14 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
             .collect()
     }
 
-    fn extra_general_constraints(
+    fn general_constraints(
         &self,
         _base: &T,
     ) -> Vec<(
         Constraint<
             ExtraVariable<
-                <T as BaseConstraints>::MainVariable,
-                <T as BaseConstraints>::StructureVariable,
+                <T as BaseProblem>::MainVariable,
+                <T as BaseProblem>::StructureVariable,
                 Self::StructureVariable,
             >,
         >,
@@ -540,7 +517,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         vec![]
     }
 
-    fn extra_objective(
+    fn objective(
         &self,
         base: &T,
     ) -> Objective<ExtraVariable<T::MainVariable, T::StructureVariable, Self::StructureVariable>>
@@ -548,8 +525,8 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         let mut new_obj = LinExpr::constant(0.0);
 
         for (i, (_c, desc)) in self
-            .internal_extra
-            .extra_general_constraints(base)
+            .internal_constraints
+            .general_constraints(base)
             .into_iter()
             .enumerate()
         {
@@ -566,7 +543,7 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         config: &ConfigData<BaseVariable<T::MainVariable, T::StructureVariable>>,
     ) -> ConfigData<Self::StructureVariable> {
         let orig_structure_variables = self
-            .internal_extra
+            .internal_constraints
             .reconstruct_extra_structure_variables(base, config);
 
         let values = config
@@ -584,8 +561,8 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
         let mut output = orig_structure_variables.transmute(|x| SoftVariable::Orig(x.clone()));
 
         for (i, (c, desc)) in self
-            .internal_extra
-            .extra_general_constraints(base)
+            .internal_constraints
+            .general_constraints(base)
             .into_iter()
             .enumerate()
         {
@@ -608,12 +585,12 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> ExtraConstraints<T> for SoftCon
     }
 }
 
-impl<T: BaseConstraints, E: ExtraConstraints<T>> SoftConstraints<T, E> {
+impl<T: BaseProblem, E: ProblemConstraints<T>> SoftConstraints<T, E> {
     /// Builds a [SoftConstraints] from an existing strict
-    /// constraint set defined in a structure implementing [ExtraConstraints].
-    pub fn new(extra: E) -> Self {
+    /// constraint set defined in a structure implementing [ProblemConstraints].
+    pub fn new(constraints: E) -> Self {
         SoftConstraints {
-            internal_extra: extra,
+            internal_constraints: constraints,
             phantom: std::marker::PhantomData,
         }
     }
@@ -628,14 +605,14 @@ impl<T: BaseConstraints, E: ExtraConstraints<T>> SoftConstraints<T, E> {
 /// interrogation groups (for colloscopes), or if we have a partially
 /// completed schedule (because of other constraints).
 ///
-/// This structure implements [ExtraConstraints] and for any problem
+/// This structure implements [ProblemConstraints] and for any problem
 /// can force a partial solution to be completed.
 ///
 /// It can also be combined with [SoftConstraints] to rather look for the closest
 /// solution possible to the partial solution rather than looking for an exact match.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FixedPartialSolution<T: BaseConstraints> {
-    /// Partial solution represented as [BaseConstraints::PartialSolution]
+pub struct FixedPartialSolution<T: BaseProblem> {
+    /// Partial solution represented as [BaseProblem::PartialSolution]
     /// to enforce
     partial_solution: T::PartialSolution,
 }
@@ -651,7 +628,7 @@ impl<V: UsableData + std::fmt::Display> std::fmt::Display for PartialConstraint<
     }
 }
 
-impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
+impl<T: BaseProblem> ProblemConstraints<T> for FixedPartialSolution<T> {
     type StructureConstraintDesc = ();
     type StructureVariable = ();
     type GeneralConstraintDesc = PartialConstraint<T::MainVariable>;
@@ -675,14 +652,14 @@ impl<T: BaseConstraints> ExtraConstraints<T> for FixedPartialSolution<T> {
         vec![]
     }
 
-    fn extra_general_constraints(
+    fn general_constraints(
         &self,
         base: &T,
     ) -> Vec<(
         Constraint<
             ExtraVariable<
-                <T as BaseConstraints>::MainVariable,
-                <T as BaseConstraints>::StructureVariable,
+                <T as BaseProblem>::MainVariable,
+                <T as BaseProblem>::StructureVariable,
                 Self::StructureVariable,
             >,
         >,

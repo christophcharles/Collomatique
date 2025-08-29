@@ -1,10 +1,10 @@
 //! Solver module.
 //!
 //! This module implements most of the logic for solving problems
-//! defined using [BaseConstraints] and [ExtraConstraints].
+//! defined using [BaseProblem] and [ProblemConstraints].
 //!
 //! The standard process to solve such a problem is to start
-//! by building a [ProblemBuilder] from a [BaseConstraints].
+//! by building a [ProblemBuilder] from a [BaseProblem].
 //! See [ProblemBuilder] or [Problem] for more details.
 
 use super::*;
@@ -54,7 +54,7 @@ impl IdIssuer {
 
 /// Variables used internally in [Problem] and [ProblemBuilder].
 ///
-/// When [ExtraConstraints] define structure variables, they
+/// When [ProblemConstraints] define structure variables, they
 /// are typed erased behind a generic ID (to simplify the API).
 /// This type represents such a type erased variable.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -72,10 +72,10 @@ impl std::fmt::Display for IdVariable {
 /// Builder for [Problem].
 ///
 /// This allows the progressive building of a [Problem]
-/// from a [BaseConstraints] and possibly multiple [ExtraConstraints].
+/// from a [BaseProblem] and possibly multiple [ProblemConstraints].
 ///
-/// One starts by calling [ProblemBuilder::new] and providing a [BaseConstraints].
-/// Extensions to the problem can be added with [ProblemBuilder::add_constraints].
+/// One starts by calling [ProblemBuilder::new] and providing a [BaseProblem].
+/// Constraints to the problem can be added with [ProblemBuilder::add_constraints].
 /// Once the problem is entirely described, it can be built using [ProblemBuilder::build].
 pub struct ProblemBuilder<
     M,
@@ -86,12 +86,12 @@ pub struct ProblemBuilder<
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
-    /// base [BaseConstraints] the problem is built from.
-    base: T,
+    /// Description implementing [BaseProblem] the problem is built from.
+    desc: T,
     /// Internal [IdIssuer] used for type eraser when adding
-    /// problem extensions (described by [ExtraConstraints]).
+    /// problem extensions (described by [ProblemConstraints]).
     id_issuer: IdIssuer,
     /// Phantom data for generic `P`.
     phantom_p: std::marker::PhantomData<P>,
@@ -103,9 +103,7 @@ pub struct ProblemBuilder<
     /// Definitions of the variables for the final ILP problem.
     variables: BTreeMap<ExtraVariable<M, S, IdVariable>, Variable>,
 
-    /// Descriptions of the general constraints of the original [BaseConstraints] problem.
-    general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
-    /// Descriptions of the structure constraints of the original [BaseConstraints] problem.
+    /// Descriptions of the structure constraints of the original [BaseProblem] problem.
     structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
     /// Constraints that are gradually built for the full ILP problem.
     /// It includes general constraints from the original problem but also the structure constraints
@@ -134,28 +132,16 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
-    /// Starts building a problem from a given [BaseConstraints].
+    /// Starts building a problem from a given [BaseProblem].
     ///
     /// This functions can actually fail if there is a mismatch between the
     /// declared variables and the variables that appear in the constraints
     /// and the objective. In that case, it returns `None`.
-    ///
-    /// `obj_coef` specifies the coefficient for the base objective.
-    /// It behaves as if the sign was ignored.
-    ///
-    /// Objective coefficients are relative so this might seem useless.
-    /// If we want the base objective coefficient to be 2.0, this is equivalent
-    /// to dividing all the other objective coefficients by 2.0.
-    ///
-    /// Apart from the conveniance API, this has still a useful application:
-    /// the objective coefficient can be set to 0. In that case, the base
-    /// objective function is ignored and this can't be done by setting the other
-    /// coefficients to infinity.
-    pub fn new(base: T, obj_coef: f64) -> Option<Self> {
-        let orig_main_variables = base.main_variables();
-        let orig_structure_variables = base.structure_variables();
+    pub fn new(desc: T) -> Option<Self> {
+        let orig_main_variables = desc.main_variables();
+        let orig_structure_variables = desc.structure_variables();
 
         let variables = orig_main_variables
             .into_iter()
@@ -167,24 +153,12 @@ where
             )
             .collect::<BTreeMap<_, _>>();
 
-        let objective = obj_coef
-            * base.objective().transmute(|v| match v {
-                BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
-                BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
-            });
-        for v in objective.get_function().variables() {
-            if !variables.contains_key(&v) {
-                return None;
-            }
-        }
-
         let mut id_issuer = IdIssuer::new();
 
-        let mut general_constraint_descs = BTreeMap::new();
         let mut structure_constraint_descs = BTreeMap::new();
         let mut constraints = Vec::new();
 
-        for (orig_constraint, c_desc) in base.structure_constraints() {
+        for (orig_constraint, c_desc) in desc.structure_constraints() {
             let mut expr = LinExpr::constant(orig_constraint.get_constant());
             for (v, value) in orig_constraint.coefficients() {
                 let new_v = match v {
@@ -210,39 +184,12 @@ where
             structure_constraint_descs.insert(desc_id, c_desc);
         }
 
-        for (orig_constraint, c_desc) in base.general_constraints() {
-            let mut expr = LinExpr::constant(orig_constraint.get_constant());
-            for (v, value) in orig_constraint.coefficients() {
-                let new_v = match v {
-                    BaseVariable::Main(m) => ExtraVariable::BaseMain(m.clone()),
-                    BaseVariable::Structure(s) => ExtraVariable::BaseStructure(s.clone()),
-                };
-
-                if !variables.contains_key(&new_v) {
-                    return None;
-                }
-
-                expr = expr + value * LinExpr::var(new_v);
-            }
-
-            let constraint = match orig_constraint.get_symbol() {
-                collomatique_ilp::linexpr::EqSymbol::Equals => expr.eq(&LinExpr::constant(0.)),
-                collomatique_ilp::linexpr::EqSymbol::LessThan => expr.leq(&LinExpr::constant(0.)),
-            };
-
-            let desc_id = id_issuer.get_id();
-
-            constraints.push((constraint, desc_id));
-            general_constraint_descs.insert(desc_id, c_desc);
-        }
-
         Some(ProblemBuilder {
-            base,
+            desc,
             id_issuer,
             phantom_p: std::marker::PhantomData,
-            objective,
+            objective: Objective::default(),
             variables,
-            general_constraint_descs,
             structure_constraint_descs,
             constraints,
             reconstruction_funcs: vec![],
@@ -394,10 +341,10 @@ where
         c_map
     }
 
-    /// Add a problem extension defined by an [ExtraConstraints] to the problem.
+    /// Add a problem extension defined by an [ProblemConstraints] to the problem.
     ///
-    /// The first parameter is a struct `extra` describing the extension and must implement [ExtraConstraints]
-    /// for the specific [BaseConstraints] of the problem.
+    /// The first parameter is a struct `extra` describing the extension and must implement [ProblemConstraints]
+    /// for the specific [BaseProblem] of the problem.
     /// The extension can provide further constraints and an additional (linear) objective.
     ///
     /// The second parameter is the weight that should be given to the additional objective.
@@ -408,31 +355,31 @@ where
     ///
     /// If the function succeeds, it returns a translator of type [ExtraTranslator]. This structure contains
     /// the necessary data to identify which extra constraints is not correctly satisfied in a (non-feasible) solution.
-    pub fn add_constraints<E: ExtraConstraints<T> + 'static>(
+    pub fn add_constraints<E: ProblemConstraints<T> + 'static>(
         &mut self,
-        extra: E,
+        constraints: E,
         obj_coef: f64,
     ) -> Option<ExtraTranslator<T, E>> {
-        if !extra.is_fit_for_problem(&self.base) {
+        if !constraints.is_fit_for_problem(&self.desc) {
             return None;
         }
 
-        let extra_variables = extra.extra_structure_variables(&self.base);
-        let extra_structure_constraints = extra.extra_structure_constraints(&self.base);
-        let extra_general_constraints = extra.extra_general_constraints(&self.base);
-        let objective = extra.extra_objective(&self.base);
+        let extra_variables = constraints.extra_structure_variables(&self.desc);
+        let extra_structure_constraints = constraints.extra_structure_constraints(&self.desc);
+        let general_constraints = constraints.general_constraints(&self.desc);
+        let objective = constraints.objective(&self.desc);
 
         let (rev_v_map, v_map) = self.scan_variables(extra_variables);
 
         if !self.check_variables_in_constraints(&extra_structure_constraints, &rev_v_map)
-            || !self.check_variables_in_constraints(&extra_general_constraints, &rev_v_map)
+            || !self.check_variables_in_constraints(&general_constraints, &rev_v_map)
             || !self.check_variables_in_expr(objective.get_function(), &rev_v_map)
         {
             return None;
         }
 
         self.add_variables(v_map);
-        let general_c_map = self.add_constraints_internal(extra_general_constraints, &rev_v_map);
+        let general_c_map = self.add_constraints_internal(general_constraints, &rev_v_map);
         let structure_c_map =
             self.add_constraints_internal(extra_structure_constraints, &rev_v_map);
 
@@ -448,7 +395,7 @@ where
             .collect();
 
         let reconstruct_func = move |base: &T, config: &ConfigData<BaseVariable<M, S>>| {
-            let pre_output = extra.reconstruct_extra_structure_variables(base, config);
+            let pre_output = constraints.reconstruct_extra_structure_variables(base, config);
             pre_output.transmute(|x| {
                 lean_rev_v_map
                     .get(x)
@@ -479,8 +426,7 @@ where
 
         Problem {
             ilp_problem,
-            base: self.base,
-            general_constraint_descs: self.general_constraint_descs,
+            desc: self.desc,
             structure_constraint_descs: self.structure_constraint_descs,
             reconstruction_funcs: self.reconstruction_funcs,
         }
@@ -490,13 +436,13 @@ where
 /// Translator
 ///
 /// This is used to restore types. The structure is returned by [ProblemBuilder::add_constraints]
-/// and can be passed to [DecoratedPartialSolution::partial_blame_extra], [DecoratedPartialSolution::partial_check_structure_extra],
-/// [DecoratedCompleteSolution::blame_extra] and [DecoratedCompleteSolution::check_structure_extra].
+/// and can be passed to [DecoratedPartialSolution::partial_blame_constraints], [DecoratedPartialSolution::partial_check_structure_constraints],
+/// [DecoratedCompleteSolution::blame_constraints] and [DecoratedCompleteSolution::check_structure_constraints].
 ///
 /// It is used to restore the correct types for the constraints descriptions associated to a problem extension
-/// (described by [ExtraConstraints]).
+/// (described by [ProblemConstraints]).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
+pub struct ExtraTranslator<T: BaseProblem, E: ProblemConstraints<T>> {
     /// Map between ids and general constraints descriptions for the problem extension
     general_c_map: BTreeMap<InternalId, E::GeneralConstraintDesc>,
     /// Map between ids and structure constraints descriptions for the problem extension
@@ -505,8 +451,8 @@ pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
 
 /// Represents a complete problem.
 ///
-/// A problem is constructed using [ProblemBuilder] from a [BaseConstraints]
-/// and possibly multiple [ExtraConstraints] using the builder pattern.
+/// A problem is constructed using [ProblemBuilder] from a [BaseProblem]
+/// and possibly multiple [ProblemConstraints] using the builder pattern.
 ///
 /// Once built, a problem is essentially fixed and is non-mutable.
 ///
@@ -514,8 +460,8 @@ pub struct ExtraTranslator<T: BaseConstraints, E: ExtraConstraints<T>> {
 /// and solve the problem using a solver.
 ///
 /// You can also provide a potentiel solution to [Problem::decorate_partial_solution]
-/// and use its blaming functions ([DecoratedPartialSolution::partial_blame] and [DecoratedPartialSolution::partial_blame_extra] or
-/// the corresponding functions for [DecoratedCompleteSolution]).
+/// and use its blaming functions ([DecoratedPartialSolution::partial_blame_constraints] or
+/// the corresponding function for [DecoratedCompleteSolution] namely [DecoratedCompleteSolution::blame_constraints]).
 /// to find out which constraints is not satisfied.
 
 pub struct Problem<M, S, T, P>
@@ -523,14 +469,12 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     /// ILP representation of the problem
     ilp_problem: collomatique_ilp::Problem<ExtraVariable<M, S, IdVariable>, InternalId, P>,
-    /// Original problem of type [BaseConstraints]
-    base: T,
-    /// Map between ids and general constraints descriptions for the problem
-    general_constraint_descs: BTreeMap<InternalId, T::GeneralConstraintDesc>,
+    /// Original problem of type [BaseProblem]
+    desc: T,
     /// Map between ids and structure constraints descriptions for the problem
     structure_constraint_descs: BTreeMap<InternalId, T::StructureConstraintDesc>,
     /// Reconstruction functions.
@@ -551,14 +495,14 @@ where
 
 /// Represents a partial solution
 ///
-/// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
+/// Normally a solution of a problem is described by the type [BaseProblem::PartialSolution].
 /// This type will be used in the rest of the program. However, this representation usually lacks
 /// some information to properly test the solution.
 ///
 /// This is the decoration provided here: all the necessary variables are correctly reconstructed
-/// and stored using [BaseConstraints::reconstruct_structure_variables] and [ExtraConstraints::reconstruct_extra_structure_variables].
+/// and stored using [BaseProblem::reconstruct_structure_variables] and [ProblemConstraints::reconstruct_extra_structure_variables].
 ///
-/// Such a decorated partial solution is constructued from a [BaseConstraints::PartialSolution]
+/// Such a decorated partial solution is constructued from a [BaseProblem::PartialSolution]
 /// by calling [Problem::decorate_partial_solution].
 #[derive(Clone)]
 pub struct DecoratedPartialSolution<'a, M, S, T, P>
@@ -566,7 +510,7 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     problem: &'a Problem<M, S, T, P>,
     internal_solution: T::PartialSolution,
@@ -578,11 +522,11 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     /// Returns the inner solution
     ///
-    /// This returns the [BaseConstraints::PartialSolution]
+    /// This returns the [BaseProblem::PartialSolution]
     /// the rest of the program usually cares about.
     pub fn inner(&self) -> &T::PartialSolution {
         &self.internal_solution
@@ -632,34 +576,16 @@ where
         })
     }
 
-    /// Blame general constraints
+    /// Blame general constraints for specific problem constraints
     ///
-    /// Returns a list of descriptions of general constraints that cannot be satisfied.
-    /// If no such constraints exist, an empty list is returned.
-    ///
-    /// Because the solution is potentially partial, it is not always possible
-    /// to check if all constraints are indeed satisfied or possibly satisfied.
-    ///
-    /// So the returned list can be empty and still the solution has no feasable extension.
-    pub fn partial_blame(&self) -> Vec<T::GeneralConstraintDesc> {
-        self.problem
-            .ilp_problem
-            .partial_blame(&self.config_data)
-            .iter()
-            .filter_map(|(_c, d)| self.problem.general_constraint_descs.get(d).cloned())
-            .collect()
-    }
-
-    /// Blame general constraints for problem extension
-    ///
-    /// Returns a list of descriptions of general constraints from a problem extension that cannot be satisfied.
-    /// The problem extension to consider is given by the translator used.
+    /// Returns a list of descriptions of general constraints from a problem extension (described by [ProblemConstraints])
+    /// that cannot be satisfied. The problem extension to consider is given by the translator used.
     ///
     /// Because the solution is potentially partial, it is not always possible
     /// to check if all constraints are indeed satisfied or possibly satisfied.
     ///
     /// If no such constraints exist, an empty list is returned.
-    pub fn partial_blame_extra<E: ExtraConstraints<T>>(
+    pub fn partial_blame_constraints<E: ProblemConstraints<T>>(
         &self,
         translator: &ExtraTranslator<T, E>,
     ) -> Vec<E::GeneralConstraintDesc> {
@@ -701,7 +627,7 @@ where
     /// If no such constraints exist, an empty list is returned.
     /// If no programming error is present in the reconstruction functions, this should
     /// *always* return an empty list.
-    pub fn partial_check_structure_extra<E: ExtraConstraints<T>>(
+    pub fn partial_check_structure_constraints<E: ProblemConstraints<T>>(
         &self,
         translator: &ExtraTranslator<T, E>,
     ) -> Vec<E::StructureConstraintDesc> {
@@ -716,7 +642,7 @@ where
 
 /// Represents a possibly non-feasable but complete solution
 ///
-/// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
+/// Normally a solution of a problem is described by the type [BaseProblem::PartialSolution].
 /// This type will be used in the rest of the program. However, this representation usually lacks
 /// some information to properly test the solution.
 ///
@@ -732,7 +658,7 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     problem: &'a Problem<M, S, T, P>,
     internal_solution: T::PartialSolution,
@@ -744,7 +670,7 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     /// Creates a new complete solution from a partial solution
     ///
@@ -756,7 +682,7 @@ where
 
     /// Returns the inner solution
     ///
-    /// This returns the [BaseConstraints::PartialSolution]
+    /// This returns the [BaseProblem::PartialSolution]
     /// the rest of the program usually cares about.
     pub fn inner(&self) -> &T::PartialSolution {
         &self.internal_solution
@@ -793,24 +719,13 @@ where
         Some(DecoratedFeasableSolution(self))
     }
 
-    /// Blame general constraints
-    ///
-    /// Returns a list of descriptions of general constraints that are not satisfied.
-    /// If no such constraints exist, an empty list is returned.
-    pub fn blame(&self) -> Vec<T::GeneralConstraintDesc> {
-        self.ilp_config
-            .blame()
-            .filter_map(|(_c, d)| self.problem.general_constraint_descs.get(d).cloned())
-            .collect()
-    }
-
     /// Blame general constraints for problem extension
     ///
     /// Returns a list of descriptions of general constraints from a problem extension that are not satisfied.
     /// The problem extension to consider is given by the translator used.
     ///
     /// If no such constraints exist, an empty list is returned.
-    pub fn blame_extra<E: ExtraConstraints<T>>(
+    pub fn blame_constraints<E: ProblemConstraints<T>>(
         &self,
         translator: &ExtraTranslator<T, E>,
     ) -> Vec<E::GeneralConstraintDesc> {
@@ -842,7 +757,7 @@ where
     /// If no such constraints exist, an empty list is returned.
     /// If no programming error is present in the reconstruction functions, this should
     /// *always* return an empty list.
-    pub fn check_structure_extra<E: ExtraConstraints<T>>(
+    pub fn check_structure_constraints<E: ProblemConstraints<T>>(
         &self,
         translator: &ExtraTranslator<T, E>,
     ) -> Vec<E::StructureConstraintDesc> {
@@ -855,7 +770,7 @@ where
 
 /// Represents a feasable solution
 ///
-/// Normally a solution of a problem is described by the type [BaseConstraints::PartialSolution].
+/// Normally a solution of a problem is described by the type [BaseProblem::PartialSolution].
 /// This type will be used in the rest of the program. However, this representation usually lacks
 /// some information to properly test the solution.
 ///
@@ -875,14 +790,14 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>;
+    T: BaseProblem<MainVariable = M, StructureVariable = S>;
 
 impl<'a, M, S, T, P> DecoratedFeasableSolution<'a, M, S, T, P>
 where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     /// Creates a new feasable solution from a complete solution
     ///
@@ -924,7 +839,7 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     type Target = DecoratedCompleteSolution<'a, M, S, T, P>;
 
@@ -943,7 +858,7 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     /// The actual decorated solution that is returned
     pub solution: Option<DecoratedFeasableSolution<'a, M, S, T, P>>,
@@ -958,11 +873,11 @@ where
     M: UsableData,
     S: UsableData,
     P: collomatique_ilp::mat_repr::ProblemRepr<ExtraVariable<M, S, IdVariable>>,
-    T: BaseConstraints<MainVariable = M, StructureVariable = S>,
+    T: BaseProblem<MainVariable = M, StructureVariable = S>,
 {
     /// Decorate a partial solution
     ///
-    /// This functions takes a partial solution of type [BaseConstraints::PartialSolution]
+    /// This functions takes a partial solution of type [BaseProblem::PartialSolution]
     /// and "decorates" it. This means that all the internal ILP variables are reconstructed and packaged
     /// into a [DecoratedPartialSolution].
     ///
@@ -971,11 +886,11 @@ where
         &'a self,
         solution: T::PartialSolution,
     ) -> Option<DecoratedPartialSolution<'a, M, S, T, P>> {
-        let starting_configuration_data = self.base.partial_solution_to_configuration(&solution)?;
+        let starting_configuration_data = self.desc.partial_solution_to_configuration(&solution)?;
         let mut base_config_data =
             starting_configuration_data.transmute(|x| BaseVariable::Main(x.clone()));
         base_config_data = base_config_data.set_iter(
-            self.base
+            self.desc
                 .reconstruct_structure_variables(&starting_configuration_data)
                 .get_values()
                 .into_iter()
@@ -988,7 +903,7 @@ where
         });
         for func in &self.reconstruction_funcs {
             config_data = config_data.set_iter(
-                func(&self.base, &base_config_data)
+                func(&self.desc, &base_config_data)
                     .get_values()
                     .into_iter()
                     .map(|(var, value)| (ExtraVariable::Extra(var), value)),
@@ -1037,7 +952,7 @@ where
         solver: &Solver,
     ) -> Option<DecoratedFeasableSolution<'a, M, S, T, P>> {
         let feasable_config = solver.solve(&self.ilp_problem)?;
-        let internal_solution = self.base.configuration_to_partial_solution(
+        let internal_solution = self.desc.configuration_to_partial_solution(
             &self.feasable_config_into_config_data(&feasable_config),
         );
 
@@ -1074,7 +989,7 @@ where
         };
 
         let internal_solution = self
-            .base
+            .desc
             .configuration_to_partial_solution(&self.feasable_config_into_config_data(&config));
 
         TimeLimitSolution {

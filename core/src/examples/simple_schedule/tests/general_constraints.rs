@@ -469,10 +469,10 @@ fn simple_test_for_general_constraints() {
 
     let constraints = SimpleScheduleConstraints {};
 
-    use crate::ExtraConstraints;
+    use crate::ProblemConstraints;
 
     let result: BTreeSet<_> = constraints
-        .extra_general_constraints(&example_problem)
+        .general_constraints(&example_problem)
         .into_iter()
         .collect();
 
