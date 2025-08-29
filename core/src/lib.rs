@@ -11,16 +11,20 @@ use ids::{IdIssuer, StudentId};
 use ops::{Op, StudentOp};
 use std::collections::BTreeMap;
 
+use thiserror::Error;
+
 /// Errors for the core crate
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum Error {
     /// Generating new IDs is not secure: half the usable IDs have been used already.
     ///
     /// This *should* not happen. If this happen, most probably a malicious
     /// file was opened.
+    #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
 
     /// A student id is invalid
+    #[error("invalid student id ({0:?})")]
     InvalidStudentId(StudentId),
 }
 
