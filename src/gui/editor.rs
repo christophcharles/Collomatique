@@ -158,12 +158,26 @@ type RedoErr = collomatique::frontend::state::RedoError<
     <collomatique::backend::sqlite::Store as collomatique::backend::Storage>::InternalError,
 >;
 
+#[derive(Error, Debug, Clone)]
+pub enum SaveToFileError {
+    #[error("Erreur d'entrée sortie : {0:?}")]
+    IOError(std::sync::Arc<std::io::Error>),
+}
+
+impl From<std::io::Error> for SaveToFileError {
+    fn from(value: std::io::Error) -> Self {
+        SaveToFileError::IOError(std::sync::Arc::new(value))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Message {
     PanelChanged(Panel),
     NewClicked,
     OpenClicked,
     SaveClicked,
+    SaveToFile(std::path::PathBuf),
+    SaveToFileProcessed(Result<std::path::PathBuf, SaveToFileError>),
     UndoClicked,
     UndoProcessed(std::sync::Arc<Result<(), UndoErr>>),
     RedoClicked,
@@ -209,7 +223,63 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
         }
         Message::NewClicked => close_warning_task(state, GuiMessage::OpenNewFile),
         Message::OpenClicked => close_warning_task(state, GuiMessage::OpenExistingFile),
-        Message::SaveClicked => Task::none(),
+        Message::SaveClicked => {
+            let GuiState::Editor(editor_state) = state else {
+                panic!("Received editor message while not in editor state");
+            };
+
+            match &editor_state.path {
+                Some(file) => Task::done(Message::SaveToFile(file.clone()).into()),
+                None => Task::done(
+                    super::dialogs::Message::FileChooserDialog(
+                        "Enregistrer le colloscope".into(),
+                        true,
+                        std::sync::Arc::new(|path| match path {
+                            Some(file) => Message::SaveToFile(file).into(),
+                            None => GuiMessage::Ignore,
+                        }),
+                    )
+                    .into(),
+                ),
+            }
+        }
+        Message::SaveToFile(path) => {
+            let app_state_lock = editor_state.app_state.read_lock();
+            let Some(app_state) = &*app_state_lock else {
+                panic!("No state to save");
+            };
+            let json_result = app_state.get_logic().get_storage().to_json();
+
+            match json_result {
+                Ok(json_content) => Task::perform(
+                    async move {
+                        tokio::fs::write(&path, json_content).await?;
+                        Ok(path)
+                    },
+                    |x| Message::SaveToFileProcessed(x).into(),
+                ),
+                Err(e) => Task::done(
+                    super::dialogs::Message::ErrorDialog(
+                        "Erreur à l'enregistrement du fichier".into(),
+                        e.to_string(),
+                    )
+                    .into(),
+                ),
+            }
+        }
+        Message::SaveToFileProcessed(path_result) => match path_result {
+            Ok(path) => {
+                editor_state.path = Some(path);
+                Task::none()
+            }
+            Err(e) => Task::done(
+                super::dialogs::Message::ErrorDialog(
+                    "Erreur à l'enregistrement du fichier".into(),
+                    e.to_string(),
+                )
+                .into(),
+            ),
+        },
         Message::UndoClicked => {
             /*let GuiState::Editor(editor_state) = state else {
                 panic!("Received editor message while not in editor state");
