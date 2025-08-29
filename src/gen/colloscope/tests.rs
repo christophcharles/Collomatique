@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn trivial_validated_data() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
@@ -44,6 +45,7 @@ fn trivial_validated_data() {
 #[test]
 fn simple_validated_data() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -202,6 +204,7 @@ fn simple_validated_data() {
 #[test]
 fn invalid_students_per_interrogation() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -255,6 +258,7 @@ fn invalid_students_per_interrogation() {
 #[test]
 fn subject_slot_overlaps_next_day() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -305,6 +309,7 @@ fn subject_slot_overlaps_next_day() {
 #[test]
 fn incompatibility_slot_overlaps_next_day() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
@@ -355,6 +360,7 @@ fn incompatibility_slot_overlaps_next_day() {
 #[test]
 fn invalid_teacher_number() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -405,6 +411,7 @@ fn invalid_teacher_number() {
 #[test]
 fn invalid_incompatibility_number() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
@@ -449,6 +456,7 @@ fn invalid_incompatibility_number() {
 #[test]
 fn slot_ref_has_invalid_subject() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -538,6 +546,7 @@ fn slot_ref_has_invalid_subject() {
 #[test]
 fn slot_ref_has_invalid_slot() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -627,6 +636,7 @@ fn slot_ref_has_invalid_slot() {
 #[test]
 fn slot_grouping_overlap() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -742,6 +752,7 @@ fn slot_grouping_overlap() {
 #[test]
 fn grouping_incompact_invalid_ref() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -829,6 +840,7 @@ fn grouping_incompact_invalid_ref() {
 #[test]
 fn invalid_interrogations_per_week() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 0,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: Some(10..8),
@@ -863,6 +875,7 @@ fn invalid_interrogations_per_week() {
 #[test]
 fn duplicated_groups() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -975,6 +988,7 @@ fn duplicated_groups() {
 #[test]
 fn duplicated_student() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1096,6 +1110,7 @@ fn duplicated_student() {
 #[test]
 fn duplicated_student_not_assigned() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1215,6 +1230,7 @@ fn duplicated_student_not_assigned() {
 #[test]
 fn invalid_student_in_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1323,6 +1339,7 @@ fn invalid_student_in_group() {
 #[test]
 fn invalid_student_not_assigned() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1425,6 +1442,7 @@ fn invalid_student_not_assigned() {
 #[test]
 fn empty_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1550,6 +1568,7 @@ fn empty_group() {
 #[test]
 fn extensible_empty_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1671,6 +1690,7 @@ fn extensible_empty_group() {
 #[test]
 fn group_too_large() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1792,6 +1812,7 @@ fn group_too_large() {
 #[test]
 fn non_extensible_too_small_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -1917,6 +1938,7 @@ fn non_extensible_too_small_group() {
 #[test]
 fn too_few_groups() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -2037,6 +2059,7 @@ fn too_few_groups() {
 #[test]
 fn too_many_groups() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -2169,6 +2192,7 @@ fn too_many_groups() {
 #[test]
 fn no_full_period() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(1).unwrap(),
         interrogations_per_week: None,
@@ -2259,6 +2283,7 @@ fn no_full_period() {
 #[test]
 fn group_in_slot_variables() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -2467,6 +2492,7 @@ fn group_in_slot_variables() {
 #[test]
 fn dynamic_group_assignment_variables() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -2755,6 +2781,7 @@ fn dynamic_group_assignment_variables() {
 #[test]
 fn student_in_group_variables() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -2944,6 +2971,7 @@ fn student_in_group_variables() {
 #[test]
 fn use_grouping() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -3072,6 +3100,7 @@ fn use_grouping() {
 #[test]
 fn incomapt_group_for_student_variables() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -3456,6 +3485,7 @@ fn incomapt_group_for_student_variables() {
 #[test]
 fn at_most_max_groups_per_slot_constraints() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -3768,6 +3798,7 @@ fn at_most_max_groups_per_slot_constraints() {
 #[test]
 fn at_most_one_interrogation_per_time_unit_constraints() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -3963,6 +3994,7 @@ fn at_most_one_interrogation_per_time_unit_constraints() {
 #[test]
 fn one_interrogation_per_period() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
@@ -4232,6 +4264,7 @@ fn one_interrogation_per_period() {
 #[test]
 fn one_interrogation_per_period_with_incomplete_period() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(5).unwrap(),
         interrogations_per_week: None,
@@ -4544,6 +4577,7 @@ fn one_interrogation_per_period_with_incomplete_period() {
 #[test]
 fn students_per_group_count() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -4733,6 +4767,7 @@ fn students_per_group_count() {
 #[test]
 fn student_in_single_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -4921,6 +4956,7 @@ fn student_in_single_group() {
 #[test]
 fn dynamic_groups_student_in_group_inequalities() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -5048,6 +5084,7 @@ fn dynamic_groups_student_in_group_inequalities() {
 #[test]
 fn dynamic_groups_group_in_slot_inequalities() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -5172,6 +5209,7 @@ fn dynamic_groups_group_in_slot_inequalities() {
 #[test]
 fn interrogations_per_week() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: Some(1..3),
@@ -5418,6 +5456,7 @@ fn interrogations_per_week() {
 #[test]
 fn grouping_inequalities() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -5580,6 +5619,7 @@ fn grouping_inequalities() {
 #[test]
 fn grouping_incompats() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -5795,6 +5835,7 @@ fn slot_overlaps() {
 #[test]
 fn simple_colloscope() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -5965,6 +6006,7 @@ fn simple_colloscope() {
 #[test]
 fn colloscope_with_dynamic_groups() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -6275,6 +6317,7 @@ fn colloscope_with_dynamic_groups() {
 #[test]
 fn at_most_one_interrogation_per_empty_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -6383,6 +6426,7 @@ fn at_most_one_interrogation_per_empty_group() {
 #[test]
 fn max_interrogations_per_day() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -6617,6 +6661,7 @@ fn max_interrogations_per_day() {
 #[test]
 fn balancing_teachers() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -6822,6 +6867,7 @@ fn balancing_teachers() {
 #[test]
 fn balancing_timeslots() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -7036,6 +7082,7 @@ fn balancing_timeslots() {
 #[test]
 fn balancing_timeslots_2() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -7241,6 +7288,7 @@ fn balancing_timeslots_2() {
 #[test]
 fn balancing_teachers_and_timeslots() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -7455,6 +7503,7 @@ fn balancing_teachers_and_timeslots() {
 #[test]
 fn no_balancing() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -7602,6 +7651,7 @@ fn no_balancing() {
 #[test]
 fn balancing_timeslots_with_ghost_group() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(4).unwrap(),
         interrogations_per_week: None,
@@ -7945,6 +7995,7 @@ fn balancing_timeslots_with_ghost_group() {
 #[test]
 fn balancing_timeslots_with_ghost_group_2() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
@@ -8238,6 +8289,7 @@ fn balancing_timeslots_with_ghost_group_2() {
 #[test]
 fn balancing_timeslots_with_partial_last_period() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 2,
         week_count: NonZeroU32::new(3).unwrap(),
         interrogations_per_week: None,
@@ -8441,6 +8493,7 @@ fn balancing_timeslots_with_partial_last_period() {
 #[test]
 fn student_incompat_max_count_constraints() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
@@ -8813,6 +8866,7 @@ fn student_incompat_max_count_constraints() {
 #[test]
 fn incompat_group_for_student_constraints() {
     let general = GeneralData {
+        periodicity_cuts: BTreeSet::new(),
         teacher_count: 1,
         week_count: NonZeroU32::new(2).unwrap(),
         interrogations_per_week: None,
