@@ -1,6 +1,5 @@
 use adw::prelude::NavigationPageExt;
 use gtk::prelude::{ButtonExt, WidgetExt};
-use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 use std::path::PathBuf;
@@ -15,12 +14,6 @@ pub enum EditorInput {
         data: collomatique_state_colloscopes::Data,
         dirty: bool,
     },
-    CloseFileClicked,
-}
-
-#[derive(Debug)]
-pub enum EditorOutput {
-    RequestCloseFile,
 }
 
 pub struct EditorPanel {
@@ -53,18 +46,10 @@ impl EditorPanel {
     }
 }
 
-relm4::new_action_group!(EditorActionGroup, "editor");
-
-relm4::new_stateless_action!(SaveAction, EditorActionGroup, "save");
-relm4::new_stateless_action!(SaveAsAction, EditorActionGroup, "save_as");
-relm4::new_stateless_action!(UndoAction, EditorActionGroup, "undo");
-relm4::new_stateless_action!(RedoAction, EditorActionGroup, "redo");
-relm4::new_stateless_action!(CloseAction, EditorActionGroup, "close");
-
 #[relm4::component(pub)]
 impl SimpleComponent for EditorPanel {
     type Input = EditorInput;
-    type Output = EditorOutput;
+    type Output = ();
     type Init = ();
 
     view! {
@@ -145,15 +130,15 @@ impl SimpleComponent for EditorPanel {
                 "Ouvrir" => super::OpenAction,
             },
             section! {
-                "Annuler" => UndoAction,
-                "Rétablir" => RedoAction,
+                "Annuler" => super::UndoAction,
+                "Rétablir" => super::RedoAction,
             },
             section! {
-                "Enregistrer" => SaveAction,
-                "Enregistrer sous" => SaveAsAction,
+                "Enregistrer" => super::SaveAction,
+                "Enregistrer sous" => super::SaveAsAction,
             },
             section! {
-                "Fermer" => CloseAction,
+                "Fermer" => super::CloseAction,
             },
             section! {
                 "À propos" => super::AboutAction
@@ -173,55 +158,10 @@ impl SimpleComponent for EditorPanel {
         };
         let widgets = view_output!();
 
-        let app = relm4::main_application();
-        app.set_accelerators_for_action::<SaveAction>(&["<primary>S"]);
-        app.set_accelerators_for_action::<UndoAction>(&["<primary>Z"]);
-        app.set_accelerators_for_action::<RedoAction>(&["<shift><primary>Z"]);
-        app.set_accelerators_for_action::<CloseAction>(&["<primary>W"]);
-
-        let save_action: RelmAction<SaveAction> = {
-            RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
-            })
-        };
-        let save_as_action: RelmAction<SaveAsAction> = {
-            RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
-            })
-        };
-        let undo_action: RelmAction<UndoAction> = {
-            RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
-            })
-        };
-        let redo_action: RelmAction<RedoAction> = {
-            RelmAction::new_stateless(move |_| {
-                //sender.input(Msg::Increment);
-            })
-        };
-        let close_action: RelmAction<CloseAction> = {
-            let sender = sender.clone();
-            RelmAction::new_stateless(move |_| {
-                sender.input(EditorInput::CloseFileClicked);
-            })
-        };
-
-        let mut group = RelmActionGroup::<EditorActionGroup>::new();
-        group.add_action(save_action.clone());
-        group.add_action(save_as_action);
-        group.add_action(undo_action.clone());
-        group.add_action(redo_action.clone());
-        group.add_action(close_action);
-        group.register_for_widget(&widgets.nav_view);
-
-        save_action.set_enabled(false);
-        undo_action.set_enabled(false);
-        redo_action.set_enabled(false);
-
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
             EditorInput::NewFile {
                 file_name,
@@ -231,9 +171,6 @@ impl SimpleComponent for EditorPanel {
                 self.file_name = file_name;
                 self.data = AppState::new(data);
                 self.dirty = dirty;
-            }
-            EditorInput::CloseFileClicked => {
-                sender.output(EditorOutput::RequestCloseFile).unwrap();
             }
         }
     }

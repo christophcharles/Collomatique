@@ -84,6 +84,11 @@ relm4::new_action_group!(AppActionGroup, "app");
 
 relm4::new_stateless_action!(NewAction, AppActionGroup, "new");
 relm4::new_stateless_action!(OpenAction, AppActionGroup, "open");
+relm4::new_stateless_action!(SaveAction, AppActionGroup, "save");
+relm4::new_stateless_action!(SaveAsAction, AppActionGroup, "save_as");
+relm4::new_stateless_action!(UndoAction, AppActionGroup, "undo");
+relm4::new_stateless_action!(RedoAction, AppActionGroup, "redo");
+relm4::new_stateless_action!(CloseAction, AppActionGroup, "close");
 relm4::new_stateless_action!(AboutAction, AppActionGroup, "about");
 
 #[relm4::component(pub)]
@@ -121,12 +126,9 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let editor = editor::EditorPanel::builder().launch(()).forward(
-            sender.input_sender(),
-            |msg| match msg {
-                editor::EditorOutput::RequestCloseFile => AppInput::RequestCloseFile,
-            },
-        );
+        let editor = editor::EditorPanel::builder()
+            .launch(())
+            .forward(sender.input_sender(), |_msg| AppInput::Ignore);
 
         let loading =
             loading::LoadingPanel::builder()
@@ -193,6 +195,10 @@ impl SimpleComponent for AppModel {
         let app = relm4::main_application();
         app.set_accelerators_for_action::<NewAction>(&["<primary>N"]);
         app.set_accelerators_for_action::<OpenAction>(&["<primary>O"]);
+        app.set_accelerators_for_action::<SaveAction>(&["<primary>S"]);
+        app.set_accelerators_for_action::<UndoAction>(&["<primary>Z"]);
+        app.set_accelerators_for_action::<RedoAction>(&["<shift><primary>Z"]);
+        app.set_accelerators_for_action::<CloseAction>(&["<primary>W"]);
 
         let new_action: RelmAction<NewAction> = {
             let sender = sender.clone();
@@ -206,6 +212,32 @@ impl SimpleComponent for AppModel {
                 sender.input(AppInput::RequestOpenExistingColloscopeWithDialog);
             })
         };
+        let save_action: RelmAction<SaveAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let save_as_action: RelmAction<SaveAsAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let undo_action: RelmAction<UndoAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let redo_action: RelmAction<RedoAction> = {
+            RelmAction::new_stateless(move |_| {
+                //sender.input(Msg::Increment);
+            })
+        };
+        let close_action: RelmAction<CloseAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestCloseFile);
+            })
+        };
         let about_action: RelmAction<AboutAction> = {
             RelmAction::new_stateless(move |_| {
                 //sender.input(Msg::Increment);
@@ -215,8 +247,17 @@ impl SimpleComponent for AppModel {
         let mut group = RelmActionGroup::<AppActionGroup>::new();
         group.add_action(new_action);
         group.add_action(open_action);
+        group.add_action(save_action.clone());
+        group.add_action(save_as_action);
+        group.add_action(undo_action.clone());
+        group.add_action(redo_action.clone());
+        group.add_action(close_action);
         group.add_action(about_action);
         group.register_for_main_application();
+
+        save_action.set_enabled(false);
+        undo_action.set_enabled(false);
+        redo_action.set_enabled(false);
 
         sender.input(if params.new {
             AppInput::NewColloscope(params.file_name.clone())
@@ -316,6 +357,9 @@ impl SimpleComponent for AppModel {
                 relm4::main_application().quit();
             }
             AppInput::RequestCloseFile => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
                 self.send_but_check_dirty(sender, AppInput::CloseFile);
             }
             AppInput::CloseFile => {
