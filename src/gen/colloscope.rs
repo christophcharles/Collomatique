@@ -422,9 +422,37 @@ pub struct IlpTranslator<'a> {
 use crate::ilp::linexpr::{Constraint, Expr};
 use crate::ilp::{Problem, ProblemBuilder};
 
+enum StudentStatus {
+    Assigned(usize),
+    ToBeAssigned(BTreeSet<usize>),
+    NotConcerned,
+}
+
 impl<'a> IlpTranslator<'a> {
     fn is_group_fixed(group: &GroupDesc, subject: &Subject) -> bool {
         !group.can_be_extended || (group.students.len() == subject.students_per_slot.end().get())
+    }
+
+    fn compute_needed_time_resolution(&self) -> u32 {
+        let mut result = 24 * 60;
+
+        use crate::math::gcd;
+
+        for subject in &self.data.subjects {
+            result = gcd(result, subject.duration.get());
+            for slot in &subject.slots {
+                result = gcd(result, slot.start.start_time.get())
+            }
+        }
+
+        for incompatibility in &self.data.incompatibilities {
+            for slot in &incompatibility.slots {
+                result = gcd(result, slot.duration.get());
+                result = gcd(result, slot.start.start_time.get());
+            }
+        }
+
+        result
     }
 
     fn build_group_in_slot_variables(&self) -> BTreeSet<Variable> {
@@ -563,6 +591,149 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
+    fn is_time_unit_in_slot(
+        week: u32,
+        weekday: super::time::Weekday,
+        time: super::time::Time,
+        _time_resolution: u32,
+        subject: &Subject,
+        slot: &SlotWithTeacher,
+    ) -> bool {
+        if week != slot.start.week {
+            return false;
+        }
+        if weekday != slot.start.weekday {
+            return false;
+        }
+        time.fit_in(&slot.start.start_time, subject.duration.get())
+    }
+
+    fn get_student_status(student: usize, subject: &Subject) -> StudentStatus {
+        if subject.groups.not_assigned.contains(&student) {
+            let list = subject
+                .groups
+                .assigned_to_group
+                .iter()
+                .enumerate()
+                .filter_map(|(k, g)| {
+                    if Self::is_group_fixed(g, subject) {
+                        return None;
+                    }
+                    Some(k)
+                })
+                .collect();
+            return StudentStatus::ToBeAssigned(list);
+        }
+        for (k, group) in subject.groups.assigned_to_group.iter().enumerate() {
+            if group.students.contains(&student) {
+                return StudentStatus::Assigned(k);
+            }
+        }
+        StudentStatus::NotConcerned
+    }
+
+    fn build_at_most_one_interrogation_constraint_for_one_time_unit_and_one_student(
+        &self,
+        week: u32,
+        weekday: super::time::Weekday,
+        time: super::time::Time,
+        time_resolution: u32,
+        student: usize,
+    ) -> Option<Constraint<Variable>> {
+        let mut expr = Expr::<Variable>::constant(0);
+
+        for (i, subject) in self.data.subjects.iter().enumerate() {
+            for (j, slot) in subject.slots.iter().enumerate() {
+                if Self::is_time_unit_in_slot(
+                    week,
+                    weekday,
+                    time.clone(),
+                    time_resolution,
+                    subject,
+                    slot,
+                ) {
+                    match Self::get_student_status(student, subject) {
+                        StudentStatus::Assigned(k) => {
+                            expr = expr
+                                + Expr::var(Variable::GroupInSlot {
+                                    subject: i,
+                                    slot: j,
+                                    group: k,
+                                });
+                        }
+                        StudentStatus::ToBeAssigned(k_list) => {
+                            for k in k_list {
+                                expr = expr
+                                    + Expr::var(Variable::DynamicGroupAssignment {
+                                        subject: i,
+                                        slot: j,
+                                        group: k,
+                                        student,
+                                    });
+                            }
+                        }
+                        StudentStatus::NotConcerned => {}
+                    }
+                }
+            }
+        }
+
+        if expr == Expr::constant(0) {
+            return None;
+        }
+
+        Some(expr.leq(&Expr::constant(1)))
+    }
+
+    fn build_at_most_one_interrogation_for_this_time_unit_constraints(
+        &self,
+        week: u32,
+        weekday: super::time::Weekday,
+        time: super::time::Time,
+        time_resolution: u32,
+    ) -> BTreeSet<Constraint<Variable>> {
+        self.data
+            .students
+            .iter()
+            .enumerate()
+            .filter_map(|(student, _)| {
+                self.build_at_most_one_interrogation_constraint_for_one_time_unit_and_one_student(
+                    week,
+                    weekday,
+                    time.clone(),
+                    time_resolution,
+                    student,
+                )
+            })
+            .collect()
+    }
+
+    fn build_at_most_one_interrogation_per_time_unit_constraints(
+        &self,
+    ) -> BTreeSet<Constraint<Variable>> {
+        let time_resolution = self.compute_needed_time_resolution();
+
+        let mut output = BTreeSet::new();
+
+        for week in 0u32..self.data.general.week_count.get() {
+            for weekday in super::time::Weekday::iter() {
+                let init_time = super::time::Time::from_hm(0, 0).unwrap();
+                for time in init_time.iterate_until_end_of_day(time_resolution) {
+                    output.extend(
+                        self.build_at_most_one_interrogation_for_this_time_unit_constraints(
+                            week,
+                            weekday,
+                            time,
+                            time_resolution,
+                        ),
+                    );
+                }
+            }
+        }
+
+        output
+    }
+
     pub fn problem_builder(&self) -> ProblemBuilder<Variable> {
         ProblemBuilder::new()
             .add_variables(self.build_group_in_slot_variables())
@@ -570,6 +741,7 @@ impl<'a> IlpTranslator<'a> {
             .add_variables(self.build_student_in_group_variables())
             .add_variables(self.build_exact_periodicity_variables())
             .add_constraints(self.build_at_most_one_group_per_slot_constraints())
+            .add_constraints(self.build_at_most_one_interrogation_per_time_unit_constraints())
     }
 
     pub fn problem(&self) -> Problem<Variable> {

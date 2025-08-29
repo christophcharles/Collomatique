@@ -148,6 +148,38 @@ impl Time {
             .and_then(|x| Some(x <= MINUTES_PER_DAY))
             .unwrap_or(false)
     }
+
+    pub fn iterate_until_end_of_day(&self, step_in_minutes: u32) -> TimeIterator {
+        TimeIterator {
+            current_time: Some(self.clone()),
+            step_in_minutes,
+        }
+    }
+
+    pub fn fit_in(&self, time: &Time, duration: u32) -> bool {
+        if *self < *time {
+            return false;
+        }
+
+        match time.add(duration) {
+            None => true,
+            Some(end) => *self < end,
+        }
+    }
+}
+
+pub struct TimeIterator {
+    current_time: Option<Time>,
+    step_in_minutes: u32,
+}
+
+impl Iterator for TimeIterator {
+    type Item = Time;
+    fn next(&mut self) -> Option<Self::Item> {
+        let time = self.current_time.clone()?;
+        self.current_time = time.add(self.step_in_minutes);
+        Some(time)
+    }
 }
 
 impl Default for Time {

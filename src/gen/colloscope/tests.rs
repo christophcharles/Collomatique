@@ -2945,3 +2945,187 @@ fn at_most_one_group_per_slot_constraints() {
 
     assert_eq!(at_most_one_group_per_slot_constraints, expected_result);
 }
+
+#[test]
+fn at_most_one_interrogation_per_time_unit_constraints() {
+    let general = GeneralData {
+        teacher_count: 2,
+        week_count: NonZeroU32::new(2).unwrap(),
+        interrogations_per_week: None,
+    };
+
+    let subjects = vec![
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 0,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                assigned_to_group: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([0, 1, 2]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::new(),
+                        can_be_extended: true,
+                    },
+                ],
+                not_assigned: BTreeSet::from([3, 4, 5]),
+            },
+        },
+        Subject {
+            students_per_slot: NonZeroUsize::new(2).unwrap()..=NonZeroUsize::new(3).unwrap(),
+            period: NonZeroU32::new(2).unwrap(),
+            period_is_strict: true,
+            duration: NonZeroU32::new(60).unwrap(),
+            slots: vec![
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Monday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+                SlotWithTeacher {
+                    teacher: 1,
+                    start: SlotStart {
+                        week: 0,
+                        weekday: time::Weekday::Tuesday,
+                        start_time: time::Time::from_hm(8, 0).unwrap(),
+                    },
+                },
+            ],
+            groups: GroupsDesc {
+                assigned_to_group: vec![
+                    GroupDesc {
+                        students: BTreeSet::from([3, 4, 5]),
+                        can_be_extended: false,
+                    },
+                    GroupDesc {
+                        students: BTreeSet::new(),
+                        can_be_extended: true,
+                    },
+                ],
+                not_assigned: BTreeSet::from([0, 1, 2]),
+            },
+        },
+    ];
+    let incompatibilities = vec![];
+    let students = vec![
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+        Student {
+            incompatibilities: BTreeSet::new(),
+        },
+    ];
+    let slot_groupings = vec![];
+    let grouping_incompats = SlotGroupingIncompatList::new();
+
+    let data = ValidatedData::new(
+        general,
+        subjects,
+        incompatibilities,
+        students,
+        slot_groupings,
+        grouping_incompats,
+    )
+    .unwrap();
+
+    let ilp_translator = data.ilp_translator();
+    let at_most_one_interrogation_per_time_unit_constraints =
+        ilp_translator.build_at_most_one_interrogation_per_time_unit_constraints();
+
+    use crate::ilp::linexpr::Expr;
+
+    #[rustfmt::skip]
+    let gis_0_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 0, group: 0 });
+    #[rustfmt::skip]
+    let gis_0_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 0, slot: 1, group: 0 });
+    #[rustfmt::skip]
+    let gis_1_0_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 0, group: 0 });
+    #[rustfmt::skip]
+    let gis_1_1_0 = Expr::<Variable>::var(Variable::GroupInSlot { subject: 1, slot: 1, group: 0 });
+
+    #[rustfmt::skip]
+    let dga_0_0_1_3 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 3 });
+    #[rustfmt::skip]
+    let dga_0_0_1_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_0_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 0, group: 1, student: 5 });
+    #[rustfmt::skip]
+    let dga_0_1_1_3 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 3 });
+    #[rustfmt::skip]
+    let dga_0_1_1_4 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 4 });
+    #[rustfmt::skip]
+    let dga_0_1_1_5 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 0, slot: 1, group: 1, student: 5 });
+
+    #[rustfmt::skip]
+    let dga_1_0_1_0 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 0, group: 1, student: 0 });
+    #[rustfmt::skip]
+    let dga_1_0_1_1 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 0, group: 1, student: 1 });
+    #[rustfmt::skip]
+    let dga_1_0_1_2 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 0, group: 1, student: 2 });
+    #[rustfmt::skip]
+    let dga_1_1_1_0 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 0 });
+    #[rustfmt::skip]
+    let dga_1_1_1_1 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 1 });
+    #[rustfmt::skip]
+    let dga_1_1_1_2 = Expr::<Variable>::var(Variable::DynamicGroupAssignment { subject: 1, slot: 1, group: 1, student: 2 });
+
+    #[rustfmt::skip]
+    let expected_result = BTreeSet::from([
+        (&gis_0_0_0 + &dga_1_0_1_0).leq(&Expr::constant(1)),
+        (&gis_0_0_0 + &dga_1_0_1_1).leq(&Expr::constant(1)),
+        (&gis_0_0_0 + &dga_1_0_1_2).leq(&Expr::constant(1)),
+
+        (&gis_0_1_0 + &dga_1_1_1_0).leq(&Expr::constant(1)),
+        (&gis_0_1_0 + &dga_1_1_1_1).leq(&Expr::constant(1)),
+        (&gis_0_1_0 + &dga_1_1_1_2).leq(&Expr::constant(1)),
+
+        (&gis_1_0_0 + &dga_0_0_1_3).leq(&Expr::constant(1)),
+        (&gis_1_0_0 + &dga_0_0_1_4).leq(&Expr::constant(1)),
+        (&gis_1_0_0 + &dga_0_0_1_5).leq(&Expr::constant(1)),
+
+        (&gis_1_1_0 + &dga_0_1_1_3).leq(&Expr::constant(1)),
+        (&gis_1_1_0 + &dga_0_1_1_4).leq(&Expr::constant(1)),
+        (&gis_1_1_0 + &dga_0_1_1_5).leq(&Expr::constant(1)),
+    ]);
+
+    assert_eq!(
+        at_most_one_interrogation_per_time_unit_constraints,
+        expected_result
+    );
+}
