@@ -24,6 +24,7 @@ pub enum ProcessWorkerCmdOutput {
     ProcessKilled(std::io::Result<()>),
     ProcessLaunched(std::io::Result<tokio::process::Child>),
     NewStdoutData(String, BufReader<tokio::process::ChildStdout>),
+    NewStderrData(String, BufReader<tokio::process::ChildStderr>),
 }
 
 pub struct ProcessWorker {
@@ -151,6 +152,10 @@ impl Component for ProcessWorker {
                             let stdout_buf = BufReader::new(stdout);
                             self.wait_stdout_data(sender.clone(), stdout_buf);
                         }
+                        if let Some(stderr) = child.stderr.take() {
+                            let stderr_buf = BufReader::new(stderr);
+                            self.wait_stderr_data(sender.clone(), stderr_buf);
+                        }
                         self.child_process = Some(child);
                         self.schedule_check(sender);
                     }
@@ -165,6 +170,12 @@ impl Component for ProcessWorker {
                 sender.output(ProcessWorkerOutput::StdOut(data)).unwrap();
                 if self.child_process.is_some() {
                     self.wait_stdout_data(sender, stdout_buf);
+                }
+            }
+            ProcessWorkerCmdOutput::NewStderrData(data, stderr_buf) => {
+                sender.output(ProcessWorkerOutput::StdErr(data)).unwrap();
+                if self.child_process.is_some() {
+                    self.wait_stderr_data(sender, stderr_buf);
                 }
             }
         }
@@ -188,6 +199,18 @@ impl ProcessWorker {
             let mut line = String::new();
             stdout_buf.read_line(&mut line).await.unwrap();
             ProcessWorkerCmdOutput::NewStdoutData(line, stdout_buf)
+        });
+    }
+
+    fn wait_stderr_data(
+        &mut self,
+        sender: ComponentSender<Self>,
+        mut stderr_buf: BufReader<tokio::process::ChildStderr>,
+    ) {
+        sender.oneshot_command(async move {
+            let mut line = String::new();
+            stderr_buf.read_line(&mut line).await.unwrap();
+            ProcessWorkerCmdOutput::NewStderrData(line, stderr_buf)
         });
     }
 }
