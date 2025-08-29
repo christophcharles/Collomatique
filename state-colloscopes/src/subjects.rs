@@ -211,6 +211,13 @@ impl Subjects {
             .iter()
             .position(|(current_id, _desc)| *current_id == id)
     }
+
+    /// Finds a subject by id
+    pub fn find_subject(&self, id: SubjectId) -> Option<&Subject> {
+        let pos = self.find_subject_position(id)?;
+
+        Some(&self.ordered_subject_list[pos].1)
+    }
 }
 
 /// Description of the subjects but unchecked

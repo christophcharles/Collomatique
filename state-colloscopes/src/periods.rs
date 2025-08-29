@@ -47,6 +47,13 @@ impl Periods {
             .iter()
             .position(|(current_id, _desc)| *current_id == id)
     }
+
+    /// Finds a period by id
+    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<bool>> {
+        let pos = self.find_period_position(id)?;
+
+        Some(&self.ordered_period_list[pos].1)
+    }
 }
 
 /// Description of the periods but unchecked
