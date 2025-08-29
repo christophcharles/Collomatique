@@ -13,7 +13,7 @@ pub enum MainVariable<SubjectId: Identifier, StudentId: Identifier> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum StructureVariable<StudentId: Identifier, SubjectId: Identifier> {
+pub enum StructureVariable<SubjectId: Identifier, StudentId: Identifier> {
     StudentInGroup {
         subject: SubjectId,
         student: StudentId,

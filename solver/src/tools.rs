@@ -30,12 +30,12 @@ use std::{collections::BTreeSet, ops::RangeInclusive};
 /// the name of the variable we are defining through the constraint, a number identifying
 /// the constraint and a plain text description.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AggregatedVariablesConstraintDesc<ProblemVariable> {
+pub struct AggregatedVariablesConstraintDesc<ProblemVariable: UsableData + 'static> {
     /// Name of the variable being definied through the constraint
     pub variable_names: Vec<ProblemVariable>,
     /// Internal number of the structure constraint
     pub internal_number: usize,
-    /// Plain text description of the constraint
+    /// Plain text description of the constraintSized
     pub desc: String,
 }
 
