@@ -461,7 +461,7 @@ impl<'a> IlpTranslator<'a> {
             || (group.students.len() == subject.students_per_interrogation.end().get())
     }
 
-    fn build_fixed_group_variables(&self) -> Vec<Variable> {
+    fn build_fixed_group_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -500,7 +500,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_dynamic_group_variables(&self) -> Vec<Variable> {
+    fn build_dynamic_group_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -542,7 +542,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_in_group_variables(&self) -> Vec<Variable> {
+    fn build_in_group_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
@@ -570,7 +570,7 @@ impl<'a> IlpTranslator<'a> {
             .collect()
     }
 
-    fn build_exact_periodicity_variables(&self) -> Vec<Variable> {
+    fn build_exact_periodicity_variables(&self) -> BTreeSet<Variable> {
         self.data
             .subjects
             .iter()
