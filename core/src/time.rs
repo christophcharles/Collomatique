@@ -14,7 +14,7 @@ use std::num::NonZeroU32;
 /// Crucially all durations have always positive span.
 ///
 /// On top of that it implements a few utility functions to interact with chrono.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NonZeroDurationInMinutes(NonZeroU32);
 
 impl NonZeroDurationInMinutes {
@@ -39,7 +39,7 @@ impl From<NonZeroDurationInMinutes> for chrono::TimeDelta {
 
 /// Encapsulates a [chrono::Weekday] and gives it a default ordering
 /// (monday is the lowest and sunday the biggest day)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Weekday(chrono::Weekday);
 
 impl PartialOrd for Weekday {
@@ -79,7 +79,7 @@ impl std::ops::DerefMut for Weekday {
 ///
 /// A slot starts on a given week, on a given weekday
 /// and a certain time.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotStart {
     /// Week of the colloscope the slot starts on
     pub week: u32,
@@ -103,7 +103,7 @@ pub struct SlotStart {
 /// cannot be zero minutes long.
 ///
 /// A slot cannot cross a day boundary
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotWithDuration {
     /// start of the slot described by a [SlotStart]
     start: SlotStart,

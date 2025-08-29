@@ -28,10 +28,12 @@
 pub mod time;
 
 use std::collections::BTreeSet;
+use std::ops::RangeInclusive;
+use std::num::NonZeroUsize;
 
 /// Description of the information pertinent to a single student
 /// for the colloscope.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Student {
     /// List of times the student is not available for interrogations or tutorial
     ///
@@ -43,7 +45,7 @@ pub struct Student {
 }
 
 /// Description of the constraints for a group list
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GroupList {
     /// Range of allowed number of students per group
     pub students_per_group: RangeInclusive<NonZeroUsize>,
@@ -54,7 +56,7 @@ pub struct GroupList {
 }
 
 /// Description of all the data describing a colloscope constraints
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ColloscopeConstraints {
     /// List of students with their relevant constraints
     pub students: Vec<Student>,
