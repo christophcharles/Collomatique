@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Error)]
 pub enum UpdateError<T: backend::Storage, IntError = <T as backend::Storage>::InternalError>
@@ -19,6 +20,8 @@ where
     ),
 }
 
+use backend::IdError;
+
 #[trait_variant::make(Send)]
 pub trait Manager: ManagerInternal {
     fn get_backend_logic(&self) -> &backend::Logic<Self::Storage>;
@@ -26,6 +29,18 @@ pub trait Manager: ManagerInternal {
         &mut self,
         id: <Self::Storage as backend::Storage>::WeekPatternId,
     ) -> handles::WeekPatternHandle;
+
+    async fn general_data_get(
+        &self,
+    ) -> Result<backend::GeneralData, <Self::Storage as backend::Storage>::InternalError>;
+    async fn week_patterns_get_all(
+        &mut self,
+    ) -> Result<BTreeMap<handles::WeekPatternHandle, backend::WeekPattern>, <Self::Storage as backend::Storage>::InternalError>;
+    async fn week_patterns_get(
+        &self,
+        handle: handles::WeekPatternHandle,
+    ) -> Result<backend::WeekPattern, IdError<<Self::Storage as backend::Storage>::InternalError, handles::WeekPatternHandle>>;
+
     async fn apply(&mut self, op: Operation) -> Result<(), UpdateError<Self::Storage>>;
     fn can_undo(&self) -> bool;
     fn can_redo(&self) -> bool;
@@ -47,6 +62,46 @@ impl<T: ManagerInternal> Manager for T {
         id: <Self::Storage as backend::Storage>::WeekPatternId,
     ) -> handles::WeekPatternHandle {
         self.get_handle_managers_mut().week_patterns.get_handle(id)
+    }
+
+    fn general_data_get(&self) -> impl core::future::Future<Output = Result<backend::GeneralData, <Self::Storage as backend::Storage> ::InternalError> > +Send {
+        async {
+            self.get_backend_logic().general_data_get().await
+        }
+    }
+
+    fn week_patterns_get_all(&mut self) -> impl core::future::Future<Output = Result<BTreeMap<handles::WeekPatternHandle,backend::WeekPattern> , <Self::Storage as backend::Storage> ::InternalError> > +Send {
+        async {
+            let week_patterns_backend = self.get_backend_logic().week_patterns_get_all().await?;
+
+            let handle_manager = &mut self.get_handle_managers_mut().week_patterns;
+            let week_patterns = week_patterns_backend.into_iter().map(
+                |(id, week_pattern)| {
+                    let handle = handle_manager.get_handle(id);
+                    (handle, week_pattern)
+                }
+            ).collect();
+
+            Ok(week_patterns)
+        }
+    }
+
+    fn week_patterns_get(&self,handle:handles::WeekPatternHandle) -> impl core::future::Future<Output = Result<backend::WeekPattern,IdError< <Self::Storage as backend::Storage> ::InternalError,handles::WeekPatternHandle> > > +Send {
+        async move {
+            let handle_manager = &self.get_handle_managers().week_patterns;
+            let Some(index) = handle_manager.get_id(handle) else {
+                return Err(IdError::InvalidId(handle));
+            };
+
+            let week_pattern = self.get_backend_logic().week_patterns_get(index).await.map_err(
+                |e| match e {
+                    IdError::InternalError(int_err) => IdError::InternalError(int_err),
+                    IdError::InvalidId(id) => panic!("Week pattern id {:?} should be valid as it was computed from handle {:?}", id, handle),
+                }
+            )?;
+
+            Ok(week_pattern)
+        }
     }
 
     fn apply(
