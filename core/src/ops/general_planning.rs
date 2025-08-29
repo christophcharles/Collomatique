@@ -11,6 +11,11 @@ pub enum GeneralPlanningUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseSubjectAssociation(
+        collomatique_state_colloscopes::GroupListId,
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GeneralPlanningUpdateWarning {
@@ -66,6 +71,34 @@ impl GeneralPlanningUpdateWarning {
                     "Perte des informations de la matière \"{}\" sur la période {}",
                     subject.parameters.name,
                     period_index + 1
+                ))
+            }
+            GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                group_list_id,
+                subject_id,
+                period_id,
+            ) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_group_lists()
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                    return None;
+                };
+                let Some(period_num) = data
+                    .get_data()
+                    .get_periods()
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
+                    subject.parameters.name, group_list.params.name, period_num+1
                 ))
             }
         }
@@ -220,6 +253,21 @@ impl GeneralPlanningUpdateOp {
                     );
                 }
 
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, group_list_id) in subject_map {
+                        output.push(GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                            *group_list_id,
+                            *subject_id,
+                            *period_id,
+                        ));
+                    }
+                }
+
                 output
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -295,6 +343,21 @@ impl GeneralPlanningUpdateOp {
                     output.push(
                         GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
                     );
+                }
+
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, group_list_id) in subject_map {
+                        output.push(GeneralPlanningUpdateWarning::LooseSubjectAssociation(
+                            *group_list_id,
+                            *subject_id,
+                            *period_id,
+                        ));
+                    }
                 }
 
                 output
@@ -433,6 +496,31 @@ impl GeneralPlanningUpdateOp {
                                     ),
                                 ),
                                 "Enlever une référence à la période pour un élève".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, _group_list_id) in subject_map {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                        *period_id,
+                                        *subject_id,
+                                        None,
+                                    ),
+                                ),
+                                "Enlever une association de liste de groupes sur la période".into(),
                             )
                             .expect("All data should be valid at this point");
                         if result.is_some() {
@@ -591,6 +679,31 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, group_list_id) in subject_map {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                        new_id,
+                                        *subject_id,
+                                        Some(*group_list_id),
+                                    ),
+                                ),
+                                "Dupliquer une association de liste de groupes sur la période découpée".into(),
+                            )
+                            .expect("All data should be valid at this point");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
                 let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
@@ -706,6 +819,31 @@ impl GeneralPlanningUpdateOp {
                             )
                             .expect("All data should be valid at this point");
 
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
+                if let Some(subject_map) = data
+                    .get_data()
+                    .get_group_lists()
+                    .subjects_associations
+                    .get(period_id)
+                {
+                    for (subject_id, _group_list_id) in subject_map {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                        *period_id,
+                                        *subject_id,
+                                        None,
+                                    ),
+                                ),
+                                "Enlever une association de liste de groupes sur la période".into(),
+                            )
+                            .expect("All data should be valid at this point");
                         if result.is_some() {
                             panic!("Unexpected result! {:?}", result);
                         }
