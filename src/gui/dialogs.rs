@@ -148,7 +148,10 @@ pub fn update(state: &mut GuiState, message: Message) -> Task<GuiMessage> {
 }
 
 async fn file_chooser_dialog(title: String, create: bool) -> Option<std::path::PathBuf> {
-    let dialog = rfd::AsyncFileDialog::new().set_title(title);
+    let dialog = rfd::AsyncFileDialog::new()
+        .set_title(title)
+        .add_filter("Bases de données Collomatique", &["collomatique"])
+        .add_filter("Tous les fichiers", &["*"]);
 
     let file = if create {
         dialog.save_file().await
