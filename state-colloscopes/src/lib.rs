@@ -880,7 +880,8 @@ impl Data {
         let new_incompat = incompats::Incompatibility {
             subject_id,
             week_pattern_id,
-            slot: incompat.slot,
+            slots: incompat.slots,
+            minimum_free_slots: incompat.minimum_free_slots,
         };
 
         Ok(new_incompat)

@@ -1,5 +1,7 @@
 use super::*;
 
+use std::num::NonZeroU32;
+
 use pyo3::{exceptions::PyValueError, types::PyString};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -204,6 +206,51 @@ impl From<SlotStart> for collomatique_time::SlotStart {
         collomatique_time::SlotStart {
             weekday: value.weekday.into(),
             start_time: value.start_time.internal,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[pyclass]
+pub struct SlotWithDuration {
+    #[pyo3(set, get)]
+    pub start_time: SlotStart,
+    #[pyo3(set, get)]
+    pub duration_in_minutes: NonZeroU32,
+}
+
+#[pymethods]
+impl SlotWithDuration {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+
+    #[new]
+    fn new(start_time: SlotStart, duration_in_minutes: NonZeroU32) -> Self {
+        SlotWithDuration {
+            start_time,
+            duration_in_minutes,
+        }
+    }
+}
+
+impl From<collomatique_time::SlotWithDuration> for SlotWithDuration {
+    fn from(value: collomatique_time::SlotWithDuration) -> Self {
+        SlotWithDuration {
+            start_time: value.start().clone().into(),
+            duration_in_minutes: value.duration().get(),
+        }
+    }
+}
+
+impl From<SlotWithDuration> for crate::rpc::cmd_msg::incompatibilities::IncompatSlotMsg {
+    fn from(value: SlotWithDuration) -> Self {
+        use crate::rpc::cmd_msg::incompatibilities::IncompatSlotMsg;
+        IncompatSlotMsg {
+            start_day: collomatique_time::Weekday::from(value.start_time.weekday).0,
+            start_time: value.start_time.start_time.internal,
+            duration: value.duration_in_minutes,
         }
     }
 }

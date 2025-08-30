@@ -1,6 +1,7 @@
 use collomatique_state_colloscopes::PromoteIncompatError;
 
 use crate::rpc::error_msg::incompatibilities::IncompatibilitiesError;
+use std::num::NonZeroU32;
 
 use super::*;
 
@@ -82,10 +83,16 @@ impl IncompatibilitiesCmdMsg {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IncompatMsg {
     pub subject_id: MsgSubjectId,
+    pub slots: Vec<IncompatSlotMsg>,
+    pub minimum_free_slots: NonZeroU32,
+    pub week_pattern_id: Option<MsgWeekPatternId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IncompatSlotMsg {
     pub start_day: chrono::Weekday,
     pub start_time: chrono::NaiveTime,
     pub duration: std::num::NonZeroU32,
-    pub week_pattern_id: Option<MsgWeekPatternId>,
 }
 
 pub enum IncompatMsgDecodeError {
@@ -98,20 +105,29 @@ impl TryFrom<IncompatMsg>
     type Error = IncompatMsgDecodeError;
 
     fn try_from(value: IncompatMsg) -> Result<Self, IncompatMsgDecodeError> {
-        let start = collomatique_time::SlotStart {
-            weekday: collomatique_time::Weekday(value.start_day),
-            start_time: value.start_time,
-        };
-        let slot = match collomatique_time::SlotWithDuration::new(start, value.duration.into()) {
-            Some(s) => s,
-            None => {
-                return Err(IncompatMsgDecodeError::SlotOverlapsWithNextDay);
-            }
-        };
+        let mut slots = vec![];
+        for incompat_slot_msg in value.slots {
+            let start = collomatique_time::SlotStart {
+                weekday: collomatique_time::Weekday(incompat_slot_msg.start_day),
+                start_time: incompat_slot_msg.start_time,
+            };
+            let slot = match collomatique_time::SlotWithDuration::new(
+                start,
+                incompat_slot_msg.duration.into(),
+            ) {
+                Some(s) => s,
+                None => {
+                    return Err(IncompatMsgDecodeError::SlotOverlapsWithNextDay);
+                }
+            };
+            slots.push(slot);
+        }
+
         Ok(
             collomatique_state_colloscopes::incompats::IncompatibilityExternalData {
                 subject_id: value.subject_id.0,
-                slot,
+                slots,
+                minimum_free_slots: value.minimum_free_slots,
                 week_pattern_id: value.week_pattern_id.map(|x| x.0),
             },
         )

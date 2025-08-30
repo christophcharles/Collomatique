@@ -83,11 +83,19 @@ impl SubjectsUpdateWarning {
                 else {
                     return None;
                 };
+
+                let slot_desc: Vec<_> = incompat
+                    .slots
+                    .iter()
+                    .map(|slot| {
+                        format!("le {} à {}", slot.start().weekday, slot.start().start_time)
+                    })
+                    .collect();
+
                 Some(format!(
-                    "Perte d'une incompatibilité horaire le {} à {} pour la matière \"{}\"",
-                    incompat.slot.start().weekday,
-                    incompat.slot.start().start_time,
+                    "Perte d'une incompatibilité horaire pour la matière \"{}\" ({})",
                     subject.parameters.name,
+                    slot_desc.join(", "),
                 ))
             }
             Self::LooseGroupListAssociation(subject_id, group_list_id, period_id) => {

@@ -3,6 +3,7 @@
 //! This module defines the relevant types to describes the schedule incompatibilities
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU32;
 
 use crate::ids::{IncompatId, SubjectId, WeekPatternId};
 
@@ -20,10 +21,12 @@ pub struct Incompats {
 pub struct Incompatibility {
     /// Subject the incompatibility is linked to
     pub subject_id: SubjectId,
-    /// Slot of time when the students are not available
+    /// Slots of time when the students might not be available
     ///
     /// This is given as a weekday, a start time and a duration
-    pub slot: collomatique_time::SlotWithDuration,
+    pub slots: Vec<collomatique_time::SlotWithDuration>,
+    /// Number of slots to force to be free in the above list
+    pub minimum_free_slots: NonZeroU32,
     /// Week pattern for the incompatibility
     ///
     /// If `None`, this means every week
@@ -40,7 +43,8 @@ impl Incompatibility {
     ) -> Incompatibility {
         Incompatibility {
             subject_id: unsafe { SubjectId::new(external_data.subject_id) },
-            slot: external_data.slot,
+            slots: external_data.slots,
+            minimum_free_slots: external_data.minimum_free_slots,
             week_pattern_id: external_data
                 .week_pattern_id
                 .map(|x| unsafe { WeekPatternId::new(x) }),
@@ -107,10 +111,12 @@ impl IncompatsExternalData {
 pub struct IncompatibilityExternalData {
     /// Subject the incompatibility is linked to
     pub subject_id: u64,
-    /// Slot of time when the students are not available
+    /// Slots of time when the students might not be available
     ///
     /// This is given as a weekday, a start time and a duration
-    pub slot: collomatique_time::SlotWithDuration,
+    pub slots: Vec<collomatique_time::SlotWithDuration>,
+    /// Number of slots to force to be free in the above list
+    pub minimum_free_slots: NonZeroU32,
     /// Week pattern for the incompatibility
     ///
     /// If `None`, this means every week
@@ -136,7 +142,8 @@ impl From<Incompatibility> for IncompatibilityExternalData {
     fn from(value: Incompatibility) -> Self {
         IncompatibilityExternalData {
             subject_id: value.subject_id.inner(),
-            slot: value.slot,
+            slots: value.slots,
+            minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value.week_pattern_id.map(|x| x.inner()),
         }
     }

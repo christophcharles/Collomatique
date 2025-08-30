@@ -19,19 +19,33 @@ pub struct List {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Incompatibility {
     pub subject_id: u64,
+    pub slots: Vec<IncompatibilitySlot>,
+    pub minimum_free_slots: NonZeroU32,
+    pub week_pattern_id: Option<u64>,
+}
+
+/// JSON desc of a slot for a schedule incompat
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IncompatibilitySlot {
     pub start_day: chrono::Weekday,
     pub start_time: chrono::NaiveTime,
     pub duration: NonZeroU32,
-    pub week_pattern_id: Option<u64>,
 }
 
 impl From<&collomatique_state_colloscopes::incompats::Incompatibility> for Incompatibility {
     fn from(value: &collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
         Incompatibility {
             subject_id: value.subject_id.inner(),
-            start_day: value.slot.start().weekday.0,
-            start_time: value.slot.start().start_time.clone(),
-            duration: value.slot.duration().get(),
+            slots: value
+                .slots
+                .iter()
+                .map(|slot_with_duration| IncompatibilitySlot {
+                    start_day: slot_with_duration.start().weekday.0,
+                    start_time: slot_with_duration.start().start_time.clone(),
+                    duration: slot_with_duration.duration().get(),
+                })
+                .collect(),
+            minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value.week_pattern_id.map(|x| x.inner()),
         }
     }
@@ -47,17 +61,25 @@ impl TryFrom<Incompatibility>
     type Error = IncompatDecodeError;
 
     fn try_from(value: Incompatibility) -> Result<Self, IncompatDecodeError> {
-        let start = collomatique_time::SlotStart {
-            weekday: collomatique_time::Weekday(value.start_day),
-            start_time: value.start_time,
-        };
-        let duration = value.duration.into();
-        let slot = collomatique_time::SlotWithDuration::new(start, duration)
-            .ok_or(IncompatDecodeError::SlotOverlapsWithNextDay)?;
+        let mut slots = vec![];
+
+        for incompatibility_slot in value.slots {
+            slots.push(
+                collomatique_time::SlotWithDuration::new(
+                    collomatique_time::SlotStart {
+                        weekday: collomatique_time::Weekday(incompatibility_slot.start_day),
+                        start_time: incompatibility_slot.start_time,
+                    },
+                    incompatibility_slot.duration.into(),
+                )
+                .ok_or(IncompatDecodeError::SlotOverlapsWithNextDay)?,
+            );
+        }
         Ok(
             collomatique_state_colloscopes::incompats::IncompatibilityExternalData {
                 subject_id: value.subject_id,
-                slot,
+                slots,
+                minimum_free_slots: value.minimum_free_slots,
                 week_pattern_id: value.week_pattern_id,
             },
         )

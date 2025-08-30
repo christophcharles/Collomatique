@@ -47,9 +47,9 @@ pub struct Incompat {
     #[pyo3(set, get)]
     pub subject_id: SubjectId,
     #[pyo3(set, get)]
-    pub start_time: time::SlotStart,
+    pub slots: Vec<time::SlotWithDuration>,
     #[pyo3(set, get)]
-    pub duration_in_minutes: NonZeroU32,
+    pub minimum_free_slots: NonZeroU32,
     #[pyo3(set, get)]
     pub week_pattern_id: Option<WeekPatternId>,
 }
@@ -59,13 +59,13 @@ impl Incompat {
     #[new]
     fn new(
         subject_id: SubjectId,
-        start_time: time::SlotStart,
-        duration_in_minutes: NonZeroU32,
+        slots: Vec<time::SlotWithDuration>,
+        minimum_free_slots: NonZeroU32,
     ) -> Self {
         Incompat {
             subject_id,
-            start_time,
-            duration_in_minutes,
+            slots,
+            minimum_free_slots,
             week_pattern_id: None,
         }
     }
@@ -80,8 +80,8 @@ impl From<collomatique_state_colloscopes::incompats::Incompatibility> for Incomp
     fn from(value: collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
         Incompat {
             subject_id: MsgSubjectId::from(value.subject_id).into(),
-            start_time: value.slot.start().clone().into(),
-            duration_in_minutes: value.slot.duration().get(),
+            slots: value.slots.into_iter().map(|x| x.into()).collect(),
+            minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value
                 .week_pattern_id
                 .map(|x| MsgWeekPatternId::from(x).into()),
@@ -94,9 +94,8 @@ impl From<Incompat> for crate::rpc::cmd_msg::incompatibilities::IncompatMsg {
         use crate::rpc::cmd_msg::incompatibilities::IncompatMsg;
         IncompatMsg {
             subject_id: MsgSubjectId::from(value.subject_id),
-            start_day: collomatique_time::Weekday::from(value.start_time.weekday).into_inner(),
-            start_time: value.start_time.start_time.into(),
-            duration: value.duration_in_minutes,
+            slots: value.slots.into_iter().map(|x| x.into()).collect(),
+            minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value.week_pattern_id.map(|x| MsgWeekPatternId::from(x)),
         }
     }
