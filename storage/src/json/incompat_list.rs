@@ -19,6 +19,7 @@ pub struct List {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Incompatibility {
     pub subject_id: u64,
+    pub name: String,
     pub slots: Vec<IncompatibilitySlot>,
     pub minimum_free_slots: NonZeroU32,
     pub week_pattern_id: Option<u64>,
@@ -36,6 +37,7 @@ impl From<&collomatique_state_colloscopes::incompats::Incompatibility> for Incom
     fn from(value: &collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
         Incompatibility {
             subject_id: value.subject_id.inner(),
+            name: value.name.clone(),
             slots: value
                 .slots
                 .iter()
@@ -78,6 +80,7 @@ impl TryFrom<Incompatibility>
         Ok(
             collomatique_state_colloscopes::incompats::IncompatibilityExternalData {
                 subject_id: value.subject_id,
+                name: value.name,
                 slots,
                 minimum_free_slots: value.minimum_free_slots,
                 week_pattern_id: value.week_pattern_id,

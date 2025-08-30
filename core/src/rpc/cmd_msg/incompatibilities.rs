@@ -83,6 +83,7 @@ impl IncompatibilitiesCmdMsg {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IncompatMsg {
     pub subject_id: MsgSubjectId,
+    pub name: String,
     pub slots: Vec<IncompatSlotMsg>,
     pub minimum_free_slots: NonZeroU32,
     pub week_pattern_id: Option<MsgWeekPatternId>,
@@ -126,6 +127,7 @@ impl TryFrom<IncompatMsg>
         Ok(
             collomatique_state_colloscopes::incompats::IncompatibilityExternalData {
                 subject_id: value.subject_id.0,
+                name: value.name,
                 slots,
                 minimum_free_slots: value.minimum_free_slots,
                 week_pattern_id: value.week_pattern_id.map(|x| x.0),

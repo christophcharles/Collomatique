@@ -886,6 +886,7 @@ impl Data {
 
         let new_incompat = incompats::Incompatibility {
             subject_id,
+            name: incompat.name,
             week_pattern_id,
             slots: incompat.slots,
             minimum_free_slots: incompat.minimum_free_slots,

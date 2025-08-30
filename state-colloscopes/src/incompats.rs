@@ -21,6 +21,8 @@ pub struct Incompats {
 pub struct Incompatibility {
     /// Subject the incompatibility is linked to
     pub subject_id: SubjectId,
+    /// Name of the incompatibility for clarity
+    pub name: String,
     /// Slots of time when the students might not be available
     ///
     /// This is given as a weekday, a start time and a duration
@@ -43,6 +45,7 @@ impl Incompatibility {
     ) -> Incompatibility {
         Incompatibility {
             subject_id: unsafe { SubjectId::new(external_data.subject_id) },
+            name: external_data.name,
             slots: external_data.slots,
             minimum_free_slots: external_data.minimum_free_slots,
             week_pattern_id: external_data
@@ -111,6 +114,8 @@ impl IncompatsExternalData {
 pub struct IncompatibilityExternalData {
     /// Subject the incompatibility is linked to
     pub subject_id: u64,
+    /// Name of the incompatibility for clarity
+    pub name: String,
     /// Slots of time when the students might not be available
     ///
     /// This is given as a weekday, a start time and a duration
@@ -142,6 +147,7 @@ impl From<Incompatibility> for IncompatibilityExternalData {
     fn from(value: Incompatibility) -> Self {
         IncompatibilityExternalData {
             subject_id: value.subject_id.inner(),
+            name: value.name,
             slots: value.slots,
             minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value.week_pattern_id.map(|x| x.inner()),

@@ -47,6 +47,8 @@ pub struct Incompat {
     #[pyo3(set, get)]
     pub subject_id: SubjectId,
     #[pyo3(set, get)]
+    pub name: String,
+    #[pyo3(set, get)]
     pub slots: Vec<time::SlotWithDuration>,
     #[pyo3(set, get)]
     pub minimum_free_slots: NonZeroU32,
@@ -59,11 +61,13 @@ impl Incompat {
     #[new]
     fn new(
         subject_id: SubjectId,
+        name: String,
         slots: Vec<time::SlotWithDuration>,
         minimum_free_slots: NonZeroU32,
     ) -> Self {
         Incompat {
             subject_id,
+            name,
             slots,
             minimum_free_slots,
             week_pattern_id: None,
@@ -80,6 +84,7 @@ impl From<collomatique_state_colloscopes::incompats::Incompatibility> for Incomp
     fn from(value: collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
         Incompat {
             subject_id: MsgSubjectId::from(value.subject_id).into(),
+            name: value.name,
             slots: value.slots.into_iter().map(|x| x.into()).collect(),
             minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value
@@ -94,6 +99,7 @@ impl From<Incompat> for crate::rpc::cmd_msg::incompatibilities::IncompatMsg {
         use crate::rpc::cmd_msg::incompatibilities::IncompatMsg;
         IncompatMsg {
             subject_id: MsgSubjectId::from(value.subject_id),
+            name: value.name,
             slots: value.slots.into_iter().map(|x| x.into()).collect(),
             minimum_free_slots: value.minimum_free_slots,
             week_pattern_id: value.week_pattern_id.map(|x| MsgWeekPatternId::from(x)),
