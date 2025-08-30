@@ -176,7 +176,8 @@ impl FactoryComponent for PeriodEntry {
             },
             gtk::ScrolledWindow {
                 set_hexpand: true,
-                set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Never),
+                set_vexpand: true,
+                set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
                 #[watch]
                 set_visible: !self.data.filtered_students.is_empty() && self.shown,
                 #[local_ref]
