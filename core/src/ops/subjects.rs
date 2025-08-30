@@ -25,7 +25,7 @@ pub enum SubjectsUpdateWarning {
 }
 
 impl SubjectsUpdateWarning {
-    pub fn build_desc_from_data<
+    pub(crate) fn build_desc_from_data<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,

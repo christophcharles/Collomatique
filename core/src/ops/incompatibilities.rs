@@ -4,7 +4,7 @@ use super::*;
 pub enum IncompatibilitiesUpdateWarning {}
 
 impl IncompatibilitiesUpdateWarning {
-    pub fn build_desc_from_data<
+    pub(crate) fn build_desc_from_data<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,

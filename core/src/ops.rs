@@ -181,9 +181,7 @@ impl From<SettingsUpdateWarning> for UpdateWarning {
 }
 
 impl UpdateWarning {
-    pub fn build_desc_from_data<
-        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
-    >(
+    fn build_desc_from_data<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
         data: &T,
     ) -> Option<String> {
