@@ -188,6 +188,7 @@ mod group_list_list;
 mod incompat_list;
 mod period_list;
 mod rule_list;
+mod settings;
 mod slot_list;
 mod student_list;
 mod subject_list;
@@ -233,6 +234,9 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
             ValidEntry::RuleList(rule_list) => {
                 rule_list::decode_entry(rule_list, &mut pre_data)?;
             }
+            ValidEntry::Settings(settings) => {
+                settings::decode_entry(settings, &mut pre_data)?;
+            }
         }
     }
 
@@ -265,6 +269,7 @@ pub enum EntryTag {
     IncompatList,
     GroupListList,
     RuleList,
+    Settings,
 }
 
 impl From<&ValidEntry> for EntryTag {
@@ -280,6 +285,7 @@ impl From<&ValidEntry> for EntryTag {
             ValidEntry::IncompatList(_) => EntryTag::IncompatList,
             ValidEntry::GroupListList(_) => EntryTag::GroupListList,
             ValidEntry::RuleList(_) => EntryTag::RuleList,
+            ValidEntry::Settings(_) => EntryTag::Settings,
         }
     }
 }

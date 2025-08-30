@@ -100,6 +100,7 @@ pub mod group_list_list;
 pub mod incompat_list;
 pub mod period_list;
 pub mod rule_list;
+pub mod settings;
 pub mod slot_list;
 pub mod student_list;
 pub mod subject_list;
@@ -140,6 +141,7 @@ pub enum ValidEntry {
     IncompatList(incompat_list::List),
     GroupListList(group_list_list::List),
     RuleList(rule_list::List),
+    Settings(settings::Settings),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
@@ -157,6 +159,7 @@ impl ValidEntry {
             ValidEntry::IncompatList(_) => 1,
             ValidEntry::GroupListList(_) => 1,
             ValidEntry::RuleList(_) => 1,
+            ValidEntry::Settings(_) => 1,
         }
     }
 
@@ -172,6 +175,7 @@ impl ValidEntry {
             ValidEntry::IncompatList(_) => true,
             ValidEntry::GroupListList(_) => true,
             ValidEntry::RuleList(_) => true,
+            ValidEntry::Settings(_) => true,
         }
     }
 }
