@@ -37,6 +37,8 @@ pub mod group_lists;
 pub use group_lists::*;
 pub mod rules;
 pub use rules::*;
+pub mod settings;
+pub use settings::*;
 
 pub type Desc = (OpCategory, String);
 
@@ -53,6 +55,7 @@ pub enum OpCategory {
     Incompatibilities,
     GroupLists,
     Rules,
+    Settings,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +70,7 @@ pub enum UpdateOp {
     Incompatibilities(IncompatibilitiesUpdateOp),
     GroupLists(GroupListsUpdateOp),
     Rules(RulesUpdateOp),
+    Settings(SettingsUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -91,6 +95,8 @@ pub enum UpdateError {
     GroupLists(#[from] GroupListsUpdateError),
     #[error(transparent)]
     Rules(#[from] RulesUpdateError),
+    #[error(transparent)]
+    Settings(#[from] SettingsUpdateError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -105,6 +111,7 @@ pub enum UpdateWarning {
     Incompatibilities(IncompatibilitiesUpdateWarning),
     GroupLists(GroupListsUpdateWarning),
     Rules(RulesUpdateWarning),
+    Settings(SettingsUpdateWarning),
 }
 
 impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
@@ -167,6 +174,12 @@ impl From<RulesUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<SettingsUpdateWarning> for UpdateWarning {
+    fn from(value: SettingsUpdateWarning) -> Self {
+        UpdateWarning::Settings(value)
+    }
+}
+
 impl UpdateWarning {
     pub fn build_desc_from_data<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
@@ -185,6 +198,7 @@ impl UpdateWarning {
             UpdateWarning::Incompatibilities(w) => w.build_desc_from_data(data),
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
             UpdateWarning::Rules(w) => w.build_desc_from_data(data),
+            UpdateWarning::Settings(w) => w.build_desc_from_data(data),
         }
     }
 }
@@ -255,6 +269,9 @@ impl UpdateOp {
                 CleaningOp::downcast(group_list_op.get_next_cleaning_op(data))
             }
             UpdateOp::Rules(rule_op) => CleaningOp::downcast(rule_op.get_next_cleaning_op(data)),
+            UpdateOp::Settings(settings_op) => {
+                CleaningOp::downcast(settings_op.get_next_cleaning_op(data))
+            }
         }
     }
 
@@ -303,6 +320,10 @@ impl UpdateOp {
                 let result = rule_op.apply_no_cleaning(data)?;
                 Ok(result.map(|x| x.into()))
             }
+            UpdateOp::Settings(settings_op) => {
+                settings_op.apply_no_cleaning(data)?;
+                Ok(None)
+            }
         }
     }
 
@@ -342,6 +363,7 @@ impl UpdateOp {
             UpdateOp::Incompatibilities(incompat_op) => incompat_op.get_desc(),
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
             UpdateOp::Rules(rule_op) => rule_op.get_desc(),
+            UpdateOp::Settings(settings_op) => settings_op.get_desc(),
         }
     }
 
