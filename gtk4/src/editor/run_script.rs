@@ -65,7 +65,7 @@ impl Component for Dialog {
         #[root]
         adw::Window {
             set_modal: true,
-            set_size_request: (700, 400),
+            set_default_size: (700, 400),
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,

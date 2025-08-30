@@ -55,7 +55,7 @@ impl SimpleComponent for Dialog {
             #[watch]
             set_visible: !model.hidden,
             set_title: Some("Configuration du modèle"),
-            set_size_request: (500, 700),
+            set_default_size: (500, 700),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
