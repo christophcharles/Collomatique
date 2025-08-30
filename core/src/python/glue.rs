@@ -49,6 +49,9 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<group_lists::PrefilledGroup>()?;
     m.add_class::<rules::LogicRule>()?;
     m.add_class::<rules::Rule>()?;
+    m.add_class::<common::PersonWithContact>()?;
+    m.add_class::<common::RangeU32>()?;
+    m.add_class::<settings::StrictLimits>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
@@ -114,6 +117,7 @@ mod group_lists;
 mod incompatibilities;
 mod rules;
 use rules::RuleId;
+mod settings;
 mod slots;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
@@ -1565,6 +1569,27 @@ impl Session {
         };
 
         Ok(!rule.excluded_periods.contains(&validated_period_id))
+    }
+
+    fn settings_update_strict_limits(
+        self_: PyRef<'_, Self>,
+        strict_limits: settings::StrictLimits,
+    ) -> PyResult<()> {
+        let result =
+            self_
+                .token
+                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Settings(
+                    crate::rpc::cmd_msg::SettingsCmdMsg::UpdateStrictLimits(strict_limits.into()),
+                )));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn settings_get(self_: PyRef<'_, Self>) -> settings::GeneralSettings {
+        self_.token.get_data().get_settings().clone().into()
     }
 }
 

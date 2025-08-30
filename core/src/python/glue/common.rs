@@ -60,3 +60,40 @@ impl PersonWithContact {
         PyString::new(self_.py(), output.as_str())
     }
 }
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RangeU32 {
+    #[pyo3(set, get)]
+    pub min: u32,
+    #[pyo3(set, get)]
+    pub max: u32,
+}
+
+impl From<std::ops::Range<u32>> for RangeU32 {
+    fn from(value: std::ops::Range<u32>) -> Self {
+        RangeU32 {
+            min: value.start,
+            max: value.end,
+        }
+    }
+}
+
+impl From<RangeU32> for std::ops::Range<u32> {
+    fn from(value: RangeU32) -> Self {
+        value.min..value.max
+    }
+}
+
+#[pymethods]
+impl RangeU32 {
+    #[new]
+    fn new(min: u32, max: u32) -> Self {
+        RangeU32 { min, max }
+    }
+
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}

@@ -24,6 +24,8 @@ pub mod group_lists;
 pub use group_lists::*;
 pub mod rules;
 pub use rules::*;
+pub mod settings;
+pub use settings::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
@@ -49,6 +51,7 @@ pub enum UpdateMsg {
     Incompats(IncompatibilitiesCmdMsg),
     GroupLists(GroupListsCmdMsg),
     Rules(RulesCmdMsg),
+    Settings(SettingsCmdMsg),
 }
 
 impl UpdateMsg {
@@ -69,6 +72,7 @@ impl UpdateMsg {
             UpdateMsg::Incompats(op) => crate::ops::UpdateOp::Incompatibilities(op.promote(data)?),
             UpdateMsg::GroupLists(op) => crate::ops::UpdateOp::GroupLists(op.promote(data)?),
             UpdateMsg::Rules(op) => crate::ops::UpdateOp::Rules(op.promote(data)?),
+            UpdateMsg::Settings(op) => crate::ops::UpdateOp::Settings(op.promote(data)),
         })
     }
 }
