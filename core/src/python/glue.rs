@@ -100,7 +100,7 @@ use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
 #[pymethods]
 impl Session {
-    fn open_dialog(
+    fn dialog_open_file(
         self_: PyRef<'_, Self>,
         title: String,
         list: Vec<(String, String)>,
