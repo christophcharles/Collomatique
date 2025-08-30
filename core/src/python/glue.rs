@@ -32,6 +32,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<general_planning::Period>()?;
     m.add_class::<subjects::Subject>()?;
     m.add_class::<subjects::SubjectParameters>()?;
+    m.add_class::<subjects::SubjectInterrogationParameters>()?;
     m.add_class::<subjects::SubjectPeriodicity>()?;
     m.add_class::<teachers::Teacher>()?;
     m.add_class::<students::Student>()?;
