@@ -15,6 +15,7 @@ use std::path::PathBuf;
 
 mod error_dialog;
 mod msg_display;
+mod ok_dialog;
 mod warning_running;
 
 pub struct Dialog {
@@ -24,6 +25,7 @@ pub struct Dialog {
     end_with_error: bool,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
+    ok_dialog: Controller<ok_dialog::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
     commands: FactoryVecDeque<msg_display::Entry>,
     adjust_scrolling: bool,
@@ -172,6 +174,15 @@ impl Component for Dialog {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
             });
 
+        let ok_dialog = ok_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.command_sender(), |msg| match msg {
+                ok_dialog::DialogOutput::Ok => DialogCmdOutput::DelayedRpcAnswer(
+                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::OkDialogClosed),
+                ),
+            });
+
         use rpc_server::{RpcLogger, RpcLoggerOutput};
         let rpc_logger = RpcLogger::builder()
             .launch(())
@@ -190,6 +201,7 @@ impl Component for Dialog {
             path: PathBuf::new(),
             error_dialog,
             warning_running,
+            ok_dialog,
             rpc_logger,
             is_running: false,
             end_with_error: false,
@@ -400,6 +412,12 @@ impl Dialog {
                         }),
                     ))
                 });
+            }
+            collomatique_core::rpc::cmd_msg::GuiMsg::OkDialog(text) => {
+                self.ok_dialog
+                    .sender()
+                    .send(ok_dialog::DialogInput::Show(text))
+                    .unwrap();
             }
         }
     }

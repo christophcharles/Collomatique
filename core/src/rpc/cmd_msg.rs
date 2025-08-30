@@ -37,6 +37,7 @@ pub enum CmdMsg {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GuiMsg {
     OpenFileDialog(OpenFileDialogMsg),
+    OkDialog(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
