@@ -659,6 +659,7 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::CommitUpdateOp(new_state) => {
+                self.dirty = true;
                 self.data = new_state;
                 // Update interface anyway, this is useful if we need to restore
                 // some GUI element to the correct state in case of error
