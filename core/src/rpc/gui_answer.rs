@@ -7,4 +7,5 @@ pub use open_file_dialog::*;
 pub enum GuiAnswer {
     OpenFileDialog(OpenFileDialogAnswer),
     OkDialogClosed,
+    ConfirmDialog(bool),
 }

@@ -13,6 +13,7 @@ use collomatique_state_colloscopes::Data;
 use crate::widgets::rpc_server;
 use std::path::PathBuf;
 
+mod confirm_dialog;
 mod error_dialog;
 mod msg_display;
 mod ok_dialog;
@@ -26,6 +27,7 @@ pub struct Dialog {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     ok_dialog: Controller<ok_dialog::Dialog>,
+    confirm_dialog: Controller<confirm_dialog::Dialog>,
     rpc_logger: Controller<rpc_server::RpcLogger>,
     commands: FactoryVecDeque<msg_display::Entry>,
     adjust_scrolling: bool,
@@ -183,6 +185,18 @@ impl Component for Dialog {
                 ),
             });
 
+        let confirm_dialog = confirm_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.command_sender(), |msg| match msg {
+                confirm_dialog::DialogOutput::Confirmed => DialogCmdOutput::DelayedRpcAnswer(
+                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::ConfirmDialog(true)),
+                ),
+                confirm_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
+                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::ConfirmDialog(false)),
+                ),
+            });
+
         use rpc_server::{RpcLogger, RpcLoggerOutput};
         let rpc_logger = RpcLogger::builder()
             .launch(())
@@ -202,6 +216,7 @@ impl Component for Dialog {
             error_dialog,
             warning_running,
             ok_dialog,
+            confirm_dialog,
             rpc_logger,
             is_running: false,
             end_with_error: false,
@@ -417,6 +432,12 @@ impl Dialog {
                 self.ok_dialog
                     .sender()
                     .send(ok_dialog::DialogInput::Show(text))
+                    .unwrap();
+            }
+            collomatique_core::rpc::cmd_msg::GuiMsg::ConfirmDialog(text) => {
+                self.confirm_dialog
+                    .sender()
+                    .send(confirm_dialog::DialogInput::Show(text))
                     .unwrap();
             }
         }
