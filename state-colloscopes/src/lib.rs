@@ -10,6 +10,7 @@ use group_lists::GroupLists;
 use group_lists::GroupListsExternalData;
 use incompats::Incompats;
 use incompats::IncompatsExternalData;
+use ops::AnnotatedSettingsOp;
 use periods::{Periods, PeriodsExternalData};
 use rules::Rules;
 use rules::RulesExternalData;
@@ -47,6 +48,7 @@ pub mod group_lists;
 pub mod incompats;
 pub mod periods;
 pub mod rules;
+pub mod settings;
 pub mod slots;
 pub mod students;
 pub mod subjects;
@@ -110,6 +112,7 @@ struct InnerData {
     incompats: incompats::Incompats,
     group_lists: group_lists::GroupLists,
     rules: rules::Rules,
+    settings: settings::GeneralSettings,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -646,6 +649,9 @@ impl InMemoryData for Data {
                 self.build_rev_group_list(group_list_op)?,
             )),
             AnnotatedOp::Rule(rule_op) => Ok(AnnotatedOp::Rule(self.build_rev_rule(rule_op)?)),
+            AnnotatedOp::Settings(settings_op) => {
+                Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
+            }
         }
     }
 
@@ -663,6 +669,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Rule(rule_op) => self.apply_rule(rule_op)?,
+            AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op),
         }
         self.check_invariants();
         Ok(())
@@ -1632,6 +1639,7 @@ impl Data {
             IncompatsExternalData::default(),
             GroupListsExternalData::default(),
             RulesExternalData::default(),
+            settings::GeneralSettings::default(),
         )
         .expect("Default data should be valid")
     }
@@ -1651,6 +1659,7 @@ impl Data {
         incompats: incompats::IncompatsExternalData,
         group_lists: group_lists::GroupListsExternalData,
         rules: rules::RulesExternalData,
+        settings: settings::GeneralSettings,
     ) -> Result<Data, FromDataError> {
         let student_ids = students.student_map.keys().copied();
         let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
@@ -1748,6 +1757,7 @@ impl Data {
                 incompats,
                 group_lists,
                 rules,
+                settings,
             },
         };
 
@@ -1804,6 +1814,11 @@ impl Data {
     /// Get the rules
     pub fn get_rules(&self) -> &rules::Rules {
         &self.inner_data.rules
+    }
+
+    /// Get the rules
+    pub fn get_settings(&self) -> &settings::GeneralSettings {
+        &self.inner_data.settings
     }
 
     /// Used internally
@@ -2915,6 +2930,17 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply settings operations
+    fn apply_settings(&mut self, settings_op: &AnnotatedSettingsOp) {
+        match settings_op {
+            AnnotatedSettingsOp::Update(new_settings) => {
+                self.inner_data.settings = new_settings.clone();
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -3483,6 +3509,18 @@ impl Data {
                 };
 
                 Ok(AnnotatedRuleOp::Update(*rule_id, old_rule.clone()))
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a settings operation
+    fn build_rev_settings(&self, settings_op: &AnnotatedSettingsOp) -> AnnotatedSettingsOp {
+        match settings_op {
+            AnnotatedSettingsOp::Update(_new_settings) => {
+                let old_settings = self.inner_data.settings.clone();
+                AnnotatedSettingsOp::Update(old_settings)
             }
         }
     }

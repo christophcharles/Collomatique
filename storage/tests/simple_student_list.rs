@@ -136,6 +136,7 @@ fn decode_simple_student_list() {
         IncompatsExternalData::default(),
         GroupListsExternalData::default(),
         RulesExternalData::default(),
+        collomatique_state_colloscopes::settings::GeneralSettings::default(),
     )
     .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::new();
@@ -194,6 +195,7 @@ fn encode_and_redecode_simple_student_list() {
         IncompatsExternalData::default(),
         GroupListsExternalData::default(),
         RulesExternalData::default(),
+        collomatique_state_colloscopes::settings::GeneralSettings::default(),
     )
     .expect("Expected data should not have ID errors");
 

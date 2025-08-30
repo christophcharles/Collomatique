@@ -151,6 +151,7 @@ fn decode_unknown_unneeded_entry_with_known_data_aside() {
         IncompatsExternalData::default(),
         GroupListsExternalData::default(),
         RulesExternalData::default(),
+        collomatique_state_colloscopes::settings::GeneralSettings::default(),
     )
     .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);

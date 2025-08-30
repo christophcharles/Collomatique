@@ -180,6 +180,7 @@ struct PreData {
     incompats: collomatique_state_colloscopes::incompats::IncompatsExternalData,
     group_lists: collomatique_state_colloscopes::group_lists::GroupListsExternalData,
     rules: collomatique_state_colloscopes::rules::RulesExternalData,
+    settings: collomatique_state_colloscopes::settings::GeneralSettings,
 }
 
 mod assignment_map;
@@ -246,6 +247,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         pre_data.incompats,
         pre_data.group_lists,
         pre_data.rules,
+        pre_data.settings,
     )?;
     Ok(data)
 }

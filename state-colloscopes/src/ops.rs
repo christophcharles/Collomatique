@@ -38,6 +38,8 @@ pub enum Op {
     GroupList(GroupListOp),
     /// Operation on rules
     Rule(RuleOp),
+    /// Operation on settings
+    Settings(SettingsOp),
 }
 
 impl Operation for Op {}
@@ -192,6 +194,16 @@ pub enum RuleOp {
     Update(RuleId, rules::Rule),
 }
 
+/// Settings operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// settings we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingsOp {
+    /// Update the settings
+    Update(settings::GeneralSettings),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -221,6 +233,8 @@ pub enum AnnotatedOp {
     GroupList(AnnotatedGroupListOp),
     /// Operation on rules
     Rule(AnnotatedRuleOp),
+    /// Operation on settings
+    Settings(AnnotatedSettingsOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -280,6 +294,12 @@ impl From<AnnotatedGroupListOp> for AnnotatedOp {
 impl From<AnnotatedRuleOp> for AnnotatedOp {
     fn from(value: AnnotatedRuleOp) -> Self {
         AnnotatedOp::Rule(value)
+    }
+}
+
+impl From<AnnotatedSettingsOp> for AnnotatedOp {
+    fn from(value: AnnotatedSettingsOp) -> Self {
+        AnnotatedOp::Settings(value)
     }
 }
 
@@ -471,6 +491,19 @@ pub enum AnnotatedRuleOp {
     Update(RuleId, rules::Rule),
 }
 
+/// Settings operation enumeration
+///
+/// Compared to [SettingsOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedSettingsOp {
+    /// Update the settings
+    Update(settings::GeneralSettings),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -524,6 +557,10 @@ impl AnnotatedOp {
             Op::Rule(rule_op) => {
                 let (op, id) = AnnotatedRuleOp::annotate(rule_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
+            }
+            Op::Settings(settings_op) => {
+                let op = AnnotatedSettingsOp::annotate(settings_op);
+                (op.into(), None)
             }
         }
     }
@@ -745,6 +782,17 @@ impl AnnotatedRuleOp {
             }
             RuleOp::Remove(rule_id) => (AnnotatedRuleOp::Remove(rule_id), None),
             RuleOp::Update(rule_id, rule) => (AnnotatedRuleOp::Update(rule_id, rule), None),
+        }
+    }
+}
+
+impl AnnotatedSettingsOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [SettingsOp].
+    fn annotate(settings_op: SettingsOp) -> AnnotatedSettingsOp {
+        match settings_op {
+            SettingsOp::Update(general_settings) => AnnotatedSettingsOp::Update(general_settings),
         }
     }
 }
