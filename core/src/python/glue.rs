@@ -146,6 +146,22 @@ impl Session {
         }
     }
 
+    #[pyo3(signature = (info_text, placeholder_text=String::new()))]
+    fn dialog_input(
+        self_: PyRef<'_, Self>,
+        info_text: String,
+        placeholder_text: String,
+    ) -> Option<String> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::GuiRequest(
+            crate::rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::InputDialog(value)) => value,
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
     fn periods_add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(

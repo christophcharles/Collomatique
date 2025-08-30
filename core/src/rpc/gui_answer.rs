@@ -8,4 +8,5 @@ pub enum GuiAnswer {
     OpenFileDialog(OpenFileDialogAnswer),
     OkDialogClosed,
     ConfirmDialog(bool),
+    InputDialog(Option<String>),
 }
