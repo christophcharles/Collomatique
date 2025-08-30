@@ -425,6 +425,7 @@ impl Dialog {
     ) {
         match gui_cmd {
             collomatique_core::rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
+                let path = self.path.clone();
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -432,9 +433,12 @@ impl Dialog {
                         .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
                         .collect();
 
-                    let file_name =
-                        crate::tools::open_save::generic_open_dialog(&params.title, &ext_vec[..])
-                            .await;
+                    let file_name = crate::tools::open_save::generic_open_dialog(
+                        &params.title,
+                        &ext_vec[..],
+                        Some(&path),
+                    )
+                    .await;
 
                     DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
                         collomatique_core::rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {

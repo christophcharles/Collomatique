@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
 pub enum DefaultSaveFile {
@@ -42,6 +42,7 @@ pub async fn open_dialog() -> Option<PathBuf> {
             ("Fichiers collomatique (*.collomatique)", "collomatique"),
             ("Tous les fichiers", "*"),
         ],
+        None,
     )
     .await
 }
@@ -50,17 +51,26 @@ pub async fn open_python_dialog() -> Option<PathBuf> {
     generic_open_dialog(
         "Ouvrir un script",
         &[("Scripts Python (*.py)", "py"), ("Tous les fichiers", "*")],
+        None,
     )
     .await
 }
 
-pub async fn generic_open_dialog(title: &str, extensions: &[(&str, &str)]) -> Option<PathBuf> {
+pub async fn generic_open_dialog(
+    title: &str,
+    extensions: &[(&str, &str)],
+    default_dir: Option<&Path>,
+) -> Option<PathBuf> {
     let mut dialog = rfd::AsyncFileDialog::new()
         .set_title(title)
         .set_can_create_directories(false);
 
     for (desc, ext) in extensions {
         dialog = dialog.add_filter(*desc, &[ext]);
+    }
+
+    if let Some(dir) = default_dir {
+        dialog = dialog.set_directory(dir);
     }
 
     let file = dialog.pick_file().await;
