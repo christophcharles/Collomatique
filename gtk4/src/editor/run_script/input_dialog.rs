@@ -70,6 +70,7 @@ impl SimpleComponent for Dialog {
                         #[track(model.should_redraw)]
                         set_label: &model.info_text,
                     },
+                    #[name(entry)]
                     gtk::Entry {
                         #[track(model.should_redraw)]
                         set_placeholder_text: Some(&model.placeholder_text),
@@ -128,6 +129,12 @@ impl SimpleComponent for Dialog {
             DialogInput::UpdateEntry(entry) => {
                 self.entry = entry;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.should_redraw {
+            widgets.entry.grab_focus();
         }
     }
 }
