@@ -92,7 +92,7 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
 def main():
     session = collomatique.current_session()
 
-    file_path = collomatique.open_dialog("Ouvrir un CSV", [("Fichiers CSV", "csv"), ("Tous les fichiers", "*")])
+    file_path = session.open_dialog("Ouvrir un CSV", [("Fichiers CSV", "csv"), ("Tous les fichiers", "*")])
     if file_path is None:
         return
     

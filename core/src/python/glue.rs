@@ -55,7 +55,6 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
-    m.add_function(wrap_pyfunction!(open_dialog, m)?)?;
 
     Ok(())
 }
@@ -70,29 +69,6 @@ pub fn log(msg: String) {
 #[pyfunction]
 pub fn current_session() -> Session {
     Session { token: Token {} }
-}
-
-#[pyfunction]
-pub fn open_dialog(title: String, list: Vec<(String, String)>) -> Option<std::path::PathBuf> {
-    let token = Token {};
-
-    let result = token.send_msg(crate::rpc::CmdMsg::GuiRequest(
-        crate::rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
-            title,
-            list: list
-                .into_iter()
-                .map(|ext| ExtensionDesc {
-                    desc: ext.0,
-                    extension: ext.1,
-                })
-                .collect(),
-        }),
-    ));
-
-    match result {
-        ResultMsg::AckGui(GuiAnswer::OpenFileDialog(answer)) => answer.file_path,
-        _ => panic!("Unexpected result: {:?}", result),
-    }
 }
 
 #[pyclass]
@@ -124,6 +100,30 @@ use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
 #[pymethods]
 impl Session {
+    fn open_dialog(
+        self_: PyRef<'_, Self>,
+        title: String,
+        list: Vec<(String, String)>,
+    ) -> Option<std::path::PathBuf> {
+        let result = self_.token.send_msg(crate::rpc::CmdMsg::GuiRequest(
+            crate::rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
+                title,
+                list: list
+                    .into_iter()
+                    .map(|ext| ExtensionDesc {
+                        desc: ext.0,
+                        extension: ext.1,
+                    })
+                    .collect(),
+            }),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::OpenFileDialog(answer)) => answer.file_path,
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
     fn periods_add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
