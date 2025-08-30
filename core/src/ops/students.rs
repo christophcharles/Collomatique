@@ -144,6 +144,7 @@ impl StudentsUpdateOp {
                         let new_prefilled_groups = collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
                             groups: group_list.prefilled_groups.groups.iter().map(
                                 |g| collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                                    name: g.name.clone(),
                                     sealed: g.sealed,
                                     students: g.students.iter().copied().filter(|id| *id != *student_id).collect(),
                                 }

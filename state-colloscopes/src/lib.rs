@@ -941,6 +941,7 @@ impl Data {
                 students.insert(new_id);
             }
             groups.push(group_lists::PrefilledGroup {
+                name: group.name,
                 students,
                 sealed: group.sealed,
             });

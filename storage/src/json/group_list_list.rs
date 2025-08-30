@@ -54,6 +54,7 @@ impl From<GroupListPrefilledGroups>
 /// JSON desc of a single prefilled group
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefilledGroup {
+    pub name: Option<non_empty_string::NonEmptyString>,
     pub students: BTreeSet<u64>,
     pub sealed: bool,
 }
@@ -61,6 +62,7 @@ pub struct PrefilledGroup {
 impl From<&collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
     fn from(value: &collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
         PrefilledGroup {
+            name: value.name.clone(),
             students: value.students.iter().map(|x| x.inner()).collect(),
             sealed: value.sealed,
         }
@@ -72,6 +74,7 @@ impl From<PrefilledGroup>
 {
     fn from(value: PrefilledGroup) -> Self {
         collomatique_state_colloscopes::group_lists::PrefilledGroupExternalData {
+            name: value.name,
             students: value.students,
             sealed: value.sealed,
         }

@@ -157,6 +157,8 @@ impl From<GroupListParameters> for crate::rpc::cmd_msg::group_lists::GroupListPa
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefilledGroup {
     #[pyo3(set, get)]
+    pub name: String,
+    #[pyo3(set, get)]
     pub students: BTreeSet<StudentId>,
     #[pyo3(set, get)]
     pub sealed: bool,
@@ -167,6 +169,7 @@ impl PrefilledGroup {
     #[new]
     fn new() -> Self {
         PrefilledGroup {
+            name: String::new(),
             students: BTreeSet::new(),
             sealed: false,
         }
@@ -181,6 +184,10 @@ impl PrefilledGroup {
 impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
     fn from(value: collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
         PrefilledGroup {
+            name: match value.name {
+                None => String::new(),
+                Some(n) => n.into_inner(),
+            },
             students: value
                 .students
                 .into_iter()
@@ -195,6 +202,7 @@ impl From<PrefilledGroup> for crate::rpc::cmd_msg::group_lists::PrefilledGroupMs
     fn from(value: PrefilledGroup) -> Self {
         use crate::rpc::cmd_msg::group_lists::PrefilledGroupMsg;
         PrefilledGroupMsg {
+            name: non_empty_string::NonEmptyString::new(value.name).ok(),
             students: value.students.into_iter().map(|x| x.into()).collect(),
             sealed: value.sealed,
         }

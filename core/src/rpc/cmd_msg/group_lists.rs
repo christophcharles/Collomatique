@@ -144,6 +144,7 @@ impl From<GroupListPrefilledGroupsMsg>
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefilledGroupMsg {
+    pub name: Option<non_empty_string::NonEmptyString>,
     pub students: BTreeSet<MsgStudentId>,
     pub sealed: bool,
 }
@@ -153,6 +154,7 @@ impl From<PrefilledGroupMsg>
 {
     fn from(value: PrefilledGroupMsg) -> Self {
         collomatique_state_colloscopes::group_lists::PrefilledGroupExternalData {
+            name: value.name,
             students: value.students.into_iter().map(|x| x.0).collect(),
             sealed: value.sealed,
         }

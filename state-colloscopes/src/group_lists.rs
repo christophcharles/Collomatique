@@ -41,6 +41,8 @@ pub struct GroupListPrefilledGroups {
 /// Prefilled groups for a single group list
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct PrefilledGroup {
+    /// Optional name for the group
+    pub name: Option<non_empty_string::NonEmptyString>,
     /// Students set
     ///
     /// Set of students that are in the group
@@ -103,6 +105,7 @@ impl PrefilledGroup {
         external_data: PrefilledGroupExternalData,
     ) -> PrefilledGroup {
         PrefilledGroup {
+            name: external_data.name,
             students: external_data
                 .students
                 .into_iter()
@@ -304,6 +307,8 @@ pub struct GroupListPrefilledGroupsExternalData {
 /// A single prefilled group but unchecked
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct PrefilledGroupExternalData {
+    /// Optional name for the group
+    pub name: Option<non_empty_string::NonEmptyString>,
     /// Students set
     ///
     /// Set of students that are in the group
@@ -379,6 +384,7 @@ impl PrefilledGroupExternalData {
 impl From<PrefilledGroup> for PrefilledGroupExternalData {
     fn from(value: PrefilledGroup) -> Self {
         PrefilledGroupExternalData {
+            name: value.name,
             students: value.students.into_iter().map(|x| x.inner()).collect(),
             sealed: value.sealed,
         }
