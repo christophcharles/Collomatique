@@ -82,6 +82,9 @@ impl SimpleComponent for Dialog {
                                 sender.input(DialogInput::UpdateEntry(text));
                             },
                         },
+                        connect_activate[sender] => move |_widget| {
+                            sender.input(DialogInput::Accept);
+                        },
                     },
                 },
             }
