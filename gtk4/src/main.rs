@@ -23,9 +23,67 @@ struct Args {
     /// Pass a file as argument to open it with Collomatique
     file: Option<PathBuf>,
 
+    /// TEMPORARY PARAMETER: do not open the gtk4 gui but launch the resolution of the colloscope
+    #[arg(long, default_value_t = false)]
+    solve: bool,
+
     /// Everything after gets passed through to GTK.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
     gtk_options: Vec<String>,
+}
+
+fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
+    use anyhow::anyhow;
+
+    let Some(path) = file else {
+        return Err(anyhow!("You must specify a file to open and solve"));
+    };
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+
+    let result = rt.block_on(collomatique_storage::load_data_from_file(&path));
+
+    let (_data, caveats) = match result {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(anyhow!("Failed to load file: {:?}", e));
+        }
+    };
+
+    for caveat in caveats {
+        println!("Caveat: {:?}", caveat);
+    }
+
+    println!("\nStart resolution...");
+
+    use collomatique_solver::{
+        examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
+        ProblemBuilder,
+    };
+
+    let problem_desc = SimpleScheduleDesc {
+        group_count: 1,
+        week_count: 3,
+        course_count: 3,
+    };
+
+    let constraints = SimpleScheduleConstraints {};
+
+    let mut problem_builder =
+        ProblemBuilder::<_, _, _>::new(problem_desc).expect("Consistent ILP description");
+    let _translator = problem_builder
+        .add_constraints(constraints, 1.0)
+        .expect("Consistent ILP description");
+    let problem = problem_builder.build();
+
+    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
+    let solution = problem.solve(&solver).map(|x| x.into_solution());
+
+    println!("\n\nPotential solution: {:?}", solution);
+
+    Ok(())
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -33,6 +91,10 @@ fn main() -> Result<(), anyhow::Error> {
 
     if args.rpc_engine {
         return collomatique_core::rpc::run_rpc_engine();
+    }
+
+    if args.solve {
+        return try_solve(args.file);
     }
 
     let payload = collomatique_gtk4::AppInit {

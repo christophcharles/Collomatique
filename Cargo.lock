@@ -367,6 +367,8 @@ dependencies = [
  "chrono",
  "clap",
  "collomatique-core",
+ "collomatique-ilp",
+ "collomatique-solver",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",

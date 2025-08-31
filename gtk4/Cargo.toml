@@ -10,6 +10,8 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 collomatique-core = { path = "../core" }
+collomatique-ilp = { path = "../ilp" }
+collomatique-solver = { path = "../solver" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
 glib = "*"
