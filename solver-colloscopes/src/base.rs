@@ -14,12 +14,13 @@ use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
 pub trait Identifier:
-    Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync
+    Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync + 'static
 {
 }
 
-impl<T: Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync> Identifier
-    for T
+impl<
+        T: Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync + 'static,
+    > Identifier for T
 {
 }
 
