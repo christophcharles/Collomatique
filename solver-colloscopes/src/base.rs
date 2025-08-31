@@ -126,3 +126,53 @@ pub struct ColloscopeProblem<
     /// List of group lists constraints
     pub group_list_descriptions: BTreeMap<GroupListId, GroupListDescription<StudentId>>,
 }
+
+use thiserror::Error;
+
+#[derive(Clone, Debug, Error)]
+pub enum ValidationError {
+    /// The number of weeks varies from slot to slot
+    #[error("The number of weeks varies from slot to slot")]
+    InconsistentWeekCount,
+}
+
+impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
+    ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>
+{
+    /// Check the consistency of data
+    pub fn validate(
+        self,
+    ) -> Result<
+        ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
+        ValidationError,
+    > {
+        let mut week_count = None;
+        for (_subject_id, subject_desc) in &self.subject_descriptions {
+            for (_slot_id, slot_desc) in &subject_desc.slots_descriptions {
+                match week_count {
+                    Some(count) => {
+                        if slot_desc.weeks.len() != count {
+                            return Err(ValidationError::InconsistentWeekCount);
+                        }
+                    }
+                    None => {
+                        week_count = Some(slot_desc.weeks.len());
+                    }
+                }
+            }
+        }
+
+        Ok(ValidatedColloscopeProblem { internal: self })
+    }
+}
+
+/// Validated problme that can be used in a solver
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatedColloscopeProblem<
+    SubjectId: Identifier,
+    SlotId: Identifier,
+    GroupListId: Identifier,
+    StudentId: Identifier,
+> {
+    internal: ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
+}

@@ -57,9 +57,14 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     }
 
     let problem_desc =
-        collomatique_core::solver::colloscopes::data_to_colloscope_problem_desc(&data);
+        collomatique_core::solver::colloscopes::data_to_colloscope_problem_desc(&data)
+            .expect("Data should be complete for resolution");
 
-    println!("Problem desc: {:?}", problem_desc);
+    let validated_desc = problem_desc
+        .validate()
+        .expect("Description should be valid");
+
+    println!("Problem desc: {:?}", validated_desc);
 
     println!("\nStart resolution...");
 

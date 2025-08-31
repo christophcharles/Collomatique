@@ -22,17 +22,8 @@ pub struct Interrogation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Slot {
-    slot_start: collomatique_time::SlotStart,
-    interrogations: Vec<Option<Interrogation>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubjectInterrogations<SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
-{
-    duration: collomatique_time::NonZeroDurationInMinutes,
-    group_assignments: super::GroupAssignments<GroupListId, StudentId>,
-    slots: BTreeMap<SlotId, Slot>,
+pub struct SubjectInterrogations<SlotId: Identifier> {
+    slots: BTreeMap<SlotId, Vec<Option<Interrogation>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,6 +33,6 @@ pub struct Colloscope<
     GroupListId: Identifier,
     StudentId: Identifier,
 > {
-    subject_map: BTreeMap<SubjectId, SubjectInterrogations<SlotId, GroupListId, StudentId>>,
+    subject_map: BTreeMap<SubjectId, SubjectInterrogations<SlotId>>,
     group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
 }
