@@ -9,7 +9,7 @@ pub enum MainVariable<
     GroupListId: Identifier,
     StudentId: Identifier,
     SubjectId: Identifier,
-    InterrogationId: Identifier,
+    SlotId: Identifier,
 > {
     GroupForStudent {
         group_list: GroupListId,
@@ -17,7 +17,7 @@ pub enum MainVariable<
     },
     GroupInSlot {
         subject: SubjectId,
-        interrogation: InterrogationId,
+        slot: SlotId,
         week: usize,
         group: usize,
     },
@@ -28,7 +28,7 @@ pub enum StructureVariable<
     GroupListId: Identifier,
     StudentId: Identifier,
     SubjectId: Identifier,
-    InterrogationId: Identifier,
+    SlotId: Identifier,
 > {
     StudentInGroup {
         group_list: GroupListId,
@@ -54,12 +54,12 @@ pub enum StructureVariable<
         subject: SubjectId,
         student: StudentId,
         group: usize,
-        interrogation: InterrogationId,
+        slot: SlotId,
         week: usize,
     },
     NonEmptySlot {
         subject: SubjectId,
-        interrogation: InterrogationId,
+        slot: SlotId,
         week: usize,
     },
 }
