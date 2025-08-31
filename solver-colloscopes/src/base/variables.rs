@@ -19,7 +19,7 @@ pub enum MainVariable<
         subject: SubjectId,
         slot: SlotId,
         week: usize,
-        group: usize,
+        group: u32,
     },
 }
 
@@ -33,27 +33,27 @@ pub enum StructureVariable<
     StudentInGroup {
         group_list: GroupListId,
         student: StudentId,
-        group: usize,
+        group: u32,
     },
     NonEmptyGroup {
         group_list: GroupListId,
-        group: usize,
+        group: u32,
     },
     StudentInGroupForSubjectAndAssignmentZone {
         subject: SubjectId,
         student: StudentId,
-        group: usize,
+        group: u32,
         assignment_zone: usize,
     },
     NonEmptyGroupForSubjectAndAssignmentZone {
         subject: SubjectId,
-        group: usize,
+        group: u32,
         assignment_zone: usize,
     },
     StudentInGroupAndSlot {
         subject: SubjectId,
         student: StudentId,
-        group: usize,
+        group: u32,
         slot: SlotId,
         week: usize,
     },
