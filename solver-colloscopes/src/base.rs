@@ -10,7 +10,7 @@ pub mod solution;
 pub mod variables;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
 pub trait Identifier:
@@ -31,7 +31,7 @@ pub struct GroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatedGroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
-    pub start_week: NonZeroUsize,
+    pub start_week: usize,
     pub group_assignment: Option<GroupAssignment<GroupListId, StudentId>>,
 }
 

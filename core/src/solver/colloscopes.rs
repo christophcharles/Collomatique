@@ -4,7 +4,6 @@
 //! from [collomatique_state_colloscopes] to [collomatique_solver_colloscopes].
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroUsize;
 
 use collomatique_solver_colloscopes::base::{self, ColloscopeProblem};
 use collomatique_state_colloscopes::{Data, GroupListId, PeriodId, SlotId, StudentId, SubjectId};
@@ -88,7 +87,7 @@ pub fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error
         };
 
         let mut start_week = 0usize;
-        for (period_id, period) in &data.get_periods().ordered_period_list {
+        for (i, (period_id, period)) in data.get_periods().ordered_period_list.iter().enumerate() {
             let group_assignment = if subject.excluded_periods.contains(period_id) {
                 None
             } else {
@@ -117,13 +116,13 @@ pub fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error
                 })
             };
 
-            if start_week == 0 {
+            if i == 0 {
                 group_assignments.starting_group_assignment = group_assignment;
             } else {
                 group_assignments
                     .other_group_assignments
                     .push(base::DatedGroupAssignment {
-                        start_week: NonZeroUsize::new(start_week).unwrap(),
+                        start_week,
                         group_assignment,
                     })
             }
