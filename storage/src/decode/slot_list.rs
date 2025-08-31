@@ -32,9 +32,15 @@ pub fn decode_entry(
             if !ids.insert(id) {
                 return Err(DecodeError::DuplicatedID);
             }
-            pre_subject_slots
-                .ordered_slots
-                .push((*id, slot.clone().into()));
+
+            let slot = match slot.clone().try_into() {
+                Ok(s) => s,
+                Err(json::slot_list::SlotDecodeError::TimeNotToTheMinute) => {
+                    return Err(DecodeError::InconsistentSlotsData)
+                }
+            };
+
+            pre_subject_slots.ordered_slots.push((*id, slot));
         }
     }
 

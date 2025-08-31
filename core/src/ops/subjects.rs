@@ -88,7 +88,11 @@ impl SubjectsUpdateWarning {
                     .slots
                     .iter()
                     .map(|slot| {
-                        format!("le {} à {}", slot.start().weekday, slot.start().start_time)
+                        format!(
+                            "le {} à {}",
+                            slot.start().weekday,
+                            slot.start().start_time.into_inner()
+                        )
                     })
                     .collect();
 

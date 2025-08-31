@@ -43,7 +43,7 @@ impl From<&collomatique_state_colloscopes::incompats::Incompatibility> for Incom
                 .iter()
                 .map(|slot_with_duration| IncompatibilitySlot {
                     start_day: slot_with_duration.start().weekday.0,
-                    start_time: slot_with_duration.start().start_time.clone(),
+                    start_time: slot_with_duration.start().start_time.inner().clone(),
                     duration: slot_with_duration.duration().get(),
                 })
                 .collect(),
@@ -55,6 +55,7 @@ impl From<&collomatique_state_colloscopes::incompats::Incompatibility> for Incom
 
 pub enum IncompatDecodeError {
     SlotOverlapsWithNextDay,
+    TimeNotToTheMinute,
 }
 
 impl TryFrom<Incompatibility>
@@ -70,7 +71,10 @@ impl TryFrom<Incompatibility>
                 collomatique_time::SlotWithDuration::new(
                     collomatique_time::SlotStart {
                         weekday: collomatique_time::Weekday(incompatibility_slot.start_day),
-                        start_time: incompatibility_slot.start_time,
+                        start_time: collomatique_time::TimeOnMinutes::new(
+                            incompatibility_slot.start_time,
+                        )
+                        .ok_or(IncompatDecodeError::TimeNotToTheMinute)?,
                     },
                     incompatibility_slot.duration.into(),
                 )

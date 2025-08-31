@@ -25,6 +25,9 @@ impl IncompatibilitiesCmdMsg {
                     Err(IncompatMsgDecodeError::SlotOverlapsWithNextDay) => {
                         return Err(error_msg::AddNewIncompatError::SlotOverlapsWithNextDay.into());
                     }
+                    Err(IncompatMsgDecodeError::TimeNotToTheMinute) => {
+                        panic!("Invalid incompat received");
+                    }
                 };
                 let new_incompat = match data.promote_incompat(external_incompat) {
                     Ok(i) => i,
@@ -51,6 +54,9 @@ impl IncompatibilitiesCmdMsg {
                     Ok(i) => i,
                     Err(IncompatMsgDecodeError::SlotOverlapsWithNextDay) => {
                         return Err(error_msg::UpdateIncompatError::SlotOverlapsWithNextDay.into());
+                    }
+                    Err(IncompatMsgDecodeError::TimeNotToTheMinute) => {
+                        panic!("Invalid incompat received");
                     }
                 };
                 let new_incompat = match data.promote_incompat(external_incompat) {
@@ -98,6 +104,7 @@ pub struct IncompatSlotMsg {
 
 pub enum IncompatMsgDecodeError {
     SlotOverlapsWithNextDay,
+    TimeNotToTheMinute,
 }
 
 impl TryFrom<IncompatMsg>
@@ -110,7 +117,8 @@ impl TryFrom<IncompatMsg>
         for incompat_slot_msg in value.slots {
             let start = collomatique_time::SlotStart {
                 weekday: collomatique_time::Weekday(incompat_slot_msg.start_day),
-                start_time: incompat_slot_msg.start_time,
+                start_time: collomatique_time::TimeOnMinutes::new(incompat_slot_msg.start_time)
+                    .ok_or(IncompatMsgDecodeError::TimeNotToTheMinute)?,
             };
             let slot = match collomatique_time::SlotWithDuration::new(
                 start,

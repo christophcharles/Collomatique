@@ -8,6 +8,8 @@ mod tests;
 
 use std::num::NonZeroU32;
 
+use chrono::Timelike;
+
 /// DurationInMinutes obviously represents a duration in minutes.
 ///
 /// The type is useful because it gives information on the type of data
@@ -117,6 +119,38 @@ impl std::ops::DerefMut for Weekday {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TimeOnMinutes {
+    internal: chrono::NaiveTime,
+}
+
+impl TimeOnMinutes {
+    pub fn new(naive_time: chrono::NaiveTime) -> Option<Self> {
+        if naive_time.second() != 0 || naive_time.nanosecond() != 0 {
+            return None;
+        }
+
+        Some(TimeOnMinutes {
+            internal: naive_time,
+        })
+    }
+
+    pub fn inner(&self) -> &chrono::NaiveTime {
+        &self.internal
+    }
+
+    pub fn into_inner(self) -> chrono::NaiveTime {
+        self.internal
+    }
+}
+
+impl std::ops::Deref for TimeOnMinutes {
+    type Target = chrono::NaiveTime;
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
+
 /// Type representing the beginning of a slot in time
 ///
 /// A slot starts on a given weekday at a certain time.
@@ -131,7 +165,7 @@ pub struct SlotStart {
     /// really need localization at this point in the algorithm
     /// Obviously, all the times in the colloscope should be
     /// expressed in the same timezone.
-    pub start_time: chrono::NaiveTime,
+    pub start_time: TimeOnMinutes,
 }
 
 /// Type representing a slot in time, with it its start time but
@@ -191,7 +225,7 @@ impl SlotWithDuration {
     /// if this slot is an interrogation, the student is actually free
     /// at the end time.
     pub fn end_time(&self) -> chrono::NaiveTime {
-        self.start.start_time + self.duration.time_delta()
+        *self.start.start_time.inner() + self.duration.time_delta()
     }
 
     /// Returns the duration of a slot
@@ -206,9 +240,9 @@ impl SlotWithDuration {
         }
 
         if self.start.start_time <= other.start.start_time {
-            self.end_time() > other.start.start_time
+            self.end_time() > *other.start.start_time.inner()
         } else {
-            self.start.start_time < other.end_time()
+            *self.start.start_time.inner() < other.end_time()
         }
     }
 }

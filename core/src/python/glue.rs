@@ -38,7 +38,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<students::Student>()?;
     m.add_class::<time::NaiveMondayDate>()?;
     m.add_class::<time::NaiveDate>()?;
-    m.add_class::<time::NaiveTime>()?;
+    m.add_class::<time::Time>()?;
     m.add_class::<time::SlotStart>()?;
     m.add_class::<time::Weekday>()?;
     m.add_class::<time::SlotWithDuration>()?;

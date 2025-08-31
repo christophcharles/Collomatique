@@ -24,7 +24,13 @@ impl SlotsCmdMsg {
                 let Some(subject_id) = data.validate_subject_id(id.0) else {
                     return Err(error_msg::AddNewSlotError::InvalidSubjectId(id).into());
                 };
-                let new_slot = match data.promote_slot(slot.into()) {
+                let slot = match slot.try_into() {
+                    Ok(s) => s,
+                    Err(SlotMsgDecodeError::TimeNotToTheMinute) => {
+                        panic!("Invalid slot received");
+                    }
+                };
+                let new_slot = match data.promote_slot(slot) {
                     Ok(s) => s,
                     Err(PromoteSlotError::InvalidTeacherId(id)) => {
                         return Err(
@@ -44,7 +50,13 @@ impl SlotsCmdMsg {
                 let Some(slot_id) = data.validate_slot_id(id.0) else {
                     return Err(error_msg::UpdateSlotError::InvalidSlotId(id).into());
                 };
-                let new_slot = match data.promote_slot(slot.into()) {
+                let slot = match slot.try_into() {
+                    Ok(s) => s,
+                    Err(SlotMsgDecodeError::TimeNotToTheMinute) => {
+                        panic!("Invalid slot received");
+                    }
+                };
+                let new_slot = match data.promote_slot(slot) {
                     Ok(s) => s,
                     Err(PromoteSlotError::InvalidTeacherId(id)) => {
                         return Err(
@@ -92,17 +104,24 @@ pub struct SlotMsg {
     pub cost: i32,
 }
 
-impl From<SlotMsg> for collomatique_state_colloscopes::slots::SlotExternalData {
-    fn from(value: SlotMsg) -> Self {
-        collomatique_state_colloscopes::slots::SlotExternalData {
+pub enum SlotMsgDecodeError {
+    TimeNotToTheMinute,
+}
+
+impl TryFrom<SlotMsg> for collomatique_state_colloscopes::slots::SlotExternalData {
+    type Error = SlotMsgDecodeError;
+
+    fn try_from(value: SlotMsg) -> Result<Self, SlotMsgDecodeError> {
+        Ok(collomatique_state_colloscopes::slots::SlotExternalData {
             teacher_id: value.teacher_id.0,
             start_time: collomatique_time::SlotStart {
                 weekday: collomatique_time::Weekday(value.start_day),
-                start_time: value.start_time,
+                start_time: collomatique_time::TimeOnMinutes::new(value.start_time)
+                    .ok_or(SlotMsgDecodeError::TimeNotToTheMinute)?,
             },
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| x.0),
             cost: value.cost,
-        }
+        })
     }
 }

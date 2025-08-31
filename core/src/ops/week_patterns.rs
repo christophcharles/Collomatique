@@ -43,7 +43,7 @@ impl WeekPatternsUpdateWarning {
                 };
                 Some(format!(
                     "Pertes du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {}",
-                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time,
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
                 ))
             }
             Self::LooseScheduleIncompat(incompat_id) => {
@@ -67,7 +67,11 @@ impl WeekPatternsUpdateWarning {
                     .slots
                     .iter()
                     .map(|slot| {
-                        format!("le {} à {}", slot.start().weekday, slot.start().start_time)
+                        format!(
+                            "le {} à {}",
+                            slot.start().weekday,
+                            slot.start().start_time.into_inner()
+                        )
                     })
                     .collect();
 

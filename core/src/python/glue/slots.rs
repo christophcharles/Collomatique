@@ -113,7 +113,8 @@ impl From<SlotParameters> for crate::rpc::cmd_msg::slots::SlotMsg {
         SlotMsg {
             teacher_id: value.teacher_id.into(),
             start_day: collomatique_time::Weekday::from(value.start_time.weekday).into_inner(),
-            start_time: value.start_time.start_time.into(),
+            start_time: collomatique_time::TimeOnMinutes::from(value.start_time.start_time)
+                .into_inner(),
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| x.into()),
             cost: value.cost,

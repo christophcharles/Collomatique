@@ -16,6 +16,9 @@ pub fn decode_entry(
             Err(json::incompat_list::IncompatDecodeError::SlotOverlapsWithNextDay) => {
                 return Err(DecodeError::IllformedSlotInSubjectIncompatibilities);
             }
+            Err(json::incompat_list::IncompatDecodeError::TimeNotToTheMinute) => {
+                return Err(DecodeError::IllformedSlotInSubjectIncompatibilities);
+            }
         };
 
         if !ids.insert(*incompat_id) {

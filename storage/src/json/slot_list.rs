@@ -36,7 +36,7 @@ impl From<&collomatique_state_colloscopes::slots::Slot> for Slot {
         Slot {
             teacher_id: value.teacher_id.inner(),
             start_day: value.start_time.weekday.0,
-            start_time: value.start_time.start_time.clone(),
+            start_time: value.start_time.start_time.inner().clone(),
             extra_info: value.extra_info.clone(),
             week_pattern: value.week_pattern.map(|x| x.inner()),
             cost: value.cost,
@@ -44,17 +44,24 @@ impl From<&collomatique_state_colloscopes::slots::Slot> for Slot {
     }
 }
 
-impl From<Slot> for collomatique_state_colloscopes::slots::SlotExternalData {
-    fn from(value: Slot) -> Self {
-        collomatique_state_colloscopes::slots::SlotExternalData {
+pub enum SlotDecodeError {
+    TimeNotToTheMinute,
+}
+
+impl TryFrom<Slot> for collomatique_state_colloscopes::slots::SlotExternalData {
+    type Error = SlotDecodeError;
+
+    fn try_from(value: Slot) -> Result<Self, SlotDecodeError> {
+        Ok(collomatique_state_colloscopes::slots::SlotExternalData {
             teacher_id: value.teacher_id,
             start_time: collomatique_time::SlotStart {
                 weekday: collomatique_time::Weekday(value.start_day),
-                start_time: value.start_time,
+                start_time: collomatique_time::TimeOnMinutes::new(value.start_time)
+                    .ok_or(SlotDecodeError::TimeNotToTheMinute)?,
             },
             extra_info: value.extra_info,
             week_pattern: value.week_pattern,
             cost: value.cost,
-        }
+        })
     }
 }

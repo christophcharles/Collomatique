@@ -86,35 +86,37 @@ impl From<NaiveDate> for chrono::NaiveDate {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[pyclass]
-pub struct NaiveTime {
-    internal: chrono::NaiveTime,
+pub struct Time {
+    internal: collomatique_time::TimeOnMinutes,
 }
 
 #[pymethods]
-impl NaiveTime {
+impl Time {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", self_.internal);
         PyString::new(self_.py(), output.as_str())
     }
 
     #[new]
-    fn new(h: u32, m: u32, s: u32, milli: u32) -> PyResult<Self> {
-        let Some(internal) = chrono::NaiveTime::from_hms_milli_opt(h, m, s, milli) else {
+    fn new(h: u32, m: u32) -> PyResult<Self> {
+        let Some(time) = chrono::NaiveTime::from_hms_milli_opt(h, m, 0, 0) else {
             return Err(PyValueError::new_err(format!("Invalid time")));
         };
 
-        Ok(NaiveTime { internal })
+        let internal =
+            collomatique_time::TimeOnMinutes::new(time).expect("Time should be on minute");
+        Ok(Time { internal })
     }
 }
 
-impl From<chrono::NaiveTime> for NaiveTime {
-    fn from(value: chrono::NaiveTime) -> Self {
-        NaiveTime { internal: value }
+impl From<collomatique_time::TimeOnMinutes> for Time {
+    fn from(value: collomatique_time::TimeOnMinutes) -> Self {
+        Time { internal: value }
     }
 }
 
-impl From<NaiveTime> for chrono::NaiveTime {
-    fn from(value: NaiveTime) -> Self {
+impl From<Time> for collomatique_time::TimeOnMinutes {
+    fn from(value: Time) -> Self {
         value.internal
     }
 }
@@ -171,7 +173,7 @@ impl From<Weekday> for collomatique_time::Weekday {
 #[pyclass]
 pub struct SlotStart {
     #[pyo3(set, get)]
-    pub start_time: NaiveTime,
+    pub start_time: Time,
     #[pyo3(set, get)]
     pub weekday: Weekday,
 }
@@ -184,7 +186,7 @@ impl SlotStart {
     }
 
     #[new]
-    fn new(weekday: Weekday, start_time: NaiveTime) -> Self {
+    fn new(weekday: Weekday, start_time: Time) -> Self {
         SlotStart {
             start_time,
             weekday,
@@ -249,7 +251,7 @@ impl From<SlotWithDuration> for crate::rpc::cmd_msg::incompatibilities::Incompat
         use crate::rpc::cmd_msg::incompatibilities::IncompatSlotMsg;
         IncompatSlotMsg {
             start_day: collomatique_time::Weekday::from(value.start_time.weekday).0,
-            start_time: value.start_time.start_time.internal,
+            start_time: value.start_time.start_time.internal.inner().clone(),
             duration: value.duration_in_minutes,
         }
     }
