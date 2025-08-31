@@ -18,6 +18,11 @@ pub trait Identifier:
 {
 }
 
+impl<T: Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync> Identifier
+    for T
+{
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
     group_list_id: GroupListId,
