@@ -10,52 +10,38 @@ use super::Identifier;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
-    group_count: usize,
-    assigned_students: BTreeMap<StudentId, usize>,
+    group_count: u32,
+    assigned_students: BTreeMap<StudentId, u32>,
     unassigned_students: BTreeSet<StudentId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interrogation {
-    assigned_groups: BTreeSet<usize>,
-    unassigned_groups: BTreeSet<usize>,
+    assigned_groups: BTreeSet<u32>,
+    unassigned_groups: BTreeSet<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InterrogationSlot {
+pub struct Slot {
     slot_start: collomatique_time::SlotStart,
     interrogations: Vec<Option<Interrogation>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TeacherInterrogations<InterrogationId: Identifier> {
-    interrogation_slots: BTreeMap<InterrogationId, InterrogationSlot>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubjectInterrogations<
-    TeacherId: Identifier,
-    InterrogationId: Identifier,
-    GroupListId: Identifier,
-    StudentId: Identifier,
-> {
+pub struct SubjectInterrogations<SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
+{
     duration: collomatique_time::NonZeroDurationInMinutes,
     group_assignments: super::GroupAssignments<GroupListId, StudentId>,
-    teacher_map: BTreeMap<TeacherId, TeacherInterrogations<InterrogationId>>,
+    slots: BTreeMap<SlotId, Slot>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Colloscope<
     SubjectId: Identifier,
-    TeacherId: Identifier,
-    InterrogationId: Identifier,
+    SlotId: Identifier,
     GroupListId: Identifier,
     StudentId: Identifier,
 > {
-    week_count: usize,
-    subject_map: BTreeMap<
-        SubjectId,
-        SubjectInterrogations<TeacherId, InterrogationId, GroupListId, StudentId>,
-    >,
+    subject_map: BTreeMap<SubjectId, SubjectInterrogations<SlotId, GroupListId, StudentId>>,
     group_lists: BTreeMap<GroupListId, GroupList<StudentId>>,
 }
