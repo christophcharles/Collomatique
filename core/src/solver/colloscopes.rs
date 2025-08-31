@@ -81,53 +81,45 @@ pub fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error
             slots_descriptions.insert(slot_id.clone(), slot_desc);
         }
 
-        let mut group_assignments = base::GroupAssignments {
-            starting_group_assignment: None,
-            other_group_assignments: vec![],
-        };
+        let mut group_assignments = vec![];
 
-        let mut start_week = 0usize;
-        for (i, (period_id, period)) in data.get_periods().ordered_period_list.iter().enumerate() {
-            let group_assignment = if subject.excluded_periods.contains(period_id) {
-                None
-            } else {
-                let group_list_id = data
-                    .get_group_lists()
-                    .subjects_associations
-                    .get(period_id)
-                    .expect("Period id should be valid")
-                    .get(subject_id)
-                    .ok_or(Error::MissingGroupList(*subject_id, *period_id))?
-                    .clone();
-
-                let enrolled_students = data
-                    .get_assignments()
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid")
-                    .subject_map
-                    .get(subject_id)
-                    .expect("Subject ID should have assignments for this period")
-                    .clone();
-
-                Some(base::GroupAssignment {
-                    group_list_id,
-                    enrolled_students,
-                })
-            };
-
-            if i == 0 {
-                group_assignments.starting_group_assignment = group_assignment;
-            } else {
-                group_assignments
-                    .other_group_assignments
-                    .push(base::DatedGroupAssignment {
-                        start_week,
-                        group_assignment,
-                    })
+        for (period_id, period) in &data.get_periods().ordered_period_list {
+            if subject.excluded_periods.contains(period_id) {
+                group_assignments.extend(vec![None; period.len()]);
+                continue;
             }
 
-            start_week += period.len();
+            let group_list_id = data
+                .get_group_lists()
+                .subjects_associations
+                .get(period_id)
+                .expect("Period id should be valid")
+                .get(subject_id)
+                .ok_or(Error::MissingGroupList(*subject_id, *period_id))?
+                .clone();
+
+            let enrolled_students = data
+                .get_assignments()
+                .period_map
+                .get(period_id)
+                .expect("Period ID should be valid")
+                .subject_map
+                .get(subject_id)
+                .expect("Subject ID should have assignments for this period")
+                .clone();
+
+            let group_assignment = Some(base::GroupAssignment {
+                group_list_id,
+                enrolled_students,
+            });
+
+            for week in period {
+                group_assignments.push(if *week {
+                    group_assignment.clone()
+                } else {
+                    None
+                });
+            }
         }
 
         let subject_desc = base::SubjectDescription {

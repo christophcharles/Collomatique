@@ -30,18 +30,6 @@ pub struct GroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
     pub enrolled_students: BTreeSet<StudentId>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DatedGroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
-    pub start_week: usize,
-    pub group_assignment: Option<GroupAssignment<GroupListId, StudentId>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GroupAssignments<GroupListId: Identifier, StudentId: Identifier> {
-    pub starting_group_assignment: Option<GroupAssignment<GroupListId, StudentId>>,
-    pub other_group_assignments: Vec<DatedGroupAssignment<GroupListId, StudentId>>,
-}
-
 /// Description of an interrogation slot
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SlotDescription {
@@ -89,9 +77,8 @@ pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, Stude
     pub groups_per_interrogation: RangeInclusive<NonZeroU32>,
     /// Description of each interrogation slot for the subject
     pub slots_descriptions: BTreeMap<SlotId, SlotDescription>,
-    /// Group lists to use for each period and what students are attending the subject
-    /// for each periods
-    pub group_assignments: GroupAssignments<GroupListId, StudentId>,
+    /// Group lists to use for each week and what students are attending the subject
+    pub group_assignments: Vec<Option<GroupAssignment<GroupListId, StudentId>>>,
 }
 
 /// Description of a group list
@@ -132,9 +119,14 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
 pub enum ValidationError {
-    /// The number of weeks varies from slot to slot
     #[error("The number of weeks varies from slot to slot")]
     InconsistentWeekCount,
+    #[error("Invalid group list id in group assignment")]
+    InvalidGroupListId,
+    #[error("Group count range should allow some value")]
+    EmptyGroupCountRange,
+    #[error("Student per group range should allow some value")]
+    EmptyStudentPerGroupRange,
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -149,17 +141,46 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
     > {
         let mut week_count = None;
         for (_subject_id, subject_desc) in &self.subject_descriptions {
-            for (_slot_id, slot_desc) in &subject_desc.slots_descriptions {
-                match week_count {
-                    Some(count) => {
-                        if slot_desc.weeks.len() != count {
-                            return Err(ValidationError::InconsistentWeekCount);
-                        }
-                    }
-                    None => {
-                        week_count = Some(slot_desc.weeks.len());
+            match week_count {
+                Some(count) => {
+                    if subject_desc.group_assignments.len() != count {
+                        return Err(ValidationError::InconsistentWeekCount);
                     }
                 }
+                None => {
+                    week_count = Some(subject_desc.group_assignments.len());
+                }
+            }
+
+            for (_slot_id, slot_desc) in &subject_desc.slots_descriptions {
+                if slot_desc.weeks.len() != subject_desc.group_assignments.len() {
+                    return Err(ValidationError::InconsistentWeekCount);
+                }
+            }
+
+            for group_assignment_opt in &subject_desc.group_assignments {
+                if let Some(group_assignment) = group_assignment_opt {
+                    if !self
+                        .group_list_descriptions
+                        .contains_key(&group_assignment.group_list_id)
+                    {
+                        return Err(ValidationError::InvalidGroupListId);
+                    }
+                }
+            }
+
+            if subject_desc.students_per_group.is_empty() {
+                return Err(ValidationError::EmptyStudentPerGroupRange);
+            }
+        }
+
+        for (_group_list_id, group_list_desc) in &self.group_list_descriptions {
+            if group_list_desc.group_count.is_empty() {
+                return Err(ValidationError::EmptyGroupCountRange);
+            }
+
+            if group_list_desc.students_per_group.is_empty() {
+                return Err(ValidationError::EmptyStudentPerGroupRange);
             }
         }
 
@@ -176,4 +197,97 @@ pub struct ValidatedColloscopeProblem<
     StudentId: Identifier,
 > {
     internal: ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
+}
+
+impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
+    collomatique_solver::SimpleBaseProblem
+    for ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>
+{
+    type MainVariable = variables::MainVariable<GroupListId, StudentId, SubjectId, SlotId>;
+    type PartialSolution = solution::Colloscope<SubjectId, SlotId, GroupListId, StudentId>;
+    type StructureVariable =
+        variables::StructureVariable<GroupListId, StudentId, SubjectId, SlotId>;
+
+    fn main_variables(&self) -> BTreeMap<Self::MainVariable, collomatique_ilp::Variable> {
+        let mut variables = BTreeMap::new();
+
+        for (group_list_id, group_list_desc) in &self.internal.group_list_descriptions {
+            let max_group_count = *group_list_desc.group_count.end();
+            for student_id in &group_list_desc.students {
+                variables.insert(
+                    variables::MainVariable::GroupForStudent {
+                        group_list: *group_list_id,
+                        student: *student_id,
+                    },
+                    collomatique_ilp::Variable::integer()
+                        .min(0.)
+                        .max(f64::from(max_group_count - 1)),
+                );
+            }
+        }
+
+        for (subject_id, subject_desc) in &self.internal.subject_descriptions {
+            for week in 0..subject_desc.group_assignments.len() {
+                let Some(group_assignment) = &subject_desc.group_assignments[week] else {
+                    continue;
+                };
+                let group_list = self
+                    .internal
+                    .group_list_descriptions
+                    .get(&group_assignment.group_list_id)
+                    .expect("Group list ID should be valid");
+
+                let max_group_count = *group_list.group_count.end();
+
+                for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
+                    if !slot_desc.weeks[week] {
+                        continue;
+                    }
+
+                    for group in 0..max_group_count {
+                        variables.insert(
+                            variables::MainVariable::GroupInSlot {
+                                subject: *subject_id,
+                                slot: *slot_id,
+                                week,
+                                group,
+                            },
+                            collomatique_ilp::Variable::binary(),
+                        );
+                    }
+                }
+            }
+        }
+
+        variables
+    }
+
+    fn aggregated_variables(
+        &self,
+    ) -> Vec<
+        Box<
+            dyn collomatique_solver::tools::AggregatedVariables<
+                collomatique_solver::generics::BaseVariable<
+                    Self::MainVariable,
+                    Self::StructureVariable,
+                >,
+            >,
+        >,
+    > {
+        todo!()
+    }
+
+    fn configuration_to_partial_solution(
+        &self,
+        _config: &collomatique_ilp::ConfigData<Self::MainVariable>,
+    ) -> Self::PartialSolution {
+        todo!()
+    }
+
+    fn partial_solution_to_configuration(
+        &self,
+        _sol: &Self::PartialSolution,
+    ) -> Option<collomatique_ilp::ConfigData<Self::MainVariable>> {
+        todo!()
+    }
 }
