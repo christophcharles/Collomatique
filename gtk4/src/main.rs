@@ -45,7 +45,7 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
 
     let result = rt.block_on(collomatique_storage::load_data_from_file(&path));
 
-    let (_data, caveats) = match result {
+    let (data, caveats) = match result {
         Ok(r) => r,
         Err(e) => {
             return Err(anyhow!("Failed to load file: {:?}", e));
@@ -55,6 +55,11 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     for caveat in caveats {
         println!("Caveat: {:?}", caveat);
     }
+
+    let problem_desc =
+        collomatique_core::solver::colloscopes::data_to_colloscope_problem_desc(&data);
+
+    println!("Problem desc: {:?}", problem_desc);
 
     println!("\nStart resolution...");
 

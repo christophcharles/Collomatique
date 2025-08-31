@@ -10,7 +10,7 @@ pub mod solution;
 pub mod variables;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::ops::RangeInclusive;
 
 pub trait Identifier:
@@ -25,20 +25,20 @@ impl<T: Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Sen
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
-    group_list_id: GroupListId,
-    enrolled_students: BTreeSet<StudentId>,
+    pub group_list_id: GroupListId,
+    pub enrolled_students: BTreeSet<StudentId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatedGroupAssignment<GroupListId: Identifier, StudentId: Identifier> {
-    start_week: NonZeroU32,
-    group_assignment: GroupAssignment<GroupListId, StudentId>,
+    pub start_week: NonZeroUsize,
+    pub group_assignment: Option<GroupAssignment<GroupListId, StudentId>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupAssignments<GroupListId: Identifier, StudentId: Identifier> {
-    starting_group_assignment: GroupAssignment<GroupListId, StudentId>,
-    other_group_assignments: Vec<DatedGroupAssignment<GroupListId, StudentId>>,
+    pub starting_group_assignment: Option<GroupAssignment<GroupListId, StudentId>>,
+    pub other_group_assignments: Vec<DatedGroupAssignment<GroupListId, StudentId>>,
 }
 
 /// Description of an interrogation slot
@@ -47,10 +47,10 @@ pub struct SlotDescription {
     /// Start day and time
     ///
     /// The duration is provided by the subject
-    slot_start: collomatique_time::SlotStart,
+    pub slot_start: collomatique_time::SlotStart,
 
     /// Weeks the slot is valid
-    weeks: Vec<bool>,
+    pub weeks: Vec<bool>,
 }
 
 /// Description of the constraints for a subject
@@ -62,13 +62,13 @@ pub struct SlotDescription {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
     /// Duration of each slot for the subject
-    duration: collomatique_time::NonZeroDurationInMinutes,
+    pub duration: collomatique_time::NonZeroDurationInMinutes,
     /// How many students per group (range)
     ///
     /// This is not redundant with the constraints from [GroupListDescription]
     /// because in a given group from a group list some students might not follow
     /// the subject. So only a subgroup might be present.
-    students_per_group: RangeInclusive<NonZeroU32>,
+    pub students_per_group: RangeInclusive<NonZeroU32>,
     /// How many groups should be in a given slot
     ///
     /// This is useful in particular for tutorial session that happen
@@ -85,12 +85,12 @@ pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, Stude
     ///
     /// This also allows, for the same reason, changing groups for standard
     /// interrogation if this is desired for some reason.
-    groups_per_interrogation: RangeInclusive<NonZeroU32>,
+    pub groups_per_interrogation: RangeInclusive<NonZeroU32>,
     /// Description of each interrogation slot for the subject
-    slots_descriptions: BTreeMap<SlotId, SlotDescription>,
+    pub slots_descriptions: BTreeMap<SlotId, SlotDescription>,
     /// Group lists to use for each period and what students are attending the subject
     /// for each periods
-    group_assignments: GroupAssignments<GroupListId, StudentId>,
+    pub group_assignments: GroupAssignments<GroupListId, StudentId>,
 }
 
 /// Description of a group list
@@ -101,11 +101,11 @@ pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, Stude
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupListDescription<StudentId: Identifier> {
     /// Students count per group (range)
-    students_per_group: RangeInclusive<NonZeroU32>,
+    pub students_per_group: RangeInclusive<NonZeroU32>,
     /// Number of groups in the list (range)
-    group_count: RangeInclusive<u32>,
+    pub group_count: RangeInclusive<u32>,
     /// Students to dispatch in the groups
-    students: BTreeSet<StudentId>,
+    pub students: BTreeSet<StudentId>,
 }
 
 /// Description of a colloscope problem - reduced
@@ -121,7 +121,8 @@ pub struct ColloscopeProblem<
     StudentId: Identifier,
 > {
     /// List of every subject that appear in the colloscope along with a description
-    subject_descriptions: BTreeMap<SubjectId, SubjectDescription<SlotId, GroupListId, StudentId>>,
+    pub subject_descriptions:
+        BTreeMap<SubjectId, SubjectDescription<SlotId, GroupListId, StudentId>>,
     /// List of group lists constraints
-    group_list_descriptions: BTreeMap<GroupListId, GroupListDescription<StudentId>>,
+    pub group_list_descriptions: BTreeMap<GroupListId, GroupListDescription<StudentId>>,
 }
