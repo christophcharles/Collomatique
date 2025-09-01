@@ -10,7 +10,6 @@ use super::Identifier;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
-    pub group_count: u32,
     pub assigned_students: BTreeMap<StudentId, u32>,
     pub unassigned_students: BTreeSet<StudentId>,
 }
@@ -46,8 +45,6 @@ pub enum ValidationError {
     InconsistentWeekCount,
     #[error("Invalid group list id in group assignment")]
     InvalidGroupListId,
-    #[error("Too many groups used in group list")]
-    TooManyGroupsInGroupList,
     #[error("Invalid group number assigned in slot")]
     InvalidGroupNumberForInterrogation,
     #[error("Group is both assigned and not unassigned in slot")]
@@ -72,9 +69,6 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                     return Err(ValidationError::InconsistentStudentStatusInGroupList);
                 }
                 groups.insert(*group);
-            }
-            if groups.len() > group_list.group_count as usize {
-                return Err(ValidationError::TooManyGroupsInGroupList);
             }
             group_list_groups.insert(*group_list_id, groups);
         }
