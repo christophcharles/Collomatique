@@ -471,9 +471,108 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
     fn configuration_to_partial_solution(
         &self,
-        _config: &collomatique_ilp::ConfigData<Self::MainVariable>,
+        config: &collomatique_ilp::ConfigData<Self::MainVariable>,
     ) -> Self::PartialSolution {
-        todo!()
+        let colloscope = solution::Colloscope {
+            group_lists: self
+                .internal
+                .group_list_descriptions
+                .iter()
+                .map(|(group_list_id, group_list_desc)| {
+                    let mut assigned_students = BTreeMap::new();
+                    let mut unassigned_students = BTreeSet::new();
+
+                    for student_id in &group_list_desc.students {
+                        let group_opt = config.get(variables::MainVariable::GroupForStudent {
+                            group_list: *group_list_id,
+                            student: *student_id,
+                        });
+
+                        match group_opt {
+                            Some(group) => {
+                                assigned_students.insert(*student_id, group as u32);
+                            }
+                            None => {
+                                unassigned_students.insert(*student_id);
+                            }
+                        }
+                    }
+
+                    (
+                        *group_list_id,
+                        solution::GroupList {
+                            assigned_students,
+                            unassigned_students,
+                        },
+                    )
+                })
+                .collect(),
+            subject_map: self
+                .internal
+                .subject_descriptions
+                .iter()
+                .map(|(subject_id, subject_desc)| {
+                    let mut slots = BTreeMap::new();
+
+                    for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
+                        let mut slot_interrogations = vec![];
+
+                        for (week, group_assignment_opt) in
+                            subject_desc.group_assignments.iter().enumerate()
+                        {
+                            let Some(group_assignment) = group_assignment_opt else {
+                                slot_interrogations.push(None);
+                                continue;
+                            };
+
+                            if !slot_desc.weeks[week] {
+                                slot_interrogations.push(None);
+                                continue;
+                            }
+
+                            let mut interrogation = solution::Interrogation {
+                                group_list_id: group_assignment.group_list_id,
+                                assigned_groups: BTreeSet::new(),
+                                unassigned_groups: BTreeSet::new(),
+                            };
+                            let group_list = self
+                                .internal
+                                .group_list_descriptions
+                                .get(&group_assignment.group_list_id)
+                                .expect("group list id should be valid");
+                            let max_group_count = *group_list.group_count.end();
+                            for group in 0..max_group_count {
+                                let status_opt = config.get(variables::MainVariable::GroupInSlot {
+                                    subject: *subject_id,
+                                    slot: *slot_id,
+                                    week,
+                                    group,
+                                });
+
+                                match status_opt {
+                                    Some(status) => {
+                                        if status > 0.5 {
+                                            interrogation.assigned_groups.insert(group);
+                                        }
+                                    }
+                                    None => {
+                                        interrogation.unassigned_groups.insert(group);
+                                    }
+                                }
+                            }
+                        }
+
+                        slots.insert(*slot_id, slot_interrogations);
+                    }
+
+                    (*subject_id, solution::SubjectInterrogations { slots })
+                })
+                .collect(),
+        };
+
+        colloscope
+            .validate()
+            .expect("Colloscope solution should always be valid at this point")
     }
 
     fn partial_solution_to_configuration(
