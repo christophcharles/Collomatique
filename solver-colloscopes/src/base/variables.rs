@@ -39,16 +39,16 @@ pub enum StructureVariable<
         group_list: GroupListId,
         group: u32,
     },
-    StudentInGroupForSubjectAndAssignmentZone {
+    StudentInGroupForSubjectAndWeek {
         subject: SubjectId,
         student: StudentId,
         group: u32,
-        assignment_zone: usize,
+        week: usize,
     },
-    NonEmptyGroupForSubjectAndAssignmentZone {
+    NonEmptyGroupForSubjectAndWeek {
         subject: SubjectId,
         group: u32,
-        assignment_zone: usize,
+        week: usize,
     },
     StudentInGroupAndSlot {
         subject: SubjectId,

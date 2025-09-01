@@ -406,3 +406,58 @@ impl<ProblemVariable: UsableData + 'static, F: Fn(u32) -> ProblemVariable + Send
         }
     }
 }
+
+/// Variable implementing a logical 'YES'.
+///
+/// [YesVariable] implements [AggregatedVariables] and can help
+/// build a logical 'YES' in problems. It takes a name for
+/// the new variable and an existing variable (that should be binary
+/// otherwise the result is undefined). The state of the existing variable
+/// will be copied. This can be useful to provide multiple names for the same
+/// value or to handle some edge cases.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct YesVariable<ProblemVariable>
+where
+    ProblemVariable: UsableData + 'static,
+{
+    /// Name for the construction variable
+    pub variable_name: ProblemVariable,
+    /// Name of the original variable to copy
+    pub original_variable: ProblemVariable,
+}
+
+impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
+    for YesVariable<ProblemVariable>
+{
+    fn get_variables_def(&self) -> Vec<(ProblemVariable, Variable)> {
+        vec![(self.variable_name.clone(), Variable::binary())]
+    }
+
+    fn get_structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ProblemVariable>,
+        AggregatedVariablesConstraintDesc<ProblemVariable>,
+    )> {
+        let var_expr = LinExpr::<ProblemVariable>::var(self.variable_name.clone());
+        let orig_var_expr = LinExpr::var(self.original_variable.clone());
+
+        let constraint = var_expr.eq(&orig_var_expr);
+
+        vec![(
+            constraint,
+            AggregatedVariablesConstraintDesc {
+                variable_names: vec![self.variable_name.clone()],
+                internal_number: 0,
+                desc: "New variable should be a copy of the old one".into(),
+            },
+        )]
+    }
+
+    fn reconstruct_structure_variables(
+        &self,
+        config: &ConfigData<ProblemVariable>,
+    ) -> Vec<Option<f64>> {
+        vec![config.get(self.original_variable.clone())]
+    }
+}
