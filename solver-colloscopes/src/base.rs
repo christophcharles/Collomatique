@@ -213,7 +213,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
     for ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>
 {
     type MainVariable = variables::MainVariable<GroupListId, StudentId, SubjectId, SlotId>;
-    type PartialSolution = solution::Colloscope<SubjectId, SlotId, GroupListId, StudentId>;
+    type PartialSolution = solution::ValidatedColloscope<SubjectId, SlotId, GroupListId, StudentId>;
     type StructureVariable =
         variables::StructureVariable<GroupListId, StudentId, SubjectId, SlotId>;
 
