@@ -777,6 +777,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                                     }
                                 }
                             }
+                            slot_interrogations.push(Some(interrogation));
                         }
 
                         slots.insert(*slot_id, slot_interrogations);
