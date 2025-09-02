@@ -461,3 +461,56 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
         vec![config.get(self.original_variable.clone())]
     }
 }
+
+/// Variable with fixed value
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FixedVariable<ProblemVariable>
+where
+    ProblemVariable: UsableData + 'static,
+{
+    /// Name for the construction variable
+    pub variable_name: ProblemVariable,
+    /// Binary value
+    pub value: bool,
+}
+
+impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
+    for FixedVariable<ProblemVariable>
+{
+    fn get_variables_def(&self) -> Vec<(ProblemVariable, Variable)> {
+        vec![(self.variable_name.clone(), Variable::binary())]
+    }
+
+    fn get_structure_constraints(
+        &self,
+    ) -> Vec<(
+        Constraint<ProblemVariable>,
+        AggregatedVariablesConstraintDesc<ProblemVariable>,
+    )> {
+        let var_expr = LinExpr::<ProblemVariable>::var(self.variable_name.clone());
+        let one = LinExpr::constant(1.);
+        let zero = LinExpr::constant(0.);
+
+        let constraint = if self.value {
+            var_expr.eq(&one)
+        } else {
+            var_expr.eq(&zero)
+        };
+
+        vec![(
+            constraint,
+            AggregatedVariablesConstraintDesc {
+                variable_names: vec![self.variable_name.clone()],
+                internal_number: 0,
+                desc: "Variable has fixed value".into(),
+            },
+        )]
+    }
+
+    fn reconstruct_structure_variables(
+        &self,
+        _config: &ConfigData<ProblemVariable>,
+    ) -> Vec<Option<f64>> {
+        vec![Some(if self.value { 1. } else { 0. })]
+    }
+}

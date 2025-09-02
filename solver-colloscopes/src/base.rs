@@ -81,6 +81,13 @@ pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, Stude
     pub group_assignments: Vec<Option<GroupAssignment<GroupListId, StudentId>>>,
 }
 
+/// Data for prefilling of a group
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrefilledGroup<StudentId: Identifier> {
+    students: BTreeSet<StudentId>,
+    sealed: bool,
+}
+
 /// Description of a group list
 ///
 /// This is only the general constraints on the group list.
@@ -90,10 +97,33 @@ pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, Stude
 pub struct GroupListDescription<StudentId: Identifier> {
     /// Students count per group (range)
     pub students_per_group: RangeInclusive<NonZeroU32>,
-    /// Number of groups in the list (range)
-    pub group_count: RangeInclusive<u32>,
-    /// Students to dispatch in the groups
-    pub students: BTreeSet<StudentId>,
+    /// List of groups with preassigned students
+    ///
+    /// There should be a prefilled group for each possible existing group
+    /// So the length of prefilled_groups is the maximum number of groups
+    pub prefilled_groups: Vec<PrefilledGroup<StudentId>>,
+    /// Minimum number of groups that should actually have students
+    pub minimum_group_count: u32,
+    /// Remaining students (not already in prefilled groups) to dispatch
+    pub remaining_students: BTreeSet<StudentId>,
+}
+
+impl<StudentId: Identifier> GroupListDescription<StudentId> {
+    /// Builds the complete list of students for the group list
+    /// but fails with `None` if there is a duplicate
+    pub fn build_student_set_or_none(&self) -> Option<BTreeSet<StudentId>> {
+        let mut output = self.remaining_students.clone();
+
+        for group in &self.prefilled_groups {
+            for student_id in &group.students {
+                if !output.insert(*student_id) {
+                    return None;
+                }
+            }
+        }
+
+        Some(output)
+    }
 }
 
 /// Description of a colloscope problem - reduced
@@ -131,6 +161,10 @@ pub enum ValidationError {
     EmptyStudentPerGroupRange,
     #[error("Some students enrolled in subjects do not appear in group list")]
     GroupListDoesNotContainAllStudents,
+    #[error("Group count should fit in u32")]
+    GroupCountTooBigForU32,
+    #[error("A group list contains a student (at least) twice: once in non-assigned students, once in a prefilled group")]
+    DuplicateStudentInGroupList,
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -143,6 +177,15 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
         ValidationError,
     > {
+        let mut students_in_group_lists = BTreeMap::new();
+        for (group_list_id, group_list_desc) in &self.group_list_descriptions {
+            let Some(students) = group_list_desc.build_student_set_or_none() else {
+                return Err(ValidationError::DuplicateStudentInGroupList);
+            };
+
+            students_in_group_lists.insert(*group_list_id, students);
+        }
+
         let mut week_count = None;
         for (_subject_id, subject_desc) in &self.subject_descriptions {
             match week_count {
@@ -172,16 +215,15 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
             for group_assignment_opt in &subject_desc.group_assignments {
                 if let Some(group_assignment) = group_assignment_opt {
-                    let Some(group_list_desc) = self
-                        .group_list_descriptions
-                        .get(&group_assignment.group_list_id)
+                    let Some(group_list_students) =
+                        students_in_group_lists.get(&group_assignment.group_list_id)
                     else {
                         return Err(ValidationError::InvalidGroupListId);
                     };
 
                     if !group_assignment
                         .enrolled_students
-                        .is_subset(&group_list_desc.students)
+                        .is_subset(group_list_students)
                     {
                         return Err(ValidationError::GroupListDoesNotContainAllStudents);
                     }
@@ -194,7 +236,11 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         }
 
         for (_group_list_id, group_list_desc) in &self.group_list_descriptions {
-            if group_list_desc.group_count.is_empty() {
+            if group_list_desc.prefilled_groups.len() > u32::MAX as usize {
+                return Err(ValidationError::GroupCountTooBigForU32);
+            }
+
+            if group_list_desc.minimum_group_count > group_list_desc.prefilled_groups.len() as u32 {
                 return Err(ValidationError::EmptyGroupCountRange);
             }
 
@@ -253,8 +299,8 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         let mut variables = BTreeMap::new();
 
         for (group_list_id, group_list_desc) in &self.internal.group_list_descriptions {
-            let max_group_count = *group_list_desc.group_count.end();
-            for student_id in &group_list_desc.students {
+            let max_group_count = group_list_desc.prefilled_groups.len() as u32;
+            for student_id in &group_list_desc.remaining_students {
                 variables.insert(
                     variables::MainVariable::GroupForStudent {
                         group_list: *group_list_id,
@@ -278,7 +324,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                     .get(&group_assignment.group_list_id)
                     .expect("Group list ID should be valid");
 
-                let max_group_count = *group_list.group_count.end();
+                let max_group_count = group_list.prefilled_groups.len() as u32;
 
                 for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
                     if !slot_desc.weeks[week] {
@@ -316,14 +362,16 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         >,
     > {
         use collomatique_solver::generics::BaseVariable;
-        use collomatique_solver::tools::{AndVariable, OrVariable, UIntToBinVariables};
+        use collomatique_solver::tools::{
+            AndVariable, FixedVariable, OrVariable, UIntToBinVariables,
+        };
 
         let mut variables = vec![];
 
         for (group_list_id, group_list_desc) in &self.internal.group_list_descriptions {
-            let max_group_count = *group_list_desc.group_count.end();
+            let max_group_count = group_list_desc.prefilled_groups.len() as u32;
             let group_list = group_list_id.clone();
-            for student_id in &group_list_desc.students {
+            for student_id in &group_list_desc.remaining_students {
                 let student = student_id.clone();
                 variables.push(Box::new(UIntToBinVariables {
                     variable_name_builder: move |i| {
@@ -345,24 +393,39 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             }
 
             for group in 0..max_group_count {
-                variables.push(Box::new(OrVariable {
-                    variable_name: BaseVariable::Structure(
-                        variables::StructureVariable::NonEmptyGroup { group_list, group },
-                    ),
-                    original_variables: group_list_desc
-                        .students
-                        .iter()
-                        .map(|student_id| {
-                            let student = *student_id;
-                            BaseVariable::Structure(variables::StructureVariable::StudentInGroup {
-                                group_list,
-                                student,
-                                group,
+                if group_list_desc.prefilled_groups[group as usize]
+                    .students
+                    .is_empty()
+                {
+                    variables.push(Box::new(OrVariable {
+                        variable_name: BaseVariable::Structure(
+                            variables::StructureVariable::NonEmptyGroup { group_list, group },
+                        ),
+                        original_variables: group_list_desc
+                            .remaining_students
+                            .iter()
+                            .map(|student_id| {
+                                let student = *student_id;
+                                BaseVariable::Structure(
+                                    variables::StructureVariable::StudentInGroup {
+                                        group_list,
+                                        student,
+                                        group,
+                                    },
+                                )
                             })
-                        })
-                        .collect(),
-                })
-                    as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                            .collect(),
+                    })
+                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                } else {
+                    variables.push(Box::new(FixedVariable {
+                        variable_name: BaseVariable::Structure(
+                            variables::StructureVariable::NonEmptyGroup { group_list, group },
+                        ),
+                        value: true,
+                    })
+                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                }
             }
         }
 
@@ -390,9 +453,12 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                     .group_list_descriptions
                     .get(&group_assignment.group_list_id)
                     .expect("group list id should be valid");
-                let max_group_count = *group_list_desc.group_count.end();
+                let max_group_count = group_list_desc.prefilled_groups.len() as u32;
                 for group in 0..max_group_count {
                     for student_id in &group_assignment.enrolled_students {
+                        if !group_list_desc.remaining_students.contains(student_id) {
+                            continue;
+                        }
                         for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
                             if !slot_desc.weeks[week] {
                                 continue;
@@ -465,33 +531,50 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 .group_list_descriptions
                 .get(&group_list_id)
                 .expect("group list id should be valid");
-            let max_group_count = *group_list_desc.group_count.end();
+            let max_group_count = group_list_desc.prefilled_groups.len() as u32;
 
             for subclass in subclasses {
                 for group in 0..max_group_count {
-                    variables.push(Box::new(OrVariable {
-                        variable_name: BaseVariable::Structure(
-                            variables::StructureVariable::NonEmptyGroupForSubClass {
-                                subclass: subclass.clone(),
-                                group_list: group_list_id,
-                                group,
-                            },
-                        ),
-                        original_variables: subclass
-                            .iter()
-                            .map(|student_id| {
-                                let student = *student_id;
-                                BaseVariable::Structure(
-                                    variables::StructureVariable::StudentInGroup {
-                                        group_list: group_list_id,
-                                        student,
-                                        group,
-                                    },
-                                )
-                            })
-                            .collect(),
-                    })
-                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                    if group_list_desc.prefilled_groups[group as usize]
+                        .students
+                        .is_disjoint(&subclass)
+                    {
+                        variables.push(Box::new(OrVariable {
+                            variable_name: BaseVariable::Structure(
+                                variables::StructureVariable::NonEmptyGroupForSubClass {
+                                    subclass: subclass.clone(),
+                                    group_list: group_list_id,
+                                    group,
+                                },
+                            ),
+                            original_variables: subclass
+                                .iter()
+                                .map(|student_id| {
+                                    let student = *student_id;
+                                    BaseVariable::Structure(
+                                        variables::StructureVariable::StudentInGroup {
+                                            group_list: group_list_id,
+                                            student,
+                                            group,
+                                        },
+                                    )
+                                })
+                                .collect(),
+                        })
+                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                    } else {
+                        variables.push(Box::new(FixedVariable {
+                            variable_name: BaseVariable::Structure(
+                                variables::StructureVariable::NonEmptyGroupForSubClass {
+                                    subclass: subclass.clone(),
+                                    group_list: group_list_id,
+                                    group,
+                                },
+                            ),
+                            value: true,
+                        })
+                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                    }
                 }
             }
         }
