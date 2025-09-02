@@ -124,6 +124,17 @@ impl<StudentId: Identifier> GroupListDescription<StudentId> {
 
         Some(output)
     }
+
+    pub fn find_student_prefilled_group(&self, student_id: StudentId) -> Option<u32> {
+        for (i, prefilled_group) in self.prefilled_groups.iter().enumerate() {
+            for id in &prefilled_group.students {
+                if *id == student_id {
+                    return Some(i as u32);
+                }
+            }
+        }
+        None
+    }
 }
 
 /// Description of a colloscope problem - reduced
@@ -145,6 +156,7 @@ pub struct ColloscopeProblem<
     pub group_list_descriptions: BTreeMap<GroupListId, GroupListDescription<StudentId>>,
 }
 
+use collomatique_solver::tools::YesVariable;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
@@ -622,6 +634,59 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                             .collect(),
                     })
                         as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+
+                    for student_id in &group_assignment.enrolled_students {
+                        if group_list_desc.remaining_students.contains(student_id) {
+                            variables.push(Box::new(OrVariable {
+                                variable_name: BaseVariable::Structure(
+                                    variables::StructureVariable::StudentInSlot {
+                                        subject: *subject_id,
+                                        student: *student_id,
+                                        slot: *slot_id,
+                                        week,
+                                    },
+                                ),
+                                original_variables: (0..max_group_count)
+                                    .into_iter()
+                                    .map(|group| {
+                                        BaseVariable::Structure(
+                                            variables::StructureVariable::StudentInGroupAndSlot {
+                                                subject: *subject_id,
+                                                student: *student_id,
+                                                group,
+                                                slot: *slot_id,
+                                                week,
+                                            },
+                                        )
+                                    })
+                                    .collect(),
+                            })
+                                as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                        } else {
+                            let group = group_list_desc
+                                .find_student_prefilled_group(*student_id)
+                                .expect("Student should have a prefilled group at this point");
+                            variables.push(Box::new(YesVariable {
+                                variable_name: BaseVariable::Structure(
+                                    variables::StructureVariable::StudentInSlot {
+                                        subject: *subject_id,
+                                        student: *student_id,
+                                        slot: *slot_id,
+                                        week,
+                                    },
+                                ),
+                                original_variable: BaseVariable::Main(
+                                    variables::MainVariable::GroupInSlot {
+                                        subject: *subject_id,
+                                        slot: *slot_id,
+                                        week,
+                                        group,
+                                    },
+                                ),
+                            })
+                                as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                        }
+                    }
                 }
             }
         }

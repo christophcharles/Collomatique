@@ -53,6 +53,12 @@ pub enum StructureVariable<
         slot: SlotId,
         week: usize,
     },
+    StudentInSlot {
+        subject: SubjectId,
+        student: StudentId,
+        slot: SlotId,
+        week: usize,
+    },
     NonEmptySlot {
         subject: SubjectId,
         slot: SlotId,
