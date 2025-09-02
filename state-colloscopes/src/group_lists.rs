@@ -170,6 +170,44 @@ impl GroupListParameters {
 }
 
 impl GroupList {
+    /// Checks whether the group list is sealed
+    ///
+    /// This means each prefilled group is sealed and there is no room for another
+    /// group
+    pub fn is_sealed(&self) -> bool {
+        if !self
+            .prefilled_groups
+            .groups
+            .iter()
+            .all(|group| group.sealed)
+        {
+            return false;
+        }
+        let max_group_count = *self.params.group_count.end();
+        self.prefilled_groups.groups.len() != (max_group_count as usize)
+    }
+
+    /// Returns the set of students that are not already in a prefilled group
+    pub fn remaining_students_to_dispatch(
+        &self,
+        students: &BTreeSet<StudentId>,
+    ) -> BTreeSet<StudentId> {
+        let mut output: BTreeSet<_> = students
+            .difference(&self.params.excluded_students)
+            .copied()
+            .collect();
+
+        for group in &self.prefilled_groups.groups {
+            for student_id in &group.students {
+                output.remove(student_id);
+            }
+        }
+
+        output
+    }
+}
+
+impl GroupList {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
