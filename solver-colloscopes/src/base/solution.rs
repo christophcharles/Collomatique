@@ -10,7 +10,7 @@ use super::Identifier;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
-    pub groups_for_students: BTreeMap<StudentId, Option<u32>>,
+    pub groups_for_remaining_students: BTreeMap<StudentId, Option<u32>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,8 +44,6 @@ pub enum ValidationError {
     InconsistentWeekCount,
     #[error("Invalid group list id in group assignment")]
     InvalidGroupListId,
-    #[error("Invalid group number assigned in slot")]
-    InvalidGroupNumberForInterrogation,
     #[error("Group is both assigned and not unassigned in slot")]
     InconsistentGroupStatusInSlot,
 }
@@ -61,7 +59,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
         for (group_list_id, group_list) in &self.group_lists {
             let mut groups = BTreeSet::new();
-            for (_student_id, group_opt) in &group_list.groups_for_students {
+            for (_student_id, group_opt) in &group_list.groups_for_remaining_students {
                 if let Some(group) = group_opt {
                     groups.insert(*group);
                 }
@@ -86,20 +84,14 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                         continue;
                     };
 
-                    let Some(groups) = group_list_groups.get(&week_interrogation.group_list_id)
-                    else {
+                    if !self
+                        .group_lists
+                        .contains_key(&week_interrogation.group_list_id)
+                    {
                         return Err(ValidationError::InvalidGroupListId);
-                    };
-
-                    for group in &week_interrogation.assigned_groups {
-                        if !groups.contains(group) {
-                            return Err(ValidationError::InvalidGroupNumberForInterrogation);
-                        }
                     }
+
                     for group in &week_interrogation.unassigned_groups {
-                        if !groups.contains(group) {
-                            return Err(ValidationError::InvalidGroupNumberForInterrogation);
-                        }
                         if week_interrogation.assigned_groups.contains(group) {
                             return Err(ValidationError::InconsistentGroupStatusInSlot);
                         }

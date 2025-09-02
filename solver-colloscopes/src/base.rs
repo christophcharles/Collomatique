@@ -84,8 +84,8 @@ pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, Stude
 /// Data for prefilling of a group
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrefilledGroup<StudentId: Identifier> {
-    students: BTreeSet<StudentId>,
-    sealed: bool,
+    pub students: BTreeSet<StudentId>,
+    pub sealed: bool,
 }
 
 /// Description of a group list
@@ -148,23 +148,35 @@ pub struct ColloscopeProblem<
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
-pub enum ValidationError {
+pub enum ValidationError<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier> {
     #[error("The number of weeks varies from slot to slot")]
     InconsistentWeekCount,
-    #[error("A week is marked valid for a slot but the subject is not active on this week")]
-    InconsistentWeekStatusInSlot,
-    #[error("Invalid group list id in group assignment")]
-    InvalidGroupListId,
-    #[error("Group count range should allow some value")]
-    EmptyGroupCountRange,
-    #[error("Student per group range should allow some value")]
-    EmptyStudentPerGroupRange,
-    #[error("Some students enrolled in subjects do not appear in group list")]
-    GroupListDoesNotContainAllStudents,
-    #[error("Group count should fit in u32")]
-    GroupCountTooBigForU32,
-    #[error("A group list contains a student (at least) twice: once in non-assigned students, once in a prefilled group")]
-    DuplicateStudentInGroupList,
+    #[error("A week (week {0}) is marked valid for slot {1:?} but the subject is not active on this week")]
+    InconsistentWeekStatusInSlot(usize, SlotId),
+    #[error("Invalid group list id ({0:?}) in group assignment for week {1} in subject {2:?}")]
+    InvalidGroupListId(GroupListId, usize, SubjectId),
+    #[error("Group count range should allow some value (group list {0:?})")]
+    EmptyGroupCountRange(GroupListId),
+    #[error("Student per group range should allow some value (group list {0:?})")]
+    EmptyStudentPerGroupRange(GroupListId),
+    #[error("Student per group range should allow some value (subject {0:?})")]
+    EmptyStudentPerGroupRangeForSubject(SubjectId),
+    #[error("Some students enrolled in subjects {0:?} do not appear in group list {1:?}")]
+    GroupListDoesNotContainAllStudents(SubjectId, GroupListId),
+    #[error("Group count should fit in u32 (group list {0:?}")]
+    GroupCountTooBigForU32(GroupListId),
+    #[error("Group list {0:?} contains a student (at least) twice: once in non-assigned students, once in a prefilled group")]
+    DuplicateStudentInGroupList(GroupListId),
+    #[error(
+        "Prefilled group {1} exceeds the maximum number of students per group (group list {0:?})"
+    )]
+    TooManyStudentsInPrefilledGroup(GroupListId, u32),
+    #[error("Sealed group {1} does not have enough students (group list {0:?})")]
+    TooFewStudentsInSealedGroup(GroupListId, u32),
+    #[error("Prefilled group {2} exceeds the maximum number of students per group when specialized for subject {0:?} on week {1}")]
+    TooManyStudentsInPrefilledGroupForSubject(SubjectId, usize, u32),
+    #[error("Sealed group {2} does not have enough students when specialized for subject {0:?} on week {1}")]
+    TooFewStudentsInSealedGroupForSubject(SubjectId, usize, u32),
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -175,19 +187,19 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         self,
     ) -> Result<
         ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
-        ValidationError,
+        ValidationError<SubjectId, SlotId, GroupListId>,
     > {
         let mut students_in_group_lists = BTreeMap::new();
         for (group_list_id, group_list_desc) in &self.group_list_descriptions {
             let Some(students) = group_list_desc.build_student_set_or_none() else {
-                return Err(ValidationError::DuplicateStudentInGroupList);
+                return Err(ValidationError::DuplicateStudentInGroupList(*group_list_id));
             };
 
             students_in_group_lists.insert(*group_list_id, students);
         }
 
         let mut week_count = None;
-        for (_subject_id, subject_desc) in &self.subject_descriptions {
+        for (subject_id, subject_desc) in &self.subject_descriptions {
             match week_count {
                 Some(count) => {
                     if subject_desc.group_assignments.len() != count {
@@ -199,53 +211,136 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 }
             }
 
-            for (_slot_id, slot_desc) in &subject_desc.slots_descriptions {
+            for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
                 if slot_desc.weeks.len() != subject_desc.group_assignments.len() {
                     return Err(ValidationError::InconsistentWeekCount);
                 }
 
-                for (slot, group_assignment_opt) in
-                    slot_desc.weeks.iter().zip(&subject_desc.group_assignments)
+                for ((week, slot), group_assignment_opt) in slot_desc
+                    .weeks
+                    .iter()
+                    .enumerate()
+                    .zip(&subject_desc.group_assignments)
                 {
                     if *slot && group_assignment_opt.is_none() {
-                        return Err(ValidationError::InconsistentWeekStatusInSlot);
+                        return Err(ValidationError::InconsistentWeekStatusInSlot(
+                            week, *slot_id,
+                        ));
                     }
                 }
             }
 
-            for group_assignment_opt in &subject_desc.group_assignments {
+            for (week, group_assignment_opt) in subject_desc.group_assignments.iter().enumerate() {
                 if let Some(group_assignment) = group_assignment_opt {
                     let Some(group_list_students) =
                         students_in_group_lists.get(&group_assignment.group_list_id)
                     else {
-                        return Err(ValidationError::InvalidGroupListId);
+                        return Err(ValidationError::InvalidGroupListId(
+                            group_assignment.group_list_id,
+                            week,
+                            *subject_id,
+                        ));
                     };
 
                     if !group_assignment
                         .enrolled_students
                         .is_subset(group_list_students)
                     {
-                        return Err(ValidationError::GroupListDoesNotContainAllStudents);
+                        return Err(ValidationError::GroupListDoesNotContainAllStudents(
+                            *subject_id,
+                            group_assignment.group_list_id,
+                        ));
+                    }
+
+                    let group_list_desc = self
+                        .group_list_descriptions
+                        .get(&group_assignment.group_list_id)
+                        .expect("Group list id should be valid at this point");
+
+                    for (i, group) in group_list_desc.prefilled_groups.iter().enumerate() {
+                        let group_students: BTreeSet<_> = group
+                            .students
+                            .difference(&group_assignment.enrolled_students)
+                            .copied()
+                            .collect();
+
+                        if group_students.len() > u32::MAX as usize {
+                            return Err(ValidationError::TooManyStudentsInPrefilledGroup(
+                                group_assignment.group_list_id,
+                                i as u32,
+                            ));
+                        }
+                        if (group_students.len() as u32)
+                            > subject_desc.students_per_group.end().get()
+                        {
+                            return Err(
+                                ValidationError::TooManyStudentsInPrefilledGroupForSubject(
+                                    *subject_id,
+                                    week,
+                                    i as u32,
+                                ),
+                            );
+                        }
+                        if group.sealed && (group_students.len() as u32) != 0 {
+                            if (group_students.len() as u32)
+                                < subject_desc.students_per_group.start().get()
+                            {
+                                return Err(
+                                    ValidationError::TooFewStudentsInSealedGroupForSubject(
+                                        *subject_id,
+                                        week,
+                                        i as u32,
+                                    ),
+                                );
+                            }
+                        }
                     }
                 }
             }
 
             if subject_desc.students_per_group.is_empty() {
-                return Err(ValidationError::EmptyStudentPerGroupRange);
+                return Err(ValidationError::EmptyStudentPerGroupRangeForSubject(
+                    *subject_id,
+                ));
             }
         }
 
-        for (_group_list_id, group_list_desc) in &self.group_list_descriptions {
+        for (group_list_id, group_list_desc) in &self.group_list_descriptions {
             if group_list_desc.prefilled_groups.len() > u32::MAX as usize {
-                return Err(ValidationError::GroupCountTooBigForU32);
+                return Err(ValidationError::GroupCountTooBigForU32(*group_list_id));
             }
 
             if group_list_desc.minimum_group_count > group_list_desc.prefilled_groups.len() as u32 {
-                return Err(ValidationError::EmptyGroupCountRange);
+                return Err(ValidationError::EmptyGroupCountRange(*group_list_id));
             }
 
             if group_list_desc.students_per_group.is_empty() {
-                return Err(ValidationError::EmptyStudentPerGroupRange);
+                return Err(ValidationError::EmptyStudentPerGroupRange(*group_list_id));
+            }
+
+            for (i, group) in group_list_desc.prefilled_groups.iter().enumerate() {
+                if group.students.len() > u32::MAX as usize {
+                    return Err(ValidationError::TooManyStudentsInPrefilledGroup(
+                        *group_list_id,
+                        i as u32,
+                    ));
+                }
+                if group.students.len() as u32 > group_list_desc.students_per_group.end().get() {
+                    return Err(ValidationError::TooManyStudentsInPrefilledGroup(
+                        *group_list_id,
+                        i as u32,
+                    ));
+                }
+                if group.sealed && (group.students.len() as u32) != 0 {
+                    if (group.students.len() as u32)
+                        < group_list_desc.students_per_group.start().get()
+                    {
+                        return Err(ValidationError::TooFewStudentsInSealedGroup(
+                            *group_list_id,
+                            i as u32,
+                        ));
+                    }
+                }
             }
         }
 
@@ -393,10 +488,24 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             }
 
             for group in 0..max_group_count {
-                if group_list_desc.prefilled_groups[group as usize]
-                    .students
-                    .is_empty()
-                {
+                let prefilled_group = &group_list_desc.prefilled_groups[group as usize];
+                if !prefilled_group.students.is_empty() {
+                    variables.push(Box::new(FixedVariable {
+                        variable_name: BaseVariable::Structure(
+                            variables::StructureVariable::NonEmptyGroup { group_list, group },
+                        ),
+                        value: true,
+                    })
+                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                } else if prefilled_group.sealed {
+                    variables.push(Box::new(FixedVariable {
+                        variable_name: BaseVariable::Structure(
+                            variables::StructureVariable::NonEmptyGroup { group_list, group },
+                        ),
+                        value: false,
+                    })
+                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                } else {
                     variables.push(Box::new(OrVariable {
                         variable_name: BaseVariable::Structure(
                             variables::StructureVariable::NonEmptyGroup { group_list, group },
@@ -415,14 +524,6 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                                 )
                             })
                             .collect(),
-                    })
-                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
-                } else {
-                    variables.push(Box::new(FixedVariable {
-                        variable_name: BaseVariable::Structure(
-                            variables::StructureVariable::NonEmptyGroup { group_list, group },
-                        ),
-                        value: true,
                     })
                         as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
                 }
@@ -535,10 +636,32 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
             for subclass in subclasses {
                 for group in 0..max_group_count {
-                    if group_list_desc.prefilled_groups[group as usize]
-                        .students
-                        .is_disjoint(&subclass)
-                    {
+                    let prefilled_group = &group_list_desc.prefilled_groups[group as usize];
+                    if !prefilled_group.students.is_disjoint(&subclass) {
+                        variables.push(Box::new(FixedVariable {
+                            variable_name: BaseVariable::Structure(
+                                variables::StructureVariable::NonEmptyGroupForSubClass {
+                                    subclass: subclass.clone(),
+                                    group_list: group_list_id,
+                                    group,
+                                },
+                            ),
+                            value: true,
+                        })
+                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                    } else if prefilled_group.sealed {
+                        variables.push(Box::new(FixedVariable {
+                            variable_name: BaseVariable::Structure(
+                                variables::StructureVariable::NonEmptyGroupForSubClass {
+                                    subclass: subclass.clone(),
+                                    group_list: group_list_id,
+                                    group,
+                                },
+                            ),
+                            value: false,
+                        })
+                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                    } else {
                         variables.push(Box::new(OrVariable {
                             variable_name: BaseVariable::Structure(
                                 variables::StructureVariable::NonEmptyGroupForSubClass {
@@ -562,18 +685,6 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                                 .collect(),
                         })
                             as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
-                    } else {
-                        variables.push(Box::new(FixedVariable {
-                            variable_name: BaseVariable::Structure(
-                                variables::StructureVariable::NonEmptyGroupForSubClass {
-                                    subclass: subclass.clone(),
-                                    group_list: group_list_id,
-                                    group,
-                                },
-                            ),
-                            value: true,
-                        })
-                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
                     }
                 }
             }
@@ -592,9 +703,9 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 .group_list_descriptions
                 .iter()
                 .map(|(group_list_id, group_list_desc)| {
-                    let mut groups_for_students = BTreeMap::new();
+                    let mut groups_for_remaining_students = BTreeMap::new();
 
-                    for student_id in &group_list_desc.students {
+                    for student_id in &group_list_desc.remaining_students {
                         let group_opt = config.get(variables::MainVariable::GroupForStudent {
                             group_list: *group_list_id,
                             student: *student_id,
@@ -602,13 +713,13 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
                         let group_u32_opt = group_opt.map(|x| x as u32);
 
-                        groups_for_students.insert(*student_id, group_u32_opt);
+                        groups_for_remaining_students.insert(*student_id, group_u32_opt);
                     }
 
                     (
                         *group_list_id,
                         solution::GroupList {
-                            groups_for_students,
+                            groups_for_remaining_students,
                         },
                     )
                 })
@@ -646,7 +757,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                                 .group_list_descriptions
                                 .get(&group_assignment.group_list_id)
                                 .expect("group list id should be valid");
-                            let max_group_count = *group_list.group_count.end();
+                            let max_group_count = group_list.prefilled_groups.len() as u32;
                             for group in 0..max_group_count {
                                 let status_opt = config.get(variables::MainVariable::GroupInSlot {
                                     subject: *subject_id,
@@ -695,13 +806,15 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             let Some(group_list) = sol.group_lists.get(group_list_id) else {
                 return None;
             };
-            if group_list.groups_for_students.len() != group_list_desc.students.len() {
+            if group_list.groups_for_remaining_students.len()
+                != group_list_desc.remaining_students.len()
+            {
                 return None;
             }
-            let max_group_count = *group_list_desc.group_count.end();
+            let max_group_count = group_list_desc.prefilled_groups.len() as u32;
 
-            for (student_id, group_opt) in &group_list.groups_for_students {
-                if !group_list_desc.students.contains(student_id) {
+            for (student_id, group_opt) in &group_list.groups_for_remaining_students {
+                if !group_list_desc.remaining_students.contains(student_id) {
                     return None;
                 }
                 if let Some(group) = group_opt {
@@ -765,7 +878,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                         .group_list_descriptions
                         .get(&group_assignment.group_list_id)
                         .expect("Group list id should be valid");
-                    let max_group_count = *group_list_desc.group_count.end();
+                    let max_group_count = group_list_desc.prefilled_groups.len() as u32;
                     for group in 0..max_group_count {
                         if interrogation.assigned_groups.contains(&group) {
                             config = config.set(

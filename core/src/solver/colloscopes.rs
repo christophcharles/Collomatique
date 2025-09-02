@@ -17,8 +17,18 @@ pub enum Error {
     /// A group list is needed for every period for every subject
     #[error("subject {0:?} does not have an associated group list for period {1:?}")]
     MissingGroupList(SubjectId, PeriodId),
-    #[error("A group list chosen for a subject does not contain all the students for the subject")]
-    GroupListDoesNotContainAllStudents,
+    #[error("Some students enrolled in subjects {0:?} do not appear in group list {1:?}")]
+    GroupListDoesNotContainAllStudents(SubjectId, GroupListId),
+    #[error(
+        "Prefilled group {1} exceeds the maximum number of students per group (group list {0:?})"
+    )]
+    TooManyStudentsInPrefilledGroup(GroupListId, u32),
+    #[error("Sealed group {1} does not have enough students (group list {0:?})")]
+    TooFewStudentsInSealedGroup(GroupListId, u32),
+    #[error("Prefilled group {2} exceeds the maximum number of students per group when specialized for subject {0:?} on week {1}")]
+    TooManyStudentsInPrefilledGroupForSubject(SubjectId, usize, u32),
+    #[error("Sealed group {2} does not have enough students when specialized for subject {0:?} on week {1}")]
+    TooFewStudentsInSealedGroupForSubject(SubjectId, usize, u32),
 }
 
 type MainVar = collomatique_solver_colloscopes::base::variables::MainVariable<
@@ -54,20 +64,25 @@ impl ColloscopeProblemWithTranslators {
         use collomatique_solver_colloscopes::base::ValidationError;
         let validated_problem_desc = match problem_desc.validate() {
             Ok(v) => v,
-            Err(ValidationError::EmptyGroupCountRange) => panic!("Unexpected empty group range count - this should be forbidden by data invariants"),
-            Err(ValidationError::EmptyStudentPerGroupRange) => panic!("Unexpected empty students per group range count - this should be forbidden by data invariants"),
-            Err(ValidationError::GroupListDoesNotContainAllStudents) => return Err(Error::GroupListDoesNotContainAllStudents),
+            Err(ValidationError::EmptyGroupCountRange(id)) => panic!("Unexpected empty group range count (group list {:?}) - this should be forbidden by data invariants", id),
+            Err(ValidationError::EmptyStudentPerGroupRange(id)) => panic!("Unexpected empty students per group range count (group list {:?}) - this should be forbidden by data invariants", id),
+            Err(ValidationError::GroupListDoesNotContainAllStudents(subject_id, group_list_id)) => return Err(Error::GroupListDoesNotContainAllStudents(subject_id, group_list_id)),
             Err(ValidationError::InconsistentWeekCount) => panic!("Unexpected inconsistent week count - this should be satisfied by the output of data_to_colloscope_problem_desc"),
-            Err(ValidationError::InconsistentWeekStatusInSlot) => panic!("Unexpected inconsistent week status in a slot - this should be satisfied by the output of data_to_colloscope_problem_desc"),
-            Err(ValidationError::InvalidGroupListId) => panic!("Unexpected invalid group_list_id for subject - this should be satisfied by the output of data_to_colloscope_problem_desc"),
+            Err(ValidationError::InconsistentWeekStatusInSlot(week, id)) => panic!("Unexpected inconsistent week status for week {} in a slot {:?} - this should be satisfied by the output of data_to_colloscope_problem_desc", week, id),
+            Err(ValidationError::InvalidGroupListId(group_list_id,week,subject_id)) => panic!("Unexpected invalid group_list_id {:?} for subject {:?} on week {} - this should be satisfied by the output of data_to_colloscope_problem_desc", group_list_id, subject_id, week),
+            Err(ValidationError::DuplicateStudentInGroupList(id)) => panic!("Unexpected duplicated students in group list {:?} - this should be satisfied by the output of data_to_colloscope_problem_desc", id),
+            Err(ValidationError::GroupCountTooBigForU32(id)) => panic!("Group count exceeds u32 capacity in group list {:?}. If this is intentional, the panic is earned...", id),
+            Err(ValidationError::TooManyStudentsInPrefilledGroup(id, group)) => return Err(Error::TooManyStudentsInPrefilledGroup(id, group)),
+            Err(ValidationError::TooManyStudentsInPrefilledGroupForSubject(id, week, group)) => return Err(Error::TooManyStudentsInPrefilledGroupForSubject(id, week, group)),
+            Err(ValidationError::TooFewStudentsInSealedGroup(id, group)) => return Err(Error::TooFewStudentsInSealedGroup(id, group)),
+            Err(ValidationError::TooFewStudentsInSealedGroupForSubject(id, week, group)) => return Err(Error::TooFewStudentsInSealedGroupForSubject(id, week, group)),
+            Err(ValidationError::EmptyStudentPerGroupRangeForSubject(id)) => panic!("Unexpected empty students per group range count (subject {:?}) - this should be forbidden by data invariants", id),
         };
 
-        println!("A");
         let problem_builder =
             collomatique_solver::ProblemBuilder::<_, _, _>::new(validated_problem_desc)
                 .expect("Consistent ILP description");
 
-        println!("B");
         let problem = problem_builder.build();
 
         Ok(ColloscopeProblemWithTranslators { problem })
@@ -194,15 +209,28 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
             .group_list_map
             .iter()
             .map(|(group_list_id, group_list)| {
+                let mut prefilled_groups = vec![
+                    base::PrefilledGroup {
+                        students: BTreeSet::new(),
+                        sealed: false,
+                    };
+                    *group_list.params.group_count.end() as usize
+                ];
+
+                for (i, prefilled_group) in group_list.prefilled_groups.groups.iter().enumerate() {
+                    prefilled_groups[i].sealed = prefilled_group.sealed;
+                    prefilled_groups[i].students = prefilled_group.students.clone();
+                }
+
+                let remaining_students = group_list.remaining_students_to_dispatch(&students);
+
                 (
                     group_list_id.clone(),
                     base::GroupListDescription {
                         students_per_group: group_list.params.students_per_group.clone(),
-                        group_count: group_list.params.group_count.clone(),
-                        students: students
-                            .difference(&group_list.params.excluded_students)
-                            .copied()
-                            .collect(),
+                        minimum_group_count: *group_list.params.group_count.start(),
+                        prefilled_groups,
+                        remaining_students,
                     },
                 )
             })
