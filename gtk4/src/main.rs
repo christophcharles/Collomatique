@@ -56,40 +56,19 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
         println!("Caveat: {:?}", caveat);
     }
 
-    let problem_desc =
-        collomatique_core::solver::colloscopes::data_to_colloscope_problem_desc(&data)
+    println!("\nBuilding ILP problem...");
+
+    let problem_with_translators =
+        collomatique_core::solver::colloscopes::ColloscopeProblemWithTranslators::from_data(&data)
             .expect("Data should be complete for resolution");
 
-    let validated_desc = problem_desc
-        .validate()
-        .expect("Description should be valid");
-
-    println!("Problem desc: {:?}", validated_desc);
-
-    println!("\nStart resolution...");
-
-    use collomatique_solver::{
-        examples::simple_schedule::{SimpleScheduleConstraints, SimpleScheduleDesc},
-        ProblemBuilder,
-    };
-
-    let problem_desc = SimpleScheduleDesc {
-        group_count: 1,
-        week_count: 3,
-        course_count: 3,
-    };
-
-    let constraints = SimpleScheduleConstraints {};
-
-    let mut problem_builder =
-        ProblemBuilder::<_, _, _>::new(problem_desc).expect("Consistent ILP description");
-    let _translator = problem_builder
-        .add_constraints(constraints, 1.0)
-        .expect("Consistent ILP description");
-    let problem = problem_builder.build();
+    println!("Start resolution...");
 
     let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
-    let solution = problem.solve(&solver).map(|x| x.into_solution());
+    let solution = problem_with_translators
+        .problem
+        .solve(&solver)
+        .map(|x| x.into_solution());
 
     println!("\n\nPotential solution: {:?}", solution);
 

@@ -348,6 +348,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "collomatique-ilp",
+ "collomatique-solver",
  "collomatique-solver-colloscopes",
  "collomatique-state",
  "collomatique-state-colloscopes",

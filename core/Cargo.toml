@@ -11,7 +11,9 @@ collomatique-time = { path = "../time" }
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
+collomatique-solver = { path = "../solver" }
 collomatique-solver-colloscopes = { path = "../solver-colloscopes" }
+collomatique-ilp = { path = "../ilp" }
 pyo3 = { version = "0.25", features = [ "py-clone" ] }
 anyhow.workspace = true
 chrono.workspace = true

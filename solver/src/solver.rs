@@ -144,9 +144,12 @@ where
     /// declared variables and the variables that appear in the constraints
     /// and the objective. In that case, it returns `None`.
     pub fn new(desc: T) -> Option<Self> {
+        println!("Building main variables...");
         let orig_main_variables = desc.main_variables();
+        println!("Building structure variables...");
         let orig_structure_variables = desc.structure_variables();
 
+        println!("Assembling variables into single map...");
         let variables = orig_main_variables
             .into_iter()
             .map(|(v_name, v_desc)| (ExtraVariable::BaseMain(v_name), v_desc))
@@ -162,6 +165,7 @@ where
         let mut structure_constraint_descs = BTreeMap::new();
         let mut constraints = Vec::new();
 
+        println!("Building structure constraints...");
         for (orig_constraint, c_desc) in desc.structure_constraints() {
             let mut expr = LinExpr::constant(orig_constraint.get_constant());
             for (v, value) in orig_constraint.coefficients() {

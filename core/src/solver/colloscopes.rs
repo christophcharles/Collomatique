@@ -17,9 +17,64 @@ pub enum Error {
     /// A group list is needed for every period for every subject
     #[error("subject {0:?} does not have an associated group list for period {1:?}")]
     MissingGroupList(SubjectId, PeriodId),
+    #[error("A group list chosen for a subject does not contain all the students for the subject")]
+    GroupListDoesNotContainAllStudents,
 }
 
-pub fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
+type MainVar = collomatique_solver_colloscopes::base::variables::MainVariable<
+    GroupListId,
+    StudentId,
+    SubjectId,
+    SlotId,
+>;
+type StructVar = collomatique_solver_colloscopes::base::variables::StructureVariable<
+    GroupListId,
+    StudentId,
+    SubjectId,
+    SlotId,
+>;
+type BaseProblem = collomatique_solver_colloscopes::base::ValidatedColloscopeProblem<
+    SubjectId,
+    SlotId,
+    GroupListId,
+    StudentId,
+>;
+type ProblemRepr = collomatique_ilp::DefaultRepr<
+    collomatique_solver::ExtraVariable<MainVar, StructVar, collomatique_solver::solver::IdVariable>,
+>;
+
+pub struct ColloscopeProblemWithTranslators {
+    pub problem: collomatique_solver::Problem<MainVar, StructVar, BaseProblem, ProblemRepr>,
+}
+
+impl ColloscopeProblemWithTranslators {
+    pub fn from_data(data: &Data) -> Result<Self, Error> {
+        let problem_desc = data_to_colloscope_problem_desc(data)?;
+
+        use collomatique_solver_colloscopes::base::ValidationError;
+        let validated_problem_desc = match problem_desc.validate() {
+            Ok(v) => v,
+            Err(ValidationError::EmptyGroupCountRange) => panic!("Unexpected empty group range count - this should be forbidden by data invariants"),
+            Err(ValidationError::EmptyStudentPerGroupRange) => panic!("Unexpected empty students per group range count - this should be forbidden by data invariants"),
+            Err(ValidationError::GroupListDoesNotContainAllStudents) => return Err(Error::GroupListDoesNotContainAllStudents),
+            Err(ValidationError::InconsistentWeekCount) => panic!("Unexpected inconsistent week count - this should be satisfied by the output of data_to_colloscope_problem_desc"),
+            Err(ValidationError::InconsistentWeekStatusInSlot) => panic!("Unexpected inconsistent week status in a slot - this should be satisfied by the output of data_to_colloscope_problem_desc"),
+            Err(ValidationError::InvalidGroupListId) => panic!("Unexpected invalid group_list_id for subject - this should be satisfied by the output of data_to_colloscope_problem_desc"),
+        };
+
+        println!("A");
+        let problem_builder =
+            collomatique_solver::ProblemBuilder::<_, _, _>::new(validated_problem_desc)
+                .expect("Consistent ILP description");
+
+        println!("B");
+        let problem = problem_builder.build();
+
+        Ok(ColloscopeProblemWithTranslators { problem })
+    }
+}
+
+fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
     let students: BTreeSet<_> = data.get_students().student_map.keys().copied().collect();
 
     let mut subject_descriptions = BTreeMap::new();
