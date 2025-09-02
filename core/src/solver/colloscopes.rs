@@ -29,6 +29,8 @@ pub enum Error {
     TooManyStudentsInPrefilledGroupForSubject(SubjectId, usize, u32),
     #[error("Sealed group {2} does not have enough students when specialized for subject {0:?} on week {1}")]
     TooFewStudentsInSealedGroupForSubject(SubjectId, usize, u32),
+    #[error("Group list {0:?} has a maximum number of groups of {1} but has {2} prefilled groups")]
+    TooManyPrefilledGroups(GroupListId, u32, usize),
 }
 
 type MainVar = collomatique_solver_colloscopes::base::variables::MainVariable<
@@ -224,38 +226,45 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
         subject_descriptions.insert(subject_id.clone(), subject_desc);
     }
 
+    let mut group_list_descriptions = BTreeMap::new();
+
+    for (group_list_id, group_list) in &data.get_group_lists().group_list_map {
+        let mut prefilled_groups = vec![
+            base::PrefilledGroup {
+                students: BTreeSet::new(),
+                sealed: false,
+            };
+            *group_list.params.group_count.end() as usize
+        ];
+
+        if group_list.prefilled_groups.groups.len() > prefilled_groups.len() {
+            return Err(Error::TooManyPrefilledGroups(
+                *group_list_id,
+                *group_list.params.group_count.end(),
+                group_list.prefilled_groups.groups.len(),
+            ));
+        }
+
+        for (i, prefilled_group) in group_list.prefilled_groups.groups.iter().enumerate() {
+            prefilled_groups[i].sealed = prefilled_group.sealed;
+            prefilled_groups[i].students = prefilled_group.students.clone();
+        }
+
+        let remaining_students = group_list.remaining_students_to_dispatch(&students);
+
+        group_list_descriptions.insert(
+            group_list_id.clone(),
+            base::GroupListDescription {
+                students_per_group: group_list.params.students_per_group.clone(),
+                minimum_group_count: *group_list.params.group_count.start(),
+                prefilled_groups,
+                remaining_students,
+            },
+        );
+    }
+
     Ok(ProblemDesc {
-        group_list_descriptions: data
-            .get_group_lists()
-            .group_list_map
-            .iter()
-            .map(|(group_list_id, group_list)| {
-                let mut prefilled_groups = vec![
-                    base::PrefilledGroup {
-                        students: BTreeSet::new(),
-                        sealed: false,
-                    };
-                    *group_list.params.group_count.end() as usize
-                ];
-
-                for (i, prefilled_group) in group_list.prefilled_groups.groups.iter().enumerate() {
-                    prefilled_groups[i].sealed = prefilled_group.sealed;
-                    prefilled_groups[i].students = prefilled_group.students.clone();
-                }
-
-                let remaining_students = group_list.remaining_students_to_dispatch(&students);
-
-                (
-                    group_list_id.clone(),
-                    base::GroupListDescription {
-                        students_per_group: group_list.params.students_per_group.clone(),
-                        minimum_group_count: *group_list.params.group_count.start(),
-                        prefilled_groups,
-                        remaining_students,
-                    },
-                )
-            })
-            .collect(),
+        group_list_descriptions,
         subject_descriptions,
     })
 }
