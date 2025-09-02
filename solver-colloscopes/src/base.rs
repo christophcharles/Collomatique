@@ -121,6 +121,8 @@ use thiserror::Error;
 pub enum ValidationError {
     #[error("The number of weeks varies from slot to slot")]
     InconsistentWeekCount,
+    #[error("A week is marked valid for a slot but the subject is not active on this week")]
+    InconsistentWeekStatusInSlot,
     #[error("Invalid group list id in group assignment")]
     InvalidGroupListId,
     #[error("Group count range should allow some value")]
@@ -157,6 +159,14 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             for (_slot_id, slot_desc) in &subject_desc.slots_descriptions {
                 if slot_desc.weeks.len() != subject_desc.group_assignments.len() {
                     return Err(ValidationError::InconsistentWeekCount);
+                }
+
+                for (slot, group_assignment_opt) in
+                    slot_desc.weeks.iter().zip(&subject_desc.group_assignments)
+                {
+                    if *slot && group_assignment_opt.is_none() {
+                        return Err(ValidationError::InconsistentWeekStatusInSlot);
+                    }
                 }
             }
 
@@ -206,6 +216,28 @@ pub struct ValidatedColloscopeProblem<
     StudentId: Identifier,
 > {
     internal: ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
+}
+
+impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
+    ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>
+{
+    pub fn inner(&self) -> &ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId> {
+        &self.internal
+    }
+
+    pub fn into_inner(self) -> ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId> {
+        self.internal
+    }
+}
+
+impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
+    std::ops::Deref for ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>
+{
+    type Target = ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -479,8 +511,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 .group_list_descriptions
                 .iter()
                 .map(|(group_list_id, group_list_desc)| {
-                    let mut assigned_students = BTreeMap::new();
-                    let mut unassigned_students = BTreeSet::new();
+                    let mut groups_for_students = BTreeMap::new();
 
                     for student_id in &group_list_desc.students {
                         let group_opt = config.get(variables::MainVariable::GroupForStudent {
@@ -488,21 +519,15 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                             student: *student_id,
                         });
 
-                        match group_opt {
-                            Some(group) => {
-                                assigned_students.insert(*student_id, group as u32);
-                            }
-                            None => {
-                                unassigned_students.insert(*student_id);
-                            }
-                        }
+                        let group_u32_opt = group_opt.map(|x| x as u32);
+
+                        groups_for_students.insert(*student_id, group_u32_opt);
                     }
 
                     (
                         *group_list_id,
                         solution::GroupList {
-                            assigned_students,
-                            unassigned_students,
+                            groups_for_students,
                         },
                     )
                 })
@@ -577,8 +602,116 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
     fn partial_solution_to_configuration(
         &self,
-        _sol: &Self::PartialSolution,
+        sol: &Self::PartialSolution,
     ) -> Option<collomatique_ilp::ConfigData<Self::MainVariable>> {
-        todo!()
+        let mut config = collomatique_ilp::ConfigData::new();
+
+        if sol.group_lists.len() != self.internal.group_list_descriptions.len() {
+            return None;
+        }
+
+        for (group_list_id, group_list_desc) in &self.internal.group_list_descriptions {
+            let Some(group_list) = sol.group_lists.get(group_list_id) else {
+                return None;
+            };
+            if group_list.groups_for_students.len() != group_list_desc.students.len() {
+                return None;
+            }
+            let max_group_count = *group_list_desc.group_count.end();
+
+            for (student_id, group_opt) in &group_list.groups_for_students {
+                if !group_list_desc.students.contains(student_id) {
+                    return None;
+                }
+                if let Some(group) = group_opt {
+                    if *group >= max_group_count {
+                        return None;
+                    }
+
+                    config = config.set(
+                        variables::MainVariable::GroupForStudent {
+                            group_list: *group_list_id,
+                            student: *student_id,
+                        },
+                        f64::from(*group),
+                    )
+                }
+            }
+        }
+
+        if sol.subject_map.len() != self.subject_descriptions.len() {
+            return None;
+        }
+
+        for (subject_id, subject_desc) in &self.subject_descriptions {
+            let Some(subject) = sol.subject_map.get(subject_id) else {
+                return None;
+            };
+
+            if subject_desc.slots_descriptions.len() != subject.slots.len() {
+                return None;
+            }
+
+            for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
+                let Some(slot) = subject.slots.get(slot_id) else {
+                    return None;
+                };
+
+                if slot.len() != slot_desc.weeks.len() {
+                    return None;
+                }
+
+                for (week, interrogation_opt) in slot.iter().enumerate() {
+                    if !slot_desc.weeks[week] {
+                        if interrogation_opt.is_some() {
+                            return None;
+                        }
+                    }
+
+                    let Some(interrogation) = interrogation_opt else {
+                        return None;
+                    };
+
+                    let group_assignment = subject_desc.group_assignments[week]
+                        .as_ref()
+                        .expect("There should be a group assignment as the slot is marked valid");
+
+                    if interrogation.group_list_id != group_assignment.group_list_id {
+                        return None;
+                    }
+
+                    let group_list_desc = self
+                        .group_list_descriptions
+                        .get(&group_assignment.group_list_id)
+                        .expect("Group list id should be valid");
+                    let max_group_count = *group_list_desc.group_count.end();
+                    for group in 0..max_group_count {
+                        if interrogation.assigned_groups.contains(&group) {
+                            config = config.set(
+                                variables::MainVariable::GroupInSlot {
+                                    subject: *subject_id,
+                                    slot: *slot_id,
+                                    week,
+                                    group,
+                                },
+                                1.,
+                            );
+                        } else if !interrogation.unassigned_groups.contains(&group) {
+                            config = config.set(
+                                variables::MainVariable::GroupInSlot {
+                                    subject: *subject_id,
+                                    slot: *slot_id,
+                                    week,
+                                    group,
+                                },
+                                0.,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(config)
     }
 }

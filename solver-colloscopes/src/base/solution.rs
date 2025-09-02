@@ -10,8 +10,7 @@ use super::Identifier;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList<StudentId: Identifier> {
-    pub assigned_students: BTreeMap<StudentId, u32>,
-    pub unassigned_students: BTreeSet<StudentId>,
+    pub groups_for_students: BTreeMap<StudentId, Option<u32>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,8 +48,6 @@ pub enum ValidationError {
     InvalidGroupNumberForInterrogation,
     #[error("Group is both assigned and not unassigned in slot")]
     InconsistentGroupStatusInSlot,
-    #[error("Student is both assigned and not assigned in group list")]
-    InconsistentStudentStatusInGroupList,
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -64,11 +61,10 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 
         for (group_list_id, group_list) in &self.group_lists {
             let mut groups = BTreeSet::new();
-            for (student_id, group) in &group_list.assigned_students {
-                if group_list.unassigned_students.contains(student_id) {
-                    return Err(ValidationError::InconsistentStudentStatusInGroupList);
+            for (_student_id, group_opt) in &group_list.groups_for_students {
+                if let Some(group) = group_opt {
+                    groups.insert(*group);
                 }
-                groups.insert(*group);
             }
             group_list_groups.insert(*group_list_id, groups);
         }
