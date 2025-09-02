@@ -53,8 +53,22 @@ type ProblemRepr = collomatique_ilp::DefaultRepr<
     collomatique_solver::ExtraVariable<MainVar, StructVar, collomatique_solver::solver::IdVariable>,
 >;
 
+pub enum ColloscopeTranslator {
+    GroupsPerSlot(
+        collomatique_solver::Translator<
+            collomatique_solver_colloscopes::constraints::main::GroupsPerSlots<
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
+            >,
+        >,
+    ),
+}
+
 pub struct ColloscopeProblemWithTranslators {
     pub problem: collomatique_solver::Problem<MainVar, StructVar, BaseProblem, ProblemRepr>,
+    pub translators: Vec<ColloscopeTranslator>,
 }
 
 impl ColloscopeProblemWithTranslators {
@@ -79,13 +93,20 @@ impl ColloscopeProblemWithTranslators {
             Err(ValidationError::EmptyStudentPerGroupRangeForSubject(id)) => panic!("Unexpected empty students per group range count (subject {:?}) - this should be forbidden by data invariants", id),
         };
 
-        let problem_builder =
+        let mut problem_builder =
             collomatique_solver::ProblemBuilder::<_, _, _>::new(validated_problem_desc)
                 .expect("Consistent ILP description");
 
+        let mut translators = vec![];
+
+        add_groups_per_slots_constraints(&mut problem_builder, &mut translators, data);
+
         let problem = problem_builder.build();
 
-        Ok(ColloscopeProblemWithTranslators { problem })
+        Ok(ColloscopeProblemWithTranslators {
+            problem,
+            translators,
+        })
     }
 }
 
@@ -237,4 +258,25 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
             .collect(),
         subject_descriptions,
     })
+}
+
+fn add_groups_per_slots_constraints(
+    problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
+    translators: &mut Vec<ColloscopeTranslator>,
+    data: &Data,
+) {
+    let week_count = data
+        .get_periods()
+        .ordered_period_list
+        .iter()
+        .map(|(_period_id, weeks)| weeks.len())
+        .sum();
+    let weeks = vec![true; week_count];
+    let groups_per_slots_constraints =
+        collomatique_solver_colloscopes::constraints::main::GroupsPerSlots::new(weeks);
+    translators.push(ColloscopeTranslator::GroupsPerSlot(
+        problem_builder
+            .add_constraints(groups_per_slots_constraints, 0.)
+            .expect("Translator should be compatible with problem"),
+    ));
 }
