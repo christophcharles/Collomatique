@@ -23,6 +23,8 @@ pub enum MainVariable<
     },
 }
 
+use std::collections::BTreeSet;
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StructureVariable<
     GroupListId: Identifier,
@@ -39,16 +41,10 @@ pub enum StructureVariable<
         group_list: GroupListId,
         group: u32,
     },
-    StudentInGroupForSubjectAndWeek {
-        subject: SubjectId,
-        student: StudentId,
+    NonEmptyGroupForSubClass {
+        subclass: BTreeSet<StudentId>,
+        group_list: GroupListId,
         group: u32,
-        week: usize,
-    },
-    NonEmptyGroupForSubjectAndWeek {
-        subject: SubjectId,
-        group: u32,
-        week: usize,
     },
     StudentInGroupAndSlot {
         subject: SubjectId,

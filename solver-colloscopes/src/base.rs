@@ -316,9 +316,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         >,
     > {
         use collomatique_solver::generics::BaseVariable;
-        use collomatique_solver::tools::{
-            AndVariable, OrVariable, UIntToBinVariables, YesVariable,
-        };
+        use collomatique_solver::tools::{AndVariable, OrVariable, UIntToBinVariables};
 
         let mut variables = vec![];
 
@@ -368,11 +366,24 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             }
         }
 
+        let mut subclasses_for_group_lists: BTreeMap<GroupListId, BTreeSet<BTreeSet<StudentId>>> =
+            self.group_list_descriptions
+                .keys()
+                .map(|group_list_id| (*group_list_id, BTreeSet::new()))
+                .collect();
+
         for (subject_id, subject_desc) in &self.internal.subject_descriptions {
             for (week, group_assignment_opt) in subject_desc.group_assignments.iter().enumerate() {
                 let Some(group_assignment) = group_assignment_opt else {
                     continue;
                 };
+
+                let subclass = group_assignment.enrolled_students.clone();
+
+                let subclasses = subclasses_for_group_lists
+                    .get_mut(&group_assignment.group_list_id)
+                    .expect("Group list id should be listed");
+                subclasses.insert(subclass);
 
                 let group_list_desc = self
                     .internal
@@ -382,90 +393,40 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 let max_group_count = *group_list_desc.group_count.end();
                 for group in 0..max_group_count {
                     for student_id in &group_assignment.enrolled_students {
-                        variables.push(Box::new(YesVariable {
-                            variable_name: BaseVariable::Structure(
-                                variables::StructureVariable::StudentInGroupForSubjectAndWeek {
-                                    subject: *subject_id,
-                                    student: *student_id,
-                                    group,
-                                    week,
-                                },
-                            ),
-                            original_variable: BaseVariable::Structure(
-                                variables::StructureVariable::StudentInGroup {
-                                    group_list: group_assignment.group_list_id,
-                                    student: *student_id,
-                                    group,
-                                },
-                            ),
-                        })
-                            as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
-
                         for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
                             if !slot_desc.weeks[week] {
                                 continue;
                             }
 
-                            variables.push(
-                                Box::new(AndVariable {
-                                    variable_name: BaseVariable::Structure(
-                                        variables::StructureVariable::StudentInGroupAndSlot {
-                                            subject: *subject_id,
-                                            student: *student_id,
-                                            group,
-                                            slot: *slot_id,
-                                            week,
-                                        }
-                                    ),
-                                    original_variables: BTreeSet::from([
-                                        BaseVariable::Main(
-                                            variables::MainVariable::GroupInSlot {
-                                                subject: *subject_id,
-                                                slot: *slot_id,
-                                                week,
-                                                group,
-                                            }
-                                        ),
-                                        BaseVariable::Structure(
-                                            variables::StructureVariable::StudentInGroupForSubjectAndWeek {
-                                                subject: *subject_id,
-                                                student: *student_id,
-                                                group,
-                                                week,
-                                            }
-                                        ),
-                                    ]),
-                                })
-                                as Box::<dyn collomatique_solver::tools::AggregatedVariables<_>>
-                            );
-                        }
-                    }
-
-                    variables.push(Box::new(OrVariable {
-                        variable_name: BaseVariable::Structure(
-                            variables::StructureVariable::NonEmptyGroupForSubjectAndWeek {
-                                subject: *subject_id,
-                                group,
-                                week,
-                            },
-                        ),
-                        original_variables: group_assignment
-                            .enrolled_students
-                            .iter()
-                            .map(|student_id| {
-                                let student = *student_id;
-                                BaseVariable::Structure(
-                                    variables::StructureVariable::StudentInGroupForSubjectAndWeek {
+                            variables.push(Box::new(AndVariable {
+                                variable_name: BaseVariable::Structure(
+                                    variables::StructureVariable::StudentInGroupAndSlot {
                                         subject: *subject_id,
-                                        student,
+                                        student: *student_id,
                                         group,
+                                        slot: *slot_id,
                                         week,
                                     },
-                                )
+                                ),
+                                original_variables: BTreeSet::from([
+                                    BaseVariable::Main(variables::MainVariable::GroupInSlot {
+                                        subject: *subject_id,
+                                        slot: *slot_id,
+                                        week,
+                                        group,
+                                    }),
+                                    BaseVariable::Structure(
+                                        variables::StructureVariable::StudentInGroup {
+                                            group_list: group_assignment.group_list_id,
+                                            student: *student_id,
+                                            group,
+                                        },
+                                    ),
+                                ]),
                             })
-                            .collect(),
-                    })
-                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                                as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                        }
+                    }
                 }
 
                 for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
@@ -490,6 +451,43 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                                     group,
                                     week,
                                 })
+                            })
+                            .collect(),
+                    })
+                        as Box<dyn collomatique_solver::tools::AggregatedVariables<_>>);
+                }
+            }
+        }
+
+        for (group_list_id, subclasses) in subclasses_for_group_lists {
+            let group_list_desc = self
+                .internal
+                .group_list_descriptions
+                .get(&group_list_id)
+                .expect("group list id should be valid");
+            let max_group_count = *group_list_desc.group_count.end();
+
+            for subclass in subclasses {
+                for group in 0..max_group_count {
+                    variables.push(Box::new(OrVariable {
+                        variable_name: BaseVariable::Structure(
+                            variables::StructureVariable::NonEmptyGroupForSubClass {
+                                subclass: subclass.clone(),
+                                group_list: group_list_id,
+                                group,
+                            },
+                        ),
+                        original_variables: subclass
+                            .iter()
+                            .map(|student_id| {
+                                let student = *student_id;
+                                BaseVariable::Structure(
+                                    variables::StructureVariable::StudentInGroup {
+                                        group_list: group_list_id,
+                                        student,
+                                        group,
+                                    },
+                                )
                             })
                             .collect(),
                     })

@@ -146,8 +146,10 @@ where
     pub fn new(desc: T) -> Option<Self> {
         println!("Building main variables...");
         let orig_main_variables = desc.main_variables();
+        println!("Count: {}", orig_main_variables.len());
         println!("Building structure variables...");
         let orig_structure_variables = desc.structure_variables();
+        println!("Count: {}", orig_structure_variables.len());
 
         println!("Assembling variables into single map...");
         let variables = orig_main_variables
@@ -165,8 +167,12 @@ where
         let mut structure_constraint_descs = BTreeMap::new();
         let mut constraints = Vec::new();
 
-        println!("Building structure constraints...");
-        for (orig_constraint, c_desc) in desc.structure_constraints() {
+        let structure_constraints = desc.structure_constraints();
+        println!(
+            "Building structure constraints... (count: {})",
+            structure_constraints.len()
+        );
+        for (orig_constraint, c_desc) in structure_constraints {
             let mut expr = LinExpr::constant(orig_constraint.get_constant());
             for (v, value) in orig_constraint.coefficients() {
                 let new_v = match v {
