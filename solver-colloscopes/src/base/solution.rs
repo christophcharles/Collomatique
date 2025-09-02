@@ -112,10 +112,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             }
         }
 
-        Ok(ValidatedColloscope {
-            internal: self,
-            group_list_groups,
-        })
+        Ok(ValidatedColloscope { internal: self })
     }
 }
 
@@ -127,7 +124,6 @@ pub struct ValidatedColloscope<
     StudentId: Identifier,
 > {
     internal: Colloscope<SubjectId, SlotId, GroupListId, StudentId>,
-    group_list_groups: BTreeMap<GroupListId, BTreeSet<u32>>,
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
