@@ -217,9 +217,10 @@ impl Component for Teachers {
                     Some(1) => TeacherFilter::NoSubjectLinked,
                     Some(x) => {
                         let index = x - 2;
-                        assert!(index < self.subjects.ordered_subject_list.len());
-
-                        TeacherFilter::Subject(self.subjects.ordered_subject_list[index].0.clone())
+                        TeacherFilter::Subject(
+                            self.filtered_list_position_to_subject_id(index)
+                                .expect("Index in subject list should be valid"),
+                        )
                     }
                 };
                 self.update_current_list();
@@ -246,17 +247,56 @@ impl Teachers {
             return;
         };
 
-        if self.subjects.find_subject_position(subject_id).is_some() {
-            return;
+        if let Some(subject) = self.subjects.find_subject(subject_id) {
+            if subject.parameters.interrogation_parameters.is_some() {
+                return;
+            }
         }
 
         self.current_filter = TeacherFilter::NoFilter;
+    }
+
+    fn find_subject_position_in_filtered_list(
+        &self,
+        subject_id: collomatique_state_colloscopes::SubjectId,
+    ) -> Option<usize> {
+        let mut pos = 0usize;
+        for (id, subject) in &self.subjects.ordered_subject_list {
+            if subject.parameters.interrogation_parameters.is_none() {
+                continue;
+            }
+            if subject_id == *id {
+                return Some(pos);
+            }
+            pos += 1;
+        }
+        None
+    }
+
+    fn filtered_list_position_to_subject_id(
+        &self,
+        pos: usize,
+    ) -> Option<collomatique_state_colloscopes::SubjectId> {
+        let mut current_pos = 0usize;
+        for (subject_id, subject) in &self.subjects.ordered_subject_list {
+            if subject.parameters.interrogation_parameters.is_none() {
+                continue;
+            }
+            if current_pos == pos {
+                return Some(*subject_id);
+            }
+            current_pos += 1;
+        }
+        None
     }
 
     fn update_filter_droplist(&mut self) {
         let mut list = vec!["Toutes les matières".into(), "Aucune matière".into()];
 
         for (_subject_id, subject) in &self.subjects.ordered_subject_list {
+            if subject.parameters.interrogation_parameters.is_none() {
+                continue;
+            }
             list.push(subject.parameters.name.clone());
         }
 
@@ -265,8 +305,7 @@ impl Teachers {
             TeacherFilter::NoSubjectLinked => 1usize,
             TeacherFilter::Subject(subject_id) => {
                 let pos = self
-                    .subjects
-                    .find_subject_position(subject_id)
+                    .find_subject_position_in_filtered_list(subject_id)
                     .expect("Current filter should always point to a valid subject");
                 pos + 2
             }
