@@ -13,7 +13,7 @@ pub struct StrictLimits<
 > {
     weeks: Vec<bool>,
     students: BTreeSet<StudentId>,
-    interrogations_per_week: Option<std::ops::Range<u32>>,
+    interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,
     max_interrogations_per_day: Option<NonZeroU32>,
     _phantom1: std::marker::PhantomData<SlotId>,
     _phantom2: std::marker::PhantomData<GroupListId>,
@@ -26,7 +26,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
     pub fn new(
         students: BTreeSet<StudentId>,
         weeks: Vec<bool>,
-        interrogations_per_week: Option<std::ops::Range<u32>>,
+        interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,
         max_interrogations_per_day: Option<NonZeroU32>,
     ) -> Self {
         use std::marker::PhantomData;
@@ -161,7 +161,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                 }
 
                 if let Some(count_per_week_range) = &self.interrogations_per_week {
-                    let max_count = count_per_week_range.end - 1;
+                    let max_count = *count_per_week_range.end();
                     let rhs = LinExpr::constant(f64::from(max_count));
                     constraints.push((
                         counting_interrogations_in_week_expr.leq(&rhs),
@@ -172,7 +172,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                         ),
                     ));
 
-                    let min_count = count_per_week_range.start;
+                    let min_count = *count_per_week_range.start();
                     let rhs = LinExpr::constant(f64::from(min_count));
                     constraints.push((
                         counting_interrogations_in_week_expr.geq(&rhs),

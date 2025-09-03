@@ -15,7 +15,7 @@ pub struct GeneralSettings {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct StrictLimits {
     /// Number of interrogations for each student per week
-    pub interrogations_per_week: Option<std::ops::Range<u32>>,
+    pub interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,
     /// maximum number of interrogation in a single day for each student
     pub max_interrogations_per_day: Option<NonZeroU32>,
 }

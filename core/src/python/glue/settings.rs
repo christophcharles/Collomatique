@@ -22,7 +22,7 @@ impl From<collomatique_state_colloscopes::settings::GeneralSettings> for General
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StrictLimits {
     #[pyo3(set, get)]
-    pub interrogations_per_week: Option<common::RangeU32>,
+    pub interrogations_per_week: Option<common::RangeInclusiveU32>,
     #[pyo3(set, get)]
     pub max_interrogations_per_day: Option<NonZeroU32>,
 }

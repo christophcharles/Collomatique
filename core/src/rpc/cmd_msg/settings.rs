@@ -23,7 +23,7 @@ impl SettingsCmdMsg {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrictLimitsMsg {
-    pub interrogations_per_week: Option<std::ops::Range<u32>>,
+    pub interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,
     pub max_interrogations_per_day: Option<NonZeroU32>,
 }
 

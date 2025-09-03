@@ -51,7 +51,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<rules::LogicRule>()?;
     m.add_class::<rules::Rule>()?;
     m.add_class::<common::PersonWithContact>()?;
-    m.add_class::<common::RangeU32>()?;
+    m.add_class::<common::RangeInclusiveU32>()?;
     m.add_class::<settings::StrictLimits>()?;
 
     m.add_function(wrap_pyfunction!(log, m)?)?;
