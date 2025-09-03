@@ -93,6 +93,19 @@ impl std::fmt::Display for Weekday {
 }
 
 impl Weekday {
+    pub fn iter() -> impl Iterator<Item = Weekday> {
+        [
+            Weekday(chrono::Weekday::Mon),
+            Weekday(chrono::Weekday::Tue),
+            Weekday(chrono::Weekday::Wed),
+            Weekday(chrono::Weekday::Thu),
+            Weekday(chrono::Weekday::Fri),
+            Weekday(chrono::Weekday::Sat),
+            Weekday(chrono::Weekday::Sun),
+        ]
+        .into_iter()
+    }
+
     pub fn inner(&self) -> &chrono::Weekday {
         &self.0
     }

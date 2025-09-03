@@ -96,6 +96,16 @@ pub enum ColloscopeTranslator {
             >,
         >,
     ),
+    StrictLimits(
+        collomatique_solver::Translator<
+            collomatique_solver_colloscopes::constraints::strict_limits::StrictLimits<
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
+            >,
+        >,
+    ),
 }
 
 pub struct ColloscopeProblemWithTranslators {
@@ -131,7 +141,9 @@ impl ColloscopeProblemWithTranslators {
 
         let mut translators = vec![];
 
-        add_groups_per_slots_constraints(&mut problem_builder, &mut translators, data);
+        let weeks = generate_active_weeks_list(data);
+
+        add_groups_per_slots_constraints(&mut problem_builder, &mut translators, data, &weeks);
         add_students_per_groups_constraints(&mut problem_builder, &mut translators, data);
         add_group_count_constraints(&mut problem_builder, &mut translators, data);
         add_students_per_groups_for_subject_constraints(
@@ -139,6 +151,7 @@ impl ColloscopeProblemWithTranslators {
             &mut translators,
             data,
         );
+        add_strict_limits_constraints(&mut problem_builder, &mut translators, data, &weeks);
 
         let problem = problem_builder.build();
 
@@ -147,6 +160,14 @@ impl ColloscopeProblemWithTranslators {
             translators,
         })
     }
+}
+
+fn generate_active_weeks_list(data: &Data) -> Vec<bool> {
+    let mut weeks = vec![];
+    for (_period_id, period) in &data.get_periods().ordered_period_list {
+        weeks.extend(period.into_iter().copied());
+    }
+    weeks
 }
 
 fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
@@ -254,6 +275,7 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
 
         let subject_desc = base::SubjectDescription {
             duration: params.duration.clone(),
+            take_duration_into_account: params.take_duration_into_account,
             students_per_group: params.students_per_group.clone(),
             groups_per_interrogation: params.groups_per_interrogation.clone(),
             slots_descriptions,
@@ -310,14 +332,8 @@ fn add_groups_per_slots_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
     data: &Data,
+    weeks: &Vec<bool>,
 ) {
-    let week_count = data
-        .get_periods()
-        .ordered_period_list
-        .iter()
-        .map(|(_period_id, weeks)| weeks.len())
-        .sum();
-    let weeks = vec![true; week_count];
     for (subject_id, subject) in &data.get_subjects().ordered_subject_list {
         if subject.parameters.interrogation_parameters.is_none() {
             continue;
@@ -395,4 +411,27 @@ fn add_students_per_groups_for_subject_constraints(
                 .expect("Translator should be compatible with problem"),
         ));
     }
+}
+
+fn add_strict_limits_constraints(
+    problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
+    translators: &mut Vec<ColloscopeTranslator>,
+    data: &Data,
+    weeks: &Vec<bool>,
+) {
+    let students = data.get_students().student_map.keys().copied().collect();
+    let settings = data.get_settings();
+
+    let strict_limits_constraints =
+        collomatique_solver_colloscopes::constraints::strict_limits::StrictLimits::new(
+            students,
+            weeks.clone(),
+            settings.strict_limits.interrogations_per_week.clone(),
+            settings.strict_limits.max_interrogations_per_day.clone(),
+        );
+    translators.push(ColloscopeTranslator::StrictLimits(
+        problem_builder
+            .add_constraints(strict_limits_constraints, 0.)
+            .expect("Translator should be compatible with problem"),
+    ));
 }

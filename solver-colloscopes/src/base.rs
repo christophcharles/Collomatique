@@ -52,6 +52,8 @@ pub struct SlotDescription {
 pub struct SubjectDescription<SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier> {
     /// Duration of each slot for the subject
     pub duration: collomatique_time::NonZeroDurationInMinutes,
+    /// Should the interrogation count towards interrogation count for students
+    pub take_duration_into_account: bool,
     /// How many students per group (range)
     ///
     /// This is not redundant with the constraints from [GroupListDescription]
