@@ -116,6 +116,16 @@ pub enum ColloscopeTranslator {
             >,
         >,
     ),
+    OneInterrogationAtATime(
+        collomatique_solver::Translator<
+            collomatique_solver_colloscopes::constraints::one_interrogation_at_a_time::OneInterrogationAtATime<
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
+            >,
+        >,
+    ),
 }
 
 pub struct ColloscopeProblemWithTranslators {
@@ -143,6 +153,7 @@ impl ColloscopeProblemWithTranslators {
             Err(ValidationError::TooFewStudentsInSealedGroup(id, group)) => return Err(Error::TooFewStudentsInSealedGroup(id, group)),
             Err(ValidationError::TooFewStudentsInSealedGroupForSubject(id, week, group)) => return Err(Error::TooFewStudentsInSealedGroupForSubject(id, week, group)),
             Err(ValidationError::EmptyStudentPerGroupRangeForSubject(id)) => panic!("Unexpected empty students per group range count (subject {:?}) - this should be forbidden by data invariants", id),
+            Err(ValidationError::SlotIncompatibleWithItsDuration(subject_id, slot_id)) => panic!("Unexpected incompatibility between slot and its duration (slot {:?} of subject {:?}) - this should be forbidden by data invariants", slot_id, subject_id),
         };
 
         let mut problem_builder =
@@ -163,6 +174,12 @@ impl ColloscopeProblemWithTranslators {
             data,
         );
         add_strict_limits_constraints(&mut problem_builder, &mut translators, data, &weeks);
+        add_one_interrogation_at_a_time_constraints(
+            &mut problem_builder,
+            &mut translators,
+            data,
+            &weeks,
+        );
 
         let problem = problem_builder.build();
 
@@ -461,6 +478,26 @@ fn add_strict_limits_constraints(
     translators.push(ColloscopeTranslator::StrictLimits(
         problem_builder
             .add_constraints(strict_limits_constraints, 0.)
+            .expect("Translator should be compatible with problem"),
+    ));
+}
+
+fn add_one_interrogation_at_a_time_constraints(
+    problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
+    translators: &mut Vec<ColloscopeTranslator>,
+    data: &Data,
+    weeks: &Vec<bool>,
+) {
+    let students = data.get_students().student_map.keys().copied().collect();
+
+    let one_interrogation_at_a_time_constraints =
+        collomatique_solver_colloscopes::constraints::one_interrogation_at_a_time::OneInterrogationAtATime::new(
+            students,
+            weeks.clone(),
+        );
+    translators.push(ColloscopeTranslator::OneInterrogationAtATime(
+        problem_builder
+            .add_constraints(one_interrogation_at_a_time_constraints, 0.)
             .expect("Translator should be compatible with problem"),
     ));
 }

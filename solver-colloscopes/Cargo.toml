@@ -10,3 +10,4 @@ collomatique-solver = { path = "../solver" }
 collomatique-time = { path = "../time" }
 ordered-float.workspace = true
 thiserror.workspace = true
+chrono.workspace = true

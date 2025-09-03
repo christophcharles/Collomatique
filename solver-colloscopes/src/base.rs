@@ -191,6 +191,8 @@ pub enum ValidationError<SubjectId: Identifier, SlotId: Identifier, GroupListId:
     TooManyStudentsInPrefilledGroupForSubject(SubjectId, usize, u32),
     #[error("Sealed group {2} does not have enough students when specialized for subject {0:?} on week {1}")]
     TooFewStudentsInSealedGroupForSubject(SubjectId, usize, u32),
+    #[error("The slot {1:?} start time does not match with slot duration from subject {0:?}")]
+    SlotIncompatibleWithItsDuration(SubjectId, SlotId),
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -228,6 +230,18 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
             for (slot_id, slot_desc) in &subject_desc.slots_descriptions {
                 if slot_desc.weeks.len() != subject_desc.group_assignments.len() {
                     return Err(ValidationError::InconsistentWeekCount);
+                }
+
+                if collomatique_time::SlotWithDuration::new(
+                    slot_desc.slot_start.clone(),
+                    subject_desc.duration,
+                )
+                .is_none()
+                {
+                    return Err(ValidationError::SlotIncompatibleWithItsDuration(
+                        *subject_id,
+                        *slot_id,
+                    ));
                 }
 
                 for ((week, slot), group_assignment_opt) in slot_desc
