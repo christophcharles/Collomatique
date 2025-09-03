@@ -281,11 +281,19 @@ fn add_groups_per_slots_constraints(
         .map(|(_period_id, weeks)| weeks.len())
         .sum();
     let weeks = vec![true; week_count];
-    let groups_per_slots_constraints =
-        collomatique_solver_colloscopes::constraints::main::GroupsPerSlots::new(weeks);
-    translators.push(ColloscopeTranslator::GroupsPerSlot(
-        problem_builder
-            .add_constraints(groups_per_slots_constraints, 0.)
-            .expect("Translator should be compatible with problem"),
-    ));
+    for (subject_id, subject) in &data.get_subjects().ordered_subject_list {
+        if subject.parameters.interrogation_parameters.is_none() {
+            continue;
+        }
+        let groups_per_slots_constraints =
+            collomatique_solver_colloscopes::constraints::main::GroupsPerSlots::new(
+                *subject_id,
+                weeks.clone(),
+            );
+        translators.push(ColloscopeTranslator::GroupsPerSlot(
+            problem_builder
+                .add_constraints(groups_per_slots_constraints, 0.)
+                .expect("Translator should be compatible with problem"),
+        ));
+    }
 }
