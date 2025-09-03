@@ -10,6 +10,7 @@
 
 pub mod group_count;
 pub mod groups_per_slots;
+pub mod sealed_groups;
 pub mod strict_limits;
 pub mod students_per_groups;
 pub mod students_per_groups_for_subject;
