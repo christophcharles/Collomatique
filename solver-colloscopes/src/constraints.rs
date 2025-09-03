@@ -10,6 +10,7 @@
 
 pub mod group_count;
 pub mod groups_per_slots;
+pub mod incompat_for_single_week;
 pub mod one_interrogation_at_a_time;
 pub mod sealed_groups;
 pub mod strict_limits;

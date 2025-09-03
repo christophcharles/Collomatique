@@ -163,6 +163,8 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
 pub enum ValidationError<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier> {
+    #[error("There should at least be one subject")]
+    NoSubject,
     #[error("The number of weeks varies from slot to slot")]
     InconsistentWeekCount,
     #[error("A week (week {0}) is marked valid for slot {1:?} but the subject is not active on this week")]
@@ -205,6 +207,10 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         ValidatedColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>,
         ValidationError<SubjectId, SlotId, GroupListId>,
     > {
+        if self.subject_descriptions.is_empty() {
+            return Err(ValidationError::NoSubject);
+        }
+
         let mut students_in_group_lists = BTreeMap::new();
         for (group_list_id, group_list_desc) in &self.group_list_descriptions {
             let Some(students) = group_list_desc.build_student_set_or_none() else {

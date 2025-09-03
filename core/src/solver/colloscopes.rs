@@ -6,7 +6,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_solver_colloscopes::base::{self, ColloscopeProblem};
-use collomatique_state_colloscopes::{Data, GroupListId, PeriodId, SlotId, StudentId, SubjectId};
+use collomatique_state_colloscopes::{
+    Data, GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId,
+};
 
 type ProblemDesc = ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>;
 
@@ -14,7 +16,8 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
 pub enum Error {
-    /// A group list is needed for every period for every subject
+    #[error("There should be at least one subject (with interrogations)")]
+    NoSubject,
     #[error("subject {0:?} does not have an associated group list for period {1:?}")]
     MissingGroupList(SubjectId, PeriodId),
     #[error("Some students enrolled in subjects {0:?} do not appear in group list {1:?}")]
@@ -126,6 +129,17 @@ pub enum ColloscopeTranslator {
             >,
         >,
     ),
+    IncompatForSingleWeek(
+        collomatique_solver::Translator<
+            collomatique_solver_colloscopes::constraints::incompat_for_single_week::IncompatForSingleWeek<
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
+                IncompatId,
+            >,
+        >,
+    ),
 }
 
 pub struct ColloscopeProblemWithTranslators {
@@ -140,6 +154,7 @@ impl ColloscopeProblemWithTranslators {
         use collomatique_solver_colloscopes::base::ValidationError;
         let validated_problem_desc = match problem_desc.validate() {
             Ok(v) => v,
+            Err(ValidationError::NoSubject) => return Err(Error::NoSubject),
             Err(ValidationError::EmptyGroupCountRange(id)) => panic!("Unexpected empty group range count (group list {:?}) - this should be forbidden by data invariants", id),
             Err(ValidationError::EmptyStudentPerGroupRange(id)) => panic!("Unexpected empty students per group range count (group list {:?}) - this should be forbidden by data invariants", id),
             Err(ValidationError::GroupListDoesNotContainAllStudents(subject_id, group_list_id)) => return Err(Error::GroupListDoesNotContainAllStudents(subject_id, group_list_id)),
@@ -180,6 +195,7 @@ impl ColloscopeProblemWithTranslators {
             data,
             &weeks,
         );
+        add_incompat_for_single_week_constraints(&mut problem_builder, &mut translators, data);
 
         let problem = problem_builder.build();
 
@@ -191,9 +207,20 @@ impl ColloscopeProblemWithTranslators {
 }
 
 fn generate_active_weeks_list(data: &Data) -> Vec<bool> {
+    generate_active_weeks_list_with_excluded_periods(data, &BTreeSet::new())
+}
+
+fn generate_active_weeks_list_with_excluded_periods(
+    data: &Data,
+    excluded_periods: &BTreeSet<PeriodId>,
+) -> Vec<bool> {
     let mut weeks = vec![];
-    for (_period_id, period) in &data.get_periods().ordered_period_list {
-        weeks.extend(period.into_iter().copied());
+    for (period_id, period) in &data.get_periods().ordered_period_list {
+        if !excluded_periods.contains(period_id) {
+            weeks.extend(period.into_iter().copied());
+        } else {
+            weeks.extend(period.into_iter().map(|_| false));
+        }
     }
     weeks
 }
@@ -500,4 +527,55 @@ fn add_one_interrogation_at_a_time_constraints(
             .add_constraints(one_interrogation_at_a_time_constraints, 0.)
             .expect("Translator should be compatible with problem"),
     ));
+}
+
+fn add_incompat_for_single_week_constraints(
+    problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
+    translators: &mut Vec<ColloscopeTranslator>,
+    data: &Data,
+) {
+    for (incompat_id, incompat) in &data.get_incompats().incompat_map {
+        let mut first_week = 0usize;
+        for (period_id, period) in &data.get_periods().ordered_period_list {
+            let assignments = data
+                .get_assignments()
+                .period_map
+                .get(period_id)
+                .expect("Period ID should be valid");
+
+            if let Some(students) = assignments.subject_map.get(&incompat.subject_id) {
+                for week in first_week..first_week + period.len() {
+                    if let Some(id) = incompat.week_pattern_id {
+                        let week_pattern = data
+                            .get_week_patterns()
+                            .week_pattern_map
+                            .get(&id)
+                            .expect("Week pattern ID should be valid");
+                        if let Some(status) = week_pattern.weeks.get(week) {
+                            if !status {
+                                continue;
+                            }
+                        }
+                    }
+
+                    let incompat_for_single_week_constraints =
+                        collomatique_solver_colloscopes::constraints::incompat_for_single_week::IncompatForSingleWeek::new(
+                            *incompat_id,
+                            students.clone(),
+                            week,
+                            incompat.slots.clone(),
+                            incompat.minimum_free_slots,
+                        );
+
+                    translators.push(ColloscopeTranslator::IncompatForSingleWeek(
+                        problem_builder
+                            .add_constraints(incompat_for_single_week_constraints, 0.)
+                            .expect("Translator should be compatible with problem"),
+                    ));
+                }
+            }
+
+            first_week += period.len();
+        }
+    }
 }
