@@ -58,7 +58,7 @@ type ProblemRepr = collomatique_ilp::DefaultRepr<
 pub enum ColloscopeTranslator {
     GroupsPerSlot(
         collomatique_solver::Translator<
-            collomatique_solver_colloscopes::constraints::main::GroupsPerSlots<
+            collomatique_solver_colloscopes::constraints::groups_per_slots::GroupsPerSlots<
                 SubjectId,
                 SlotId,
                 GroupListId,
@@ -68,7 +68,7 @@ pub enum ColloscopeTranslator {
     ),
     StudentsPerGroup(
         collomatique_solver::Translator<
-            collomatique_solver_colloscopes::constraints::main::StudentsPerGroups<
+            collomatique_solver_colloscopes::constraints::students_per_groups::StudentsPerGroups<
                 SubjectId,
                 SlotId,
                 GroupListId,
@@ -297,7 +297,7 @@ fn add_groups_per_slots_constraints(
             continue;
         }
         let groups_per_slots_constraints =
-            collomatique_solver_colloscopes::constraints::main::GroupsPerSlots::new(
+            collomatique_solver_colloscopes::constraints::groups_per_slots::GroupsPerSlots::new(
                 *subject_id,
                 weeks.clone(),
             );
@@ -316,7 +316,7 @@ fn add_students_per_groups_constraints(
 ) {
     for (group_list_id, _group_list) in &data.get_group_lists().group_list_map {
         let students_per_groups_constraints =
-            collomatique_solver_colloscopes::constraints::main::StudentsPerGroups::new(
+            collomatique_solver_colloscopes::constraints::students_per_groups::StudentsPerGroups::new(
                 *group_list_id,
             );
         translators.push(ColloscopeTranslator::StudentsPerGroup(

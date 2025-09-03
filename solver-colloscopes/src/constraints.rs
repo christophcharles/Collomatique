@@ -8,4 +8,5 @@
 //! Other possible constraints are defined in the various other submodules and allow
 //! a finer description of your colloscope problem.
 
-pub mod main;
+pub mod groups_per_slots;
+pub mod students_per_groups;
