@@ -38,7 +38,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GroupsPerSlotsDesc<SubjectId: Identifier, SlotId: Identifier> {
     AtMostCountGroupInSlotForWeek(SubjectId, u32, SlotId, usize),
-    AtMinimumCountGroupInSlotForWeek(SubjectId, u32, SlotId, usize),
+    AtMinimumCountGroupInNonEmptySlotForWeek(SubjectId, u32, SlotId, usize),
 }
 
 impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, StudentId: Identifier>
@@ -150,7 +150,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                         ));
                     constraints.push((
                         lhs.geq(&rhs),
-                        GroupsPerSlotsDesc::AtMinimumCountGroupInSlotForWeek(
+                        GroupsPerSlotsDesc::AtMinimumCountGroupInNonEmptySlotForWeek(
                             self.subject_id,
                             min_count,
                             *slot_id,
