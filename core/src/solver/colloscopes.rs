@@ -66,7 +66,7 @@ pub enum ColloscopeTranslator {
             >,
         >,
     ),
-    StudentsPerGroup(
+    StudentsPerGroups(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::students_per_groups::StudentsPerGroups<
                 SubjectId,
@@ -79,6 +79,16 @@ pub enum ColloscopeTranslator {
     GroupCount(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::group_count::GroupCount<
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
+            >,
+        >,
+    ),
+    StudentsPerGroupsForSubject(
+        collomatique_solver::Translator<
+            collomatique_solver_colloscopes::constraints::students_per_groups_for_subject::StudentsPerGroupsForSubject<
                 SubjectId,
                 SlotId,
                 GroupListId,
@@ -124,6 +134,11 @@ impl ColloscopeProblemWithTranslators {
         add_groups_per_slots_constraints(&mut problem_builder, &mut translators, data);
         add_students_per_groups_constraints(&mut problem_builder, &mut translators, data);
         add_group_count_constraints(&mut problem_builder, &mut translators, data);
+        add_students_per_groups_for_subject_constraints(
+            &mut problem_builder,
+            &mut translators,
+            data,
+        );
 
         let problem = problem_builder.build();
 
@@ -330,7 +345,7 @@ fn add_students_per_groups_constraints(
             collomatique_solver_colloscopes::constraints::students_per_groups::StudentsPerGroups::new(
                 *group_list_id,
             );
-        translators.push(ColloscopeTranslator::StudentsPerGroup(
+        translators.push(ColloscopeTranslator::StudentsPerGroups(
             problem_builder
                 .add_constraints(students_per_groups_constraints, 0.)
                 .expect("Translator should be compatible with problem"),
@@ -351,6 +366,32 @@ fn add_group_count_constraints(
         translators.push(ColloscopeTranslator::GroupCount(
             problem_builder
                 .add_constraints(group_count_constraints, 0.)
+                .expect("Translator should be compatible with problem"),
+        ));
+    }
+}
+
+fn add_students_per_groups_for_subject_constraints(
+    problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
+    translators: &mut Vec<ColloscopeTranslator>,
+    data: &Data,
+) {
+    let mut params = BTreeSet::new();
+    for (_period_id, subject_map) in &data.get_group_lists().subjects_associations {
+        for (subject_id, group_list_id) in subject_map {
+            params.insert((*subject_id, *group_list_id));
+        }
+    }
+
+    for (subject_id, group_list_id) in params {
+        let students_per_groups_for_subject_constraints =
+            collomatique_solver_colloscopes::constraints::students_per_groups_for_subject::StudentsPerGroupsForSubject::new(
+                group_list_id,
+                subject_id,
+            );
+        translators.push(ColloscopeTranslator::StudentsPerGroupsForSubject(
+            problem_builder
+                .add_constraints(students_per_groups_for_subject_constraints, 0.)
                 .expect("Translator should be compatible with problem"),
         ));
     }

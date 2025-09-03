@@ -11,3 +11,4 @@
 pub mod group_count;
 pub mod groups_per_slots;
 pub mod students_per_groups;
+pub mod students_per_groups_for_subject;
