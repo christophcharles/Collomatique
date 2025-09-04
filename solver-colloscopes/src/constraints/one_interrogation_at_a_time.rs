@@ -2,7 +2,7 @@ use collomatique_ilp::LinExpr;
 
 use crate::base::Identifier;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct OneInterrogationAtATime<
     SubjectId: Identifier,
@@ -35,10 +35,9 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OneInterrogationAtATimeDesc<StudentId: Identifier> {
     AtMostOneInterrogationAtATimeForStudent(
-        StudentId,
+        BTreeSet<(StudentId, collomatique_time::SlotWithDuration)>,
         usize,
         collomatique_time::Weekday,
-        collomatique_time::SlotWithDuration,
     ),
 }
 
@@ -89,7 +88,7 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
         >,
         Self::GeneralConstraintDesc,
     )> {
-        let mut constraints = vec![];
+        let mut constraints = BTreeMap::new();
 
         let time_resolution = Self::compute_needed_time_resolution(desc);
         let slots_in_day = MINUTES_IN_DAY / time_resolution;
@@ -123,22 +122,28 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                         if let Some(constraint) =
                             Self::build_single_constraint(desc, &slot, week, *student_id)
                         {
-                            constraints.push((
-                                constraint,
-                                OneInterrogationAtATimeDesc::AtMostOneInterrogationAtATimeForStudent(
-                                    *student_id,
-                                    week,
-                                    weekday,
-                                    slot.clone(),
-                                )
-                            ));
+                            if let Some(OneInterrogationAtATimeDesc::AtMostOneInterrogationAtATimeForStudent(prev_set, prev_week, prev_day)) = constraints.get_mut(&constraint) {
+                                assert_eq!(*prev_week, week);
+                                assert_eq!(*prev_day, weekday);
+
+                                prev_set.insert((*student_id, slot.clone()));
+                            } else {
+                                constraints.insert(
+                                    constraint,
+                                    OneInterrogationAtATimeDesc::AtMostOneInterrogationAtATimeForStudent(
+                                        BTreeSet::from([(*student_id, slot.clone())]),
+                                        week,
+                                        weekday,
+                                    )
+                                );
+                            }
                         }
                     }
                 }
             }
         }
 
-        constraints
+        constraints.into_iter().collect()
     }
 }
 
