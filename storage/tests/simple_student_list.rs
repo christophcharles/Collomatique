@@ -125,20 +125,22 @@ fn decode_simple_student_list() {
             ),
         ]),
     };
-    let expected_data = collomatique_state_colloscopes::Data::from_data(
-        PeriodsExternalData::default(),
-        SubjectsExternalData::default(),
-        TeachersExternalData::default(),
-        expected_students,
-        AssignmentsExternalData::default(),
-        WeekPatternsExternalData::default(),
-        SlotsExternalData::default(),
-        IncompatsExternalData::default(),
-        GroupListsExternalData::default(),
-        RulesExternalData::default(),
-        collomatique_state_colloscopes::settings::GeneralSettings::default(),
-    )
-    .expect("Expected data should not have ID errors");
+    let main_params =
+        collomatique_state_colloscopes::colloscope_params::ColloscopeParametersExternalData {
+            periods: PeriodsExternalData::default(),
+            subjects: SubjectsExternalData::default(),
+            teachers: TeachersExternalData::default(),
+            students: expected_students,
+            assignments: AssignmentsExternalData::default(),
+            week_patterns: WeekPatternsExternalData::default(),
+            slots: SlotsExternalData::default(),
+            incompats: IncompatsExternalData::default(),
+            group_lists: GroupListsExternalData::default(),
+            rules: RulesExternalData::default(),
+            settings: collomatique_state_colloscopes::settings::GeneralSettings::default(),
+        };
+    let expected_data = collomatique_state_colloscopes::Data::from_data(main_params)
+        .expect("Expected data should not have ID errors");
     let expected_caveats = BTreeSet::new();
 
     assert_eq!(data, expected_data);
@@ -184,20 +186,22 @@ fn encode_and_redecode_simple_student_list() {
         ]),
     };
 
-    let orig_data = collomatique_state_colloscopes::Data::from_data(
-        PeriodsExternalData::default(),
-        SubjectsExternalData::default(),
-        TeachersExternalData::default(),
-        students,
-        AssignmentsExternalData::default(),
-        WeekPatternsExternalData::default(),
-        SlotsExternalData::default(),
-        IncompatsExternalData::default(),
-        GroupListsExternalData::default(),
-        RulesExternalData::default(),
-        collomatique_state_colloscopes::settings::GeneralSettings::default(),
-    )
-    .expect("Expected data should not have ID errors");
+    let main_params =
+        collomatique_state_colloscopes::colloscope_params::ColloscopeParametersExternalData {
+            periods: PeriodsExternalData::default(),
+            subjects: SubjectsExternalData::default(),
+            teachers: TeachersExternalData::default(),
+            students,
+            assignments: AssignmentsExternalData::default(),
+            week_patterns: WeekPatternsExternalData::default(),
+            slots: SlotsExternalData::default(),
+            incompats: IncompatsExternalData::default(),
+            group_lists: GroupListsExternalData::default(),
+            rules: RulesExternalData::default(),
+            settings: collomatique_state_colloscopes::settings::GeneralSettings::default(),
+        };
+    let orig_data = collomatique_state_colloscopes::Data::from_data(main_params)
+        .expect("Expected data should not have ID errors");
 
     let content = serialize_data(&orig_data);
     let (data, caveats) = deserialize_data(&content).expect("Should be valid input");

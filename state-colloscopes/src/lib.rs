@@ -4,24 +4,20 @@
 //! and the various traits for the specific case of colloscope representation.
 //!
 
-use assignments::{Assignments, AssignmentsExternalData};
+use assignments::Assignments;
 use collomatique_state::{tools, InMemoryData, Operation};
 use group_lists::GroupLists;
-use group_lists::GroupListsExternalData;
 use incompats::Incompats;
-use incompats::IncompatsExternalData;
 use ops::AnnotatedSettingsOp;
-use periods::{Periods, PeriodsExternalData};
+use periods::Periods;
 use rules::Rules;
-use rules::RulesExternalData;
-use slots::{Slots, SlotsExternalData};
+use slots::Slots;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use students::{Students, StudentsExternalData};
+use students::Students;
 use subjects::{Subjects, SubjectsExternalData};
-use teachers::{Teachers, TeachersExternalData};
+use teachers::Teachers;
 use week_patterns::WeekPatterns;
-use week_patterns::WeekPatternsExternalData;
 
 pub mod ids;
 use ids::Id;
@@ -45,6 +41,7 @@ pub use subjects::{
 };
 
 pub mod assignments;
+pub mod colloscope_params;
 pub mod group_lists;
 pub mod incompats;
 pub mod periods;
@@ -91,39 +88,6 @@ pub struct PersonWithContact {
     pub email: Option<non_empty_string::NonEmptyString>,
 }
 
-/// Full set of parameters to describe the constraints for colloscopes
-///
-/// This structure contains all the parameters we might want to adjust
-/// to define the constraints for a colloscope.
-///
-/// This structure is used in two ways:
-/// - a main version is used in [InnerData] to represent the currently edited parameters
-/// - another version is used for each colloscope to store the parameters used for its generation
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ColloscopeParameters<
-    PeriodId: Id,
-    SubjectId: Id,
-    TeacherId: Id,
-    StudentId: Id,
-    WeekPatternId: Id,
-    SlotId: Id,
-    IncompatId: Id,
-    GroupListId: Id,
-    RuleId: Id,
-> {
-    pub periods: periods::Periods<PeriodId>,
-    pub subjects: subjects::Subjects<SubjectId, PeriodId>,
-    pub teachers: teachers::Teachers<TeacherId, SubjectId>,
-    pub students: students::Students<StudentId, PeriodId>,
-    pub assignments: assignments::Assignments<PeriodId, SubjectId, StudentId>,
-    pub week_patterns: week_patterns::WeekPatterns<WeekPatternId>,
-    pub slots: slots::Slots<SubjectId, SlotId, TeacherId, WeekPatternId>,
-    pub incompats: incompats::Incompats<IncompatId, SubjectId, WeekPatternId>,
-    pub group_lists: group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId>,
-    pub rules: rules::Rules<RuleId, PeriodId, SlotId>,
-    pub settings: settings::GeneralSettings,
-}
-
 /// Internal structure to store the data for [Data]
 ///
 /// We have `data1 == data2` if and only if their internal
@@ -136,7 +100,7 @@ pub struct ColloscopeParameters<
 /// of [Eq] and [PartialEq] for [Data] relies on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InnerData {
-    main_params: ColloscopeParameters<
+    main_params: colloscope_params::ColloscopeParameters<
         PeriodId,
         SubjectId,
         TeacherId,
@@ -1708,20 +1672,8 @@ impl Data {
     /// This [Data] is basically empty and corresponds to the
     /// state of a new file
     pub fn new() -> Data {
-        Self::from_data(
-            PeriodsExternalData::default(),
-            SubjectsExternalData::default(),
-            TeachersExternalData::default(),
-            StudentsExternalData::default(),
-            AssignmentsExternalData::default(),
-            WeekPatternsExternalData::default(),
-            SlotsExternalData::default(),
-            IncompatsExternalData::default(),
-            GroupListsExternalData::default(),
-            RulesExternalData::default(),
-            settings::GeneralSettings::default(),
-        )
-        .expect("Default data should be valid")
+        Self::from_data(colloscope_params::ColloscopeParametersExternalData::default())
+            .expect("Default data should be valid")
     }
 
     /// Create a new [Data] from existing data
@@ -1729,118 +1681,19 @@ impl Data {
     /// This will check the consistency of the data
     /// and will also do some internal checks, so this might fail.
     pub fn from_data(
-        periods: periods::PeriodsExternalData,
-        subjects: subjects::SubjectsExternalData,
-        teachers: teachers::TeachersExternalData,
-        students: students::StudentsExternalData,
-        assignments: assignments::AssignmentsExternalData,
-        week_patterns: week_patterns::WeekPatternsExternalData,
-        slots: slots::SlotsExternalData,
-        incompats: incompats::IncompatsExternalData,
-        group_lists: group_lists::GroupListsExternalData,
-        rules: rules::RulesExternalData,
-        settings: settings::GeneralSettings,
+        main_params: colloscope_params::ColloscopeParametersExternalData,
     ) -> Result<Data, FromDataError> {
-        let student_ids = students.student_map.keys().copied();
-        let period_ids = periods.ordered_period_list.iter().map(|(id, _d)| *id);
-        let subject_ids = subjects.ordered_subject_list.iter().map(|(id, _d)| *id);
-        let teacher_ids = teachers.teacher_map.keys().copied();
-        let week_patterns_ids = week_patterns.week_pattern_map.keys().copied();
-        let slot_ids = slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots.ordered_slots.iter().map(|(id, _d)| *id)
-            });
-        let incompat_ids = incompats.incompat_map.keys().copied();
-        let group_list_ids = group_lists.group_list_map.keys().copied();
-        let rule_ids = rules.rule_map.keys().copied();
-        let id_issuer = IdIssuer::new(
-            student_ids,
-            period_ids,
-            subject_ids,
-            teacher_ids,
-            week_patterns_ids,
-            slot_ids,
-            incompat_ids,
-            group_list_ids,
-            rule_ids,
-        )?;
+        let id_issuer = IdIssuer::new(main_params.ids())?;
 
-        let period_ids: std::collections::BTreeSet<_> = periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, _d)| *id)
-            .collect();
-        let week_pattern_ids: std::collections::BTreeSet<_> =
-            week_patterns.week_pattern_map.keys().copied().collect();
-        let subject_ids: std::collections::BTreeSet<_> = subjects
-            .ordered_subject_list
-            .iter()
-            .map(|(id, _)| *id)
-            .collect();
-        let student_ids = students.student_map.keys().copied().collect();
-        let slot_ids = slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
-            })
-            .collect();
-        if !subjects.validate_all(&period_ids) {
-            return Err(tools::IdError::InvalidId.into());
-        }
-        if !teachers.validate_all(&subjects) {
-            return Err(tools::IdError::InvalidId.into());
-        }
-        if !students.validate_all(&period_ids) {
-            return Err(tools::IdError::InvalidId.into());
-        }
-        if !assignments.validate_all(&period_ids, &students, &subjects) {
-            return Err(FromDataError::InconsistentAssignments);
-        }
-        if !slots.validate_all(&subjects, &week_pattern_ids, &teachers) {
-            return Err(FromDataError::InconsistentSlots);
-        }
-        if !incompats.validate_all(&subject_ids, &week_pattern_ids) {
-            return Err(tools::IdError::InvalidId.into());
-        }
-        if !group_lists.validate_all(&subjects, &student_ids, &period_ids) {
-            return Err(FromDataError::InconsistentGroupLists);
-        }
-        if !rules.validate_all(&period_ids, &slot_ids) {
-            return Err(FromDataError::InconsistentRules);
-        }
+        main_params.validate()?;
 
         // Ids have been validated
-        let students = unsafe { Students::from_external_data(students) };
-        let periods = unsafe { Periods::from_external_data(periods) };
-        let subjects = unsafe { Subjects::from_external_data(subjects) };
-        let teachers = unsafe { Teachers::from_external_data(teachers) };
-        let assignments = unsafe { Assignments::from_external_data(assignments) };
-        let week_patterns = unsafe { WeekPatterns::from_external_data(week_patterns) };
-        let slots = unsafe { Slots::from_external_data(slots) };
-        let incompats = unsafe { Incompats::from_external_data(incompats) };
-        let group_lists = unsafe { GroupLists::from_external_data(group_lists) };
-        let rules = unsafe { Rules::from_external_data(rules) };
+        let main_params =
+            unsafe { colloscope_params::ColloscopeParameters::from_external_data(main_params) };
 
         let data = Data {
             id_issuer,
-            inner_data: InnerData {
-                main_params: ColloscopeParameters {
-                    periods,
-                    subjects,
-                    teachers,
-                    students,
-                    assignments,
-                    week_patterns,
-                    slots,
-                    incompats,
-                    group_lists,
-                    rules,
-                    settings,
-                },
-            },
+            inner_data: InnerData { main_params },
         };
 
         data.check_invariants();

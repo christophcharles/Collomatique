@@ -180,25 +180,8 @@ impl IdIssuer {
     ///
     /// It takes a list of all used ids so far
     pub fn new(
-        student_ids: impl Iterator<Item = u64>,
-        period_ids: impl Iterator<Item = u64>,
-        subject_ids: impl Iterator<Item = u64>,
-        teacher_ids: impl Iterator<Item = u64>,
-        week_patterns_ids: impl Iterator<Item = u64>,
-        slot_ids: impl Iterator<Item = u64>,
-        incompat_ids: impl Iterator<Item = u64>,
-        group_list_ids: impl Iterator<Item = u64>,
-        rule_ids: impl Iterator<Item = u64>,
+        existing_ids: impl Iterator<Item = u64>,
     ) -> std::result::Result<IdIssuer, tools::IdError> {
-        let existing_ids = student_ids
-            .chain(period_ids)
-            .chain(subject_ids)
-            .chain(teacher_ids)
-            .chain(week_patterns_ids)
-            .chain(slot_ids)
-            .chain(incompat_ids)
-            .chain(group_list_ids)
-            .chain(rule_ids);
         Ok(IdIssuer {
             helper: tools::IdIssuerHelper::new(existing_ids)?,
         })

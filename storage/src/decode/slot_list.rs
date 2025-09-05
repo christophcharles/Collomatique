@@ -11,7 +11,7 @@ pub fn decode_entry(
     let mut ids = BTreeSet::new();
 
     for (subject_id, subject_slots) in &slot_list.subject_map {
-        let Some(subject) = pre_data.subjects.find_subject(*subject_id) else {
+        let Some(subject) = pre_data.main_params.subjects.find_subject(*subject_id) else {
             return Err(DecodeError::InconsistentSlotsData);
         };
         if subject.parameters.interrogation_parameters.is_none() {
@@ -19,6 +19,7 @@ pub fn decode_entry(
         }
 
         let pre_subject_slots = pre_data
+            .main_params
             .slots
             .subject_map
             .get_mut(subject_id)

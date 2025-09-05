@@ -8,7 +8,7 @@ pub fn decode_entry(
     settings: json::settings::Settings,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    pre_data.settings = settings.into();
+    pre_data.main_params.settings = settings.into();
 
     Ok(())
 }

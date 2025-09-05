@@ -12,7 +12,7 @@ pub fn decode_entry(
     period_list: json::period_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    pre_data.periods.first_week = match period_list.first_week {
+    pre_data.main_params.periods.first_week = match period_list.first_week {
         Some(date) => {
             let monday_date = collomatique_time::NaiveMondayDate::new(date);
             if monday_date.is_none() {
@@ -23,16 +23,26 @@ pub fn decode_entry(
         None => None,
     };
 
-    if !pre_data.periods.ordered_period_list.is_empty() {
+    if !pre_data.main_params.periods.ordered_period_list.is_empty() {
         return Err(DecodeError::PeriodsAlreadyDecoded);
     }
-    if !pre_data.subjects.ordered_subject_list.is_empty() {
+    if !pre_data
+        .main_params
+        .subjects
+        .ordered_subject_list
+        .is_empty()
+    {
         return Err(DecodeError::SubjectsDecodedBeforePeriods);
     }
-    if !pre_data.assignments.period_map.is_empty() {
+    if !pre_data.main_params.assignments.period_map.is_empty() {
         return Err(DecodeError::AssignmentsDecodedBeforePeriods);
     }
-    if !pre_data.group_lists.subjects_associations.is_empty() {
+    if !pre_data
+        .main_params
+        .group_lists
+        .subjects_associations
+        .is_empty()
+    {
         return Err(DecodeError::GroupListsDecodedBeforePeriods);
     }
     let mut ids = BTreeSet::new();
@@ -40,14 +50,19 @@ pub fn decode_entry(
         if !ids.insert(id) {
             return Err(DecodeError::DuplicatedID);
         }
-        pre_data.periods.ordered_period_list.push((id, desc));
-        pre_data.assignments.period_map.insert(
+        pre_data
+            .main_params
+            .periods
+            .ordered_period_list
+            .push((id, desc));
+        pre_data.main_params.assignments.period_map.insert(
             id,
             PeriodAssignmentsExternalData {
                 subject_map: BTreeMap::new(),
             },
         );
         pre_data
+            .main_params
             .group_lists
             .subjects_associations
             .insert(id, BTreeMap::new());

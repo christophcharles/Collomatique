@@ -8,7 +8,7 @@ pub fn decode_entry(
     student_list: json::student_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    if !pre_data.students.student_map.is_empty() {
+    if !pre_data.main_params.students.student_map.is_empty() {
         return Err(DecodeError::StudentsAlreadyDecoded);
     }
 
@@ -17,7 +17,11 @@ pub fn decode_entry(
         if !ids.insert(id) {
             return Err(DecodeError::DuplicatedID);
         }
-        pre_data.students.student_map.insert(id, student.into());
+        pre_data
+            .main_params
+            .students
+            .student_map
+            .insert(id, student.into());
     }
 
     Ok(())

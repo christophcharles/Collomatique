@@ -170,17 +170,8 @@ pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeErr
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 struct PreData {
-    periods: collomatique_state_colloscopes::periods::PeriodsExternalData,
-    subjects: collomatique_state_colloscopes::subjects::SubjectsExternalData,
-    teachers: collomatique_state_colloscopes::teachers::TeachersExternalData,
-    students: collomatique_state_colloscopes::students::StudentsExternalData,
-    assignments: collomatique_state_colloscopes::assignments::AssignmentsExternalData,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatternsExternalData,
-    slots: collomatique_state_colloscopes::slots::SlotsExternalData,
-    incompats: collomatique_state_colloscopes::incompats::IncompatsExternalData,
-    group_lists: collomatique_state_colloscopes::group_lists::GroupListsExternalData,
-    rules: collomatique_state_colloscopes::rules::RulesExternalData,
-    settings: collomatique_state_colloscopes::settings::GeneralSettings,
+    main_params:
+        collomatique_state_colloscopes::colloscope_params::ColloscopeParametersExternalData,
 }
 
 mod assignment_map;
@@ -240,19 +231,7 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         }
     }
 
-    let data = Data::from_data(
-        pre_data.periods,
-        pre_data.subjects,
-        pre_data.teachers,
-        pre_data.students,
-        pre_data.assignments,
-        pre_data.week_patterns,
-        pre_data.slots,
-        pre_data.incompats,
-        pre_data.group_lists,
-        pre_data.rules,
-        pre_data.settings,
-    )?;
+    let data = Data::from_data(pre_data.main_params)?;
     Ok(data)
 }
 

@@ -8,10 +8,15 @@ pub fn decode_entry(
     subject_list: json::subject_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    if !pre_data.subjects.ordered_subject_list.is_empty() {
+    if !pre_data
+        .main_params
+        .subjects
+        .ordered_subject_list
+        .is_empty()
+    {
         return Err(DecodeError::SubjectsAlreadyDecoded);
     }
-    if !pre_data.slots.subject_map.is_empty() {
+    if !pre_data.main_params.slots.subject_map.is_empty() {
         return Err(DecodeError::SlotsDecodedBeforeSubjects);
     }
 
@@ -21,11 +26,12 @@ pub fn decode_entry(
             return Err(DecodeError::DuplicatedID);
         }
 
-        for (period_id, _) in &pre_data.periods.ordered_period_list {
+        for (period_id, _) in &pre_data.main_params.periods.ordered_period_list {
             if subject.excluded_periods.contains(period_id) {
                 continue;
             }
             let period_assignment = pre_data
+                .main_params
                 .assignments
                 .period_map
                 .get_mut(period_id)
@@ -39,7 +45,7 @@ pub fn decode_entry(
         }
 
         if subject.parameters.interrogation_parameters.is_some() {
-            pre_data.slots.subject_map.insert(
+            pre_data.main_params.slots.subject_map.insert(
                 id,
                 collomatique_state_colloscopes::slots::SubjectSlotsExternalData {
                     ordered_slots: vec![],
@@ -48,6 +54,7 @@ pub fn decode_entry(
         }
 
         pre_data
+            .main_params
             .subjects
             .ordered_subject_list
             .push((id, subject.into()));

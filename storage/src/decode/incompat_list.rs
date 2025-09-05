@@ -25,6 +25,7 @@ pub fn decode_entry(
             return Err(DecodeError::DuplicatedID);
         }
         pre_data
+            .main_params
             .incompats
             .incompat_map
             .insert(*incompat_id, pre_incompat);

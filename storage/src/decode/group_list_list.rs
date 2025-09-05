@@ -8,7 +8,7 @@ pub fn decode_entry(
     group_lists: json::group_list_list::List,
     pre_data: &mut PreData,
 ) -> Result<(), DecodeError> {
-    if !pre_data.group_lists.group_list_map.is_empty() {
+    if !pre_data.main_params.group_lists.group_list_map.is_empty() {
         return Err(DecodeError::GroupListsAlreadyDecoded);
     }
 
@@ -20,6 +20,7 @@ pub fn decode_entry(
         }
         let pre_group_list = group_list.into();
         pre_data
+            .main_params
             .group_lists
             .group_list_map
             .insert(group_list_id, pre_group_list);
@@ -27,6 +28,7 @@ pub fn decode_entry(
 
     for (period_id, subject_map) in group_lists.subjects_associations {
         let Some(pre_subject_map) = pre_data
+            .main_params
             .group_lists
             .subjects_associations
             .get_mut(&period_id)
