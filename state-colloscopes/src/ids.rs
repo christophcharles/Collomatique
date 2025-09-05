@@ -6,6 +6,17 @@
 
 use collomatique_state::tools;
 
+pub trait Id:
+    Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync + 'static
+{
+    /// Returns the value for the ID
+    fn inner(&self) -> u64;
+    /// Builds a new ID from u64
+    ///
+    /// This is unsafe as invariants should be checked first (to avoid duplicated ids)
+    unsafe fn new(value: u64) -> Self;
+}
+
 /// This type represents an ID for a student
 ///
 /// Every student gets a unique ID. IDs then identify students
@@ -13,13 +24,12 @@ use collomatique_state::tools;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StudentId(u64);
 
-impl StudentId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for StudentId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> StudentId {
+    unsafe fn new(value: u64) -> StudentId {
         StudentId(value)
     }
 }
@@ -31,13 +41,12 @@ impl StudentId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PeriodId(u64);
 
-impl PeriodId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for PeriodId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> PeriodId {
+    unsafe fn new(value: u64) -> PeriodId {
         PeriodId(value)
     }
 }
@@ -49,13 +58,12 @@ impl PeriodId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SubjectId(u64);
 
-impl SubjectId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for SubjectId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> SubjectId {
+    unsafe fn new(value: u64) -> SubjectId {
         SubjectId(value)
     }
 }
@@ -67,13 +75,12 @@ impl SubjectId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TeacherId(u64);
 
-impl TeacherId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for TeacherId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> TeacherId {
+    unsafe fn new(value: u64) -> TeacherId {
         TeacherId(value)
     }
 }
@@ -85,13 +92,12 @@ impl TeacherId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WeekPatternId(u64);
 
-impl WeekPatternId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for WeekPatternId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> WeekPatternId {
+    unsafe fn new(value: u64) -> WeekPatternId {
         WeekPatternId(value)
     }
 }
@@ -103,13 +109,12 @@ impl WeekPatternId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SlotId(u64);
 
-impl SlotId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for SlotId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> SlotId {
+    unsafe fn new(value: u64) -> SlotId {
         SlotId(value)
     }
 }
@@ -121,13 +126,12 @@ impl SlotId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IncompatId(u64);
 
-impl IncompatId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for IncompatId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> IncompatId {
+    unsafe fn new(value: u64) -> IncompatId {
         IncompatId(value)
     }
 }
@@ -139,13 +143,12 @@ impl IncompatId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GroupListId(u64);
 
-impl GroupListId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for GroupListId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> GroupListId {
+    unsafe fn new(value: u64) -> GroupListId {
         GroupListId(value)
     }
 }
@@ -157,13 +160,12 @@ impl GroupListId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RuleId(u64);
 
-impl RuleId {
-    /// Returns the value for the ID
-    pub fn inner(&self) -> u64 {
+impl Id for RuleId {
+    fn inner(&self) -> u64 {
         self.0
     }
 
-    pub(crate) unsafe fn new(value: u64) -> RuleId {
+    unsafe fn new(value: u64) -> RuleId {
         RuleId(value)
     }
 }

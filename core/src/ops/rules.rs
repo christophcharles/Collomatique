@@ -18,11 +18,14 @@ impl RulesUpdateWarning {
 
 #[derive(Debug, Clone)]
 pub enum RulesUpdateOp {
-    AddNewRule(String, collomatique_state_colloscopes::rules::LogicRule),
+    AddNewRule(
+        String,
+        collomatique_state_colloscopes::rules::LogicRule<collomatique_state_colloscopes::SlotId>,
+    ),
     UpdateRule(
         collomatique_state_colloscopes::RuleId,
         String,
-        collomatique_state_colloscopes::rules::LogicRule,
+        collomatique_state_colloscopes::rules::LogicRule<collomatique_state_colloscopes::SlotId>,
     ),
     DeleteRule(collomatique_state_colloscopes::RuleId),
     UpdatePeriodStatusForRule(

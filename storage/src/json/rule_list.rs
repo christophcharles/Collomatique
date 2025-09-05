@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 /// JSON desc of rule
@@ -31,8 +33,8 @@ pub enum LogicRule {
     Variable(u64),
 }
 
-impl From<&collomatique_state_colloscopes::rules::LogicRule> for LogicRule {
-    fn from(value: &collomatique_state_colloscopes::rules::LogicRule) -> Self {
+impl<SlotId: Id> From<&collomatique_state_colloscopes::rules::LogicRule<SlotId>> for LogicRule {
+    fn from(value: &collomatique_state_colloscopes::rules::LogicRule<SlotId>) -> Self {
         use collomatique_state_colloscopes::rules::LogicRule as LR;
         match value {
             LR::And(l1, l2) => LogicRule::And(
@@ -63,8 +65,10 @@ impl From<LogicRule> for collomatique_state_colloscopes::rules::LogicRuleExterna
     }
 }
 
-impl From<&collomatique_state_colloscopes::rules::Rule> for Rule {
-    fn from(value: &collomatique_state_colloscopes::rules::Rule) -> Self {
+impl<PeriodId: Id, SlotId: Id> From<&collomatique_state_colloscopes::rules::Rule<PeriodId, SlotId>>
+    for Rule
+{
+    fn from(value: &collomatique_state_colloscopes::rules::Rule<PeriodId, SlotId>) -> Self {
         Rule {
             name: value.name.clone(),
             excluded_periods: value.excluded_periods.iter().map(|x| x.inner()).collect(),

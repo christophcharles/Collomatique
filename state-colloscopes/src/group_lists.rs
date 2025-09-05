@@ -6,15 +6,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
-use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
+use crate::ids::Id;
 
 /// Description of the group lists
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct GroupLists {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupLists<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id> {
     /// Group lists
     ///
     /// Each item associates a group list id to an actual group list
-    pub group_list_map: BTreeMap<GroupListId, GroupList>,
+    pub group_list_map: BTreeMap<GroupListId, GroupList<StudentId>>,
 
     /// Associations between subjects and group lists
     ///
@@ -22,25 +22,42 @@ pub struct GroupLists {
     pub subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>>,
 }
 
+impl<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id> Default
+    for GroupLists<GroupListId, PeriodId, SubjectId, StudentId>
+{
+    fn default() -> Self {
+        GroupLists {
+            group_list_map: BTreeMap::new(),
+            subjects_associations: BTreeMap::new(),
+        }
+    }
+}
+
 /// Description of a single group list
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GroupList {
+pub struct GroupList<StudentId: Id> {
     /// parameters for the group list
-    pub params: GroupListParameters,
+    pub params: GroupListParameters<StudentId>,
     /// Prefilled groups
-    pub prefilled_groups: GroupListPrefilledGroups,
+    pub prefilled_groups: GroupListPrefilledGroups<StudentId>,
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct GroupListPrefilledGroups {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupListPrefilledGroups<StudentId: Id> {
     /// group list
-    pub groups: Vec<PrefilledGroup>,
+    pub groups: Vec<PrefilledGroup<StudentId>>,
+}
+
+impl<StudentId: Id> Default for GroupListPrefilledGroups<StudentId> {
+    fn default() -> Self {
+        GroupListPrefilledGroups { groups: vec![] }
+    }
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct PrefilledGroup {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrefilledGroup<StudentId: Id> {
     /// Optional name for the group
     pub name: Option<non_empty_string::NonEmptyString>,
     /// Students set
@@ -56,7 +73,17 @@ pub struct PrefilledGroup {
     pub sealed: bool,
 }
 
-impl GroupListPrefilledGroups {
+impl<StudentId: Id> Default for PrefilledGroup<StudentId> {
+    fn default() -> Self {
+        PrefilledGroup {
+            name: None,
+            students: BTreeSet::new(),
+            sealed: false,
+        }
+    }
+}
+
+impl<StudentId: Id> GroupListPrefilledGroups<StudentId> {
     pub fn check_duplicated_student(&self) -> bool {
         let mut students_so_far = BTreeSet::new();
         for group in &self.groups {
@@ -96,14 +123,12 @@ impl GroupListPrefilledGroups {
     }
 }
 
-impl PrefilledGroup {
+impl<StudentId: Id> PrefilledGroup<StudentId> {
     /// Builds a single prefilled group from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [PrefilledGroupExternalData::validate].
-    pub(crate) unsafe fn from_external_data(
-        external_data: PrefilledGroupExternalData,
-    ) -> PrefilledGroup {
+    pub(crate) unsafe fn from_external_data(external_data: PrefilledGroupExternalData) -> Self {
         PrefilledGroup {
             name: external_data.name,
             students: external_data
@@ -116,14 +141,14 @@ impl PrefilledGroup {
     }
 }
 
-impl GroupListPrefilledGroups {
+impl<StudentId: Id> GroupListPrefilledGroups<StudentId> {
     /// Builds prefilled groups from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [GroupListPrefilledGroupsExternalData::validate].
     pub(crate) unsafe fn from_external_data(
         external_data: GroupListPrefilledGroupsExternalData,
-    ) -> GroupListPrefilledGroups {
+    ) -> Self {
         GroupListPrefilledGroups {
             groups: external_data
                 .groups
@@ -136,7 +161,7 @@ impl GroupListPrefilledGroups {
 
 /// Parameters for a single group list
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GroupListParameters {
+pub struct GroupListParameters<StudentId: Id> {
     /// Name for the list
     pub name: String,
     /// Range of possible count of students per group
@@ -147,7 +172,7 @@ pub struct GroupListParameters {
     pub excluded_students: BTreeSet<StudentId>,
 }
 
-impl GroupListParameters {
+impl<StudentId: Id> GroupListParameters<StudentId> {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
@@ -155,7 +180,7 @@ impl GroupListParameters {
     /// [GroupListParametersExternalData::validate].
     pub(crate) unsafe fn from_external_data(
         external_data: GroupListParametersExternalData,
-    ) -> GroupListParameters {
+    ) -> Self {
         GroupListParameters {
             name: external_data.name,
             students_per_group: external_data.students_per_group,
@@ -169,7 +194,7 @@ impl GroupListParameters {
     }
 }
 
-impl GroupList {
+impl<StudentId: Id> GroupList<StudentId> {
     /// Checks whether the group list is sealed
     ///
     /// This means each prefilled group is sealed and there is no room for another
@@ -207,13 +232,13 @@ impl GroupList {
     }
 }
 
-impl GroupList {
+impl<StudentId: Id> GroupList<StudentId> {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [GroupListsExternalData::validate_all], [GroupListExternalData::validate] and
     /// [GroupListParametersExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: GroupListExternalData) -> GroupList {
+    pub(crate) unsafe fn from_external_data(external_data: GroupListExternalData) -> Self {
         GroupList {
             params: unsafe { GroupListParameters::from_external_data(external_data.params) },
             prefilled_groups: unsafe {
@@ -223,13 +248,15 @@ impl GroupList {
     }
 }
 
-impl GroupLists {
+impl<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id>
+    GroupLists<GroupListId, PeriodId, SubjectId, StudentId>
+{
     /// Builds interrogation slots from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [GroupListsExternalData::validate_all], [GroupListExternalData::validate] and
     /// [GroupListParametersExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: GroupListsExternalData) -> GroupLists {
+    pub(crate) unsafe fn from_external_data(external_data: GroupListsExternalData) -> Self {
         GroupLists {
             group_list_map: external_data
                 .group_list_map
@@ -395,8 +422,8 @@ impl GroupListExternalData {
     }
 }
 
-impl From<GroupList> for GroupListExternalData {
-    fn from(value: GroupList) -> Self {
+impl<StudentId: Id> From<GroupList<StudentId>> for GroupListExternalData {
+    fn from(value: GroupList<StudentId>) -> Self {
         GroupListExternalData {
             params: value.params.into(),
             prefilled_groups: value.prefilled_groups.into(),
@@ -419,8 +446,8 @@ impl PrefilledGroupExternalData {
     }
 }
 
-impl From<PrefilledGroup> for PrefilledGroupExternalData {
-    fn from(value: PrefilledGroup) -> Self {
+impl<StudentId: Id> From<PrefilledGroup<StudentId>> for PrefilledGroupExternalData {
+    fn from(value: PrefilledGroup<StudentId>) -> Self {
         PrefilledGroupExternalData {
             name: value.name,
             students: value.students.into_iter().map(|x| x.inner()).collect(),
@@ -447,8 +474,10 @@ impl GroupListPrefilledGroupsExternalData {
     }
 }
 
-impl From<GroupListPrefilledGroups> for GroupListPrefilledGroupsExternalData {
-    fn from(value: GroupListPrefilledGroups) -> Self {
+impl<StudentId: Id> From<GroupListPrefilledGroups<StudentId>>
+    for GroupListPrefilledGroupsExternalData
+{
+    fn from(value: GroupListPrefilledGroups<StudentId>) -> Self {
         GroupListPrefilledGroupsExternalData {
             groups: value.groups.into_iter().map(|g| g.into()).collect(),
         }
@@ -475,8 +504,8 @@ impl GroupListParametersExternalData {
     }
 }
 
-impl From<GroupListParameters> for GroupListParametersExternalData {
-    fn from(value: GroupListParameters) -> Self {
+impl<StudentId: Id> From<GroupListParameters<StudentId>> for GroupListParametersExternalData {
+    fn from(value: GroupListParameters<StudentId>) -> Self {
         GroupListParametersExternalData {
             name: value.name,
             students_per_group: value.students_per_group,

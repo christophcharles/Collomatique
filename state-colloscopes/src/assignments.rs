@@ -4,21 +4,31 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::{PeriodId, StudentId, SubjectId};
+use crate::ids::Id;
 
 /// Description of the assignments
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Assignments {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Assignments<PeriodId: Id, SubjectId: Id, StudentId: Id> {
     /// Assignments for each period
     ///
     /// Each item associates a period id to an assignment description
     /// There should be an entry for each valid period
-    pub period_map: BTreeMap<PeriodId, PeriodAssignments>,
+    pub period_map: BTreeMap<PeriodId, PeriodAssignments<SubjectId, StudentId>>,
+}
+
+impl<PeriodId: Id, SubjectId: Id, StudentId: Id> Default
+    for Assignments<PeriodId, SubjectId, StudentId>
+{
+    fn default() -> Self {
+        Assignments {
+            period_map: BTreeMap::new(),
+        }
+    }
 }
 
 /// Description of an assignment for a period
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct PeriodAssignments {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PeriodAssignments<SubjectId: Id, StudentId: Id> {
     /// Assignments for each student on the period
     ///
     /// Each item associates a subject id to an assignment description
@@ -27,14 +37,20 @@ pub struct PeriodAssignments {
     pub subject_map: BTreeMap<SubjectId, BTreeSet<StudentId>>,
 }
 
-impl PeriodAssignments {
+impl<SubjectId: Id, StudentId: Id> Default for PeriodAssignments<SubjectId, StudentId> {
+    fn default() -> Self {
+        PeriodAssignments {
+            subject_map: BTreeMap::new(),
+        }
+    }
+}
+
+impl<SubjectId: Id, StudentId: Id> PeriodAssignments<SubjectId, StudentId> {
     /// Builds a period assignment from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [PeriodAssignmentExternalData::validate].
-    pub(crate) unsafe fn from_external_data(
-        external_data: PeriodAssignmentsExternalData,
-    ) -> PeriodAssignments {
+    pub(crate) unsafe fn from_external_data(external_data: PeriodAssignmentsExternalData) -> Self {
         PeriodAssignments {
             subject_map: external_data
                 .subject_map
@@ -53,12 +69,12 @@ impl PeriodAssignments {
     }
 }
 
-impl Assignments {
+impl<PeriodId: Id, SubjectId: Id, StudentId: Id> Assignments<PeriodId, SubjectId, StudentId> {
     /// Builds an assignment from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [AssignmentsExternalData::validate_all] and [PeriodAssignmentsExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: AssignmentsExternalData) -> Assignments {
+    pub(crate) unsafe fn from_external_data(external_data: AssignmentsExternalData) -> Self {
         Assignments {
             period_map: external_data
                 .period_map
@@ -166,8 +182,10 @@ impl PeriodAssignmentsExternalData {
     }
 }
 
-impl From<PeriodAssignments> for PeriodAssignmentsExternalData {
-    fn from(value: PeriodAssignments) -> Self {
+impl<SubjectId: Id, StudentId: Id> From<PeriodAssignments<SubjectId, StudentId>>
+    for PeriodAssignmentsExternalData
+{
+    fn from(value: PeriodAssignments<SubjectId, StudentId>) -> Self {
         PeriodAssignmentsExternalData {
             subject_map: value
                 .subject_map

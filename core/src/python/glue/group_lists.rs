@@ -64,8 +64,18 @@ impl GroupList {
     }
 }
 
-impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList {
-    fn from(value: collomatique_state_colloscopes::group_lists::GroupList) -> Self {
+impl
+    From<
+        collomatique_state_colloscopes::group_lists::GroupList<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    > for GroupList
+{
+    fn from(
+        value: collomatique_state_colloscopes::group_lists::GroupList<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    ) -> Self {
         GroupList {
             parameters: value.params.into(),
             prefilled_groups: value
@@ -118,10 +128,18 @@ impl GroupListParameters {
     }
 }
 
-impl From<collomatique_state_colloscopes::group_lists::GroupListParameters>
-    for GroupListParameters
+impl
+    From<
+        collomatique_state_colloscopes::group_lists::GroupListParameters<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    > for GroupListParameters
 {
-    fn from(value: collomatique_state_colloscopes::group_lists::GroupListParameters) -> Self {
+    fn from(
+        value: collomatique_state_colloscopes::group_lists::GroupListParameters<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    ) -> Self {
         GroupListParameters {
             name: value.name,
             students_per_group_min: *value.students_per_group.start(),
@@ -181,8 +199,18 @@ impl PrefilledGroup {
     }
 }
 
-impl From<collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
-    fn from(value: collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
+impl
+    From<
+        collomatique_state_colloscopes::group_lists::PrefilledGroup<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    > for PrefilledGroup
+{
+    fn from(
+        value: collomatique_state_colloscopes::group_lists::PrefilledGroup<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    ) -> Self {
         PrefilledGroup {
             name: match value.name {
                 None => String::new(),

@@ -119,9 +119,17 @@ impl LogicRule {
     }
 }
 
-impl TryFrom<collomatique_state_colloscopes::rules::LogicRule> for LogicRule {
+impl
+    TryFrom<
+        collomatique_state_colloscopes::rules::LogicRule<collomatique_state_colloscopes::SlotId>,
+    > for LogicRule
+{
     type Error = PyErr;
-    fn try_from(value: collomatique_state_colloscopes::rules::LogicRule) -> PyResult<Self> {
+    fn try_from(
+        value: collomatique_state_colloscopes::rules::LogicRule<
+            collomatique_state_colloscopes::SlotId,
+        >,
+    ) -> PyResult<Self> {
         use collomatique_state_colloscopes::rules;
         match value {
             rules::LogicRule::And(l1, l2) => {

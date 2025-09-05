@@ -80,8 +80,20 @@ impl Incompat {
     }
 }
 
-impl From<collomatique_state_colloscopes::incompats::Incompatibility> for Incompat {
-    fn from(value: collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
+impl
+    From<
+        collomatique_state_colloscopes::incompats::Incompatibility<
+            collomatique_state_colloscopes::SubjectId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
+    > for Incompat
+{
+    fn from(
+        value: collomatique_state_colloscopes::incompats::Incompatibility<
+            collomatique_state_colloscopes::SubjectId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
+    ) -> Self {
         Incompat {
             subject_id: MsgSubjectId::from(value.subject_id).into(),
             name: value.name,

@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 /// JSON desc of assignments
@@ -28,8 +30,16 @@ pub struct SubjectAssignments {
     pub assigned_students: BTreeSet<u64>,
 }
 
-impl From<&collomatique_state_colloscopes::assignments::PeriodAssignments> for PeriodAssignments {
-    fn from(value: &collomatique_state_colloscopes::assignments::PeriodAssignments) -> Self {
+impl<SubjectId: Id, StudentId: Id>
+    From<&collomatique_state_colloscopes::assignments::PeriodAssignments<SubjectId, StudentId>>
+    for PeriodAssignments
+{
+    fn from(
+        value: &collomatique_state_colloscopes::assignments::PeriodAssignments<
+            SubjectId,
+            StudentId,
+        >,
+    ) -> Self {
         PeriodAssignments {
             subject_map: value
                 .subject_map

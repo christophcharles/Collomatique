@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::BTreeMap;
 
 /// JSON desc of slots
@@ -31,8 +33,10 @@ pub struct Slot {
     pub cost: i32,
 }
 
-impl From<&collomatique_state_colloscopes::slots::Slot> for Slot {
-    fn from(value: &collomatique_state_colloscopes::slots::Slot) -> Self {
+impl<TeacherId: Id, WeekPatternId: Id>
+    From<&collomatique_state_colloscopes::slots::Slot<TeacherId, WeekPatternId>> for Slot
+{
+    fn from(value: &collomatique_state_colloscopes::slots::Slot<TeacherId, WeekPatternId>) -> Self {
         Slot {
             teacher_id: value.teacher_id.inner(),
             start_day: value.start_time.weekday.0,

@@ -96,15 +96,23 @@ impl GroupListsUpdateWarning {
 
 #[derive(Debug, Clone)]
 pub enum GroupListsUpdateOp {
-    AddNewGroupList(collomatique_state_colloscopes::group_lists::GroupListParameters),
+    AddNewGroupList(
+        collomatique_state_colloscopes::group_lists::GroupListParameters<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    ),
     UpdateGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupListParameters,
+        collomatique_state_colloscopes::group_lists::GroupListParameters<
+            collomatique_state_colloscopes::StudentId,
+        >,
     ),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     PrefillGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups,
+        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
+            collomatique_state_colloscopes::StudentId,
+        >,
     ),
     AssignGroupListToSubject(
         collomatique_state_colloscopes::PeriodId,

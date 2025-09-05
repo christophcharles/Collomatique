@@ -29,10 +29,16 @@ impl TeachersUpdateWarning {
 
 #[derive(Debug, Clone)]
 pub enum TeachersUpdateOp {
-    AddNewTeacher(collomatique_state_colloscopes::teachers::Teacher),
+    AddNewTeacher(
+        collomatique_state_colloscopes::teachers::Teacher<
+            collomatique_state_colloscopes::SubjectId,
+        >,
+    ),
     UpdateTeacher(
         collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::teachers::Teacher,
+        collomatique_state_colloscopes::teachers::Teacher<
+            collomatique_state_colloscopes::SubjectId,
+        >,
     ),
     DeleteTeacher(collomatique_state_colloscopes::TeacherId),
 }

@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
@@ -24,8 +26,8 @@ pub struct Subject {
     pub excluded_periods: BTreeSet<u64>,
 }
 
-impl From<&collomatique_state_colloscopes::Subject> for Subject {
-    fn from(value: &collomatique_state_colloscopes::Subject) -> Self {
+impl<PeriodId: Id> From<&collomatique_state_colloscopes::Subject<PeriodId>> for Subject {
+    fn from(value: &collomatique_state_colloscopes::Subject<PeriodId>) -> Self {
         Subject {
             parameters: value.parameters.clone().into(),
             excluded_periods: value.excluded_periods.iter().map(|x| x.inner()).collect(),

@@ -14,7 +14,9 @@ mod select_start_date;
 
 #[derive(Debug)]
 pub enum GeneralPlanningInput {
-    Update(collomatique_state_colloscopes::periods::Periods),
+    Update(
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
+    ),
 
     DeleteFirstWeekClicked,
     EditFirstWeekClicked,
@@ -37,7 +39,8 @@ enum WeekCountSelectionReason {
     Cut(collomatique_state_colloscopes::PeriodId),
 }
 pub struct GeneralPlanning {
-    periods: collomatique_state_colloscopes::periods::Periods,
+    periods:
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
     week_selection_reason: WeekCountSelectionReason,
     periods_list: FactoryVecDeque<periods_display::Entry>,
 

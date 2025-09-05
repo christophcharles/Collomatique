@@ -2,11 +2,11 @@
 //!
 //! This module defines the relevant types to describes the periods
 
-use crate::ids::PeriodId;
+use crate::ids::Id;
 
 /// Description of the periods
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Periods {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Periods<PeriodId: Id> {
     /// Start date for the colloscope
     ///
     /// The date might not be set but of course, this will hinder
@@ -22,15 +22,24 @@ pub struct Periods {
     /// Each boolean represents a week. If it is true
     /// there is an interrogation on the given week
     /// otherwise there isn't.
-    pub ordered_period_list: Vec<(crate::ids::PeriodId, Vec<bool>)>,
+    pub ordered_period_list: Vec<(PeriodId, Vec<bool>)>,
 }
 
-impl Periods {
+impl<PeriodId: Id> Default for Periods<PeriodId> {
+    fn default() -> Self {
+        Periods {
+            first_week: None,
+            ordered_period_list: vec![],
+        }
+    }
+}
+
+impl<PeriodId: Id> Periods<PeriodId> {
     /// Builds a period from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// However the only check is needed is that there are no duplicate ids
-    pub(crate) unsafe fn from_external_data(external_data: PeriodsExternalData) -> Periods {
+    pub(crate) unsafe fn from_external_data(external_data: PeriodsExternalData) -> Self {
         Periods {
             first_week: external_data.first_week,
             ordered_period_list: external_data

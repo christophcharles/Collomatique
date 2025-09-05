@@ -16,11 +16,19 @@ impl IncompatibilitiesUpdateWarning {
 
 #[derive(Debug, Clone)]
 pub enum IncompatibilitiesUpdateOp {
-    AddNewIncompat(collomatique_state_colloscopes::incompats::Incompatibility),
+    AddNewIncompat(
+        collomatique_state_colloscopes::incompats::Incompatibility<
+            collomatique_state_colloscopes::SubjectId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
+    ),
     DeleteIncompat(collomatique_state_colloscopes::IncompatId),
     UpdateIncompat(
         collomatique_state_colloscopes::IncompatId,
-        collomatique_state_colloscopes::incompats::Incompatibility,
+        collomatique_state_colloscopes::incompats::Incompatibility<
+            collomatique_state_colloscopes::SubjectId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
     ),
 }
 

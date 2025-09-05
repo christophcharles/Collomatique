@@ -4,28 +4,48 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::{SlotId, SubjectId, TeacherId, WeekPatternId};
+use crate::ids::Id;
 
 /// Description of the interrogation slots
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Slots {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Slots<SubjectId: Id, SlotId: Id, TeacherId: Id, WeekPatternId: Id> {
     /// Slots for each subject
     ///
     /// Each item associates a subject id to a collection of slots
     /// There should be an entry for each valid subject with interrogations
-    pub subject_map: BTreeMap<SubjectId, SubjectSlots>,
+    pub subject_map: BTreeMap<SubjectId, SubjectSlots<SlotId, TeacherId, WeekPatternId>>,
+}
+
+impl<SubjectId: Id, SlotId: Id, TeacherId: Id, WeekPatternId: Id> Default
+    for Slots<SubjectId, SlotId, TeacherId, WeekPatternId>
+{
+    fn default() -> Self {
+        Slots {
+            subject_map: BTreeMap::new(),
+        }
+    }
 }
 
 /// Description of the interrogation slots for a subject
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct SubjectSlots {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubjectSlots<SlotId: Id, TeacherId: Id, WeekPatternId: Id> {
     /// Slots for the subject in order
-    pub ordered_slots: Vec<(SlotId, Slot)>,
+    pub ordered_slots: Vec<(SlotId, Slot<TeacherId, WeekPatternId>)>,
+}
+
+impl<SlotId: Id, TeacherId: Id, WeekPatternId: Id> Default
+    for SubjectSlots<SlotId, TeacherId, WeekPatternId>
+{
+    fn default() -> Self {
+        SubjectSlots {
+            ordered_slots: vec![],
+        }
+    }
 }
 
 /// Description of a single slot
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Slot {
+pub struct Slot<TeacherId: Id, WeekPatternId: Id> {
     /// Teacher for the interrogation
     pub teacher_id: TeacherId,
     /// Day and start time for the interrogation
@@ -45,12 +65,12 @@ pub struct Slot {
     pub cost: i32,
 }
 
-impl Slot {
+impl<TeacherId: Id, WeekPatternId: Id> Slot<TeacherId, WeekPatternId> {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [SlotExternalData::validate_all] and [SlotExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: SlotExternalData) -> Slot {
+    pub(crate) unsafe fn from_external_data(external_data: SlotExternalData) -> Self {
         Slot {
             teacher_id: unsafe { TeacherId::new(external_data.teacher_id) },
             start_time: external_data.start_time,
@@ -63,14 +83,12 @@ impl Slot {
     }
 }
 
-impl SubjectSlots {
+impl<SlotId: Id, TeacherId: Id, WeekPatternId: Id> SubjectSlots<SlotId, TeacherId, WeekPatternId> {
     /// Builds interrogation slots for a subject from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [SubjectSlotsExternalData::validate].
-    pub(crate) unsafe fn from_external_data(
-        external_data: SubjectSlotsExternalData,
-    ) -> SubjectSlots {
+    pub(crate) unsafe fn from_external_data(external_data: SubjectSlotsExternalData) -> Self {
         SubjectSlots {
             ordered_slots: external_data
                 .ordered_slots
@@ -93,7 +111,7 @@ impl SubjectSlots {
         None
     }
 
-    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
+    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot<TeacherId, WeekPatternId>> {
         let pos = self.find_slot_position(slot_id)?;
 
         Some(
@@ -106,12 +124,14 @@ impl SubjectSlots {
     }
 }
 
-impl Slots {
+impl<SubjectId: Id, SlotId: Id, TeacherId: Id, WeekPatternId: Id>
+    Slots<SubjectId, SlotId, TeacherId, WeekPatternId>
+{
     /// Builds interrogation slots from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [SlotsExternalData::validate_all] and [SlotsExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: SlotsExternalData) -> Slots {
+    pub(crate) unsafe fn from_external_data(external_data: SlotsExternalData) -> Self {
         Slots {
             subject_map: external_data
                 .subject_map
@@ -134,7 +154,7 @@ impl Slots {
         None
     }
 
-    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
+    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot<TeacherId, WeekPatternId>> {
         let (subject_id, pos) = self.find_slot_subject_and_position(slot_id)?;
 
         Some(
@@ -216,8 +236,10 @@ impl SubjectSlotsExternalData {
     }
 }
 
-impl From<SubjectSlots> for SubjectSlotsExternalData {
-    fn from(value: SubjectSlots) -> Self {
+impl<SlotId: Id, TeacherId: Id, WeekPatternId: Id>
+    From<SubjectSlots<SlotId, TeacherId, WeekPatternId>> for SubjectSlotsExternalData
+{
+    fn from(value: SubjectSlots<SlotId, TeacherId, WeekPatternId>) -> Self {
         SubjectSlotsExternalData {
             ordered_slots: value
                 .ordered_slots
@@ -295,8 +317,8 @@ impl SlotExternalData {
     }
 }
 
-impl From<Slot> for SlotExternalData {
-    fn from(value: Slot) -> Self {
+impl<TeacherId: Id, WeekPatternId: Id> From<Slot<TeacherId, WeekPatternId>> for SlotExternalData {
+    fn from(value: Slot<TeacherId, WeekPatternId>) -> Self {
         SlotExternalData {
             teacher_id: value.teacher_id.inner(),
             start_time: value.start_time,

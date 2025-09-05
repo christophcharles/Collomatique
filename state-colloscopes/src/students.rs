@@ -4,32 +4,49 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::{PeriodId, StudentId};
+use crate::ids::Id;
 
 /// Description of the students
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Students {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Students<StudentId: Id, PeriodId: Id> {
     /// List of students
     ///
     /// Each item associates an id to a student description
-    pub student_map: BTreeMap<StudentId, Student>,
+    pub student_map: BTreeMap<StudentId, Student<PeriodId>>,
+}
+
+impl<StudentId: Id, PeriodId: Id> Default for Students<StudentId, PeriodId> {
+    fn default() -> Self {
+        Students {
+            student_map: BTreeMap::new(),
+        }
+    }
 }
 
 /// Description of a single student
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Student {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Student<PeriodId: Id> {
     /// Description of the student in term of name and contact
     pub desc: crate::PersonWithContact,
     /// List of periods the student will not take part in
     pub excluded_periods: BTreeSet<PeriodId>,
 }
 
-impl Student {
+impl<PeriodId: Id> Default for Student<PeriodId> {
+    fn default() -> Self {
+        Student {
+            desc: crate::PersonWithContact::default(),
+            excluded_periods: BTreeSet::new(),
+        }
+    }
+}
+
+impl<PeriodId: Id> Student<PeriodId> {
     /// Builds a student from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [StudentExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: StudentExternalData) -> Student {
+    pub(crate) unsafe fn from_external_data(external_data: StudentExternalData) -> Self {
         Student {
             desc: external_data.desc,
             excluded_periods: external_data
@@ -41,12 +58,12 @@ impl Student {
     }
 }
 
-impl Students {
+impl<StudentId: Id, PeriodId: Id> Students<StudentId, PeriodId> {
     /// Builds students from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [StudentsExternalData::validate_all] and [StudentExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: StudentsExternalData) -> Students {
+    pub(crate) unsafe fn from_external_data(external_data: StudentsExternalData) -> Self {
         Students {
             student_map: external_data
                 .student_map
@@ -116,8 +133,8 @@ impl StudentExternalData {
     }
 }
 
-impl From<Student> for StudentExternalData {
-    fn from(value: Student) -> Self {
+impl<PeriodId: Id> From<Student<PeriodId>> for StudentExternalData {
+    fn from(value: Student<PeriodId>) -> Self {
         StudentExternalData {
             desc: value.desc,
             excluded_periods: value.excluded_periods.iter().map(|x| x.inner()).collect(),

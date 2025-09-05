@@ -4,20 +4,28 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::{PeriodId, RuleId, SlotId};
+use crate::ids::Id;
 
 /// Description of the rules
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Rules {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rules<RuleId: Id, PeriodId: Id, SlotId: Id> {
     /// Rules
     ///
     /// Each item associates a rule id to an actual rule
-    pub rule_map: BTreeMap<RuleId, Rule>,
+    pub rule_map: BTreeMap<RuleId, Rule<PeriodId, SlotId>>,
+}
+
+impl<RuleId: Id, PeriodId: Id, SlotId: Id> Default for Rules<RuleId, PeriodId, SlotId> {
+    fn default() -> Self {
+        Rules {
+            rule_map: BTreeMap::new(),
+        }
+    }
 }
 
 /// Description of a single rule
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Rule {
+pub struct Rule<PeriodId: Id, SlotId: Id> {
     /// name for the rule
     pub name: String,
     /// excluded periods
@@ -25,19 +33,19 @@ pub struct Rule {
     /// The rule should be enforced only on the other periods
     pub excluded_periods: BTreeSet<PeriodId>,
     /// Rule description
-    pub desc: LogicRule,
+    pub desc: LogicRule<SlotId>,
 }
 
 /// Logic rule enumeration
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LogicRule {
-    And(Box<LogicRule>, Box<LogicRule>),
-    Or(Box<LogicRule>, Box<LogicRule>),
-    Not(Box<LogicRule>),
+pub enum LogicRule<SlotId: Id> {
+    And(Box<LogicRule<SlotId>>, Box<LogicRule<SlotId>>),
+    Or(Box<LogicRule<SlotId>>, Box<LogicRule<SlotId>>),
+    Not(Box<LogicRule<SlotId>>),
     Variable(SlotId),
 }
 
-impl LogicRule {
+impl<SlotId: Id> LogicRule<SlotId> {
     pub fn references_slot(&self, slot_id: SlotId) -> bool {
         match self {
             LogicRule::And(l1, l2) => l1.references_slot(slot_id) || l2.references_slot(slot_id),
@@ -48,12 +56,12 @@ impl LogicRule {
     }
 }
 
-impl Rule {
+impl<PeriodId: Id, SlotId: Id> Rule<PeriodId, SlotId> {
     /// Builds a single rule from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [RuleExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: RuleExternalData) -> Rule {
+    pub(crate) unsafe fn from_external_data(external_data: RuleExternalData) -> Self {
         Rule {
             name: external_data.name,
             excluded_periods: external_data
@@ -66,12 +74,12 @@ impl Rule {
     }
 }
 
-impl Rules {
+impl<RuleId: Id, PeriodId: Id, SlotId: Id> Rules<RuleId, PeriodId, SlotId> {
     /// Builds rules from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [Rules::validate_all].
-    pub(crate) unsafe fn from_external_data(external_data: RulesExternalData) -> Rules {
+    pub(crate) unsafe fn from_external_data(external_data: RulesExternalData) -> Self {
         Rules {
             rule_map: external_data
                 .rule_map
@@ -86,12 +94,12 @@ impl Rules {
     }
 }
 
-impl LogicRule {
+impl<SlotId: Id> LogicRule<SlotId> {
     /// Builds a rule description from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [LogicRuleExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: LogicRuleExternalData) -> LogicRule {
+    pub(crate) unsafe fn from_external_data(external_data: LogicRuleExternalData) -> Self {
         match external_data {
             LogicRuleExternalData::And(e1, e2) => {
                 let l1 = unsafe { LogicRule::from_external_data(*e1) };
@@ -188,8 +196,8 @@ impl LogicRuleExternalData {
     }
 }
 
-impl From<Rule> for RuleExternalData {
-    fn from(value: Rule) -> Self {
+impl<PeriodId: Id, SlotId: Id> From<Rule<PeriodId, SlotId>> for RuleExternalData {
+    fn from(value: Rule<PeriodId, SlotId>) -> Self {
         RuleExternalData {
             name: value.name,
             excluded_periods: value
@@ -202,8 +210,8 @@ impl From<Rule> for RuleExternalData {
     }
 }
 
-impl From<LogicRule> for LogicRuleExternalData {
-    fn from(value: LogicRule) -> Self {
+impl<SlotId: Id> From<LogicRule<SlotId>> for LogicRuleExternalData {
+    fn from(value: LogicRule<SlotId>) -> Self {
         match value {
             LogicRule::And(l1, l2) => {
                 let e1 = (*l1).into();

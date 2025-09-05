@@ -85,10 +85,12 @@ impl StudentsUpdateWarning {
 
 #[derive(Debug, Clone)]
 pub enum StudentsUpdateOp {
-    AddNewStudent(collomatique_state_colloscopes::students::Student),
+    AddNewStudent(
+        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+    ),
     UpdateStudent(
         collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::students::Student,
+        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
     ),
     DeleteStudent(collomatique_state_colloscopes::StudentId),
 }

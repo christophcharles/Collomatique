@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
@@ -33,8 +35,16 @@ pub struct IncompatibilitySlot {
     pub duration: NonZeroU32,
 }
 
-impl From<&collomatique_state_colloscopes::incompats::Incompatibility> for Incompatibility {
-    fn from(value: &collomatique_state_colloscopes::incompats::Incompatibility) -> Self {
+impl<SubjectId: Id, WeekPatternId: Id>
+    From<&collomatique_state_colloscopes::incompats::Incompatibility<SubjectId, WeekPatternId>>
+    for Incompatibility
+{
+    fn from(
+        value: &collomatique_state_colloscopes::incompats::Incompatibility<
+            SubjectId,
+            WeekPatternId,
+        >,
+    ) -> Self {
         Incompatibility {
             subject_id: value.subject_id.inner(),
             name: value.name.clone(),

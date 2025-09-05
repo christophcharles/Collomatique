@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 /// JSON desc of Students
@@ -24,8 +26,8 @@ pub struct Student {
     pub excluded_periods: BTreeSet<u64>,
 }
 
-impl From<&collomatique_state_colloscopes::students::Student> for Student {
-    fn from(value: &collomatique_state_colloscopes::students::Student) -> Self {
+impl<PeriodId: Id> From<&collomatique_state_colloscopes::students::Student<PeriodId>> for Student {
+    fn from(value: &collomatique_state_colloscopes::students::Student<PeriodId>) -> Self {
         Student {
             desc: (&value.desc).into(),
             excluded_periods: value.excluded_periods.iter().map(|x| x.inner()).collect(),

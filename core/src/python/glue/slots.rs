@@ -95,8 +95,20 @@ impl SlotParameters {
     }
 }
 
-impl From<collomatique_state_colloscopes::slots::Slot> for SlotParameters {
-    fn from(value: collomatique_state_colloscopes::slots::Slot) -> Self {
+impl
+    From<
+        collomatique_state_colloscopes::slots::Slot<
+            collomatique_state_colloscopes::TeacherId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
+    > for SlotParameters
+{
+    fn from(
+        value: collomatique_state_colloscopes::slots::Slot<
+            collomatique_state_colloscopes::TeacherId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
+    ) -> Self {
         SlotParameters {
             teacher_id: MsgTeacherId::from(value.teacher_id).into(),
             start_time: value.start_time.into(),

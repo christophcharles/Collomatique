@@ -27,6 +27,8 @@ pub use rules::*;
 pub mod settings;
 pub use settings::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
     Update(UpdateMsg),

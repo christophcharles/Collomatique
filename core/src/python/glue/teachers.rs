@@ -71,8 +71,18 @@ impl Teacher {
     }
 }
 
-impl From<collomatique_state_colloscopes::teachers::Teacher> for Teacher {
-    fn from(value: collomatique_state_colloscopes::teachers::Teacher) -> Self {
+impl
+    From<
+        collomatique_state_colloscopes::teachers::Teacher<
+            collomatique_state_colloscopes::SubjectId,
+        >,
+    > for Teacher
+{
+    fn from(
+        value: collomatique_state_colloscopes::teachers::Teacher<
+            collomatique_state_colloscopes::SubjectId,
+        >,
+    ) -> Self {
         Teacher {
             desc: value.desc.into(),
             subjects: value

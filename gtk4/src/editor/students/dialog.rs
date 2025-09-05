@@ -9,16 +9,18 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    student_data: collomatique_state_colloscopes::students::Student,
-    periods: collomatique_state_colloscopes::periods::Periods,
+    student_data:
+        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+    periods:
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
     period_entries: FactoryVecDeque<PeriodEntry>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        collomatique_state_colloscopes::periods::Periods,
-        collomatique_state_colloscopes::students::Student,
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
     ),
     Cancel,
     Accept,
@@ -32,7 +34,9 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(collomatique_state_colloscopes::students::Student),
+    Accepted(
+        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+    ),
 }
 
 impl Dialog {

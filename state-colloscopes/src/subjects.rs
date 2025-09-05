@@ -4,21 +4,29 @@
 
 use std::{collections::BTreeSet, num::NonZeroU32};
 
-use crate::ids::{PeriodId, SubjectId};
+use crate::ids::Id;
 
 /// Description of the subjects
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Subjects {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Subjects<SubjectId: Id, PeriodId: Id> {
     /// Ordered list of subjects
     ///
     /// Each item represent a subject. It is described
     /// by a unique id and a description of type [Subject]
-    pub ordered_subject_list: Vec<(SubjectId, Subject)>,
+    pub ordered_subject_list: Vec<(SubjectId, Subject<PeriodId>)>,
+}
+
+impl<SubjectId: Id, PeriodId: Id> Default for Subjects<SubjectId, PeriodId> {
+    fn default() -> Self {
+        Subjects {
+            ordered_subject_list: vec![],
+        }
+    }
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Subject {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Subject<PeriodId: Id> {
     /// Parameters for the subject
     ///
     /// This is separated because those parameters do
@@ -28,6 +36,15 @@ pub struct Subject {
     ///
     /// By default a subject is present for every period.
     pub excluded_periods: BTreeSet<PeriodId>,
+}
+
+impl<PeriodId: Id> Default for Subject<PeriodId> {
+    fn default() -> Self {
+        Subject {
+            parameters: SubjectParameters::default(),
+            excluded_periods: BTreeSet::new(),
+        }
+    }
 }
 
 /// Description of one subject
@@ -229,12 +246,12 @@ impl Default for SubjectInterrogationParameters {
     }
 }
 
-impl Subject {
+impl<PeriodId: Id> Subject<PeriodId> {
     /// Builds a subject from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [SubjectExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: SubjectExternalData) -> Subject {
+    pub(crate) unsafe fn from_external_data(external_data: SubjectExternalData) -> Self {
         Subject {
             parameters: external_data.parameters,
             excluded_periods: external_data
@@ -246,12 +263,12 @@ impl Subject {
     }
 }
 
-impl Subjects {
+impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
     /// Builds subjects from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [SubjectsExternalData::validate_all] and [SubjectExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: SubjectsExternalData) -> Subjects {
+    pub(crate) unsafe fn from_external_data(external_data: SubjectsExternalData) -> Self {
         Subjects {
             ordered_subject_list: external_data
                 .ordered_subject_list
@@ -273,7 +290,7 @@ impl Subjects {
     }
 
     /// Finds a subject by id
-    pub fn find_subject(&self, id: SubjectId) -> Option<&Subject> {
+    pub fn find_subject(&self, id: SubjectId) -> Option<&Subject<PeriodId>> {
         let pos = self.find_subject_position(id)?;
 
         Some(&self.ordered_subject_list[pos].1)
@@ -387,8 +404,8 @@ impl SubjectExternalData {
     }
 }
 
-impl From<Subject> for SubjectExternalData {
-    fn from(value: Subject) -> Self {
+impl<PeriodId: Id> From<Subject<PeriodId>> for SubjectExternalData {
+    fn from(value: Subject<PeriodId>) -> Self {
         SubjectExternalData {
             parameters: value.parameters,
             excluded_periods: value

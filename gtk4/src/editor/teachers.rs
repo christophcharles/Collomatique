@@ -11,14 +11,24 @@ mod dialog;
 #[derive(Debug)]
 pub enum TeachersInput {
     Update(
-        collomatique_state_colloscopes::subjects::Subjects,
-        collomatique_state_colloscopes::teachers::Teachers,
+        collomatique_state_colloscopes::subjects::Subjects<
+            collomatique_state_colloscopes::SubjectId,
+            collomatique_state_colloscopes::PeriodId,
+        >,
+        collomatique_state_colloscopes::teachers::Teachers<
+            collomatique_state_colloscopes::TeacherId,
+            collomatique_state_colloscopes::SubjectId,
+        >,
     ),
     EditTeacherClicked(collomatique_state_colloscopes::TeacherId),
     DeleteTeacherClicked(collomatique_state_colloscopes::TeacherId),
     AddTeacherClicked,
     FilterChanged(Option<usize>),
-    TeacherEditResult(collomatique_state_colloscopes::teachers::Teacher),
+    TeacherEditResult(
+        collomatique_state_colloscopes::teachers::Teacher<
+            collomatique_state_colloscopes::SubjectId,
+        >,
+    ),
 }
 
 #[derive(Debug)]
@@ -37,8 +47,14 @@ enum TeacherFilter {
 use crate::widgets::contact_list::ContactInfo;
 
 pub struct Teachers {
-    subjects: collomatique_state_colloscopes::subjects::Subjects,
-    teachers: collomatique_state_colloscopes::teachers::Teachers,
+    subjects: collomatique_state_colloscopes::subjects::Subjects<
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    >,
+    teachers: collomatique_state_colloscopes::teachers::Teachers<
+        collomatique_state_colloscopes::TeacherId,
+        collomatique_state_colloscopes::SubjectId,
+    >,
 
     teacher_modification_reason: TeacherModificationReason,
     current_filter: TeacherFilter,

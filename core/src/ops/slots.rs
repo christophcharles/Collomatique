@@ -33,11 +33,17 @@ impl SlotsUpdateWarning {
 pub enum SlotsUpdateOp {
     AddNewSlot(
         collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::slots::Slot,
+        collomatique_state_colloscopes::slots::Slot<
+            collomatique_state_colloscopes::TeacherId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
     ),
     UpdateSlot(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::slots::Slot,
+        collomatique_state_colloscopes::slots::Slot<
+            collomatique_state_colloscopes::TeacherId,
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
     ),
     DeleteSlot(collomatique_state_colloscopes::SlotId),
     MoveSlotUp(collomatique_state_colloscopes::SlotId),

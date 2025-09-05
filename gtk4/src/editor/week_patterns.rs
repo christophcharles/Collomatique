@@ -14,8 +14,10 @@ mod dialog;
 #[derive(Debug)]
 pub enum WeekPatternsInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods,
-        collomatique_state_colloscopes::week_patterns::WeekPatterns,
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns<
+            collomatique_state_colloscopes::WeekPatternId,
+        >,
     ),
     EditWeekPatternClicked(collomatique_state_colloscopes::WeekPatternId),
     DeleteWeekPatternClicked(collomatique_state_colloscopes::WeekPatternId),
@@ -30,8 +32,11 @@ enum WeekPatternModificationReason {
 }
 
 pub struct WeekPatterns {
-    periods: collomatique_state_colloscopes::periods::Periods,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    periods:
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
+        collomatique_state_colloscopes::WeekPatternId,
+    >,
 
     week_pattern_modification_reason: WeekPatternModificationReason,
 

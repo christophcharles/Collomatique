@@ -4,6 +4,8 @@
 //!
 use super::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
@@ -31,10 +33,13 @@ pub struct GroupListPrefilledGroups {
     pub groups: Vec<PrefilledGroup>,
 }
 
-impl From<&collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups>
+impl<StudentId: Id>
+    From<&collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<StudentId>>
     for GroupListPrefilledGroups
 {
-    fn from(value: &collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups) -> Self {
+    fn from(
+        value: &collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<StudentId>,
+    ) -> Self {
         GroupListPrefilledGroups {
             groups: value.groups.iter().map(|x| x.into()).collect(),
         }
@@ -59,8 +64,12 @@ pub struct PrefilledGroup {
     pub sealed: bool,
 }
 
-impl From<&collomatique_state_colloscopes::group_lists::PrefilledGroup> for PrefilledGroup {
-    fn from(value: &collomatique_state_colloscopes::group_lists::PrefilledGroup) -> Self {
+impl<StudentId: Id> From<&collomatique_state_colloscopes::group_lists::PrefilledGroup<StudentId>>
+    for PrefilledGroup
+{
+    fn from(
+        value: &collomatique_state_colloscopes::group_lists::PrefilledGroup<StudentId>,
+    ) -> Self {
         PrefilledGroup {
             name: value.name.clone(),
             students: value.students.iter().map(|x| x.inner()).collect(),
@@ -90,10 +99,13 @@ pub struct GroupListParameters {
     pub excluded_students: BTreeSet<u64>,
 }
 
-impl From<&collomatique_state_colloscopes::group_lists::GroupListParameters>
+impl<StudentId: Id>
+    From<&collomatique_state_colloscopes::group_lists::GroupListParameters<StudentId>>
     for GroupListParameters
 {
-    fn from(value: &collomatique_state_colloscopes::group_lists::GroupListParameters) -> Self {
+    fn from(
+        value: &collomatique_state_colloscopes::group_lists::GroupListParameters<StudentId>,
+    ) -> Self {
         GroupListParameters {
             name: value.name.clone(),
             students_per_group: value.students_per_group.clone(),
@@ -120,8 +132,10 @@ impl From<GroupListParameters>
     }
 }
 
-impl From<&collomatique_state_colloscopes::group_lists::GroupList> for GroupList {
-    fn from(value: &collomatique_state_colloscopes::group_lists::GroupList) -> Self {
+impl<StudentId: Id> From<&collomatique_state_colloscopes::group_lists::GroupList<StudentId>>
+    for GroupList
+{
+    fn from(value: &collomatique_state_colloscopes::group_lists::GroupList<StudentId>) -> Self {
         GroupList {
             params: (&value.params).into(),
             prefilled_groups: (&value.prefilled_groups).into(),

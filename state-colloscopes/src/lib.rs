@@ -24,6 +24,7 @@ use week_patterns::WeekPatterns;
 use week_patterns::WeekPatternsExternalData;
 
 pub mod ids;
+use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
     GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId, TeacherId,
@@ -102,16 +103,16 @@ pub struct PersonWithContact {
 /// of [Eq] and [PartialEq] for [Data] relies on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InnerData {
-    periods: periods::Periods,
-    subjects: subjects::Subjects,
-    teachers: teachers::Teachers,
-    students: students::Students,
-    assignments: assignments::Assignments,
-    week_patterns: week_patterns::WeekPatterns,
-    slots: slots::Slots,
-    incompats: incompats::Incompats,
-    group_lists: group_lists::GroupLists,
-    rules: rules::Rules,
+    periods: periods::Periods<PeriodId>,
+    subjects: subjects::Subjects<SubjectId, PeriodId>,
+    teachers: teachers::Teachers<TeacherId, SubjectId>,
+    students: students::Students<StudentId, PeriodId>,
+    assignments: assignments::Assignments<PeriodId, SubjectId, StudentId>,
+    week_patterns: week_patterns::WeekPatterns<WeekPatternId>,
+    slots: slots::Slots<SubjectId, SlotId, TeacherId, WeekPatternId>,
+    incompats: incompats::Incompats<IncompatId, SubjectId, WeekPatternId>,
+    group_lists: group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId>,
+    rules: rules::Rules<RuleId, PeriodId, SlotId>,
     settings: settings::GeneralSettings,
 }
 
@@ -802,7 +803,7 @@ impl Data {
     pub fn promote_teacher(
         &self,
         teacher: teachers::TeacherExternalData,
-    ) -> Result<teachers::Teacher, u64> {
+    ) -> Result<teachers::Teacher<SubjectId>, u64> {
         let mut new_subjects = BTreeSet::new();
 
         for subject_id in teacher.subjects {
@@ -822,7 +823,7 @@ impl Data {
     pub fn promote_student(
         &self,
         student: students::StudentExternalData,
-    ) -> Result<students::Student, u64> {
+    ) -> Result<students::Student<PeriodId>, u64> {
         let mut new_excluded_periods = BTreeSet::new();
 
         for period_id in student.excluded_periods {
@@ -842,7 +843,7 @@ impl Data {
     pub fn promote_slot(
         &self,
         slot: slots::SlotExternalData,
-    ) -> Result<slots::Slot, PromoteSlotError> {
+    ) -> Result<slots::Slot<TeacherId, WeekPatternId>, PromoteSlotError> {
         let teacher_id = self
             .validate_teacher_id(slot.teacher_id)
             .ok_or(PromoteSlotError::InvalidTeacherId(slot.teacher_id))?;
@@ -870,7 +871,7 @@ impl Data {
     pub fn promote_incompat(
         &self,
         incompat: incompats::IncompatibilityExternalData,
-    ) -> Result<incompats::Incompatibility, PromoteIncompatError> {
+    ) -> Result<incompats::Incompatibility<SubjectId, WeekPatternId>, PromoteIncompatError> {
         let subject_id = self
             .validate_subject_id(incompat.subject_id)
             .ok_or(PromoteIncompatError::InvalidSubjectId(incompat.subject_id))?;
@@ -899,7 +900,7 @@ impl Data {
     pub fn promote_group_list_params(
         &self,
         params: group_lists::GroupListParametersExternalData,
-    ) -> Result<group_lists::GroupListParameters, PromoteGroupListParametersError> {
+    ) -> Result<group_lists::GroupListParameters<StudentId>, PromoteGroupListParametersError> {
         let mut excluded_students = BTreeSet::new();
 
         for student_id in params.excluded_students {
@@ -926,7 +927,10 @@ impl Data {
     pub fn promote_group_list_prefilled_groups(
         &self,
         prefilled_groups: group_lists::GroupListPrefilledGroupsExternalData,
-    ) -> Result<group_lists::GroupListPrefilledGroups, PromoteGroupListPrefilledGroupsError> {
+    ) -> Result<
+        group_lists::GroupListPrefilledGroups<StudentId>,
+        PromoteGroupListPrefilledGroupsError,
+    > {
         let mut groups = vec![];
 
         for group in prefilled_groups.groups {
@@ -956,7 +960,7 @@ impl Data {
     pub fn promote_logic_rule(
         &self,
         logic_rule: rules::LogicRuleExternalData,
-    ) -> Result<rules::LogicRule, PromoteLogicRuleError> {
+    ) -> Result<rules::LogicRule<SlotId>, PromoteLogicRuleError> {
         use rules::{LogicRule, LogicRuleExternalData};
         let new_logic_rule = match logic_rule {
             LogicRuleExternalData::And(l1, l2) => LogicRule::And(
@@ -1071,7 +1075,7 @@ impl Data {
     ///
     /// Checks that a subject is valid
     fn validate_subject_internal(
-        subject: &subjects::Subject,
+        subject: &subjects::Subject<PeriodId>,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), SubjectError> {
         for period_id in &subject.excluded_periods {
@@ -1119,7 +1123,7 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// used to check a subject before commiting a subject op
-    fn validate_subject(&self, subject: &subjects::Subject) -> Result<(), SubjectError> {
+    fn validate_subject(&self, subject: &subjects::Subject<PeriodId>) -> Result<(), SubjectError> {
         let period_ids = self.build_period_ids();
 
         Self::validate_subject_internal(subject, &period_ids)
@@ -1138,8 +1142,8 @@ impl Data {
     ///
     /// Checks that a subject is valid
     fn validate_teacher_internal(
-        teacher: &teachers::Teacher,
-        subjects: &subjects::Subjects,
+        teacher: &teachers::Teacher<SubjectId>,
+        subjects: &subjects::Subjects<SubjectId, PeriodId>,
     ) -> Result<(), TeacherError> {
         for subject_id in &teacher.subjects {
             let Some(subject) = subjects.find_subject(*subject_id) else {
@@ -1156,7 +1160,7 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// used to check a teacher before commiting a teacher op
-    fn validate_teacher(&self, teacher: &teachers::Teacher) -> Result<(), TeacherError> {
+    fn validate_teacher(&self, teacher: &teachers::Teacher<SubjectId>) -> Result<(), TeacherError> {
         Self::validate_teacher_internal(teacher, &self.inner_data.subjects)
     }
 
@@ -1173,7 +1177,7 @@ impl Data {
     ///
     /// Checks that a subject is valid
     fn validate_student_internal(
-        student: &students::Student,
+        student: &students::Student<PeriodId>,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), StudentError> {
         for period_id in &student.excluded_periods {
@@ -1188,7 +1192,7 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// used to check a teacher before commiting a teacher op
-    fn validate_student(&self, student: &students::Student) -> Result<(), StudentError> {
+    fn validate_student(&self, student: &students::Student<PeriodId>) -> Result<(), StudentError> {
         let period_ids = self.build_period_ids();
 
         Self::validate_student_internal(student, &period_ids)
@@ -1247,11 +1251,11 @@ impl Data {
     ///
     /// Checks that a slot is valid
     fn validate_slot_internal(
-        slot: &slots::Slot,
+        slot: &slots::Slot<TeacherId, WeekPatternId>,
         subject_id: SubjectId,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
-        teachers: &teachers::Teachers,
-        subjects: &subjects::Subjects,
+        teachers: &teachers::Teachers<TeacherId, SubjectId>,
+        subjects: &subjects::Subjects<SubjectId, PeriodId>,
     ) -> Result<(), SlotError> {
         let Some(teacher) = teachers.teacher_map.get(&slot.teacher_id) else {
             return Err(SlotError::InvalidTeacherId(slot.teacher_id));
@@ -1287,7 +1291,11 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// used to check a teacher before commiting a teacher op
-    fn validate_slot(&self, slot: &slots::Slot, subject_id: SubjectId) -> Result<(), SlotError> {
+    fn validate_slot(
+        &self,
+        slot: &slots::Slot<TeacherId, WeekPatternId>,
+        subject_id: SubjectId,
+    ) -> Result<(), SlotError> {
         let week_pattern_ids = self.build_week_pattern_ids();
 
         Self::validate_slot_internal(
@@ -1333,7 +1341,7 @@ impl Data {
     ///
     /// Checks that an incompat is valid
     fn validate_incompat_internal(
-        incompat: &incompats::Incompatibility,
+        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
         subject_ids: &BTreeSet<SubjectId>,
     ) -> Result<(), IncompatError> {
@@ -1353,7 +1361,7 @@ impl Data {
     /// used to check a teacher before commiting a teacher op
     fn validate_incompat(
         &self,
-        incompat: &incompats::Incompatibility,
+        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
     ) -> Result<(), IncompatError> {
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
@@ -1378,8 +1386,8 @@ impl Data {
     ///
     /// Checks that an incompat is valid
     fn validate_group_list_params_internal(
-        params: &group_lists::GroupListParameters,
-        students: &students::Students,
+        params: &group_lists::GroupListParameters<StudentId>,
+        students: &students::Students<StudentId, PeriodId>,
     ) -> Result<(), GroupListError> {
         if params.group_count.is_empty() {
             return Err(GroupListError::GroupCountRangeIsEmpty);
@@ -1399,8 +1407,8 @@ impl Data {
     ///
     /// Checks that an incompat is valid
     fn validate_group_list_prefilled_groups_internal(
-        prefilled_groups: &group_lists::GroupListPrefilledGroups,
-        students: &students::Students,
+        prefilled_groups: &group_lists::GroupListPrefilledGroups<StudentId>,
+        students: &students::Students<StudentId, PeriodId>,
         excluded_students: &BTreeSet<StudentId>,
     ) -> Result<(), GroupListError> {
         if !prefilled_groups.check_duplicated_student() {
@@ -1423,8 +1431,8 @@ impl Data {
     ///
     /// Checks that an incompat is valid
     fn validate_group_list_internal(
-        group_list: &group_lists::GroupList,
-        students: &students::Students,
+        group_list: &group_lists::GroupList<StudentId>,
+        students: &students::Students<StudentId, PeriodId>,
     ) -> Result<(), GroupListError> {
         Self::validate_group_list_params_internal(&group_list.params, students)?;
         Self::validate_group_list_prefilled_groups_internal(
@@ -1440,7 +1448,7 @@ impl Data {
     /// used to check a teacher before commiting a teacher op
     fn validate_group_list(
         &self,
-        group_list: &group_lists::GroupList,
+        group_list: &group_lists::GroupList<StudentId>,
     ) -> Result<(), GroupListError> {
         Self::validate_group_list_internal(group_list, &self.inner_data.students)
     }
@@ -1480,7 +1488,7 @@ impl Data {
     ///
     /// Checks that a rule is valid
     fn validate_logic_rule_internal(
-        logic_rule: &rules::LogicRule,
+        logic_rule: &rules::LogicRule<SlotId>,
         slot_ids: &BTreeSet<SlotId>,
     ) -> Result<(), RuleError> {
         match logic_rule {
@@ -1508,7 +1516,7 @@ impl Data {
     ///
     /// Checks that a rule is valid
     fn validate_rule_internal(
-        rule: &rules::Rule,
+        rule: &rules::Rule<PeriodId, SlotId>,
         period_ids: &BTreeSet<PeriodId>,
         slot_ids: &BTreeSet<SlotId>,
     ) -> Result<(), RuleError> {
@@ -1526,7 +1534,7 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// used to check a rule before commiting a rule op
-    fn validate_rule(&self, rule: &rules::Rule) -> Result<(), RuleError> {
+    fn validate_rule(&self, rule: &rules::Rule<PeriodId, SlotId>) -> Result<(), RuleError> {
         let period_ids = self.build_period_ids();
         let slot_ids = self.build_slot_ids();
         Self::validate_rule_internal(rule, &period_ids, &slot_ids)
@@ -1769,52 +1777,54 @@ impl Data {
     }
 
     /// Get the students
-    pub fn get_students(&self) -> &students::Students {
+    pub fn get_students(&self) -> &students::Students<StudentId, PeriodId> {
         &self.inner_data.students
     }
 
     /// Get the subjects
-    pub fn get_subjects(&self) -> &subjects::Subjects {
+    pub fn get_subjects(&self) -> &subjects::Subjects<SubjectId, PeriodId> {
         &self.inner_data.subjects
     }
 
     /// Return the description of the periods
-    pub fn get_periods(&self) -> &periods::Periods {
+    pub fn get_periods(&self) -> &periods::Periods<PeriodId> {
         &self.inner_data.periods
     }
 
     /// Get the subjects
-    pub fn get_teachers(&self) -> &teachers::Teachers {
+    pub fn get_teachers(&self) -> &teachers::Teachers<TeacherId, SubjectId> {
         &self.inner_data.teachers
     }
 
     /// Get the assignments
-    pub fn get_assignments(&self) -> &assignments::Assignments {
+    pub fn get_assignments(&self) -> &assignments::Assignments<PeriodId, SubjectId, StudentId> {
         &self.inner_data.assignments
     }
 
     /// Get the week patterns
-    pub fn get_week_patterns(&self) -> &week_patterns::WeekPatterns {
+    pub fn get_week_patterns(&self) -> &week_patterns::WeekPatterns<WeekPatternId> {
         &self.inner_data.week_patterns
     }
 
     /// Get the slots
-    pub fn get_slots(&self) -> &slots::Slots {
+    pub fn get_slots(&self) -> &slots::Slots<SubjectId, SlotId, TeacherId, WeekPatternId> {
         &self.inner_data.slots
     }
 
     /// Get the incompats
-    pub fn get_incompats(&self) -> &incompats::Incompats {
+    pub fn get_incompats(&self) -> &incompats::Incompats<IncompatId, SubjectId, WeekPatternId> {
         &self.inner_data.incompats
     }
 
     /// Get the group lists
-    pub fn get_group_lists(&self) -> &group_lists::GroupLists {
+    pub fn get_group_lists(
+        &self,
+    ) -> &group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId> {
         &self.inner_data.group_lists
     }
 
     /// Get the rules
-    pub fn get_rules(&self) -> &rules::Rules {
+    pub fn get_rules(&self) -> &rules::Rules<RuleId, PeriodId, SlotId> {
         &self.inner_data.rules
     }
 

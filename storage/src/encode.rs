@@ -8,6 +8,8 @@
 use super::*;
 use json::*;
 
+use collomatique_state_colloscopes::ids::Id;
+
 fn generate_header() -> Header {
     Header {
         file_type: FileType::Collomatique,

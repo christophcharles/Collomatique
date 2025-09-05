@@ -5,20 +5,30 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
-use crate::ids::{IncompatId, SubjectId, WeekPatternId};
+use crate::ids::Id;
 
 /// Description of the schedule incompatibilities
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct Incompats {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Incompats<IncompatId: Id, SubjectId: Id, WeekPatternId: Id> {
     /// Incompats for subjects
     ///
     /// Each item associates an incompat id to a schedule incompatibility
-    pub incompat_map: BTreeMap<IncompatId, Incompatibility>,
+    pub incompat_map: BTreeMap<IncompatId, Incompatibility<SubjectId, WeekPatternId>>,
+}
+
+impl<IncompatId: Id, SubjectId: Id, WeekPatternId: Id> Default
+    for Incompats<IncompatId, SubjectId, WeekPatternId>
+{
+    fn default() -> Self {
+        Incompats {
+            incompat_map: BTreeMap::new(),
+        }
+    }
 }
 
 /// Description of a single schedule incompat
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Incompatibility {
+pub struct Incompatibility<SubjectId: Id, WeekPatternId: Id> {
     /// Subject the incompatibility is linked to
     pub subject_id: SubjectId,
     /// Name of the incompatibility for clarity
@@ -35,14 +45,12 @@ pub struct Incompatibility {
     pub week_pattern_id: Option<WeekPatternId>,
 }
 
-impl Incompatibility {
+impl<SubjectId: Id, WeekPatternId: Id> Incompatibility<SubjectId, WeekPatternId> {
     /// Builds an interrogation slot from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [IncompatibilityExternalData::validate].
-    pub(crate) unsafe fn from_external_data(
-        external_data: IncompatibilityExternalData,
-    ) -> Incompatibility {
+    pub(crate) unsafe fn from_external_data(external_data: IncompatibilityExternalData) -> Self {
         Incompatibility {
             subject_id: unsafe { SubjectId::new(external_data.subject_id) },
             name: external_data.name,
@@ -55,12 +63,14 @@ impl Incompatibility {
     }
 }
 
-impl Incompats {
+impl<IncompatId: Id, SubjectId: Id, WeekPatternId: Id>
+    Incompats<IncompatId, SubjectId, WeekPatternId>
+{
     /// Builds interrogation slots from external data
     ///
     /// No checks is done for consistency so this is unsafe.
     /// See [SlotsExternalData::validate_all] and [SlotsExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: IncompatsExternalData) -> Incompats {
+    pub(crate) unsafe fn from_external_data(external_data: IncompatsExternalData) -> Self {
         Incompats {
             incompat_map: external_data
                 .incompat_map
@@ -143,8 +153,10 @@ impl IncompatibilityExternalData {
     }
 }
 
-impl From<Incompatibility> for IncompatibilityExternalData {
-    fn from(value: Incompatibility) -> Self {
+impl<SubjectId: Id, WeekPatternId: Id> From<Incompatibility<SubjectId, WeekPatternId>>
+    for IncompatibilityExternalData
+{
+    fn from(value: Incompatibility<SubjectId, WeekPatternId>) -> Self {
         IncompatibilityExternalData {
             subject_id: value.subject_id.inner(),
             name: value.name,

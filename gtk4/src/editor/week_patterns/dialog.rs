@@ -12,7 +12,8 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    periods: collomatique_state_colloscopes::periods::Periods,
+    periods:
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
     week_pattern: collomatique_state_colloscopes::week_patterns::WeekPattern,
     period_entries: FactoryVecDeque<PeriodEntry>,
 }
@@ -20,7 +21,7 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
         collomatique_state_colloscopes::week_patterns::WeekPattern,
     ),
     Cancel,

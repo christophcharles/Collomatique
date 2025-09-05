@@ -4,15 +4,23 @@
 
 use std::collections::BTreeMap;
 
-use crate::ids::WeekPatternId;
+use crate::ids::Id;
 
 /// Description of the week patterns
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct WeekPatterns {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeekPatterns<WeekPatternId: Id> {
     /// Week patterns
     ///
     /// Each item associate to a single ID a sequence of weeks
     pub week_pattern_map: BTreeMap<WeekPatternId, WeekPattern>,
+}
+
+impl<WeekPatternId: Id> Default for WeekPatterns<WeekPatternId> {
+    fn default() -> Self {
+        WeekPatterns {
+            week_pattern_map: BTreeMap::new(),
+        }
+    }
 }
 
 /// Description of a week pattern
@@ -46,13 +54,11 @@ pub struct WeekPatternsExternalData {
     pub week_pattern_map: BTreeMap<u64, WeekPattern>,
 }
 
-impl WeekPatterns {
+impl<WeekPatternId: Id> WeekPatterns<WeekPatternId> {
     /// Builds week patterns from external data
     ///
     /// No checks is done for consistency so this is unsafe.
-    pub(crate) unsafe fn from_external_data(
-        external_data: WeekPatternsExternalData,
-    ) -> WeekPatterns {
+    pub(crate) unsafe fn from_external_data(external_data: WeekPatternsExternalData) -> Self {
         WeekPatterns {
             week_pattern_map: external_data
                 .week_pattern_map

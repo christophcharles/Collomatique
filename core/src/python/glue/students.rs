@@ -71,8 +71,16 @@ impl Student {
     }
 }
 
-impl From<collomatique_state_colloscopes::students::Student> for Student {
-    fn from(value: collomatique_state_colloscopes::students::Student) -> Self {
+impl
+    From<
+        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+    > for Student
+{
+    fn from(
+        value: collomatique_state_colloscopes::students::Student<
+            collomatique_state_colloscopes::PeriodId,
+        >,
+    ) -> Self {
         Student {
             desc: value.desc.into(),
             excluded_periods: value
