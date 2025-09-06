@@ -126,7 +126,9 @@ impl RulesUpdateOp {
             Self::UpdateRule(rule_id, name, rule) => {
                 let current_rule = data
                     .get_data()
-                    .get_rules()
+                    .get_inner_data()
+                    .main_params
+                    .rules
                     .rule_map
                     .get(rule_id)
                     .ok_or(UpdateRuleError::InvalidRuleId(*rule_id))?;
@@ -184,7 +186,9 @@ impl RulesUpdateOp {
             Self::UpdatePeriodStatusForRule(rule_id, period_id, new_status) => {
                 if data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                     .is_none()
                 {
@@ -193,7 +197,9 @@ impl RulesUpdateOp {
 
                 let mut rule = data
                     .get_data()
-                    .get_rules()
+                    .get_inner_data()
+                    .main_params
+                    .rules
                     .rule_map
                     .get(rule_id)
                     .ok_or(UpdatePeriodStatusForRuleError::InvalidRuleId(*rule_id))?

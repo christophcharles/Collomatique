@@ -27,7 +27,9 @@ impl GroupListsUpdateWarning {
             Self::LooseWholePrefilledGroupList(group_list_id) => {
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -42,7 +44,9 @@ impl GroupListsUpdateWarning {
             Self::LooseStudentsInPrefilledGroupList(group_list_id, student_ids) => {
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -50,7 +54,13 @@ impl GroupListsUpdateWarning {
                 };
                 let mut student_names = vec![];
                 for student_id in student_ids {
-                    let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                    let Some(student) = data
+                        .get_data()
+                        .get_inner_data()
+                        .main_params
+                        .students
+                        .student_map
+                        .get(student_id)
                     else {
                         return None;
                     };
@@ -69,18 +79,28 @@ impl GroupListsUpdateWarning {
             Self::LooseSubjectAssociation(group_list_id, subject_id, period_id) => {
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
                     return None;
                 };
-                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
                     return None;
                 };
                 let Some(period_num) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -205,7 +225,9 @@ impl GroupListsUpdateOp {
             GroupListsUpdateOp::UpdateGroupList(group_list_id, params) => {
                 let Some(old_group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -238,7 +260,9 @@ impl GroupListsUpdateOp {
             GroupListsUpdateOp::DeleteGroupList(group_list_id) => {
                 let Some(old_group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -257,8 +281,12 @@ impl GroupListsUpdateOp {
                     });
                 }
 
-                for (period_id, subject_map) in
-                    &data.get_data().get_group_lists().subjects_associations
+                for (period_id, subject_map) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
+                    .subjects_associations
                 {
                     for (subject_id, associated_id) in subject_map {
                         if *group_list_id == *associated_id {
@@ -302,7 +330,9 @@ impl GroupListsUpdateOp {
                 for student_id in &params.excluded_students {
                     if !data
                         .get_data()
-                        .get_students()
+                        .get_inner_data()
+                        .main_params
+                        .students
                         .student_map
                         .contains_key(student_id)
                     {
@@ -335,7 +365,9 @@ impl GroupListsUpdateOp {
                 for student_id in &params.excluded_students {
                     if !data
                         .get_data()
-                        .get_students()
+                        .get_inner_data()
+                        .main_params
+                        .students
                         .student_map
                         .contains_key(student_id)
                     {
@@ -352,7 +384,9 @@ impl GroupListsUpdateOp {
 
                 if !data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .contains_key(group_list_id)
                 {
@@ -383,7 +417,9 @@ impl GroupListsUpdateOp {
             Self::DeleteGroupList(group_list_id) => {
                 if !data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .contains_key(group_list_id)
                 {
@@ -412,7 +448,9 @@ impl GroupListsUpdateOp {
             Self::PrefillGroupList(group_list_id, prefilled_groups) => {
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -429,7 +467,9 @@ impl GroupListsUpdateOp {
                     }
                     if !data
                         .get_data()
-                        .get_students()
+                        .get_inner_data()
+                        .main_params
+                        .students
                         .student_map
                         .contains_key(&student_id)
                     {
@@ -453,7 +493,13 @@ impl GroupListsUpdateOp {
                 Ok(None)
             }
             Self::AssignGroupListToSubject(period_id, subject_id, group_list_id_opt) => {
-                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
                     return Err(AssignGroupListToSubjectError::InvalidSubjectId(*subject_id).into());
                 };
 
@@ -474,7 +520,9 @@ impl GroupListsUpdateOp {
 
                 if !data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .subjects_associations
                     .contains_key(period_id)
                 {
@@ -484,7 +532,9 @@ impl GroupListsUpdateOp {
                 if let Some(group_list_id) = group_list_id_opt {
                     if !data
                         .get_data()
-                        .get_group_lists()
+                        .get_inner_data()
+                        .main_params
+                        .group_lists
                         .group_list_map
                         .contains_key(group_list_id)
                     {

@@ -99,8 +99,8 @@ pub struct PersonWithContact {
 /// directly use `derive(PartialEq, Eq)` with it. The implementation
 /// of [Eq] and [PartialEq] for [Data] relies on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct InnerData {
-    main_params: colloscope_params::ColloscopeParameters<
+pub struct InnerData {
+    pub main_params: colloscope_params::ColloscopeParameters<
         PeriodId,
         SubjectId,
         TeacherId,
@@ -1701,61 +1701,12 @@ impl Data {
         Ok(data)
     }
 
-    /// Get the students
-    pub fn get_students(&self) -> &students::Students<StudentId, PeriodId> {
-        &self.inner_data.main_params.students
-    }
-
-    /// Get the subjects
-    pub fn get_subjects(&self) -> &subjects::Subjects<SubjectId, PeriodId> {
-        &self.inner_data.main_params.subjects
-    }
-
-    /// Return the description of the periods
-    pub fn get_periods(&self) -> &periods::Periods<PeriodId> {
-        &self.inner_data.main_params.periods
-    }
-
-    /// Get the subjects
-    pub fn get_teachers(&self) -> &teachers::Teachers<TeacherId, SubjectId> {
-        &self.inner_data.main_params.teachers
-    }
-
-    /// Get the assignments
-    pub fn get_assignments(&self) -> &assignments::Assignments<PeriodId, SubjectId, StudentId> {
-        &self.inner_data.main_params.assignments
-    }
-
-    /// Get the week patterns
-    pub fn get_week_patterns(&self) -> &week_patterns::WeekPatterns<WeekPatternId> {
-        &self.inner_data.main_params.week_patterns
-    }
-
-    /// Get the slots
-    pub fn get_slots(&self) -> &slots::Slots<SubjectId, SlotId, TeacherId, WeekPatternId> {
-        &self.inner_data.main_params.slots
-    }
-
-    /// Get the incompats
-    pub fn get_incompats(&self) -> &incompats::Incompats<IncompatId, SubjectId, WeekPatternId> {
-        &self.inner_data.main_params.incompats
-    }
-
-    /// Get the group lists
-    pub fn get_group_lists(
-        &self,
-    ) -> &group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId> {
-        &self.inner_data.main_params.group_lists
-    }
-
-    /// Get the rules
-    pub fn get_rules(&self) -> &rules::Rules<RuleId, PeriodId, SlotId> {
-        &self.inner_data.main_params.rules
-    }
-
-    /// Get the rules
-    pub fn get_settings(&self) -> &settings::GeneralSettings {
-        &self.inner_data.main_params.settings
+    /// Returns a non-mutable reference to internal data
+    ///
+    /// Elementary ops allow the edition of data. But between two ops
+    /// you can inspect the current data via this function
+    pub fn get_inner_data(&self) -> &InnerData {
+        &self.inner_data
     }
 
     /// Used internally

@@ -62,7 +62,9 @@ fn can_remove_referenced_periods() {
     // Check that indeed the subject does not reference any period
     assert!(app_state
         .get_data()
-        .get_subjects()
+        .get_inner_data()
+        .main_params
+        .subjects
         .find_subject(subject)
         .unwrap()
         .excluded_periods
@@ -131,7 +133,9 @@ fn can_remove_referenced_periods_and_they_are_correctly_restored() {
     let expected = BTreeSet::from([period2]);
     let actual = &app_state
         .get_data()
-        .get_subjects()
+        .get_inner_data()
+        .main_params
+        .subjects
         .find_subject(subject)
         .unwrap()
         .excluded_periods;
@@ -208,7 +212,9 @@ fn period_status_is_correctly_reproduced_when_cutting() {
     let expected = BTreeSet::from([period2, period2_bis]);
     let actual = &app_state
         .get_data()
-        .get_subjects()
+        .get_inner_data()
+        .main_params
+        .subjects
         .find_subject(subject)
         .unwrap()
         .excluded_periods;

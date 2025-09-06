@@ -159,7 +159,9 @@ impl AssignmentsUpdateOp {
             Self::DuplicatePreviousPeriod(period_id) => {
                 let Some(position) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return Err(
@@ -176,24 +178,39 @@ impl AssignmentsUpdateOp {
                     );
                 }
 
-                let previous_period_id =
-                    data.get_data().get_periods().ordered_period_list[position - 1].0;
+                let previous_period_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[position - 1]
+                    .0;
                 let current_period_assignments = data
                     .get_data()
-                    .get_assignments()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
                     .period_map
                     .get(period_id)
                     .expect("Period id should be valid at this point")
                     .clone();
                 let previous_period_assignments = data
                     .get_data()
-                    .get_assignments()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
                     .period_map
                     .get(&previous_period_id)
                     .expect("Previous period id should be valid at this point")
                     .clone();
 
-                let student_map = data.get_data().get_students().student_map.clone();
+                let student_map = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .clone();
 
                 for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
@@ -232,14 +249,22 @@ impl AssignmentsUpdateOp {
             Self::AssignAll(period_id, subject_id, status) => {
                 if data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                     .is_none()
                 {
                     return Err(AssignAllError::InvalidPeriodId(period_id.clone()).into());
                 };
 
-                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
                     return Err(AssignAllError::InvalidSubjectId(*subject_id).into());
                 };
 
@@ -249,7 +274,13 @@ impl AssignmentsUpdateOp {
                     );
                 }
 
-                let student_map = data.get_data().get_students().student_map.clone();
+                let student_map = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .clone();
                 for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
                         continue;

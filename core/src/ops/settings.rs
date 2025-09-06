@@ -42,7 +42,12 @@ impl SettingsUpdateOp {
     ) -> Result<(), SettingsUpdateError> {
         match self {
             Self::UpdateStrictLimits(strict_limits) => {
-                let mut new_settings = data.get_data().get_settings().clone();
+                let mut new_settings = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .settings
+                    .clone();
                 new_settings.strict_limits = strict_limits.clone();
 
                 let result = data

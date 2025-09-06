@@ -205,44 +205,109 @@ impl EditorPanel {
         self.general_planning
             .sender()
             .send(general_planning::GeneralPlanningInput::Update(
-                self.data.get_data().get_periods().clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .clone(),
             ))
             .unwrap();
         self.subjects
             .sender()
             .send(subjects::SubjectsInput::Update(
-                self.data.get_data().get_periods().clone(),
-                self.data.get_data().get_subjects().clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .clone(),
             ))
             .unwrap();
         self.teachers
             .sender()
             .send(teachers::TeachersInput::Update(
-                self.data.get_data().get_subjects().clone(),
-                self.data.get_data().get_teachers().clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .teachers
+                    .clone(),
             ))
             .unwrap();
         self.students
             .sender()
             .send(students::StudentsInput::Update(
-                self.data.get_data().get_periods().clone(),
-                self.data.get_data().get_students().clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .clone(),
             ))
             .unwrap();
         self.assignments
             .sender()
             .send(assignments::AssignmentsInput::Update(
-                self.data.get_data().get_periods().clone(),
-                self.data.get_data().get_subjects().clone(),
-                self.data.get_data().get_students().clone(),
-                self.data.get_data().get_assignments().clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
+                    .clone(),
             ))
             .unwrap();
         self.week_patterns
             .sender()
             .send(week_patterns::WeekPatternsInput::Update(
-                self.data.get_data().get_periods().clone(),
-                self.data.get_data().get_week_patterns().clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .week_patterns
+                    .clone(),
             ))
             .unwrap();
     }

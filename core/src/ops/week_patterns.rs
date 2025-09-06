@@ -17,14 +17,18 @@ impl WeekPatternsUpdateWarning {
             WeekPatternsUpdateWarning::LooseInterrogationSlot(slot_id) => {
                 let Some((subject_id, position)) = data
                     .get_data()
-                    .get_slots()
+                    .get_inner_data()
+                    .main_params
+                    .slots
                     .find_slot_subject_and_position(*slot_id)
                 else {
                     return None;
                 };
                 let slot = &data
                     .get_data()
-                    .get_slots()
+                    .get_inner_data()
+                    .main_params
+                    .slots
                     .subject_map
                     .get(&subject_id)
                     .expect("Subject id should be valid at this point")
@@ -32,13 +36,21 @@ impl WeekPatternsUpdateWarning {
                     .1;
                 let Some(teacher) = data
                     .get_data()
-                    .get_teachers()
+                    .get_inner_data()
+                    .main_params
+                    .teachers
                     .teacher_map
                     .get(&slot.teacher_id)
                 else {
                     return None;
                 };
-                let Some(subject) = data.get_data().get_subjects().find_subject(subject_id) else {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .find_subject(subject_id)
+                else {
                     return None;
                 };
                 Some(format!(
@@ -49,7 +61,9 @@ impl WeekPatternsUpdateWarning {
             Self::LooseScheduleIncompat(incompat_id) => {
                 let Some(incompat) = data
                     .get_data()
-                    .get_incompats()
+                    .get_inner_data()
+                    .main_params
+                    .incompats
                     .incompat_map
                     .get(incompat_id)
                 else {
@@ -57,7 +71,9 @@ impl WeekPatternsUpdateWarning {
                 };
                 let Some(subject) = data
                     .get_data()
-                    .get_subjects()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
                     .find_subject(incompat.subject_id)
                 else {
                     return None;
@@ -126,7 +142,13 @@ impl WeekPatternsUpdateOp {
             Self::AddNewWeekPattern(_) => None,
             Self::UpdateWeekPattern(_, _) => None,
             Self::DeleteWeekPattern(week_pattern_id) => {
-                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                for (_subject_id, subject_slots) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .slots
+                    .subject_map
+                {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern == Some(*week_pattern_id) {
                             return Some(CleaningOp {
@@ -139,7 +161,13 @@ impl WeekPatternsUpdateOp {
                     }
                 }
 
-                for (incompat_id, incompat) in &data.get_data().get_incompats().incompat_map {
+                for (incompat_id, incompat) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .incompats
+                    .incompat_map
+                {
                     if incompat.week_pattern_id == Some(*week_pattern_id) {
                         return Some(CleaningOp {
                             warning: WeekPatternsUpdateWarning::LooseScheduleIncompat(*incompat_id),

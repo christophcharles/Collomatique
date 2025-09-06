@@ -14,7 +14,13 @@ impl TeachersUpdateWarning {
     ) -> Option<String> {
         match self {
             TeachersUpdateWarning::LooseInterrogationSlots(teacher_id) => {
-                let Some(teacher) = data.get_data().get_teachers().teacher_map.get(teacher_id)
+                let Some(teacher) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .teachers
+                    .teacher_map
+                    .get(teacher_id)
                 else {
                     return None;
                 };
@@ -83,7 +89,13 @@ impl TeachersUpdateOp {
         match self {
             Self::AddNewTeacher(_) => None,
             Self::UpdateTeacher(teacher_id, teacher) => {
-                for (subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                for (subject_id, subject_slots) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .slots
+                    .subject_map
+                {
                     if teacher.subjects.contains(subject_id) {
                         continue;
                     }
@@ -102,7 +114,13 @@ impl TeachersUpdateOp {
                 None
             }
             Self::DeleteTeacher(teacher_id) => {
-                for (_subject_id, subject_slots) in &data.get_data().get_slots().subject_map {
+                for (_subject_id, subject_slots) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .slots
+                    .subject_map
+                {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {
                             return Some(CleaningOp {

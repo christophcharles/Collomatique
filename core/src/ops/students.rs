@@ -25,13 +25,21 @@ impl StudentsUpdateWarning {
     ) -> Option<String> {
         match self {
             StudentsUpdateWarning::LooseStudentAssignmentForPeriod(student_id, period_id) => {
-                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
                 else {
                     return None;
                 };
                 let Some(period_index) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -44,13 +52,21 @@ impl StudentsUpdateWarning {
                 ))
             }
             Self::LooseExclusionFromGroupList(student_id, group_list_id) => {
-                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
                 else {
                     return None;
                 };
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -62,13 +78,21 @@ impl StudentsUpdateWarning {
                 ))
             }
             Self::LoosePrefilledGroup(student_id, group_list_id) => {
-                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
                 else {
                     return None;
                 };
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
@@ -135,12 +159,23 @@ impl StudentsUpdateOp {
         match self {
             Self::AddNewStudent(_student) => None,
             Self::DeleteStudent(student_id) => {
-                let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
+                let Some(old_student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
                 else {
                     return None;
                 };
 
-                for (group_list_id, group_list) in &data.get_data().get_group_lists().group_list_map
+                for (group_list_id, group_list) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
+                    .group_list_map
                 {
                     if group_list.prefilled_groups.contains_student(*student_id) {
                         let new_prefilled_groups = collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
@@ -179,7 +214,12 @@ impl StudentsUpdateOp {
                     }
                 }
 
-                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                for (period_id, period_assignments) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
+                    .period_map
                 {
                     if old_student.excluded_periods.contains(period_id) {
                         continue;
@@ -206,12 +246,23 @@ impl StudentsUpdateOp {
                 None
             }
             Self::UpdateStudent(student_id, student) => {
-                let Some(old_student) = data.get_data().get_students().student_map.get(student_id)
+                let Some(old_student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
                 else {
                     return None;
                 };
 
-                for (period_id, period_assignments) in &data.get_data().get_assignments().period_map
+                for (period_id, period_assignments) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
+                    .period_map
                 {
                     if old_student.excluded_periods.contains(period_id) {
                         continue;

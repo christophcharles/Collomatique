@@ -326,7 +326,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_periods()
+            .get_inner_data()
+            .main_params
+            .periods
             .first_week
             .as_ref()
             .map(|x| x.clone().into())
@@ -336,7 +338,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_periods()
+            .get_inner_data()
+            .main_params
+            .periods
             .ordered_period_list
             .iter()
             .map(|(id, data)| Period {
@@ -523,7 +527,12 @@ impl Session {
             )));
         };
 
-        let Some(subject) = data.get_subjects().find_subject(validated_subject_id) else {
+        let Some(subject) = data
+            .get_inner_data()
+            .main_params
+            .subjects
+            .find_subject(validated_subject_id)
+        else {
             panic!("subject id should be valid at this point");
         };
 
@@ -543,7 +552,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_subjects()
+            .get_inner_data()
+            .main_params
+            .subjects
             .ordered_subject_list
             .iter()
             .map(|(id, data)| Subject {
@@ -628,7 +639,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_teachers()
+            .get_inner_data()
+            .main_params
+            .teachers
             .teacher_map
             .iter()
             .map(|(id, data)| (MsgTeacherId::from(*id).into(), data.clone().into()))
@@ -708,7 +721,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_students()
+            .get_inner_data()
+            .main_params
+            .students
             .student_map
             .iter()
             .map(|(id, data)| (MsgStudentId::from(*id).into(), data.clone().into()))
@@ -796,7 +811,9 @@ impl Session {
         };
 
         let student = current_data
-            .get_students()
+            .get_inner_data()
+            .main_params
+            .students
             .student_map
             .get(&student_id)
             .expect("Student id should be valid at this point");
@@ -809,7 +826,9 @@ impl Session {
         }
 
         let Some(assigned_students) = current_data
-            .get_assignments()
+            .get_inner_data()
+            .main_params
+            .assignments
             .period_map
             .get(&period_id)
             .expect("Period id should be valid at this point")
@@ -955,7 +974,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_week_patterns()
+            .get_inner_data()
+            .main_params
+            .week_patterns
             .week_pattern_map
             .iter()
             .map(|(id, data)| (MsgWeekPatternId::from(*id).into(), data.clone().into()))
@@ -1120,7 +1141,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_slots()
+            .get_inner_data()
+            .main_params
+            .slots
             .subject_map
             .iter()
             .map(|(subject_id, subject_slots)| {
@@ -1230,7 +1253,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_incompats()
+            .get_inner_data()
+            .main_params
+            .incompats
             .incompat_map
             .iter()
             .map(|(incompat_id, incompat)| {
@@ -1371,7 +1396,9 @@ impl Session {
         self_
             .token
             .get_data()
-            .get_group_lists()
+            .get_inner_data()
+            .main_params
+            .group_lists
             .group_list_map
             .iter()
             .map(|(group_list_id, group_list)| {
@@ -1456,7 +1483,9 @@ impl Session {
         };
 
         let subject_map = current_data
-            .get_group_lists()
+            .get_inner_data()
+            .main_params
+            .group_lists
             .subjects_associations
             .get(&period_id)
             .expect("Period id should be valid at this point");
@@ -1533,7 +1562,14 @@ impl Session {
     fn rules_get_list(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<rules::RuleId, rules::Rule>> {
         let mut new_map = BTreeMap::new();
 
-        for (rule_id, rule) in &self_.token.get_data().get_rules().rule_map {
+        for (rule_id, rule) in &self_
+            .token
+            .get_data()
+            .get_inner_data()
+            .main_params
+            .rules
+            .rule_map
+        {
             new_map.insert(
                 MsgRuleId::from(*rule_id).into(),
                 rules::Rule {
@@ -1594,7 +1630,13 @@ impl Session {
             )));
         };
 
-        let Some(rule) = data.get_rules().rule_map.get(&validated_rule_id) else {
+        let Some(rule) = data
+            .get_inner_data()
+            .main_params
+            .rules
+            .rule_map
+            .get(&validated_rule_id)
+        else {
             panic!("rule id should be valid at this point");
         };
 
@@ -1628,7 +1670,14 @@ impl Session {
     }
 
     fn settings_get(self_: PyRef<'_, Self>) -> settings::GeneralSettings {
-        self_.token.get_data().get_settings().clone().into()
+        self_
+            .token
+            .get_data()
+            .get_inner_data()
+            .main_params
+            .settings
+            .clone()
+            .into()
     }
 }
 

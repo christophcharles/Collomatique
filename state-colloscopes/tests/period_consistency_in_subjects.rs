@@ -153,7 +153,9 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
     assert_eq!(
         app_state
             .get_data()
-            .get_subjects()
+            .get_inner_data()
+            .main_params
+            .subjects
             .find_subject(subject_id)
             .unwrap()
             .excluded_periods,

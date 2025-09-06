@@ -19,7 +19,7 @@ fn generate_header() -> Header {
 }
 
 fn generate_student_list(data: &Data) -> student_list::List {
-    let orig_students = data.get_students();
+    let orig_students = &data.get_inner_data().main_params.students;
 
     student_list::List {
         student_map: orig_students
@@ -31,7 +31,7 @@ fn generate_student_list(data: &Data) -> student_list::List {
 }
 
 fn generate_period_list(data: &Data) -> period_list::List {
-    let orig_periods = data.get_periods();
+    let orig_periods = &data.get_inner_data().main_params.periods;
 
     period_list::List {
         first_week: orig_periods.first_week.as_ref().map(|x| x.inner().clone()),
@@ -44,7 +44,7 @@ fn generate_period_list(data: &Data) -> period_list::List {
 }
 
 fn generate_subject_list(data: &Data) -> subject_list::List {
-    let orig_subjects = data.get_subjects();
+    let orig_subjects = &data.get_inner_data().main_params.subjects;
 
     subject_list::List {
         ordered_subject_list: orig_subjects
@@ -56,7 +56,7 @@ fn generate_subject_list(data: &Data) -> subject_list::List {
 }
 
 fn generate_teacher_list(data: &Data) -> teacher_list::List {
-    let orig_teachers = data.get_teachers();
+    let orig_teachers = &data.get_inner_data().main_params.teachers;
 
     teacher_list::List {
         teacher_map: orig_teachers
@@ -68,7 +68,7 @@ fn generate_teacher_list(data: &Data) -> teacher_list::List {
 }
 
 fn generate_assignment_map(data: &Data) -> assignment_map::Map {
-    let orig_assignments = data.get_assignments();
+    let orig_assignments = &data.get_inner_data().main_params.assignments;
 
     assignment_map::Map {
         period_map: orig_assignments
@@ -80,7 +80,7 @@ fn generate_assignment_map(data: &Data) -> assignment_map::Map {
 }
 
 fn generate_week_pattern_list(data: &Data) -> week_pattern_list::List {
-    let orig_week_patterns = data.get_week_patterns();
+    let orig_week_patterns = &data.get_inner_data().main_params.week_patterns;
 
     week_pattern_list::List {
         week_pattern_map: orig_week_patterns
@@ -92,7 +92,7 @@ fn generate_week_pattern_list(data: &Data) -> week_pattern_list::List {
 }
 
 fn generate_slot_list(data: &Data) -> slot_list::List {
-    let orig_slots = data.get_slots();
+    let orig_slots = &data.get_inner_data().main_params.slots;
 
     slot_list::List {
         subject_map: orig_slots
@@ -115,7 +115,7 @@ fn generate_slot_list(data: &Data) -> slot_list::List {
 }
 
 fn generate_incompat_list(data: &Data) -> incompat_list::List {
-    let orig_incompats = data.get_incompats();
+    let orig_incompats = &data.get_inner_data().main_params.incompats;
 
     incompat_list::List {
         incompat_map: orig_incompats
@@ -127,7 +127,7 @@ fn generate_incompat_list(data: &Data) -> incompat_list::List {
 }
 
 fn generate_group_list_list(data: &Data) -> group_list_list::List {
-    let orig_group_lists = data.get_group_lists();
+    let orig_group_lists = &data.get_inner_data().main_params.group_lists;
 
     group_list_list::List {
         group_list_map: orig_group_lists
@@ -154,7 +154,7 @@ fn generate_group_list_list(data: &Data) -> group_list_list::List {
 }
 
 fn generate_rule_list(data: &Data) -> rule_list::List {
-    let orig_rules = data.get_rules();
+    let orig_rules = &data.get_inner_data().main_params.rules;
 
     rule_list::List {
         rule_map: orig_rules
@@ -166,7 +166,7 @@ fn generate_rule_list(data: &Data) -> rule_list::List {
 }
 
 fn generate_settings(data: &Data) -> settings::Settings {
-    let orig_rules = data.get_settings();
+    let orig_rules = &data.get_inner_data().main_params.settings;
 
     orig_rules.into()
 }

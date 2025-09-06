@@ -31,13 +31,21 @@ impl GeneralPlanningUpdateWarning {
     ) -> Option<String> {
         match self {
             GeneralPlanningUpdateWarning::LooseStudentExclusionForPeriod(student_id, period_id) => {
-                let Some(student) = data.get_data().get_students().student_map.get(student_id)
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
                 else {
                     return None;
                 };
                 let Some(period_index) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -52,7 +60,9 @@ impl GeneralPlanningUpdateWarning {
             GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(period_id) => {
                 let Some(period_index) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -63,12 +73,20 @@ impl GeneralPlanningUpdateWarning {
                 ))
             }
             GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(subject_id, period_id) => {
-                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
                     return None;
                 };
                 let Some(period_index) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -86,18 +104,28 @@ impl GeneralPlanningUpdateWarning {
             ) => {
                 let Some(group_list) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .group_list_map
                     .get(group_list_id)
                 else {
                     return None;
                 };
-                let Some(subject) = data.get_data().get_subjects().find_subject(*subject_id) else {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
                     return None;
                 };
                 let Some(period_num) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -108,12 +136,21 @@ impl GeneralPlanningUpdateWarning {
                 ))
             }
             GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(rule_id, period_id) => {
-                let Some(rule) = data.get_data().get_rules().rule_map.get(rule_id) else {
+                let Some(rule) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .rules
+                    .rule_map
+                    .get(rule_id)
+                else {
                     return None;
                 };
                 let Some(period_index) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -207,7 +244,13 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::CutPeriod(_, _) => None,
             GeneralPlanningUpdateOp::UpdateWeekStatus(_, _, _) => None,
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                for (subject_id, subject) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .ordered_subject_list
+                {
                     if subject.excluded_periods.contains(period_id) {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
@@ -223,7 +266,8 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                for (rule_id, rule) in &data.get_data().get_inner_data().main_params.rules.rule_map
+                {
                     if rule.excluded_periods.contains(period_id) {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
@@ -236,7 +280,13 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in &data.get_data().get_students().student_map {
+                for (student_id, student) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.remove(period_id);
@@ -253,8 +303,13 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let Some(period_assignments) =
-                    data.get_data().get_assignments().period_map.get(period_id)
+                let Some(period_assignments) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
+                    .period_map
+                    .get(period_id)
                 else {
                     return None;
                 };
@@ -277,7 +332,9 @@ impl GeneralPlanningUpdateOp {
 
                 if let Some(subject_map) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .subjects_associations
                     .get(period_id)
                 {
@@ -302,7 +359,9 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
                 let Some(pos) = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                 else {
                     return None;
@@ -310,9 +369,21 @@ impl GeneralPlanningUpdateOp {
                 if pos == 0 {
                     return None;
                 }
-                let previous_id = data.get_data().get_periods().ordered_period_list[pos - 1].0;
+                let previous_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos - 1]
+                    .0;
 
-                for (subject_id, subject) in &data.get_data().get_subjects().ordered_subject_list {
+                for (subject_id, subject) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .ordered_subject_list
+                {
                     if subject.excluded_periods.contains(period_id)
                         != subject.excluded_periods.contains(&previous_id)
                     {
@@ -330,7 +401,8 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                for (rule_id, rule) in &data.get_data().get_inner_data().main_params.rules.rule_map
+                {
                     if rule.excluded_periods.contains(period_id)
                         != rule.excluded_periods.contains(&previous_id)
                     {
@@ -347,7 +419,13 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in &data.get_data().get_students().student_map {
+                for (student_id, student) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                {
                     if student.excluded_periods.contains(period_id)
                         != student.excluded_periods.contains(&previous_id)
                     {
@@ -372,7 +450,9 @@ impl GeneralPlanningUpdateOp {
 
                 let Some(period_assignments) = data
                     .get_data()
-                    .get_assignments()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
                     .period_map
                     .get(period_id)
                     .cloned()
@@ -382,7 +462,9 @@ impl GeneralPlanningUpdateOp {
 
                 let Some(previous_assignments) = data
                     .get_data()
-                    .get_assignments()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
                     .period_map
                     .get(&previous_id)
                 else {
@@ -402,8 +484,12 @@ impl GeneralPlanningUpdateOp {
                             }
                         }
                         Some(previous_students) => {
-                            for (student_id, _student) in
-                                &data.get_data().get_students().student_map
+                            for (student_id, _student) in &data
+                                .get_data()
+                                .get_inner_data()
+                                .main_params
+                                .students
+                                .student_map
                             {
                                 if assigned_students.contains(student_id)
                                     != previous_students.contains(student_id)
@@ -422,7 +508,9 @@ impl GeneralPlanningUpdateOp {
 
                 if let Some(subject_map) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .subjects_associations
                     .get(period_id)
                 {
@@ -489,7 +577,14 @@ impl GeneralPlanningUpdateOp {
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
-                            match data.get_data().get_periods().ordered_period_list.last() {
+                            match data
+                                .get_data()
+                                .get_inner_data()
+                                .main_params
+                                .periods
+                                .ordered_period_list
+                                .last()
+                            {
                                 Some((id, _)) => {
                                     collomatique_state_colloscopes::PeriodOp::AddAfter(
                                         *id, new_desc,
@@ -511,10 +606,17 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
                 let pos = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                     .ok_or(UpdatePeriodWeekCountError::InvalidPeriodId(*period_id))?;
-                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                let mut desc = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos]
                     .1
                     .clone();
 
@@ -562,10 +664,17 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
                 let pos = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                     .ok_or(CutPeriodError::InvalidPeriodId(*period_id))?;
-                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                let mut desc = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos]
                     .1
                     .clone();
 
@@ -593,8 +702,13 @@ impl GeneralPlanningUpdateOp {
                     _ => panic!("Unexpected result! {:?}", result),
                 };
 
-                let ordered_subject_list =
-                    data.get_data().get_subjects().ordered_subject_list.clone();
+                let ordered_subject_list = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .ordered_subject_list
+                    .clone();
                 for (subject_id, subject) in &ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
                         let mut new_subject = subject.clone();
@@ -616,7 +730,13 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let rule_map = data.get_data().get_rules().rule_map.clone();
+                let rule_map = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .rules
+                    .rule_map
+                    .clone();
                 for (rule_id, rule) in &rule_map {
                     if rule.excluded_periods.contains(period_id) {
                         let mut new_rule = rule.clone();
@@ -637,7 +757,13 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let student_map = data.get_data().get_students().student_map.clone();
+                let student_map = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .clone();
                 for (student_id, student) in &student_map {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
@@ -661,7 +787,9 @@ impl GeneralPlanningUpdateOp {
 
                 let period_assignments = data
                     .get_data()
-                    .get_assignments()
+                    .get_inner_data()
+                    .main_params
+                    .assignments
                     .period_map
                     .get(period_id)
                     .expect("Period id should be valid at this point")
@@ -688,7 +816,9 @@ impl GeneralPlanningUpdateOp {
 
                 if let Some(subject_map) = data
                     .get_data()
-                    .get_group_lists()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
                     .subjects_associations
                     .get(period_id)
                     .cloned()
@@ -729,18 +859,36 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
                 let pos = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                     .ok_or(MergeWithPreviousPeriodError::InvalidPeriodId(*period_id))?;
                 if pos == 0 {
                     Err(MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith)?;
                 }
-                let previous_id = data.get_data().get_periods().ordered_period_list[pos - 1].0;
+                let previous_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos - 1]
+                    .0;
 
-                let mut prev_desc = data.get_data().get_periods().ordered_period_list[pos - 1]
+                let mut prev_desc = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos - 1]
                     .1
                     .clone();
-                let desc = data.get_data().get_periods().ordered_period_list[pos]
+                let desc = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos]
                     .1
                     .clone();
 
@@ -780,10 +928,17 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
                 let pos = data
                     .get_data()
-                    .get_periods()
+                    .get_inner_data()
+                    .main_params
+                    .periods
                     .find_period_position(*period_id)
                     .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
-                let mut desc = data.get_data().get_periods().ordered_period_list[pos]
+                let mut desc = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos]
                     .1
                     .clone();
 

@@ -17,7 +17,14 @@ impl SlotsUpdateWarning {
     ) -> Option<String> {
         match self {
             SlotsUpdateWarning::LooseRuleReferencingSlot(_slot_id, rule_id) => {
-                let Some(rule) = data.get_data().get_rules().rule_map.get(rule_id) else {
+                let Some(rule) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .rules
+                    .rule_map
+                    .get(rule_id)
+                else {
                     return None;
                 };
                 Some(format!(
@@ -137,7 +144,8 @@ impl SlotsUpdateOp {
             SlotsUpdateOp::AddNewSlot(_desc, _slot) => None,
             SlotsUpdateOp::UpdateSlot(_id, _slot) => None,
             SlotsUpdateOp::DeleteSlot(slot_id) => {
-                for (rule_id, rule) in &data.get_data().get_rules().rule_map {
+                for (rule_id, rule) in &data.get_data().get_inner_data().main_params.rules.rule_map
+                {
                     if rule.desc.references_slot(*slot_id) {
                         return Some(CleaningOp {
                             warning: SlotsUpdateWarning::LooseRuleReferencingSlot(
@@ -165,13 +173,21 @@ impl SlotsUpdateOp {
             Self::AddNewSlot(subject_id, slot) => {
                 if data
                     .get_data()
-                    .get_subjects()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
                     .find_subject_position(*subject_id)
                     .is_none()
                 {
                     return Err(AddNewSlotError::InvalidSubjectId(*subject_id).into());
                 }
-                let Some(subject_slots) = data.get_data().get_slots().subject_map.get(subject_id)
+                let Some(subject_slots) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .slots
+                    .subject_map
+                    .get(subject_id)
                 else {
                     return Err(AddNewSlotError::SubjectHasNoInterrogation(*subject_id).into());
                 };
@@ -266,7 +282,9 @@ impl SlotsUpdateOp {
             Self::MoveSlotUp(slot_id) => {
                 let (_subject_id, current_position) = data
                     .get_data()
-                    .get_slots()
+                    .get_inner_data()
+                    .main_params
+                    .slots
                     .find_slot_subject_and_position(*slot_id)
                     .ok_or(MoveSlotUpError::InvalidSlotId(*slot_id))?;
 
@@ -293,14 +311,18 @@ impl SlotsUpdateOp {
             Self::MoveSlotDown(slot_id) => {
                 let (subject_id, current_position) = data
                     .get_data()
-                    .get_slots()
+                    .get_inner_data()
+                    .main_params
+                    .slots
                     .find_slot_subject_and_position(*slot_id)
                     .ok_or(MoveSlotUpError::InvalidSlotId(*slot_id))?;
 
                 if current_position
                     == data
                         .get_data()
-                        .get_slots()
+                        .get_inner_data()
+                        .main_params
+                        .slots
                         .subject_map
                         .get(&subject_id)
                         .expect("Subject id should be valid at this point")

@@ -215,7 +215,12 @@ fn generate_active_weeks_list_with_excluded_periods(
     excluded_periods: &BTreeSet<PeriodId>,
 ) -> Vec<bool> {
     let mut weeks = vec![];
-    for (period_id, period) in &data.get_periods().ordered_period_list {
+    for (period_id, period) in &data
+        .get_inner_data()
+        .main_params
+        .periods
+        .ordered_period_list
+    {
         if !excluded_periods.contains(period_id) {
             weeks.extend(period.into_iter().copied());
         } else {
@@ -226,11 +231,23 @@ fn generate_active_weeks_list_with_excluded_periods(
 }
 
 fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
-    let students: BTreeSet<_> = data.get_students().student_map.keys().copied().collect();
+    let students: BTreeSet<_> = data
+        .get_inner_data()
+        .main_params
+        .students
+        .student_map
+        .keys()
+        .copied()
+        .collect();
 
     let mut subject_descriptions = BTreeMap::new();
 
-    for (subject_id, subject) in &data.get_subjects().ordered_subject_list {
+    for (subject_id, subject) in &data
+        .get_inner_data()
+        .main_params
+        .subjects
+        .ordered_subject_list
+    {
         let Some(params) = &subject.parameters.interrogation_parameters else {
             continue;
         };
@@ -238,7 +255,9 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
         let mut slots_descriptions = BTreeMap::new();
 
         let slot_list = data
-            .get_slots()
+            .get_inner_data()
+            .main_params
+            .slots
             .subject_map
             .get(subject_id)
             .expect("Subject should have slots as it has interrogations");
@@ -247,13 +266,20 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
             let mut weeks = vec![];
 
             let week_pattern_opt = slot.week_pattern.map(|id| {
-                data.get_week_patterns()
+                data.get_inner_data()
+                    .main_params
+                    .week_patterns
                     .week_pattern_map
                     .get(&id)
                     .expect("Week pattern id should be valid")
             });
 
-            for (period_id, period) in &data.get_periods().ordered_period_list {
+            for (period_id, period) in &data
+                .get_inner_data()
+                .main_params
+                .periods
+                .ordered_period_list
+            {
                 if subject.excluded_periods.contains(period_id) {
                     weeks.extend(vec![false; period.len()]);
                     continue;
@@ -289,14 +315,21 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
 
         let mut group_assignments = vec![];
 
-        for (period_id, period) in &data.get_periods().ordered_period_list {
+        for (period_id, period) in &data
+            .get_inner_data()
+            .main_params
+            .periods
+            .ordered_period_list
+        {
             if subject.excluded_periods.contains(period_id) {
                 group_assignments.extend(vec![None; period.len()]);
                 continue;
             }
 
             let group_list_id = data
-                .get_group_lists()
+                .get_inner_data()
+                .main_params
+                .group_lists
                 .subjects_associations
                 .get(period_id)
                 .expect("Period id should be valid")
@@ -305,7 +338,9 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
                 .clone();
 
             let enrolled_students = data
-                .get_assignments()
+                .get_inner_data()
+                .main_params
+                .assignments
                 .period_map
                 .get(period_id)
                 .expect("Period ID should be valid")
@@ -342,7 +377,8 @@ fn data_to_colloscope_problem_desc(data: &Data) -> Result<ProblemDesc, Error> {
 
     let mut group_list_descriptions = BTreeMap::new();
 
-    for (group_list_id, group_list) in &data.get_group_lists().group_list_map {
+    for (group_list_id, group_list) in &data.get_inner_data().main_params.group_lists.group_list_map
+    {
         let mut prefilled_groups = vec![
             base::PrefilledGroup {
                 students: BTreeSet::new(),
@@ -389,7 +425,12 @@ fn add_groups_per_slots_constraints(
     data: &Data,
     weeks: &Vec<bool>,
 ) {
-    for (subject_id, subject) in &data.get_subjects().ordered_subject_list {
+    for (subject_id, subject) in &data
+        .get_inner_data()
+        .main_params
+        .subjects
+        .ordered_subject_list
+    {
         if subject.parameters.interrogation_parameters.is_none() {
             continue;
         }
@@ -411,7 +452,9 @@ fn add_students_per_groups_constraints(
     translators: &mut Vec<ColloscopeTranslator>,
     data: &Data,
 ) {
-    for (group_list_id, _group_list) in &data.get_group_lists().group_list_map {
+    for (group_list_id, _group_list) in
+        &data.get_inner_data().main_params.group_lists.group_list_map
+    {
         let students_per_groups_constraints =
             collomatique_solver_colloscopes::constraints::students_per_groups::StudentsPerGroups::new(
                 *group_list_id,
@@ -429,7 +472,9 @@ fn add_group_count_constraints(
     translators: &mut Vec<ColloscopeTranslator>,
     data: &Data,
 ) {
-    for (group_list_id, _group_list) in &data.get_group_lists().group_list_map {
+    for (group_list_id, _group_list) in
+        &data.get_inner_data().main_params.group_lists.group_list_map
+    {
         let group_count_constraints =
             collomatique_solver_colloscopes::constraints::group_count::GroupCount::new(
                 *group_list_id,
@@ -447,7 +492,9 @@ fn add_sealed_groups_constraints(
     translators: &mut Vec<ColloscopeTranslator>,
     data: &Data,
 ) {
-    for (group_list_id, _group_list) in &data.get_group_lists().group_list_map {
+    for (group_list_id, _group_list) in
+        &data.get_inner_data().main_params.group_lists.group_list_map
+    {
         let sealed_groups_constraints =
             collomatique_solver_colloscopes::constraints::sealed_groups::SealedGroups::new(
                 *group_list_id,
@@ -466,7 +513,12 @@ fn add_students_per_groups_for_subject_constraints(
     data: &Data,
 ) {
     let mut params = BTreeSet::new();
-    for (_period_id, subject_map) in &data.get_group_lists().subjects_associations {
+    for (_period_id, subject_map) in &data
+        .get_inner_data()
+        .main_params
+        .group_lists
+        .subjects_associations
+    {
         for (subject_id, group_list_id) in subject_map {
             params.insert((*subject_id, *group_list_id));
         }
@@ -492,8 +544,15 @@ fn add_strict_limits_constraints(
     data: &Data,
     weeks: &Vec<bool>,
 ) {
-    let students = data.get_students().student_map.keys().copied().collect();
-    let settings = data.get_settings();
+    let students = data
+        .get_inner_data()
+        .main_params
+        .students
+        .student_map
+        .keys()
+        .copied()
+        .collect();
+    let settings = &data.get_inner_data().main_params.settings;
 
     let strict_limits_constraints =
         collomatique_solver_colloscopes::constraints::strict_limits::StrictLimits::new(
@@ -515,7 +574,14 @@ fn add_one_interrogation_at_a_time_constraints(
     data: &Data,
     weeks: &Vec<bool>,
 ) {
-    let students = data.get_students().student_map.keys().copied().collect();
+    let students = data
+        .get_inner_data()
+        .main_params
+        .students
+        .student_map
+        .keys()
+        .copied()
+        .collect();
 
     let one_interrogation_at_a_time_constraints =
         collomatique_solver_colloscopes::constraints::one_interrogation_at_a_time::OneInterrogationAtATime::new(
@@ -534,11 +600,18 @@ fn add_incompat_for_single_week_constraints(
     translators: &mut Vec<ColloscopeTranslator>,
     data: &Data,
 ) {
-    for (incompat_id, incompat) in &data.get_incompats().incompat_map {
+    for (incompat_id, incompat) in &data.get_inner_data().main_params.incompats.incompat_map {
         let mut first_week = 0usize;
-        for (period_id, period) in &data.get_periods().ordered_period_list {
+        for (period_id, period) in &data
+            .get_inner_data()
+            .main_params
+            .periods
+            .ordered_period_list
+        {
             let assignments = data
-                .get_assignments()
+                .get_inner_data()
+                .main_params
+                .assignments
                 .period_map
                 .get(period_id)
                 .expect("Period ID should be valid");
@@ -547,7 +620,9 @@ fn add_incompat_for_single_week_constraints(
                 for week in first_week..first_week + period.len() {
                     if let Some(id) = incompat.week_pattern_id {
                         let week_pattern = data
-                            .get_week_patterns()
+                            .get_inner_data()
+                            .main_params
+                            .week_patterns
                             .week_pattern_map
                             .get(&id)
                             .expect("Week pattern ID should be valid");
