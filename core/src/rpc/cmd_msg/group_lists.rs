@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::{
+use collomatique_state_colloscopes::colloscope_params::{
     PromoteGroupListParametersError, PromoteGroupListPrefilledGroupsError,
 };
 
@@ -23,7 +23,11 @@ impl GroupListsCmdMsg {
         use crate::ops::GroupListsUpdateOp;
         Ok(match self {
             GroupListsCmdMsg::AddNewGroupList(params) => {
-                let new_params = match data.promote_group_list_params(params.into()) {
+                let new_params = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_group_list_params(params.into())
+                {
                     Ok(p) => p,
                     Err(PromoteGroupListParametersError::InvalidStudentId(id)) => {
                         return Err(error_msg::AddNewGroupListError::InvalidStudentId(
@@ -35,10 +39,18 @@ impl GroupListsCmdMsg {
                 GroupListsUpdateOp::AddNewGroupList(new_params)
             }
             GroupListsCmdMsg::UpdateGroupList(id, params) => {
-                let Some(group_list_id) = data.validate_group_list_id(id.0) else {
+                let Some(group_list_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_group_list_id(id.0)
+                else {
                     return Err(error_msg::UpdateGroupListError::InvalidGroupListId(id).into());
                 };
-                let new_params = match data.promote_group_list_params(params.into()) {
+                let new_params = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_group_list_params(params.into())
+                {
                     Ok(p) => p,
                     Err(PromoteGroupListParametersError::InvalidStudentId(id)) => {
                         return Err(error_msg::AddNewGroupListError::InvalidStudentId(
@@ -50,35 +62,54 @@ impl GroupListsCmdMsg {
                 GroupListsUpdateOp::UpdateGroupList(group_list_id, new_params)
             }
             GroupListsCmdMsg::DeleteGroupList(id) => {
-                let Some(group_list_id) = data.validate_group_list_id(id.0) else {
+                let Some(group_list_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_group_list_id(id.0)
+                else {
                     return Err(error_msg::DeleteGroupListError::InvalidGroupListId(id).into());
                 };
                 GroupListsUpdateOp::DeleteGroupList(group_list_id)
             }
             GroupListsCmdMsg::PrefillGroupList(id, prefilled_groups) => {
-                let Some(group_list_id) = data.validate_group_list_id(id.0) else {
+                let Some(group_list_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_group_list_id(id.0)
+                else {
                     return Err(error_msg::PrefillGroupListError::InvalidGroupListId(id).into());
                 };
-                let new_prefilled_groups =
-                    match data.promote_group_list_prefilled_groups(prefilled_groups.into()) {
-                        Ok(pg) => pg,
-                        Err(PromoteGroupListPrefilledGroupsError::InvalidStudentId(id)) => {
-                            return Err(error_msg::AddNewGroupListError::InvalidStudentId(
-                                MsgStudentId(id),
-                            )
-                            .into());
-                        }
-                    };
+                let new_prefilled_groups = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_group_list_prefilled_groups(prefilled_groups.into())
+                {
+                    Ok(pg) => pg,
+                    Err(PromoteGroupListPrefilledGroupsError::InvalidStudentId(id)) => {
+                        return Err(error_msg::AddNewGroupListError::InvalidStudentId(
+                            MsgStudentId(id),
+                        )
+                        .into());
+                    }
+                };
                 GroupListsUpdateOp::PrefillGroupList(group_list_id, new_prefilled_groups)
             }
             GroupListsCmdMsg::AssignGroupListToSubject(period_id, subject_id, group_list_id) => {
-                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                let Some(period_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_period_id(period_id.0)
+                else {
                     return Err(error_msg::AssignGroupListToSubjectError::InvalidPeriodId(
                         period_id,
                     )
                     .into());
                 };
-                let Some(subject_id) = data.validate_subject_id(subject_id.0) else {
+                let Some(subject_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_subject_id(subject_id.0)
+                else {
                     return Err(error_msg::AssignGroupListToSubjectError::InvalidSubjectId(
                         subject_id,
                     )
@@ -86,7 +117,11 @@ impl GroupListsCmdMsg {
                 };
                 let group_list_id = match group_list_id {
                     Some(id) => {
-                        let Some(new_id) = data.validate_group_list_id(id.0) else {
+                        let Some(new_id) = data
+                            .get_inner_data()
+                            .main_params
+                            .validate_group_list_id(id.0)
+                        else {
                             return Err(
                                 error_msg::AssignGroupListToSubjectError::InvalidGroupListId(id)
                                     .into(),

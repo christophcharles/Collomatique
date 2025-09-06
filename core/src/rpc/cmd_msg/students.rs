@@ -17,7 +17,11 @@ impl StudentsCmdMsg {
         use crate::ops::StudentsUpdateOp;
         Ok(match self {
             StudentsCmdMsg::AddNewStudent(student_msg) => {
-                let new_student = match data.promote_student(student_msg.into()) {
+                let new_student = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_student(student_msg.into())
+                {
                     Ok(t) => t,
                     Err(period_id) => {
                         return Err(StudentsError::AddNewStudent(
@@ -29,10 +33,15 @@ impl StudentsCmdMsg {
                 StudentsUpdateOp::AddNewStudent(new_student)
             }
             StudentsCmdMsg::UpdateStudent(id, student_msg) => {
-                let Some(student_id) = data.validate_student_id(id.0) else {
+                let Some(student_id) = data.get_inner_data().main_params.validate_student_id(id.0)
+                else {
                     return Err(error_msg::UpdateStudentError::InvalidStudentId(id).into());
                 };
-                let new_student = match data.promote_student(student_msg.into()) {
+                let new_student = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_student(student_msg.into())
+                {
                     Ok(t) => t,
                     Err(period_id) => {
                         return Err(StudentsError::AddNewStudent(
@@ -43,7 +52,8 @@ impl StudentsCmdMsg {
                 StudentsUpdateOp::UpdateStudent(student_id, new_student)
             }
             StudentsCmdMsg::DeleteStudent(id) => {
-                let Some(student_id) = data.validate_student_id(id.0) else {
+                let Some(student_id) = data.get_inner_data().main_params.validate_student_id(id.0)
+                else {
                     return Err(error_msg::DeleteStudentError::InvalidStudentId(id).into());
                 };
                 StudentsUpdateOp::DeleteStudent(student_id)

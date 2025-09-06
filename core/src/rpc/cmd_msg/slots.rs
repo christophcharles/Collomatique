@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::PromoteSlotError;
+use collomatique_state_colloscopes::colloscope_params::PromoteSlotError;
 
 use crate::rpc::error_msg::slots::SlotsError;
 
@@ -21,7 +21,8 @@ impl SlotsCmdMsg {
         use crate::ops::SlotsUpdateOp;
         Ok(match self {
             SlotsCmdMsg::AddNewSlot(id, slot) => {
-                let Some(subject_id) = data.validate_subject_id(id.0) else {
+                let Some(subject_id) = data.get_inner_data().main_params.validate_subject_id(id.0)
+                else {
                     return Err(error_msg::AddNewSlotError::InvalidSubjectId(id).into());
                 };
                 let slot = match slot.try_into() {
@@ -30,7 +31,7 @@ impl SlotsCmdMsg {
                         panic!("Invalid slot received");
                     }
                 };
-                let new_slot = match data.promote_slot(slot) {
+                let new_slot = match data.get_inner_data().main_params.promote_slot(slot) {
                     Ok(s) => s,
                     Err(PromoteSlotError::InvalidTeacherId(id)) => {
                         return Err(
@@ -47,7 +48,7 @@ impl SlotsCmdMsg {
                 SlotsUpdateOp::AddNewSlot(subject_id, new_slot)
             }
             SlotsCmdMsg::UpdateSlot(id, slot) => {
-                let Some(slot_id) = data.validate_slot_id(id.0) else {
+                let Some(slot_id) = data.get_inner_data().main_params.validate_slot_id(id.0) else {
                     return Err(error_msg::UpdateSlotError::InvalidSlotId(id).into());
                 };
                 let slot = match slot.try_into() {
@@ -56,7 +57,7 @@ impl SlotsCmdMsg {
                         panic!("Invalid slot received");
                     }
                 };
-                let new_slot = match data.promote_slot(slot) {
+                let new_slot = match data.get_inner_data().main_params.promote_slot(slot) {
                     Ok(s) => s,
                     Err(PromoteSlotError::InvalidTeacherId(id)) => {
                         return Err(
@@ -73,19 +74,19 @@ impl SlotsCmdMsg {
                 SlotsUpdateOp::UpdateSlot(slot_id, new_slot)
             }
             SlotsCmdMsg::DeleteSlot(id) => {
-                let Some(slot_id) = data.validate_slot_id(id.0) else {
+                let Some(slot_id) = data.get_inner_data().main_params.validate_slot_id(id.0) else {
                     return Err(error_msg::DeleteSlotError::InvalidSlotId(id).into());
                 };
                 SlotsUpdateOp::DeleteSlot(slot_id)
             }
             SlotsCmdMsg::MoveSlotUp(id) => {
-                let Some(slot_id) = data.validate_slot_id(id.0) else {
+                let Some(slot_id) = data.get_inner_data().main_params.validate_slot_id(id.0) else {
                     return Err(error_msg::MoveSlotUpError::InvalidSlotId(id).into());
                 };
                 SlotsUpdateOp::MoveSlotUp(slot_id)
             }
             SlotsCmdMsg::MoveSlotDown(id) => {
-                let Some(slot_id) = data.validate_slot_id(id.0) else {
+                let Some(slot_id) = data.get_inner_data().main_params.validate_slot_id(id.0) else {
                     return Err(error_msg::MoveSlotDownError::InvalidSlotId(id).into());
                 };
                 SlotsUpdateOp::MoveSlotDown(slot_id)

@@ -32,31 +32,36 @@ impl GeneralPlanningCmdMsg {
                 GeneralPlanningUpdateOp::AddNewPeriod(week_count)
             }
             GeneralPlanningCmdMsg::UpdatePeriodWeekCount(id, week_count) => {
-                let Some(period_id) = data.validate_period_id(id.0) else {
+                let Some(period_id) = data.get_inner_data().main_params.validate_period_id(id.0)
+                else {
                     return Err(error_msg::UpdatePeriodWeekCountError::InvalidPeriodId(id).into());
                 };
                 GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count)
             }
             GeneralPlanningCmdMsg::DeletePeriod(id) => {
-                let Some(period_id) = data.validate_period_id(id.0) else {
+                let Some(period_id) = data.get_inner_data().main_params.validate_period_id(id.0)
+                else {
                     return Err(error_msg::UpdatePeriodWeekCountError::InvalidPeriodId(id).into());
                 };
                 GeneralPlanningUpdateOp::DeletePeriod(period_id)
             }
             GeneralPlanningCmdMsg::CutPeriod(id, remaining_weeks) => {
-                let Some(period_id) = data.validate_period_id(id.0) else {
+                let Some(period_id) = data.get_inner_data().main_params.validate_period_id(id.0)
+                else {
                     return Err(error_msg::UpdatePeriodWeekCountError::InvalidPeriodId(id).into());
                 };
                 GeneralPlanningUpdateOp::CutPeriod(period_id, remaining_weeks)
             }
             GeneralPlanningCmdMsg::MergeWithPreviousPeriod(id) => {
-                let Some(period_id) = data.validate_period_id(id.0) else {
+                let Some(period_id) = data.get_inner_data().main_params.validate_period_id(id.0)
+                else {
                     return Err(error_msg::UpdatePeriodWeekCountError::InvalidPeriodId(id).into());
                 };
                 GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id)
             }
             GeneralPlanningCmdMsg::UpdateWeekStatus(id, week, new_status) => {
-                let Some(period_id) = data.validate_period_id(id.0) else {
+                let Some(period_id) = data.get_inner_data().main_params.validate_period_id(id.0)
+                else {
                     return Err(error_msg::UpdatePeriodWeekCountError::InvalidPeriodId(id).into());
                 };
                 GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week, new_status)

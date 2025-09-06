@@ -518,8 +518,10 @@ impl Session {
     ) -> PyResult<bool> {
         let data = self_.token.get_data();
 
-        let Some(validated_subject_id) =
-            data.validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
+        let Some(validated_subject_id) = data
+            .get_inner_data()
+            .main_params
+            .validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid subject id {:?}",
@@ -536,8 +538,10 @@ impl Session {
             panic!("subject id should be valid at this point");
         };
 
-        let Some(validated_period_id) =
-            data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        let Some(validated_period_id) = data
+            .get_inner_data()
+            .main_params
+            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid period id {:?}",
@@ -785,24 +789,30 @@ impl Session {
     ) -> PyResult<bool> {
         let current_data = self_.token.get_data();
 
-        let Some(period_id) =
-            current_data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        let Some(period_id) = current_data
+            .get_inner_data()
+            .main_params
+            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid period id {:?}",
                 period_id
             )));
         };
-        let Some(student_id) =
-            current_data.validate_student_id(MsgStudentId::from(student_id.clone()).0)
+        let Some(student_id) = current_data
+            .get_inner_data()
+            .main_params
+            .validate_student_id(MsgStudentId::from(student_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid student id {:?}",
                 student_id
             )));
         };
-        let Some(subject_id) =
-            current_data.validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
+        let Some(subject_id) = current_data
+            .get_inner_data()
+            .main_params
+            .validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid subject id {:?}",
@@ -1464,8 +1474,10 @@ impl Session {
     ) -> PyResult<Option<group_lists::GroupListId>> {
         let current_data = self_.token.get_data();
 
-        let Some(period_id) =
-            current_data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        let Some(period_id) = current_data
+            .get_inner_data()
+            .main_params
+            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid period id {:?}",
@@ -1473,8 +1485,10 @@ impl Session {
             )));
         };
 
-        let Some(subject_id) =
-            current_data.validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
+        let Some(subject_id) = current_data
+            .get_inner_data()
+            .main_params
+            .validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid subject id {:?}",
@@ -1622,7 +1636,10 @@ impl Session {
     ) -> PyResult<bool> {
         let data = self_.token.get_data();
 
-        let Some(validated_rule_id) = data.validate_rule_id(MsgRuleId::from(rule_id.clone()).0)
+        let Some(validated_rule_id) = data
+            .get_inner_data()
+            .main_params
+            .validate_rule_id(MsgRuleId::from(rule_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid rule id {:?}",
@@ -1640,8 +1657,10 @@ impl Session {
             panic!("rule id should be valid at this point");
         };
 
-        let Some(validated_period_id) =
-            data.validate_period_id(MsgPeriodId::from(period_id.clone()).0)
+        let Some(validated_period_id) = data
+            .get_inner_data()
+            .main_params
+            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
         else {
             return Err(PyValueError::new_err(format!(
                 "Invalid period id {:?}",

@@ -22,14 +22,22 @@ impl WeekPatternsCmdMsg {
                 WeekPatternsUpdateOp::AddNewWeekPattern(new_week_pattern)
             }
             WeekPatternsCmdMsg::UpdateWeekPattern(id, week_pattern_msg) => {
-                let Some(week_pattern_id) = data.validate_week_pattern_id(id.0) else {
+                let Some(week_pattern_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_week_pattern_id(id.0)
+                else {
                     return Err(error_msg::UpdateWeekPatternError::InvalidWeekPatternId(id).into());
                 };
                 let new_week_pattern = week_pattern_msg.into();
                 WeekPatternsUpdateOp::UpdateWeekPattern(week_pattern_id, new_week_pattern)
             }
             WeekPatternsCmdMsg::DeleteWeekPattern(id) => {
-                let Some(week_pattern_id) = data.validate_week_pattern_id(id.0) else {
+                let Some(week_pattern_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_week_pattern_id(id.0)
+                else {
                     return Err(error_msg::DeleteWeekPatternError::InvalidWeekPatternId(id).into());
                 };
                 WeekPatternsUpdateOp::DeleteWeekPattern(week_pattern_id)

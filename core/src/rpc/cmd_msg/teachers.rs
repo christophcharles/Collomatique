@@ -17,7 +17,11 @@ impl TeachersCmdMsg {
         use crate::ops::TeachersUpdateOp;
         Ok(match self {
             TeachersCmdMsg::AddNewTeacher(teacher_msg) => {
-                let new_teacher = match data.promote_teacher(teacher_msg.into()) {
+                let new_teacher = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_teacher(teacher_msg.into())
+                {
                     Ok(t) => t,
                     Err(subject_id) => {
                         return Err(TeachersError::AddNewTeacher(
@@ -31,10 +35,15 @@ impl TeachersCmdMsg {
                 TeachersUpdateOp::AddNewTeacher(new_teacher)
             }
             TeachersCmdMsg::UpdateTeacher(id, teacher_msg) => {
-                let Some(teacher_id) = data.validate_teacher_id(id.0) else {
+                let Some(teacher_id) = data.get_inner_data().main_params.validate_teacher_id(id.0)
+                else {
                     return Err(error_msg::UpdateTeacherError::InvalidTeacherId(id).into());
                 };
-                let new_teacher = match data.promote_teacher(teacher_msg.into()) {
+                let new_teacher = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_teacher(teacher_msg.into())
+                {
                     Ok(t) => t,
                     Err(subject_id) => {
                         return Err(TeachersError::AddNewTeacher(
@@ -47,7 +56,8 @@ impl TeachersCmdMsg {
                 TeachersUpdateOp::UpdateTeacher(teacher_id, new_teacher)
             }
             TeachersCmdMsg::DeleteTeacher(id) => {
-                let Some(teacher_id) = data.validate_teacher_id(id.0) else {
+                let Some(teacher_id) = data.get_inner_data().main_params.validate_teacher_id(id.0)
+                else {
                     return Err(error_msg::DeleteTeacherError::InvalidTeacherId(id).into());
                 };
                 TeachersUpdateOp::DeleteTeacher(teacher_id)

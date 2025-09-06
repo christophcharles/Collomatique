@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::PromoteIncompatError;
+use collomatique_state_colloscopes::colloscope_params::PromoteIncompatError;
 
 use crate::rpc::error_msg::incompatibilities::IncompatibilitiesError;
 use std::num::NonZeroU32;
@@ -29,7 +29,11 @@ impl IncompatibilitiesCmdMsg {
                         panic!("Invalid incompat received");
                     }
                 };
-                let new_incompat = match data.promote_incompat(external_incompat) {
+                let new_incompat = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_incompat(external_incompat)
+                {
                     Ok(i) => i,
                     Err(PromoteIncompatError::InvalidSubjectId(id)) => {
                         return Err(error_msg::AddNewIncompatError::InvalidSubjectId(
@@ -47,7 +51,9 @@ impl IncompatibilitiesCmdMsg {
                 IncompatibilitiesUpdateOp::AddNewIncompat(new_incompat)
             }
             IncompatibilitiesCmdMsg::UpdateIncompat(id, incompat) => {
-                let Some(incompat_id) = data.validate_incompat_id(id.0) else {
+                let Some(incompat_id) =
+                    data.get_inner_data().main_params.validate_incompat_id(id.0)
+                else {
                     return Err(error_msg::UpdateIncompatError::InvalidIncompatId(id).into());
                 };
                 let external_incompat = match incompat.try_into() {
@@ -59,7 +65,11 @@ impl IncompatibilitiesCmdMsg {
                         panic!("Invalid incompat received");
                     }
                 };
-                let new_incompat = match data.promote_incompat(external_incompat) {
+                let new_incompat = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_incompat(external_incompat)
+                {
                     Ok(i) => i,
                     Err(PromoteIncompatError::InvalidSubjectId(id)) => {
                         return Err(error_msg::UpdateIncompatError::InvalidSubjectId(
@@ -77,7 +87,9 @@ impl IncompatibilitiesCmdMsg {
                 IncompatibilitiesUpdateOp::UpdateIncompat(incompat_id, new_incompat)
             }
             IncompatibilitiesCmdMsg::DeleteIncompat(id) => {
-                let Some(incompat_id) = data.validate_incompat_id(id.0) else {
+                let Some(incompat_id) =
+                    data.get_inner_data().main_params.validate_incompat_id(id.0)
+                else {
                     return Err(error_msg::DeleteIncompatError::InvalidIncompatId(id).into());
                 };
                 IncompatibilitiesUpdateOp::DeleteIncompat(incompat_id)

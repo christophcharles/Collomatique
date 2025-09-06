@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::PromoteLogicRuleError;
+use collomatique_state_colloscopes::colloscope_params::PromoteLogicRuleError;
 
 use crate::rpc::error_msg::rules::RulesError;
 
@@ -20,7 +20,11 @@ impl RulesCmdMsg {
         use crate::ops::RulesUpdateOp;
         Ok(match self {
             RulesCmdMsg::AddNewRule(name, rule) => {
-                let new_rule = match data.promote_logic_rule(rule.into()) {
+                let new_rule = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_logic_rule(rule.into())
+                {
                     Ok(l) => l,
                     Err(PromoteLogicRuleError::InvalidSlotId(id)) => {
                         return Err(error_msg::AddNewRuleError::InvalidSlotId(MsgSlotId(id)).into())
@@ -29,10 +33,14 @@ impl RulesCmdMsg {
                 RulesUpdateOp::AddNewRule(name, new_rule)
             }
             RulesCmdMsg::UpdateRule(id, name, rule) => {
-                let Some(rule_id) = data.validate_rule_id(id.0) else {
+                let Some(rule_id) = data.get_inner_data().main_params.validate_rule_id(id.0) else {
                     return Err(error_msg::UpdateRuleError::InvalidRuleId(id).into());
                 };
-                let new_rule = match data.promote_logic_rule(rule.into()) {
+                let new_rule = match data
+                    .get_inner_data()
+                    .main_params
+                    .promote_logic_rule(rule.into())
+                {
                     Ok(l) => l,
                     Err(PromoteLogicRuleError::InvalidSlotId(id)) => {
                         return Err(error_msg::UpdateRuleError::InvalidSlotId(MsgSlotId(id)).into())
@@ -41,18 +49,26 @@ impl RulesCmdMsg {
                 RulesUpdateOp::UpdateRule(rule_id, name, new_rule)
             }
             RulesCmdMsg::DeleteRule(id) => {
-                let Some(rule_id) = data.validate_rule_id(id.0) else {
+                let Some(rule_id) = data.get_inner_data().main_params.validate_rule_id(id.0) else {
                     return Err(error_msg::DeleteRuleError::InvalidRuleId(id).into());
                 };
                 RulesUpdateOp::DeleteRule(rule_id)
             }
             RulesCmdMsg::UpdatePeriodStatusForRule(rule_id, period_id, status) => {
-                let Some(rule_id) = data.validate_rule_id(rule_id.0) else {
+                let Some(rule_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_rule_id(rule_id.0)
+                else {
                     return Err(
                         error_msg::UpdatePeriodStatusForRuleError::InvalidRuleId(rule_id).into(),
                     );
                 };
-                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                let Some(period_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_period_id(period_id.0)
+                else {
                     return Err(error_msg::UpdatePeriodStatusForRuleError::InvalidPeriodId(
                         period_id,
                     )

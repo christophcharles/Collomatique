@@ -21,36 +21,48 @@ impl SubjectsCmdMsg {
         Ok(match self {
             SubjectsCmdMsg::AddNewSubject(params) => SubjectsUpdateOp::AddNewSubject(params.into()),
             SubjectsCmdMsg::UpdateSubject(id, params) => {
-                let Some(subject_id) = data.validate_subject_id(id.0) else {
+                let Some(subject_id) = data.get_inner_data().main_params.validate_subject_id(id.0)
+                else {
                     return Err(error_msg::UpdateSubjectError::InvalidSubjectId(id).into());
                 };
                 SubjectsUpdateOp::UpdateSubject(subject_id, params.into())
             }
             SubjectsCmdMsg::DeleteSubject(id) => {
-                let Some(subject_id) = data.validate_subject_id(id.0) else {
+                let Some(subject_id) = data.get_inner_data().main_params.validate_subject_id(id.0)
+                else {
                     return Err(error_msg::DeleteSubjectError::InvalidSubjectId(id).into());
                 };
                 SubjectsUpdateOp::DeleteSubject(subject_id)
             }
             SubjectsCmdMsg::MoveUp(id) => {
-                let Some(subject_id) = data.validate_subject_id(id.0) else {
+                let Some(subject_id) = data.get_inner_data().main_params.validate_subject_id(id.0)
+                else {
                     return Err(error_msg::MoveUpError::InvalidSubjectId(id).into());
                 };
                 SubjectsUpdateOp::MoveSubjectUp(subject_id)
             }
             SubjectsCmdMsg::MoveDown(id) => {
-                let Some(subject_id) = data.validate_subject_id(id.0) else {
+                let Some(subject_id) = data.get_inner_data().main_params.validate_subject_id(id.0)
+                else {
                     return Err(error_msg::MoveDownError::InvalidSubjectId(id).into());
                 };
                 SubjectsUpdateOp::MoveSubjectDown(subject_id)
             }
             SubjectsCmdMsg::UpdatePeriodStatus(subject_id, period_id, new_status) => {
-                let Some(subject_id) = data.validate_subject_id(subject_id.0) else {
+                let Some(subject_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_subject_id(subject_id.0)
+                else {
                     return Err(
                         error_msg::UpdatePeriodStatusError::InvalidSubjectId(subject_id).into(),
                     );
                 };
-                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                let Some(period_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_period_id(period_id.0)
+                else {
                     return Err(
                         error_msg::UpdatePeriodStatusError::InvalidPeriodId(period_id).into(),
                     );

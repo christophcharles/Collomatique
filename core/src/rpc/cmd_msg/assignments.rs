@@ -17,19 +17,35 @@ impl AssignmentsCmdMsg {
         use crate::ops::AssignmentsUpdateOp;
         Ok(match self {
             AssignmentsCmdMsg::Assign(period_id, student_id, subject_id, status) => {
-                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                let Some(period_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_period_id(period_id.0)
+                else {
                     return Err(error_msg::AssignError::InvalidPeriodId(period_id).into());
                 };
-                let Some(student_id) = data.validate_student_id(student_id.0) else {
+                let Some(student_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_student_id(student_id.0)
+                else {
                     return Err(error_msg::AssignError::InvalidStudentId(student_id).into());
                 };
-                let Some(subject_id) = data.validate_subject_id(subject_id.0) else {
+                let Some(subject_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_subject_id(subject_id.0)
+                else {
                     return Err(error_msg::AssignError::InvalidSubjectId(subject_id).into());
                 };
                 AssignmentsUpdateOp::Assign(period_id, student_id, subject_id, status)
             }
             AssignmentsCmdMsg::DuplicatePreviousPeriod(period_id) => {
-                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                let Some(period_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_period_id(period_id.0)
+                else {
                     return Err(error_msg::DuplicatePreviousPeriodError::InvalidPeriodId(
                         period_id,
                     )
@@ -38,10 +54,18 @@ impl AssignmentsCmdMsg {
                 AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id)
             }
             AssignmentsCmdMsg::AssignAll(period_id, subject_id, status) => {
-                let Some(period_id) = data.validate_period_id(period_id.0) else {
+                let Some(period_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_period_id(period_id.0)
+                else {
                     return Err(error_msg::AssignAllError::InvalidPeriodId(period_id).into());
                 };
-                let Some(subject_id) = data.validate_subject_id(subject_id.0) else {
+                let Some(subject_id) = data
+                    .get_inner_data()
+                    .main_params
+                    .validate_subject_id(subject_id.0)
+                else {
                     return Err(error_msg::AssignAllError::InvalidSubjectId(subject_id).into());
                 };
                 AssignmentsUpdateOp::AssignAll(period_id, subject_id, status)
