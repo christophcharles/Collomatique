@@ -162,3 +162,12 @@ impl From<collomatique_state_colloscopes::RuleId> for MsgRuleId {
         MsgRuleId(value.inner())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeId> for MsgColloscopeId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeId) -> Self {
+        MsgColloscopeId(value.inner())
+    }
+}

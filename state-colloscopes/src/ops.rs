@@ -38,6 +38,8 @@ pub enum Op {
     Rule(RuleOp),
     /// Operation on settings
     Settings(SettingsOp),
+    /// Operation on colloscopes
+    Colloscopes(ColloscopeOp),
 }
 
 impl Operation for Op {}
@@ -212,6 +214,18 @@ pub enum SettingsOp {
     Update(settings::GeneralSettings),
 }
 
+/// Colloscope operation enumeration
+///
+/// This is the list of all possible operations related to the
+/// colloscopes we can do on a [Data]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ColloscopeOp {
+    /// Add a colloscope
+    AddEmpty(String),
+    /// Remove an existing colloscope
+    Remove(ColloscopeId),
+}
+
 /// Annotated operation
 ///
 /// Compared to [Op], this is a annotated operation,
@@ -243,6 +257,8 @@ pub enum AnnotatedOp {
     Rule(AnnotatedRuleOp),
     /// Operation on settings
     Settings(AnnotatedSettingsOp),
+    /// Operation on colloscopes
+    Colloscopes(AnnotatedColloscopeOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -308,6 +324,12 @@ impl From<AnnotatedRuleOp> for AnnotatedOp {
 impl From<AnnotatedSettingsOp> for AnnotatedOp {
     fn from(value: AnnotatedSettingsOp) -> Self {
         AnnotatedOp::Settings(value)
+    }
+}
+
+impl From<AnnotatedColloscopeOp> for AnnotatedOp {
+    fn from(value: AnnotatedColloscopeOp) -> Self {
+        AnnotatedOp::Colloscopes(value)
     }
 }
 
@@ -526,6 +548,22 @@ pub enum AnnotatedSettingsOp {
     Update(settings::GeneralSettings),
 }
 
+/// Colloscope operation enumeration
+///
+/// Compared to [ColloscopeOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedColloscopeOp {
+    /// Add an empty colloscope
+    /// First parameter is the colloscope id for the new colloscope
+    AddEmpty(ColloscopeId, String),
+    /// Remove an existing colloscope
+    Remove(ColloscopeId),
+}
+
 impl Operation for AnnotatedOp {}
 
 impl AnnotatedOp {
@@ -583,6 +621,10 @@ impl AnnotatedOp {
             Op::Settings(settings_op) => {
                 let op = AnnotatedSettingsOp::annotate(settings_op);
                 (op.into(), None)
+            }
+            Op::Colloscopes(colloscopes_op) => {
+                let (op, id) = AnnotatedColloscopeOp::annotate(colloscopes_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
             }
         }
     }
@@ -815,6 +857,26 @@ impl AnnotatedSettingsOp {
     fn annotate(settings_op: SettingsOp) -> AnnotatedSettingsOp {
         match settings_op {
             SettingsOp::Update(general_settings) => AnnotatedSettingsOp::Update(general_settings),
+        }
+    }
+}
+
+impl AnnotatedColloscopeOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [ColloscopeOp].
+    fn annotate(
+        colloscope_op: ColloscopeOp,
+        id_issuer: &mut IdIssuer,
+    ) -> (AnnotatedColloscopeOp, Option<ColloscopeId>) {
+        match colloscope_op {
+            ColloscopeOp::AddEmpty(name) => {
+                let new_id = id_issuer.get_colloscope_id();
+                (AnnotatedColloscopeOp::AddEmpty(new_id, name), Some(new_id))
+            }
+            ColloscopeOp::Remove(colloscope_id) => {
+                (AnnotatedColloscopeOp::Remove(colloscope_id), None)
+            }
         }
     }
 }

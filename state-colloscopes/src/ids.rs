@@ -170,6 +170,23 @@ impl Id for RuleId {
     }
 }
 
+/// This type represents an ID for a colloscope
+///
+/// Every colloscope gets a unique ID. IDs then identify colloscopes
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeId(u64);
+
+impl Id for ColloscopeId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeId {
+        ColloscopeId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -230,5 +247,10 @@ impl IdIssuer {
     /// Get a new unused ID for a rule
     pub fn get_rule_id(&mut self) -> RuleId {
         RuleId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a colloscope
+    pub fn get_colloscope_id(&mut self) -> ColloscopeId {
+        ColloscopeId(self.helper.get_new_id().inner())
     }
 }

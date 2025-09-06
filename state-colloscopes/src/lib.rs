@@ -23,14 +23,14 @@ pub mod ids;
 use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
-    GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId, TeacherId,
-    WeekPatternId,
+    ColloscopeId, GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId,
+    TeacherId, WeekPatternId,
 };
 pub mod ops;
 use ops::{
-    AnnotatedAssignmentOp, AnnotatedGroupListOp, AnnotatedIncompatOp, AnnotatedPeriodOp,
-    AnnotatedRuleOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
-    AnnotatedWeekPatternOp,
+    AnnotatedAssignmentOp, AnnotatedColloscopeOp, AnnotatedGroupListOp, AnnotatedIncompatOp,
+    AnnotatedPeriodOp, AnnotatedRuleOp, AnnotatedSlotOp, AnnotatedStudentOp, AnnotatedSubjectOp,
+    AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
 pub use ops::{
     AnnotatedOp, AssignmentOp, GroupListOp, IncompatOp, Op, PeriodOp, RuleOp, SettingsOp, SlotOp,
@@ -42,6 +42,7 @@ pub use subjects::{
 
 pub mod assignments;
 pub mod colloscope_params;
+pub mod colloscopes;
 pub mod group_lists;
 pub mod incompats;
 pub mod periods;
@@ -111,6 +112,7 @@ pub struct InnerData {
         GroupListId,
         RuleId,
     >,
+    pub colloscopes: colloscopes::Colloscopes,
 }
 
 /// Complete data that can be handled in the colloscope
@@ -496,6 +498,20 @@ pub enum RuleError<RuleId: Id, PeriodId: Id, SlotId: Id> {
     InvalidSlotId(SlotId),
 }
 
+/// Errors for colloscopes operations
+///
+/// These errors can be returned when trying to modify [Data] with a colloscope op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ColloscopeError {
+    /// colloscope id is invalid
+    #[error("invalid colloscope id ({0:?})")]
+    InvalidColloscopeId(ColloscopeId),
+
+    /// The colloscope id already exists
+    #[error("colloscope id ({0:?}) already exists")]
+    ColloscopeIdAlreadyExists(ColloscopeId),
+}
+
 /// Errors for colloscopes modification
 ///
 /// These errors can be returned when trying to modify [Data].
@@ -521,6 +537,8 @@ pub enum Error {
     GroupList(#[from] GroupListError<GroupListId, StudentId, SubjectId, PeriodId>),
     #[error(transparent)]
     Rule(#[from] RuleError<RuleId, PeriodId, SlotId>),
+    #[error(transparent)]
+    Colloscope(#[from] ColloscopeError),
 }
 
 /// Errors for IDs
@@ -550,6 +568,7 @@ pub enum NewId {
     IncompatId(IncompatId),
     GroupListId(GroupListId),
     RuleId(RuleId),
+    ColloscopeId(ColloscopeId),
 }
 
 impl From<StudentId> for NewId {
@@ -606,6 +625,12 @@ impl From<RuleId> for NewId {
     }
 }
 
+impl From<ColloscopeId> for NewId {
+    fn from(value: ColloscopeId) -> Self {
+        NewId::ColloscopeId(value)
+    }
+}
+
 impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
@@ -650,6 +675,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Settings(settings_op) => {
                 Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
             }
+            AnnotatedOp::Colloscopes(colloscope_op) => Ok(AnnotatedOp::Colloscopes(
+                self.build_rev_colloscope(colloscope_op)?,
+            )),
         }
     }
 
@@ -668,6 +696,7 @@ impl InMemoryData for Data {
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Rule(rule_op) => self.apply_rule(rule_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op),
+            AnnotatedOp::Colloscopes(colloscope_op) => self.apply_colloscope(colloscope_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -675,6 +704,16 @@ impl InMemoryData for Data {
 }
 
 impl Data {
+    fn ids(&self) -> impl Iterator<Item = u64> {
+        self.inner_data.main_params.ids().chain(
+            self.inner_data
+                .colloscopes
+                .colloscope_map
+                .iter()
+                .flat_map(|(colloscope_id, _colloscope)| [colloscope_id.inner()].into_iter()),
+        )
+    }
+
     /// USED INTERNALLY
     ///
     /// Checks that there are no duplicate ids in data
@@ -683,7 +722,7 @@ impl Data {
     fn check_no_duplicate_ids(&self) {
         let mut ids_so_far = BTreeSet::new();
 
-        for id in self.inner_data.main_params.ids() {
+        for id in self.ids() {
             assert!(ids_so_far.insert(id));
         }
     }
@@ -722,10 +761,14 @@ impl Data {
         // Ids have been validated
         let main_params =
             unsafe { colloscope_params::ColloscopeParameters::from_external_data(main_params) };
+        let colloscopes = colloscopes::Colloscopes::default();
 
         let data = Data {
             id_issuer,
-            inner_data: InnerData { main_params },
+            inner_data: InnerData {
+                main_params,
+                colloscopes,
+            },
         };
 
         data.check_invariants();
@@ -2107,6 +2150,45 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply colloscope operations
+    fn apply_colloscope(
+        &mut self,
+        colloscope_op: &AnnotatedColloscopeOp,
+    ) -> std::result::Result<(), ColloscopeError> {
+        match colloscope_op {
+            AnnotatedColloscopeOp::AddEmpty(new_id, name) => {
+                if self
+                    .inner_data
+                    .colloscopes
+                    .colloscope_map
+                    .contains_key(new_id)
+                {
+                    return Err(ColloscopeError::ColloscopeIdAlreadyExists(*new_id));
+                };
+
+                let new_colloscope = colloscopes::Colloscope { name: name.clone() };
+
+                self.inner_data
+                    .colloscopes
+                    .colloscope_map
+                    .insert(*new_id, new_colloscope);
+
+                Ok(())
+            }
+            AnnotatedColloscopeOp::Remove(id) => {
+                if !self.inner_data.colloscopes.colloscope_map.contains_key(id) {
+                    return Err(ColloscopeError::InvalidColloscopeId(*id));
+                }
+
+                self.inner_data.colloscopes.colloscope_map.remove(id);
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -2797,6 +2879,35 @@ impl Data {
             AnnotatedSettingsOp::Update(_new_settings) => {
                 let old_settings = self.inner_data.main_params.settings.clone();
                 AnnotatedSettingsOp::Update(old_settings)
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a colloscope operation
+    fn build_rev_colloscope(
+        &self,
+        colloscope_op: &AnnotatedColloscopeOp,
+    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
+        match colloscope_op {
+            AnnotatedColloscopeOp::AddEmpty(new_id, _name) => {
+                Ok(AnnotatedColloscopeOp::Remove(new_id.clone()))
+            }
+            AnnotatedColloscopeOp::Remove(colloscope_id) => {
+                let Some(old_colloscope) = self
+                    .inner_data
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return Err(ColloscopeError::InvalidColloscopeId(*colloscope_id));
+                };
+
+                Ok(AnnotatedColloscopeOp::AddEmpty(
+                    *colloscope_id,
+                    old_colloscope.name.clone(),
+                ))
             }
         }
     }
