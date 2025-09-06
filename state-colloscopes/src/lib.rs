@@ -146,7 +146,7 @@ use thiserror::Error;
 ///
 /// These errors can be returned when trying to modify [Data] with a student op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum StudentError {
+pub enum StudentError<StudentId: Id, PeriodId: Id, SubjectId: Id, GroupListId: Id> {
     /// A student id is invalid
     #[error("invalid student id ({0:?})")]
     InvalidStudentId(StudentId),
@@ -178,7 +178,7 @@ pub enum StudentError {
 ///
 /// These errors can be returned when trying to modify [Data] with a period op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum PeriodError {
+pub enum PeriodError<PeriodId: Id, SubjectId: Id, StudentId: Id, RuleId: Id> {
     /// A period id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
@@ -214,7 +214,7 @@ pub enum PeriodError {
 ///
 /// These errors can be returned when trying to modify [Data] with a subject op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SubjectError {
+pub enum SubjectError<SubjectId: Id, PeriodId: Id, TeacherId: Id, IncompatId: Id, GroupListId: Id> {
     /// A subject id is invalid
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(SubjectId),
@@ -270,7 +270,7 @@ pub enum SubjectError {
 ///
 /// These errors can be returned when trying to modify [Data] with a teacher op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum TeacherError {
+pub enum TeacherError<TeacherId: Id, SubjectId: Id, SlotId: Id> {
     /// A teacher id is invalid
     #[error("invalid teacher id ({0:?})")]
     InvalidTeacherId(TeacherId),
@@ -300,7 +300,7 @@ pub enum TeacherError {
 ///
 /// These errors can be returned when trying to modify [Data] with a assignment op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum AssignmentError {
+pub enum AssignmentError<PeriodId: Id, SubjectId: Id, StudentId: Id> {
     /// A period id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
@@ -326,7 +326,7 @@ pub enum AssignmentError {
 ///
 /// These errors can be returned when trying to modify [Data] with a week pattern op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum WeekPatternError {
+pub enum WeekPatternError<WeekPatternId: Id, SlotId: Id, IncompatId: Id> {
     /// A week pattern id is invalid
     #[error("invalid week pattern id ({0:?})")]
     InvalidWeekPatternId(WeekPatternId),
@@ -348,7 +348,7 @@ pub enum WeekPatternError {
 ///
 /// These errors can be returned when trying to modify [Data] with a slot op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SlotError {
+pub enum SlotError<SlotId: Id, SubjectId: Id, TeacherId: Id, WeekPatternId: Id, RuleId: Id> {
     /// A slot id is invalid
     #[error("invalid slot id ({0:?})")]
     InvalidSlotId(SlotId),
@@ -398,7 +398,7 @@ pub enum SlotError {
 ///
 /// These errors can be returned when trying to modify [Data] with an incompat op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum IncompatError {
+pub enum IncompatError<IncompatId: Id, SubjectId: Id, WeekPatternId: Id> {
     /// A incompat id is invalid
     #[error("invalid incompat id ({0:?})")]
     InvalidIncompatId(IncompatId),
@@ -420,7 +420,7 @@ pub enum IncompatError {
 ///
 /// These errors can be returned when trying to modify [Data] with a group list op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum GroupListError {
+pub enum GroupListError<GroupListId: Id, StudentId: Id, SubjectId: Id, PeriodId: Id> {
     /// group list id is invalid
     #[error("invalid group list id ({0:?})")]
     InvalidGroupListId(GroupListId),
@@ -478,7 +478,7 @@ pub enum GroupListError {
 ///
 /// These errors can be returned when trying to modify [Data] with a rule op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum RuleError {
+pub enum RuleError<RuleId: Id, PeriodId: Id, SlotId: Id> {
     /// rule id is invalid
     #[error("invalid rule id ({0:?})")]
     InvalidRuleId(RuleId),
@@ -502,25 +502,25 @@ pub enum RuleError {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum Error {
     #[error(transparent)]
-    Student(#[from] StudentError),
+    Student(#[from] StudentError<StudentId, PeriodId, SubjectId, GroupListId>),
     #[error(transparent)]
-    Period(#[from] PeriodError),
+    Period(#[from] PeriodError<PeriodId, SubjectId, StudentId, RuleId>),
     #[error(transparent)]
-    Subject(#[from] SubjectError),
+    Subject(#[from] SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>),
     #[error(transparent)]
-    Teacher(#[from] TeacherError),
+    Teacher(#[from] TeacherError<TeacherId, SubjectId, SlotId>),
     #[error(transparent)]
-    Assignment(#[from] AssignmentError),
+    Assignment(#[from] AssignmentError<PeriodId, SubjectId, StudentId>),
     #[error(transparent)]
-    WeekPattern(#[from] WeekPatternError),
+    WeekPattern(#[from] WeekPatternError<WeekPatternId, SlotId, IncompatId>),
     #[error(transparent)]
-    Slot(#[from] SlotError),
+    Slot(#[from] SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>),
     #[error(transparent)]
-    Incompat(#[from] IncompatError),
+    Incompat(#[from] IncompatError<IncompatId, SubjectId, WeekPatternId>),
     #[error(transparent)]
-    GroupList(#[from] GroupListError),
+    GroupList(#[from] GroupListError<GroupListId, StudentId, SubjectId, PeriodId>),
     #[error(transparent)]
-    Rule(#[from] RuleError),
+    Rule(#[from] RuleError<RuleId, PeriodId, SlotId>),
 }
 
 /// Errors for IDs
@@ -683,608 +683,9 @@ impl Data {
     fn check_no_duplicate_ids(&self) {
         let mut ids_so_far = BTreeSet::new();
 
-        for (id, _) in &self.inner_data.main_params.periods.ordered_period_list {
-            assert!(ids_so_far.insert(id.inner()));
+        for id in self.inner_data.main_params.ids() {
+            assert!(ids_so_far.insert(id));
         }
-
-        for (id, _) in &self.inner_data.main_params.subjects.ordered_subject_list {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-
-        for (id, _) in &self.inner_data.main_params.students.student_map {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-
-        for (id, _) in &self.inner_data.main_params.teachers.teacher_map {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-
-        for (id, _) in &self.inner_data.main_params.week_patterns.week_pattern_map {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-
-        for (_subject_id, subject_slots) in &self.inner_data.main_params.slots.subject_map {
-            for (id, _) in &subject_slots.ordered_slots {
-                assert!(ids_so_far.insert(id.inner()));
-            }
-        }
-
-        for (id, _) in &self.inner_data.main_params.incompats.incompat_map {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-
-        for (id, _) in &self.inner_data.main_params.group_lists.group_list_map {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-
-        for (id, _) in &self.inner_data.main_params.rules.rule_map {
-            assert!(ids_so_far.insert(id.inner()));
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a subject is valid
-    fn validate_subject_internal(
-        subject: &subjects::Subject<PeriodId>,
-        period_ids: &BTreeSet<PeriodId>,
-    ) -> Result<(), SubjectError> {
-        for period_id in &subject.excluded_periods {
-            if !period_ids.contains(period_id) {
-                return Err(SubjectError::InvalidPeriodId(*period_id));
-            }
-        }
-
-        let Some(interrogation_parameters) = &subject.parameters.interrogation_parameters else {
-            return Ok(());
-        };
-
-        if interrogation_parameters.students_per_group.is_empty() {
-            return Err(SubjectError::StudentsPerGroupRangeIsEmpty);
-        }
-        if interrogation_parameters.groups_per_interrogation.is_empty() {
-            return Err(SubjectError::GroupsPerInterrogationRangeIsEmpty);
-        }
-
-        match &interrogation_parameters.periodicity {
-            SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                blocks,
-                minimum_week_separation: _,
-            } => {
-                for block in blocks {
-                    if block.interrogation_count_in_block.is_empty() {
-                        return Err(SubjectError::InterrogationCountRangeIsEmpty);
-                    }
-                }
-            }
-            SubjectPeriodicity::AmountInYear {
-                interrogation_count_in_year,
-                minimum_week_separation: _,
-            } => {
-                if interrogation_count_in_year.is_empty() {
-                    return Err(SubjectError::InterrogationCountRangeIsEmpty);
-                }
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a subject before commiting a subject op
-    fn validate_subject(&self, subject: &subjects::Subject<PeriodId>) -> Result<(), SubjectError> {
-        let period_ids = self.build_period_ids();
-
-        Self::validate_subject_internal(subject, &period_ids)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in subject data
-    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
-        for (_subject_id, subject) in &self.inner_data.main_params.subjects.ordered_subject_list {
-            Self::validate_subject_internal(subject, period_ids).unwrap();
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a subject is valid
-    fn validate_teacher_internal(
-        teacher: &teachers::Teacher<SubjectId>,
-        subjects: &subjects::Subjects<SubjectId, PeriodId>,
-    ) -> Result<(), TeacherError> {
-        for subject_id in &teacher.subjects {
-            let Some(subject) = subjects.find_subject(*subject_id) else {
-                return Err(TeacherError::InvalidSubjectId(*subject_id));
-            };
-            if subject.parameters.interrogation_parameters.is_none() {
-                return Err(TeacherError::SubjectHasNoInterrogation(*subject_id));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a teacher before commiting a teacher op
-    fn validate_teacher(&self, teacher: &teachers::Teacher<SubjectId>) -> Result<(), TeacherError> {
-        Self::validate_teacher_internal(teacher, &self.inner_data.main_params.subjects)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in subject data
-    fn check_teachers_data_consistency(&self) {
-        for (_teacher_id, teacher) in &self.inner_data.main_params.teachers.teacher_map {
-            Self::validate_teacher_internal(teacher, &self.inner_data.main_params.subjects)
-                .unwrap();
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a subject is valid
-    fn validate_student_internal(
-        student: &students::Student<PeriodId>,
-        period_ids: &BTreeSet<PeriodId>,
-    ) -> Result<(), StudentError> {
-        for period_id in &student.excluded_periods {
-            if !period_ids.contains(period_id) {
-                return Err(StudentError::InvalidPeriodId(*period_id));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a teacher before commiting a teacher op
-    fn validate_student(&self, student: &students::Student<PeriodId>) -> Result<(), StudentError> {
-        let period_ids = self.build_period_ids();
-
-        Self::validate_student_internal(student, &period_ids)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in subject data
-    fn check_students_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
-        for (_student_id, student) in &self.inner_data.main_params.students.student_map {
-            Self::validate_student_internal(student, period_ids).unwrap();
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in assignments data
-    fn check_assignments_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
-        assert!(self.inner_data.main_params.assignments.period_map.len() == period_ids.len());
-        for (period_id, period_assignments) in &self.inner_data.main_params.assignments.period_map {
-            assert!(period_ids.contains(period_id));
-
-            let mut subject_count_for_period = 0usize;
-            for (subject_id, subject) in &self.inner_data.main_params.subjects.ordered_subject_list
-            {
-                if subject.excluded_periods.contains(period_id) {
-                    continue;
-                }
-                subject_count_for_period += 1;
-
-                let subject_assignments = period_assignments
-                    .subject_map
-                    .get(subject_id)
-                    .expect("All relevant subjects for the period should appear in the map");
-
-                for student_id in subject_assignments {
-                    let student = self
-                        .inner_data
-                        .main_params
-                        .students
-                        .student_map
-                        .get(student_id)
-                        .expect("Every student that appears in the map should be a valid id");
-
-                    if student.excluded_periods.contains(period_id) {
-                        panic!(
-                            "Assigned student {:?} is not present for period {:?}",
-                            student_id, period_id
-                        );
-                    }
-                }
-            }
-            assert!(subject_count_for_period == period_assignments.subject_map.len());
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a slot is valid
-    fn validate_slot_internal(
-        slot: &slots::Slot<TeacherId, WeekPatternId>,
-        subject_id: SubjectId,
-        week_pattern_ids: &BTreeSet<WeekPatternId>,
-        teachers: &teachers::Teachers<TeacherId, SubjectId>,
-        subjects: &subjects::Subjects<SubjectId, PeriodId>,
-    ) -> Result<(), SlotError> {
-        let Some(teacher) = teachers.teacher_map.get(&slot.teacher_id) else {
-            return Err(SlotError::InvalidTeacherId(slot.teacher_id));
-        };
-        if !teacher.subjects.contains(&subject_id) {
-            return Err(SlotError::TeacherDoesNotTeachInSubject(
-                slot.teacher_id,
-                subject_id,
-            ));
-        }
-        if let Some(week_pattern_id) = &slot.week_pattern {
-            if !week_pattern_ids.contains(week_pattern_id) {
-                return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
-            }
-        }
-        let Some(subject) = subjects.find_subject(subject_id) else {
-            return Err(SlotError::InvalidSubjectId(subject_id));
-        };
-        let Some(params) = &subject.parameters.interrogation_parameters else {
-            return Err(SlotError::SubjectHasNoInterrogation(subject_id));
-        };
-        if collomatique_time::SlotWithDuration::new(
-            slot.start_time.clone(),
-            params.duration.clone(),
-        )
-        .is_none()
-        {
-            return Err(SlotError::SlotOverlapsWithNextDay);
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a teacher before commiting a teacher op
-    fn validate_slot(
-        &self,
-        slot: &slots::Slot<TeacherId, WeekPatternId>,
-        subject_id: SubjectId,
-    ) -> Result<(), SlotError> {
-        let week_pattern_ids = self.build_week_pattern_ids();
-
-        Self::validate_slot_internal(
-            slot,
-            subject_id,
-            &week_pattern_ids,
-            &self.inner_data.main_params.teachers,
-            &self.inner_data.main_params.subjects,
-        )
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in assignments data
-    fn check_slots_data_consistency(&self, week_pattern_ids: &BTreeSet<WeekPatternId>) {
-        let subjects_with_interrogations_count = self
-            .inner_data
-            .main_params
-            .subjects
-            .ordered_subject_list
-            .iter()
-            .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
-            .count();
-        assert_eq!(
-            self.inner_data.main_params.slots.subject_map.len(),
-            subjects_with_interrogations_count
-        );
-
-        for (subject_id, subject_slots) in &self.inner_data.main_params.slots.subject_map {
-            for (_slot_id, slot) in &subject_slots.ordered_slots {
-                Self::validate_slot_internal(
-                    slot,
-                    *subject_id,
-                    week_pattern_ids,
-                    &self.inner_data.main_params.teachers,
-                    &self.inner_data.main_params.subjects,
-                )
-                .unwrap();
-            }
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that an incompat is valid
-    fn validate_incompat_internal(
-        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
-        week_pattern_ids: &BTreeSet<WeekPatternId>,
-        subject_ids: &BTreeSet<SubjectId>,
-    ) -> Result<(), IncompatError> {
-        if !subject_ids.contains(&incompat.subject_id) {
-            return Err(IncompatError::InvalidSubjectId(incompat.subject_id));
-        }
-        if let Some(week_pattern_id) = &incompat.week_pattern_id {
-            if !week_pattern_ids.contains(week_pattern_id) {
-                return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
-            }
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a teacher before commiting a teacher op
-    fn validate_incompat(
-        &self,
-        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
-    ) -> Result<(), IncompatError> {
-        let week_pattern_ids = self.build_week_pattern_ids();
-        let subject_ids = self.build_subject_ids();
-
-        Self::validate_incompat_internal(incompat, &week_pattern_ids, &subject_ids)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in assignments data
-    fn check_incompats_data_consistency(
-        &self,
-        week_pattern_ids: &BTreeSet<WeekPatternId>,
-        subject_ids: &BTreeSet<SubjectId>,
-    ) {
-        for (_incompat_id, incompat) in &self.inner_data.main_params.incompats.incompat_map {
-            Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).unwrap();
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that an incompat is valid
-    fn validate_group_list_params_internal(
-        params: &group_lists::GroupListParameters<StudentId>,
-        students: &students::Students<StudentId, PeriodId>,
-    ) -> Result<(), GroupListError> {
-        if params.group_count.is_empty() {
-            return Err(GroupListError::GroupCountRangeIsEmpty);
-        }
-        if params.students_per_group.is_empty() {
-            return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
-        }
-        for student_id in &params.excluded_students {
-            if !students.student_map.contains_key(student_id) {
-                return Err(GroupListError::InvalidStudentId(*student_id));
-            }
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that an incompat is valid
-    fn validate_group_list_prefilled_groups_internal(
-        prefilled_groups: &group_lists::GroupListPrefilledGroups<StudentId>,
-        students: &students::Students<StudentId, PeriodId>,
-        excluded_students: &BTreeSet<StudentId>,
-    ) -> Result<(), GroupListError> {
-        if !prefilled_groups.check_duplicated_student() {
-            return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
-        }
-        for group in &prefilled_groups.groups {
-            for student_id in &group.students {
-                if !students.student_map.contains_key(student_id) {
-                    return Err(GroupListError::InvalidStudentId(*student_id));
-                }
-                if excluded_students.contains(student_id) {
-                    return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that an incompat is valid
-    fn validate_group_list_internal(
-        group_list: &group_lists::GroupList<StudentId>,
-        students: &students::Students<StudentId, PeriodId>,
-    ) -> Result<(), GroupListError> {
-        Self::validate_group_list_params_internal(&group_list.params, students)?;
-        Self::validate_group_list_prefilled_groups_internal(
-            &group_list.prefilled_groups,
-            students,
-            &group_list.params.excluded_students,
-        )?;
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a teacher before commiting a teacher op
-    fn validate_group_list(
-        &self,
-        group_list: &group_lists::GroupList<StudentId>,
-    ) -> Result<(), GroupListError> {
-        Self::validate_group_list_internal(group_list, &self.inner_data.main_params.students)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in assignments data
-    fn check_group_lists_data_consistency(&self) {
-        if self
-            .inner_data
-            .main_params
-            .group_lists
-            .subjects_associations
-            .len()
-            != self
-                .inner_data
-                .main_params
-                .periods
-                .ordered_period_list
-                .len()
-        {
-            panic!("Invalid period count in subject associations for group lists");
-        }
-        for (period_id, subject_map) in &self
-            .inner_data
-            .main_params
-            .group_lists
-            .subjects_associations
-        {
-            for (subject_id, group_list_id) in subject_map {
-                assert!(self
-                    .inner_data
-                    .main_params
-                    .group_lists
-                    .group_list_map
-                    .contains_key(group_list_id));
-                let subject = self
-                    .inner_data
-                    .main_params
-                    .subjects
-                    .find_subject(*subject_id)
-                    .expect("Subject ID should be valid in subject/group_list associations");
-
-                assert!(subject.parameters.interrogation_parameters.is_some());
-                assert!(!subject.excluded_periods.contains(period_id));
-            }
-        }
-        for (_group_list_id, group_list) in &self.inner_data.main_params.group_lists.group_list_map
-        {
-            Self::validate_group_list_internal(group_list, &self.inner_data.main_params.students)
-                .unwrap();
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a rule is valid
-    fn validate_logic_rule_internal(
-        logic_rule: &rules::LogicRule<SlotId>,
-        slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), RuleError> {
-        match logic_rule {
-            rules::LogicRule::And(l1, l2) => {
-                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
-                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
-            }
-            rules::LogicRule::Or(l1, l2) => {
-                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
-                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
-            }
-            rules::LogicRule::Not(l) => {
-                Self::validate_logic_rule_internal(l.as_ref(), slot_ids)?;
-            }
-            rules::LogicRule::Variable(slot_id) => {
-                if !slot_ids.contains(slot_id) {
-                    return Err(RuleError::InvalidSlotId(*slot_id));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that a rule is valid
-    fn validate_rule_internal(
-        rule: &rules::Rule<PeriodId, SlotId>,
-        period_ids: &BTreeSet<PeriodId>,
-        slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), RuleError> {
-        for period_id in &rule.excluded_periods {
-            if !period_ids.contains(period_id) {
-                return Err(RuleError::InvalidPeriodId(*period_id));
-            }
-        }
-
-        Self::validate_logic_rule_internal(&rule.desc, slot_ids)?;
-
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// used to check a rule before commiting a rule op
-    fn validate_rule(&self, rule: &rules::Rule<PeriodId, SlotId>) -> Result<(), RuleError> {
-        let period_ids = self.build_period_ids();
-        let slot_ids = self.build_slot_ids();
-        Self::validate_rule_internal(rule, &period_ids, &slot_ids)
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// checks all the invariants in rules data
-    fn check_rules_data_consistency(
-        &self,
-        period_ids: &BTreeSet<PeriodId>,
-        slot_ids: &BTreeSet<SlotId>,
-    ) {
-        for (_rule_id, rule) in &self.inner_data.main_params.rules.rule_map {
-            Self::validate_rule_internal(rule, period_ids, slot_ids).unwrap();
-        }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Build the set of PeriodIds
-    ///
-    /// This is useful to check that references are valid
-    fn build_period_ids(&self) -> BTreeSet<PeriodId> {
-        let mut ids = BTreeSet::new();
-        for (id, _) in &self.inner_data.main_params.periods.ordered_period_list {
-            ids.insert(*id);
-        }
-        ids
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Build the set of WeekPatternId
-    ///
-    /// This is useful to check that references are valid
-    fn build_week_pattern_ids(&self) -> BTreeSet<WeekPatternId> {
-        self.inner_data
-            .main_params
-            .week_patterns
-            .week_pattern_map
-            .keys()
-            .copied()
-            .collect()
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Build the set of SubjectId
-    ///
-    /// This is useful to check that references are valid
-    fn build_subject_ids(&self) -> BTreeSet<SubjectId> {
-        self.inner_data
-            .main_params
-            .subjects
-            .ordered_subject_list
-            .iter()
-            .map(|(id, _)| *id)
-            .collect()
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Build the set of SlotId
-    ///
-    /// This is useful to check that references are valid
-    fn build_slot_ids(&self) -> BTreeSet<SlotId> {
-        self.inner_data
-            .main_params
-            .slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
-            })
-            .collect()
     }
 
     /// USED INTERNALLY
@@ -1293,19 +694,7 @@ impl Data {
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
-        let period_ids = self.build_period_ids();
-        let week_pattern_ids = self.build_week_pattern_ids();
-        let subject_ids = self.build_subject_ids();
-        let slot_ids = self.build_slot_ids();
-
-        self.check_subjects_data_consistency(&period_ids);
-        self.check_teachers_data_consistency();
-        self.check_students_data_consistency(&period_ids);
-        self.check_assignments_data_consistency(&period_ids);
-        self.check_slots_data_consistency(&week_pattern_ids);
-        self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
-        self.check_group_lists_data_consistency();
-        self.check_rules_data_consistency(&period_ids, &slot_ids);
+        self.inner_data.main_params.check_invariants();
     }
 }
 
@@ -1358,7 +747,7 @@ impl Data {
     fn apply_student(
         &mut self,
         student_op: &AnnotatedStudentOp,
-    ) -> std::result::Result<(), StudentError> {
+    ) -> std::result::Result<(), StudentError<StudentId, PeriodId, SubjectId, GroupListId>> {
         match student_op {
             AnnotatedStudentOp::Add(new_id, student) => {
                 if self
@@ -1371,7 +760,7 @@ impl Data {
                 {
                     return Err(StudentError::StudentIdAlreadyExists(*new_id));
                 }
-                self.validate_student(student)?;
+                self.inner_data.main_params.validate_student(student)?;
 
                 self.inner_data
                     .main_params
@@ -1427,7 +816,7 @@ impl Data {
                 Ok(())
             }
             AnnotatedStudentOp::Update(id, new_student) => {
-                self.validate_student(new_student)?;
+                self.inner_data.main_params.validate_student(new_student)?;
                 let Some(current_student) =
                     self.inner_data.main_params.students.student_map.get_mut(id)
                 else {
@@ -1466,7 +855,7 @@ impl Data {
     fn apply_period(
         &mut self,
         period_op: &AnnotatedPeriodOp,
-    ) -> std::result::Result<(), PeriodError> {
+    ) -> std::result::Result<(), PeriodError<PeriodId, SubjectId, StudentId, RuleId>> {
         match period_op {
             AnnotatedPeriodOp::ChangeStartDate(new_date) => {
                 self.inner_data.main_params.periods.first_week = new_date.clone();
@@ -1659,7 +1048,10 @@ impl Data {
     fn apply_subject(
         &mut self,
         subject_op: &AnnotatedSubjectOp,
-    ) -> std::result::Result<(), SubjectError> {
+    ) -> std::result::Result<
+        (),
+        SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>,
+    > {
         match subject_op {
             AnnotatedSubjectOp::AddAfter(new_id, after_id, params) => {
                 if self
@@ -1671,7 +1063,7 @@ impl Data {
                 {
                     return Err(SubjectError::SubjectIdAlreadyExists(*new_id));
                 }
-                self.validate_subject(params)?;
+                self.inner_data.main_params.validate_subject(params)?;
 
                 let position = match after_id {
                     Some(id) => {
@@ -1862,7 +1254,7 @@ impl Data {
                 Ok(())
             }
             AnnotatedSubjectOp::Update(id, new_params) => {
-                self.validate_subject(new_params)?;
+                self.inner_data.main_params.validate_subject(new_params)?;
                 let Some(position) = self
                     .inner_data
                     .main_params
@@ -2028,7 +1420,7 @@ impl Data {
     fn apply_teacher(
         &mut self,
         teacher_op: &AnnotatedTeacherOp,
-    ) -> std::result::Result<(), TeacherError> {
+    ) -> std::result::Result<(), TeacherError<TeacherId, SubjectId, SlotId>> {
         match teacher_op {
             AnnotatedTeacherOp::Add(new_id, teacher) => {
                 if self
@@ -2041,7 +1433,7 @@ impl Data {
                 {
                     return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
                 }
-                self.validate_teacher(teacher)?;
+                self.inner_data.main_params.validate_teacher(teacher)?;
 
                 self.inner_data
                     .main_params
@@ -2077,7 +1469,7 @@ impl Data {
                 Ok(())
             }
             AnnotatedTeacherOp::Update(id, new_teacher) => {
-                self.validate_teacher(new_teacher)?;
+                self.inner_data.main_params.validate_teacher(new_teacher)?;
                 let Some(current_teacher) =
                     self.inner_data.main_params.teachers.teacher_map.get_mut(id)
                 else {
@@ -2111,7 +1503,7 @@ impl Data {
     fn apply_assignment(
         &mut self,
         assignment_op: &AnnotatedAssignmentOp,
-    ) -> std::result::Result<(), AssignmentError> {
+    ) -> std::result::Result<(), AssignmentError<PeriodId, SubjectId, StudentId>> {
         match assignment_op {
             AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
                 let Some(period_assignments) = self
@@ -2176,7 +1568,7 @@ impl Data {
     fn apply_week_pattern(
         &mut self,
         week_pattern_op: &AnnotatedWeekPatternOp,
-    ) -> std::result::Result<(), WeekPatternError> {
+    ) -> std::result::Result<(), WeekPatternError<WeekPatternId, SlotId, IncompatId>> {
         match week_pattern_op {
             AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
                 if self
@@ -2261,7 +1653,11 @@ impl Data {
     /// Used internally
     ///
     /// Apply slot operations
-    fn apply_slot(&mut self, slot_op: &AnnotatedSlotOp) -> std::result::Result<(), SlotError> {
+    fn apply_slot(
+        &mut self,
+        slot_op: &AnnotatedSlotOp,
+    ) -> std::result::Result<(), SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>>
+    {
         match slot_op {
             AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot) => {
                 if self
@@ -2273,7 +1669,9 @@ impl Data {
                 {
                     return Err(SlotError::SlotIdAlreadyExists(*new_id));
                 }
-                self.validate_slot(slot, *subject_id)?;
+                self.inner_data
+                    .main_params
+                    .validate_slot(slot, *subject_id)?;
 
                 let position = match after_id {
                     Some(id) => {
@@ -2377,7 +1775,9 @@ impl Data {
                     return Err(SlotError::InvalidSlotId(*slot_id));
                 };
 
-                self.validate_slot(new_slot, subject_id)?;
+                self.inner_data
+                    .main_params
+                    .validate_slot(new_slot, subject_id)?;
 
                 let subject_slots = self
                     .inner_data
@@ -2400,7 +1800,7 @@ impl Data {
     fn apply_incompat(
         &mut self,
         incompat_op: &AnnotatedIncompatOp,
-    ) -> std::result::Result<(), IncompatError> {
+    ) -> std::result::Result<(), IncompatError<IncompatId, SubjectId, WeekPatternId>> {
         match incompat_op {
             AnnotatedIncompatOp::Add(new_id, incompat) => {
                 if self
@@ -2412,7 +1812,7 @@ impl Data {
                 {
                     return Err(IncompatError::IncompatIdAlreadyExists(*new_id));
                 }
-                self.validate_incompat(incompat)?;
+                self.inner_data.main_params.validate_incompat(incompat)?;
 
                 self.inner_data
                     .main_params
@@ -2442,7 +1842,9 @@ impl Data {
                 Ok(())
             }
             AnnotatedIncompatOp::Update(incompat_id, new_incompat) => {
-                self.validate_incompat(new_incompat)?;
+                self.inner_data
+                    .main_params
+                    .validate_incompat(new_incompat)?;
 
                 let Some(incompat) = self
                     .inner_data
@@ -2467,7 +1869,7 @@ impl Data {
     fn apply_group_list(
         &mut self,
         group_list_op: &AnnotatedGroupListOp,
-    ) -> std::result::Result<(), GroupListError> {
+    ) -> std::result::Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
         match group_list_op {
             AnnotatedGroupListOp::Add(new_id, params) => {
                 if self
@@ -2484,7 +1886,9 @@ impl Data {
                     prefilled_groups: group_lists::GroupListPrefilledGroups::default(),
                 };
 
-                self.validate_group_list(&new_group_list)?;
+                self.inner_data
+                    .main_params
+                    .validate_group_list(&new_group_list)?;
 
                 self.inner_data
                     .main_params
@@ -2544,7 +1948,9 @@ impl Data {
                     prefilled_groups: old_group_list.prefilled_groups.clone(),
                 };
 
-                self.validate_group_list(&new_group_list)?;
+                self.inner_data
+                    .main_params
+                    .validate_group_list(&new_group_list)?;
 
                 self.inner_data
                     .main_params
@@ -2569,7 +1975,9 @@ impl Data {
                     prefilled_groups: prefilled_groups.clone(),
                 };
 
-                self.validate_group_list(&new_group_list)?;
+                self.inner_data
+                    .main_params
+                    .validate_group_list(&new_group_list)?;
 
                 self.inner_data
                     .main_params
@@ -2633,7 +2041,10 @@ impl Data {
     /// Used internally
     ///
     /// Apply rule operations
-    fn apply_rule(&mut self, rule_op: &AnnotatedRuleOp) -> std::result::Result<(), RuleError> {
+    fn apply_rule(
+        &mut self,
+        rule_op: &AnnotatedRuleOp,
+    ) -> std::result::Result<(), RuleError<RuleId, PeriodId, SlotId>> {
         match rule_op {
             AnnotatedRuleOp::Add(new_id, rule) => {
                 if self
@@ -2646,7 +2057,7 @@ impl Data {
                     return Err(RuleError::RuleIdAlreadyExists(*new_id));
                 };
 
-                self.validate_rule(rule)?;
+                self.inner_data.main_params.validate_rule(rule)?;
 
                 self.inner_data
                     .main_params
@@ -2670,7 +2081,7 @@ impl Data {
                     return Err(RuleError::InvalidRuleId(*id));
                 }
 
-                self.validate_rule(rule)?;
+                self.inner_data.main_params.validate_rule(rule)?;
 
                 self.inner_data
                     .main_params
@@ -2700,7 +2111,10 @@ impl Data {
     fn build_rev_student(
         &self,
         student_op: &AnnotatedStudentOp,
-    ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
+    ) -> std::result::Result<
+        AnnotatedStudentOp,
+        StudentError<StudentId, PeriodId, SubjectId, GroupListId>,
+    > {
         match student_op {
             AnnotatedStudentOp::Add(student_id, _student) => {
                 if self
@@ -2752,7 +2166,8 @@ impl Data {
     fn build_rev_period(
         &self,
         period_op: &AnnotatedPeriodOp,
-    ) -> std::result::Result<AnnotatedPeriodOp, PeriodError> {
+    ) -> std::result::Result<AnnotatedPeriodOp, PeriodError<PeriodId, SubjectId, StudentId, RuleId>>
+    {
         match period_op {
             AnnotatedPeriodOp::ChangeStartDate(_new_date) => {
                 Ok(AnnotatedPeriodOp::ChangeStartDate(
@@ -2841,7 +2256,10 @@ impl Data {
     fn build_rev_subject(
         &self,
         subject_op: &AnnotatedSubjectOp,
-    ) -> std::result::Result<AnnotatedSubjectOp, SubjectError> {
+    ) -> std::result::Result<
+        AnnotatedSubjectOp,
+        SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>,
+    > {
         match subject_op {
             AnnotatedSubjectOp::AddAfter(new_id, after_id, _params) => {
                 if self
@@ -2934,7 +2352,7 @@ impl Data {
     fn build_rev_teacher(
         &self,
         teacher_op: &AnnotatedTeacherOp,
-    ) -> std::result::Result<AnnotatedTeacherOp, TeacherError> {
+    ) -> std::result::Result<AnnotatedTeacherOp, TeacherError<TeacherId, SubjectId, SlotId>> {
         match teacher_op {
             AnnotatedTeacherOp::Add(new_id, _teacher) => {
                 if self
@@ -2985,7 +2403,8 @@ impl Data {
     fn build_rev_assignment(
         &self,
         assignment_op: &AnnotatedAssignmentOp,
-    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError> {
+    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError<PeriodId, SubjectId, StudentId>>
+    {
         match assignment_op {
             AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, _status) => {
                 let Some(period_assignments) = self
@@ -3050,7 +2469,10 @@ impl Data {
     fn build_rev_week_pattern(
         &self,
         week_pattern_op: &AnnotatedWeekPatternOp,
-    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternError> {
+    ) -> std::result::Result<
+        AnnotatedWeekPatternOp,
+        WeekPatternError<WeekPatternId, SlotId, IncompatId>,
+    > {
         match week_pattern_op {
             AnnotatedWeekPatternOp::Add(new_id, _week_pattern) => {
                 if self
@@ -3111,7 +2533,10 @@ impl Data {
     fn build_rev_slot(
         &self,
         slot_op: &AnnotatedSlotOp,
-    ) -> std::result::Result<AnnotatedSlotOp, SlotError> {
+    ) -> std::result::Result<
+        AnnotatedSlotOp,
+        SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>,
+    > {
         match slot_op {
             AnnotatedSlotOp::AddAfter(new_id, _subject_id, after_id, _slot) => {
                 if self
@@ -3214,7 +2639,8 @@ impl Data {
     fn build_rev_incompat(
         &self,
         incompat_op: &AnnotatedIncompatOp,
-    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
+    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError<IncompatId, SubjectId, WeekPatternId>>
+    {
         match incompat_op {
             AnnotatedIncompatOp::Add(new_id, _incompat) => {
                 Ok(AnnotatedIncompatOp::Remove(new_id.clone()))
@@ -3257,7 +2683,10 @@ impl Data {
     fn build_rev_group_list(
         &self,
         group_list_op: &AnnotatedGroupListOp,
-    ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
+    ) -> std::result::Result<
+        AnnotatedGroupListOp,
+        GroupListError<GroupListId, StudentId, SubjectId, PeriodId>,
+    > {
         match group_list_op {
             AnnotatedGroupListOp::Add(new_id, _params) => {
                 Ok(AnnotatedGroupListOp::Remove(new_id.clone()))
@@ -3340,7 +2769,7 @@ impl Data {
     fn build_rev_rule(
         &self,
         rule_op: &AnnotatedRuleOp,
-    ) -> std::result::Result<AnnotatedRuleOp, RuleError> {
+    ) -> std::result::Result<AnnotatedRuleOp, RuleError<RuleId, PeriodId, SlotId>> {
         match rule_op {
             AnnotatedRuleOp::Add(new_id, _rule) => Ok(AnnotatedRuleOp::Remove(new_id.clone())),
             AnnotatedRuleOp::Remove(rule_id) => {

@@ -558,3 +558,646 @@ pub enum PromoteLogicRuleError {
     #[error("Slot id {0:?} is invalid")]
     InvalidSlotId(u64),
 }
+
+impl<
+        PeriodId: Id,
+        SubjectId: Id,
+        TeacherId: Id,
+        StudentId: Id,
+        WeekPatternId: Id,
+        SlotId: Id,
+        IncompatId: Id,
+        GroupListId: Id,
+        RuleId: Id,
+    >
+    ColloscopeParameters<
+        PeriodId,
+        SubjectId,
+        TeacherId,
+        StudentId,
+        WeekPatternId,
+        SlotId,
+        IncompatId,
+        GroupListId,
+        RuleId,
+    >
+{
+    /// USED INTERNALLY
+    ///
+    /// Returns an iterator on all ids that appear in the colloscope params
+    pub(crate) fn ids(&self) -> impl Iterator<Item = u64> {
+        let student_ids = self.students.student_map.keys().map(|x| x.inner());
+        let period_ids = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .map(|(id, _d)| id.inner());
+        let subject_ids = self
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _d)| id.inner());
+        let teacher_ids = self.teachers.teacher_map.keys().map(|x| x.inner());
+        let week_patterns_ids = self
+            .week_patterns
+            .week_pattern_map
+            .keys()
+            .map(|x| x.inner());
+        let slot_ids = self
+            .slots
+            .subject_map
+            .iter()
+            .flat_map(|(_subject_id, subject_slots)| {
+                subject_slots
+                    .ordered_slots
+                    .iter()
+                    .map(|(id, _d)| id.inner())
+            });
+        let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
+        let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
+        let rule_ids = self.rules.rule_map.keys().map(|x| x.inner());
+
+        let existing_ids = student_ids
+            .chain(period_ids)
+            .chain(subject_ids)
+            .chain(teacher_ids)
+            .chain(week_patterns_ids)
+            .chain(slot_ids)
+            .chain(incompat_ids)
+            .chain(group_list_ids)
+            .chain(rule_ids);
+
+        existing_ids
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a subject is valid
+    fn validate_subject_internal(
+        subject: &subjects::Subject<PeriodId>,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>> {
+        for period_id in &subject.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(SubjectError::InvalidPeriodId(*period_id));
+            }
+        }
+
+        let Some(interrogation_parameters) = &subject.parameters.interrogation_parameters else {
+            return Ok(());
+        };
+
+        if interrogation_parameters.students_per_group.is_empty() {
+            return Err(SubjectError::StudentsPerGroupRangeIsEmpty);
+        }
+        if interrogation_parameters.groups_per_interrogation.is_empty() {
+            return Err(SubjectError::GroupsPerInterrogationRangeIsEmpty);
+        }
+
+        match &interrogation_parameters.periodicity {
+            SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                blocks,
+                minimum_week_separation: _,
+            } => {
+                for block in blocks {
+                    if block.interrogation_count_in_block.is_empty() {
+                        return Err(SubjectError::InterrogationCountRangeIsEmpty);
+                    }
+                }
+            }
+            SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year,
+                minimum_week_separation: _,
+            } => {
+                if interrogation_count_in_year.is_empty() {
+                    return Err(SubjectError::InterrogationCountRangeIsEmpty);
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a subject before commiting a subject op
+    pub(crate) fn validate_subject(
+        &self,
+        subject: &subjects::Subject<PeriodId>,
+    ) -> Result<(), SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>> {
+        let period_ids = self.build_period_ids();
+
+        Self::validate_subject_internal(subject, &period_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in subject data
+    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+        for (_subject_id, subject) in &self.subjects.ordered_subject_list {
+            Self::validate_subject_internal(subject, period_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a subject is valid
+    fn validate_teacher_internal(
+        teacher: &teachers::Teacher<SubjectId>,
+        subjects: &subjects::Subjects<SubjectId, PeriodId>,
+    ) -> Result<(), TeacherError<TeacherId, SubjectId, SlotId>> {
+        for subject_id in &teacher.subjects {
+            let Some(subject) = subjects.find_subject(*subject_id) else {
+                return Err(TeacherError::InvalidSubjectId(*subject_id));
+            };
+            if subject.parameters.interrogation_parameters.is_none() {
+                return Err(TeacherError::SubjectHasNoInterrogation(*subject_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    pub(crate) fn validate_teacher(
+        &self,
+        teacher: &teachers::Teacher<SubjectId>,
+    ) -> Result<(), TeacherError<TeacherId, SubjectId, SlotId>> {
+        Self::validate_teacher_internal(teacher, &self.subjects)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in subject data
+    fn check_teachers_data_consistency(&self) {
+        for (_teacher_id, teacher) in &self.teachers.teacher_map {
+            Self::validate_teacher_internal(teacher, &self.subjects).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a subject is valid
+    fn validate_student_internal(
+        student: &students::Student<PeriodId>,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), StudentError<StudentId, PeriodId, SubjectId, GroupListId>> {
+        for period_id in &student.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(StudentError::InvalidPeriodId(*period_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    pub(crate) fn validate_student(
+        &self,
+        student: &students::Student<PeriodId>,
+    ) -> Result<(), StudentError<StudentId, PeriodId, SubjectId, GroupListId>> {
+        let period_ids = self.build_period_ids();
+
+        Self::validate_student_internal(student, &period_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in subject data
+    fn check_students_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+        for (_student_id, student) in &self.students.student_map {
+            Self::validate_student_internal(student, period_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_assignments_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+        assert!(self.assignments.period_map.len() == period_ids.len());
+        for (period_id, period_assignments) in &self.assignments.period_map {
+            assert!(period_ids.contains(period_id));
+
+            let mut subject_count_for_period = 0usize;
+            for (subject_id, subject) in &self.subjects.ordered_subject_list {
+                if subject.excluded_periods.contains(period_id) {
+                    continue;
+                }
+                subject_count_for_period += 1;
+
+                let subject_assignments = period_assignments
+                    .subject_map
+                    .get(subject_id)
+                    .expect("All relevant subjects for the period should appear in the map");
+
+                for student_id in subject_assignments {
+                    let student = self
+                        .students
+                        .student_map
+                        .get(student_id)
+                        .expect("Every student that appears in the map should be a valid id");
+
+                    if student.excluded_periods.contains(period_id) {
+                        panic!(
+                            "Assigned student {:?} is not present for period {:?}",
+                            student_id, period_id
+                        );
+                    }
+                }
+            }
+            assert!(subject_count_for_period == period_assignments.subject_map.len());
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a slot is valid
+    fn validate_slot_internal(
+        slot: &slots::Slot<TeacherId, WeekPatternId>,
+        subject_id: SubjectId,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+        teachers: &teachers::Teachers<TeacherId, SubjectId>,
+        subjects: &subjects::Subjects<SubjectId, PeriodId>,
+    ) -> Result<(), SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>> {
+        let Some(teacher) = teachers.teacher_map.get(&slot.teacher_id) else {
+            return Err(SlotError::InvalidTeacherId(slot.teacher_id));
+        };
+        if !teacher.subjects.contains(&subject_id) {
+            return Err(SlotError::TeacherDoesNotTeachInSubject(
+                slot.teacher_id,
+                subject_id,
+            ));
+        }
+        if let Some(week_pattern_id) = &slot.week_pattern {
+            if !week_pattern_ids.contains(week_pattern_id) {
+                return Err(SlotError::InvalidWeekPatternId(*week_pattern_id));
+            }
+        }
+        let Some(subject) = subjects.find_subject(subject_id) else {
+            return Err(SlotError::InvalidSubjectId(subject_id));
+        };
+        let Some(params) = &subject.parameters.interrogation_parameters else {
+            return Err(SlotError::SubjectHasNoInterrogation(subject_id));
+        };
+        if collomatique_time::SlotWithDuration::new(
+            slot.start_time.clone(),
+            params.duration.clone(),
+        )
+        .is_none()
+        {
+            return Err(SlotError::SlotOverlapsWithNextDay);
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    pub(crate) fn validate_slot(
+        &self,
+        slot: &slots::Slot<TeacherId, WeekPatternId>,
+        subject_id: SubjectId,
+    ) -> Result<(), SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>> {
+        let week_pattern_ids = self.build_week_pattern_ids();
+
+        Self::validate_slot_internal(
+            slot,
+            subject_id,
+            &week_pattern_ids,
+            &self.teachers,
+            &self.subjects,
+        )
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_slots_data_consistency(&self, week_pattern_ids: &BTreeSet<WeekPatternId>) {
+        let subjects_with_interrogations_count = self
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+            .count();
+        assert_eq!(
+            self.slots.subject_map.len(),
+            subjects_with_interrogations_count
+        );
+
+        for (subject_id, subject_slots) in &self.slots.subject_map {
+            for (_slot_id, slot) in &subject_slots.ordered_slots {
+                Self::validate_slot_internal(
+                    slot,
+                    *subject_id,
+                    week_pattern_ids,
+                    &self.teachers,
+                    &self.subjects,
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that an incompat is valid
+    fn validate_incompat_internal(
+        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+        subject_ids: &BTreeSet<SubjectId>,
+    ) -> Result<(), IncompatError<IncompatId, SubjectId, WeekPatternId>> {
+        if !subject_ids.contains(&incompat.subject_id) {
+            return Err(IncompatError::InvalidSubjectId(incompat.subject_id));
+        }
+        if let Some(week_pattern_id) = &incompat.week_pattern_id {
+            if !week_pattern_ids.contains(week_pattern_id) {
+                return Err(IncompatError::InvalidWeekPatternId(*week_pattern_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    pub(crate) fn validate_incompat(
+        &self,
+        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
+    ) -> Result<(), IncompatError<IncompatId, SubjectId, WeekPatternId>> {
+        let week_pattern_ids = self.build_week_pattern_ids();
+        let subject_ids = self.build_subject_ids();
+
+        Self::validate_incompat_internal(incompat, &week_pattern_ids, &subject_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_incompats_data_consistency(
+        &self,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+        subject_ids: &BTreeSet<SubjectId>,
+    ) {
+        for (_incompat_id, incompat) in &self.incompats.incompat_map {
+            Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that an incompat is valid
+    fn validate_group_list_params_internal(
+        params: &group_lists::GroupListParameters<StudentId>,
+        students: &students::Students<StudentId, PeriodId>,
+    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        if params.group_count.is_empty() {
+            return Err(GroupListError::GroupCountRangeIsEmpty);
+        }
+        if params.students_per_group.is_empty() {
+            return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
+        }
+        for student_id in &params.excluded_students {
+            if !students.student_map.contains_key(student_id) {
+                return Err(GroupListError::InvalidStudentId(*student_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that an incompat is valid
+    fn validate_group_list_prefilled_groups_internal(
+        prefilled_groups: &group_lists::GroupListPrefilledGroups<StudentId>,
+        students: &students::Students<StudentId, PeriodId>,
+        excluded_students: &BTreeSet<StudentId>,
+    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        if !prefilled_groups.check_duplicated_student() {
+            return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
+        }
+        for group in &prefilled_groups.groups {
+            for student_id in &group.students {
+                if !students.student_map.contains_key(student_id) {
+                    return Err(GroupListError::InvalidStudentId(*student_id));
+                }
+                if excluded_students.contains(student_id) {
+                    return Err(GroupListError::StudentBothIncludedAndExcluded(*student_id));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that an incompat is valid
+    fn validate_group_list_internal(
+        group_list: &group_lists::GroupList<StudentId>,
+        students: &students::Students<StudentId, PeriodId>,
+    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        Self::validate_group_list_params_internal(&group_list.params, students)?;
+        Self::validate_group_list_prefilled_groups_internal(
+            &group_list.prefilled_groups,
+            students,
+            &group_list.params.excluded_students,
+        )?;
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a teacher before commiting a teacher op
+    pub(crate) fn validate_group_list(
+        &self,
+        group_list: &group_lists::GroupList<StudentId>,
+    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        Self::validate_group_list_internal(group_list, &self.students)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in assignments data
+    fn check_group_lists_data_consistency(&self) {
+        if self.group_lists.subjects_associations.len() != self.periods.ordered_period_list.len() {
+            panic!("Invalid period count in subject associations for group lists");
+        }
+        for (period_id, subject_map) in &self.group_lists.subjects_associations {
+            for (subject_id, group_list_id) in subject_map {
+                assert!(self.group_lists.group_list_map.contains_key(group_list_id));
+                let subject = self
+                    .subjects
+                    .find_subject(*subject_id)
+                    .expect("Subject ID should be valid in subject/group_list associations");
+
+                assert!(subject.parameters.interrogation_parameters.is_some());
+                assert!(!subject.excluded_periods.contains(period_id));
+            }
+        }
+        for (_group_list_id, group_list) in &self.group_lists.group_list_map {
+            Self::validate_group_list_internal(group_list, &self.students).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a rule is valid
+    fn validate_logic_rule_internal(
+        logic_rule: &rules::LogicRule<SlotId>,
+        slot_ids: &BTreeSet<SlotId>,
+    ) -> Result<(), RuleError<RuleId, PeriodId, SlotId>> {
+        match logic_rule {
+            rules::LogicRule::And(l1, l2) => {
+                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
+                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
+            }
+            rules::LogicRule::Or(l1, l2) => {
+                Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
+                Self::validate_logic_rule_internal(l2.as_ref(), slot_ids)?;
+            }
+            rules::LogicRule::Not(l) => {
+                Self::validate_logic_rule_internal(l.as_ref(), slot_ids)?;
+            }
+            rules::LogicRule::Variable(slot_id) => {
+                if !slot_ids.contains(slot_id) {
+                    return Err(RuleError::InvalidSlotId(*slot_id));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that a rule is valid
+    fn validate_rule_internal(
+        rule: &rules::Rule<PeriodId, SlotId>,
+        period_ids: &BTreeSet<PeriodId>,
+        slot_ids: &BTreeSet<SlotId>,
+    ) -> Result<(), RuleError<RuleId, PeriodId, SlotId>> {
+        for period_id in &rule.excluded_periods {
+            if !period_ids.contains(period_id) {
+                return Err(RuleError::InvalidPeriodId(*period_id));
+            }
+        }
+
+        Self::validate_logic_rule_internal(&rule.desc, slot_ids)?;
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check a rule before commiting a rule op
+    pub(crate) fn validate_rule(
+        &self,
+        rule: &rules::Rule<PeriodId, SlotId>,
+    ) -> Result<(), RuleError<RuleId, PeriodId, SlotId>> {
+        let period_ids = self.build_period_ids();
+        let slot_ids = self.build_slot_ids();
+        Self::validate_rule_internal(rule, &period_ids, &slot_ids)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in rules data
+    fn check_rules_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+        slot_ids: &BTreeSet<SlotId>,
+    ) {
+        for (_rule_id, rule) in &self.rules.rule_map {
+            Self::validate_rule_internal(rule, period_ids, slot_ids).unwrap();
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Build the set of PeriodIds
+    ///
+    /// This is useful to check that references are valid
+    fn build_period_ids(&self) -> BTreeSet<PeriodId> {
+        let mut ids = BTreeSet::new();
+        for (id, _) in &self.periods.ordered_period_list {
+            ids.insert(*id);
+        }
+        ids
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Build the set of WeekPatternId
+    ///
+    /// This is useful to check that references are valid
+    fn build_week_pattern_ids(&self) -> BTreeSet<WeekPatternId> {
+        self.week_patterns
+            .week_pattern_map
+            .keys()
+            .copied()
+            .collect()
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Build the set of SubjectId
+    ///
+    /// This is useful to check that references are valid
+    fn build_subject_ids(&self) -> BTreeSet<SubjectId> {
+        self.subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Build the set of SlotId
+    ///
+    /// This is useful to check that references are valid
+    fn build_slot_ids(&self) -> BTreeSet<SlotId> {
+        self.slots
+            .subject_map
+            .iter()
+            .flat_map(|(_subject_id, subject_slots)| {
+                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
+            })
+            .collect()
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks that there are no duplicate ids in this specific colloscope params
+    fn check_no_duplicate_ids(&self) {
+        let mut ids_so_far = BTreeSet::new();
+
+        for id in self.ids() {
+            assert!(ids_so_far.insert(id));
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks all the invariants of data
+    pub(crate) fn check_invariants(&self) {
+        self.check_no_duplicate_ids();
+
+        let period_ids = self.build_period_ids();
+        let week_pattern_ids = self.build_week_pattern_ids();
+        let subject_ids = self.build_subject_ids();
+        let slot_ids = self.build_slot_ids();
+
+        self.check_subjects_data_consistency(&period_ids);
+        self.check_teachers_data_consistency();
+        self.check_students_data_consistency(&period_ids);
+        self.check_assignments_data_consistency(&period_ids);
+        self.check_slots_data_consistency(&week_pattern_ids);
+        self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
+        self.check_group_lists_data_consistency();
+        self.check_rules_data_consistency(&period_ids, &slot_ids);
+    }
+}
