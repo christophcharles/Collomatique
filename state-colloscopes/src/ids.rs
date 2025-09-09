@@ -187,6 +187,159 @@ impl Id for ColloscopeId {
     }
 }
 
+/// This type represents an ID for a student inside a colloscope
+///
+/// Every student gets a unique ID. IDs then identify students
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeStudentId(u64);
+
+impl Id for ColloscopeStudentId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeStudentId {
+        ColloscopeStudentId(value)
+    }
+}
+
+/// This type represents an ID for a period inside a colloscope
+///
+/// Every period gets a unique ID. IDs then identify periods
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopePeriodId(u64);
+
+impl Id for ColloscopePeriodId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopePeriodId {
+        ColloscopePeriodId(value)
+    }
+}
+
+/// This type represents an ID for a subject inside a colloscope
+///
+/// Every subject gets a unique ID. IDs then identify periods
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeSubjectId(u64);
+
+impl Id for ColloscopeSubjectId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeSubjectId {
+        ColloscopeSubjectId(value)
+    }
+}
+
+/// This type represents an ID for a teacher inside a colloscope
+///
+/// Every teacher gets a unique ID. IDs then identify teachers
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeTeacherId(u64);
+
+impl Id for ColloscopeTeacherId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeTeacherId {
+        ColloscopeTeacherId(value)
+    }
+}
+
+/// This type represents an ID for a week pattern inside a colloscope
+///
+/// Every week pattern gets a unique ID. IDs then identify week patterns
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeWeekPatternId(u64);
+
+impl Id for ColloscopeWeekPatternId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeWeekPatternId {
+        ColloscopeWeekPatternId(value)
+    }
+}
+
+/// This type represents an ID for an interrogation slot inside a colloscope
+///
+/// Every interrogation slot gets a unique ID. IDs then identify slots
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeSlotId(u64);
+
+impl Id for ColloscopeSlotId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeSlotId {
+        ColloscopeSlotId(value)
+    }
+}
+
+/// This type represents an ID for an schedule incompatibility inside a colloscope
+///
+/// Every incompatibility gets a unique ID. IDs then identify incompatibilities
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeIncompatId(u64);
+
+impl Id for ColloscopeIncompatId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeIncompatId {
+        ColloscopeIncompatId(value)
+    }
+}
+
+/// This type represents an ID for a group list inside a colloscope
+///
+/// Every group list gets a unique ID. IDs then identify group lists
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeGroupListId(u64);
+
+impl Id for ColloscopeGroupListId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeGroupListId {
+        ColloscopeGroupListId(value)
+    }
+}
+
+/// This type represents an ID for a rule inside a colloscope
+///
+/// Every rule gets a unique ID. IDs then identify rules
+/// internally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColloscopeRuleId(u64);
+
+impl Id for ColloscopeRuleId {
+    fn inner(&self) -> u64 {
+        self.0
+    }
+
+    unsafe fn new(value: u64) -> ColloscopeRuleId {
+        ColloscopeRuleId(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,
@@ -252,5 +405,50 @@ impl IdIssuer {
     /// Get a new unused ID for a colloscope
     pub fn get_colloscope_id(&mut self) -> ColloscopeId {
         ColloscopeId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a student in a colloscope
+    pub fn get_colloscope_student_id(&mut self) -> ColloscopeStudentId {
+        ColloscopeStudentId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a period in a colloscope
+    pub fn get_colloscope_period_id(&mut self) -> ColloscopePeriodId {
+        ColloscopePeriodId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a subject in a colloscope
+    pub fn get_colloscope_subject_id(&mut self) -> ColloscopeSubjectId {
+        ColloscopeSubjectId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a teacher in a colloscope
+    pub fn get_colloscope_teacher_id(&mut self) -> ColloscopeTeacherId {
+        ColloscopeTeacherId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a week pattern in a colloscope
+    pub fn get_colloscope_week_pattern_id(&mut self) -> ColloscopeWeekPatternId {
+        ColloscopeWeekPatternId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a slot in a colloscope
+    pub fn get_colloscope_slot_id(&mut self) -> ColloscopeSlotId {
+        ColloscopeSlotId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a schedule incompatibility in a colloscope
+    pub fn get_colloscope_incompat_id(&mut self) -> ColloscopeIncompatId {
+        ColloscopeIncompatId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a group list in a colloscope
+    pub fn get_colloscope_group_list_id(&mut self) -> ColloscopeGroupListId {
+        ColloscopeGroupListId(self.helper.get_new_id().inner())
+    }
+
+    /// Get a new unused ID for a rule in a colloscope
+    pub fn get_colloscope_rule_id(&mut self) -> ColloscopeRuleId {
+        ColloscopeRuleId(self.helper.get_new_id().inner())
     }
 }
