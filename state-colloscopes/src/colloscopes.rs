@@ -75,5 +75,6 @@ impl Colloscope {
         self.id_maps
             .validate_new_ids(&self.params)
             .expect("Destination id should always be valid in colloscope id maps");
+        self.params.check_invariants();
     }
 }
