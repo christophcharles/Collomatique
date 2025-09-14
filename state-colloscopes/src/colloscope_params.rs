@@ -1158,10 +1158,17 @@ impl<
     /// USED INTERNALLY
     ///
     /// checks all the invariants in subject data
-    fn check_subjects_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+    fn check_subjects_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), InvariantError> {
         for (_subject_id, subject) in &self.subjects.ordered_subject_list {
-            Self::validate_subject_internal(subject, period_ids).unwrap();
+            if Self::validate_subject_internal(subject, period_ids).is_err() {
+                return Err(InvariantError::InvalidSubject);
+            }
         }
+
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1196,10 +1203,13 @@ impl<
     /// USED INTERNALLY
     ///
     /// checks all the invariants in subject data
-    fn check_teachers_data_consistency(&self) {
+    fn check_teachers_data_consistency(&self) -> Result<(), InvariantError> {
         for (_teacher_id, teacher) in &self.teachers.teacher_map {
-            Self::validate_teacher_internal(teacher, &self.subjects).unwrap();
+            if Self::validate_teacher_internal(teacher, &self.subjects).is_err() {
+                return Err(InvariantError::InvalidTeacher);
+            }
         }
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1233,19 +1243,30 @@ impl<
     /// USED INTERNALLY
     ///
     /// checks all the invariants in subject data
-    fn check_students_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+    fn check_students_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), InvariantError> {
         for (_student_id, student) in &self.students.student_map {
-            Self::validate_student_internal(student, period_ids).unwrap();
+            if Self::validate_student_internal(student, period_ids).is_err() {
+                return Err(InvariantError::InvalidStudent);
+            }
         }
+        Ok(())
     }
 
     /// USED INTERNALLY
     ///
     /// checks all the invariants in assignments data
-    fn check_assignments_data_consistency(&self, period_ids: &BTreeSet<PeriodId>) {
+    fn check_assignments_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), InvariantError> {
         assert!(self.assignments.period_map.len() == period_ids.len());
         for (period_id, period_assignments) in &self.assignments.period_map {
-            assert!(period_ids.contains(period_id));
+            if !period_ids.contains(period_id) {
+                return Err(InvariantError::InvalidPeriodIdInAssignements);
+            }
 
             let mut subject_count_for_period = 0usize;
             for (subject_id, subject) in &self.subjects.ordered_subject_list {
@@ -1257,25 +1278,26 @@ impl<
                 let subject_assignments = period_assignments
                     .subject_map
                     .get(subject_id)
-                    .expect("All relevant subjects for the period should appear in the map");
+                    .ok_or(InvariantError::InvalidSubjectIdInAssignments)?;
 
                 for student_id in subject_assignments {
                     let student = self
                         .students
                         .student_map
                         .get(student_id)
-                        .expect("Every student that appears in the map should be a valid id");
+                        .ok_or(InvariantError::InvalidStudentIdInAssignments)?;
 
                     if student.excluded_periods.contains(period_id) {
-                        panic!(
-                            "Assigned student {:?} is not present for period {:?}",
-                            student_id, period_id
-                        );
+                        return Err(InvariantError::AssignedStudentNotPresentForPeriod);
                     }
                 }
             }
-            assert!(subject_count_for_period == period_assignments.subject_map.len());
+            if subject_count_for_period != period_assignments.subject_map.len() {
+                return Err(InvariantError::WrongSubjectCountInAssignments);
+            }
         }
+
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1341,30 +1363,37 @@ impl<
     /// USED INTERNALLY
     ///
     /// checks all the invariants in assignments data
-    fn check_slots_data_consistency(&self, week_pattern_ids: &BTreeSet<WeekPatternId>) {
+    fn check_slots_data_consistency(
+        &self,
+        week_pattern_ids: &BTreeSet<WeekPatternId>,
+    ) -> Result<(), InvariantError> {
         let subjects_with_interrogations_count = self
             .subjects
             .ordered_subject_list
             .iter()
             .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
             .count();
-        assert_eq!(
-            self.slots.subject_map.len(),
-            subjects_with_interrogations_count
-        );
+        if self.slots.subject_map.len() != subjects_with_interrogations_count {
+            return Err(InvariantError::WrongSubjectCountInSlots);
+        }
 
         for (subject_id, subject_slots) in &self.slots.subject_map {
             for (_slot_id, slot) in &subject_slots.ordered_slots {
-                Self::validate_slot_internal(
+                if Self::validate_slot_internal(
                     slot,
                     *subject_id,
                     week_pattern_ids,
                     &self.teachers,
                     &self.subjects,
                 )
-                .unwrap();
+                .is_err()
+                {
+                    return Err(InvariantError::InvalidSlot);
+                }
             }
         }
+
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1406,10 +1435,14 @@ impl<
         &self,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
         subject_ids: &BTreeSet<SubjectId>,
-    ) {
+    ) -> Result<(), InvariantError> {
         for (_incompat_id, incompat) in &self.incompats.incompat_map {
-            Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).unwrap();
+            if Self::validate_incompat_internal(incompat, week_pattern_ids, subject_ids).is_err() {
+                return Err(InvariantError::InvalidIncompat);
+            }
         }
+
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1486,25 +1519,35 @@ impl<
     /// USED INTERNALLY
     ///
     /// checks all the invariants in assignments data
-    fn check_group_lists_data_consistency(&self) {
+    fn check_group_lists_data_consistency(&self) -> Result<(), InvariantError> {
         if self.group_lists.subjects_associations.len() != self.periods.ordered_period_list.len() {
-            panic!("Invalid period count in subject associations for group lists");
+            return Err(InvariantError::WrongPeriodCountInSubjectAssociationsForGroupLists);
         }
         for (period_id, subject_map) in &self.group_lists.subjects_associations {
             for (subject_id, group_list_id) in subject_map {
-                assert!(self.group_lists.group_list_map.contains_key(group_list_id));
+                if !self.group_lists.group_list_map.contains_key(group_list_id) {
+                    return Err(InvariantError::InvalidGroupListIdInSubjectAssociations);
+                }
                 let subject = self
                     .subjects
                     .find_subject(*subject_id)
-                    .expect("Subject ID should be valid in subject/group_list associations");
+                    .ok_or(InvariantError::InvalidSubjectIdInSubjectAssociations)?;
 
-                assert!(subject.parameters.interrogation_parameters.is_some());
-                assert!(!subject.excluded_periods.contains(period_id));
+                if subject.parameters.interrogation_parameters.is_none() {
+                    return Err(InvariantError::SubjectAssociationForSubjectWithoutInterrogations);
+                };
+                if subject.excluded_periods.contains(period_id) {
+                    return Err(InvariantError::SubjectAssociationForSubjectNotRunningOnPeriod);
+                }
             }
         }
         for (_group_list_id, group_list) in &self.group_lists.group_list_map {
-            Self::validate_group_list_internal(group_list, &self.students).unwrap();
+            if Self::validate_group_list_internal(group_list, &self.students).is_err() {
+                return Err(InvariantError::InvalidGroupList);
+            }
         }
+
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1573,10 +1616,14 @@ impl<
         &self,
         period_ids: &BTreeSet<PeriodId>,
         slot_ids: &BTreeSet<SlotId>,
-    ) {
+    ) -> Result<(), InvariantError> {
         for (_rule_id, rule) in &self.rules.rule_map {
-            Self::validate_rule_internal(rule, period_ids, slot_ids).unwrap();
+            if Self::validate_rule_internal(rule, period_ids, slot_ids).is_err() {
+                return Err(InvariantError::InvalidRule);
+            }
         }
+
+        Ok(())
     }
 
     /// USED INTERNALLY
@@ -1636,32 +1683,40 @@ impl<
     /// USED INTERNALLY
     ///
     /// Checks that there are no duplicate ids in this specific colloscope params
-    fn check_no_duplicate_ids(&self) {
+    fn check_no_duplicate_ids(&self) -> bool {
         let mut ids_so_far = BTreeSet::new();
 
         for id in self.ids() {
-            assert!(ids_so_far.insert(id));
+            if !ids_so_far.insert(id) {
+                return false;
+            }
         }
+
+        true
     }
 
     /// USED INTERNALLY
     ///
     /// Checks all the invariants of data
-    pub(crate) fn check_invariants(&self) {
-        self.check_no_duplicate_ids();
+    pub(crate) fn check_invariants(&self) -> Result<(), InvariantError> {
+        if !self.check_no_duplicate_ids() {
+            return Err(InvariantError::DuplicatedId);
+        }
 
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
         let slot_ids = self.build_slot_ids();
 
-        self.check_subjects_data_consistency(&period_ids);
-        self.check_teachers_data_consistency();
-        self.check_students_data_consistency(&period_ids);
-        self.check_assignments_data_consistency(&period_ids);
-        self.check_slots_data_consistency(&week_pattern_ids);
-        self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids);
-        self.check_group_lists_data_consistency();
-        self.check_rules_data_consistency(&period_ids, &slot_ids);
+        self.check_subjects_data_consistency(&period_ids)?;
+        self.check_teachers_data_consistency()?;
+        self.check_students_data_consistency(&period_ids)?;
+        self.check_assignments_data_consistency(&period_ids)?;
+        self.check_slots_data_consistency(&week_pattern_ids)?;
+        self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids)?;
+        self.check_group_lists_data_consistency()?;
+        self.check_rules_data_consistency(&period_ids, &slot_ids)?;
+
+        Ok(())
     }
 }

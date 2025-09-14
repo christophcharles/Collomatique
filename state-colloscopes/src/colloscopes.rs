@@ -68,13 +68,11 @@ impl Colloscope {
             GroupListId,
             RuleId,
         >,
-    ) {
-        self.id_maps
-            .validate_source_ids(main_params)
-            .expect("Source ids in colloscope should be valid");
-        self.id_maps
-            .validate_new_ids(&self.params)
-            .expect("Destination id should always be valid in colloscope id maps");
-        self.params.check_invariants();
+    ) -> Result<(), super::ColloscopeError> {
+        self.id_maps.validate_source_ids(main_params)?;
+        self.id_maps.validate_new_ids(&self.params)?;
+        self.params.check_invariants()?;
+
+        Ok(())
     }
 }

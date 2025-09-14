@@ -586,6 +586,9 @@ pub enum ColloscopeError {
     /// Rule colloscope id is invalid
     #[error("invalid colloscope rule id ({0:?})")]
     InvalidColloscopeRuleId(ColloscopeRuleId),
+
+    #[error(transparent)]
+    InvariantErrorInParameters(#[from] InvariantError),
 }
 
 /// Errors for colloscopes modification
@@ -707,6 +710,51 @@ impl From<ColloscopeId> for NewId {
     }
 }
 
+/// Errors for students operations
+///
+/// These errors can be returned when trying to modify [Data] with a student op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum InvariantError {
+    #[error("duplicated id")]
+    DuplicatedId,
+    #[error("invalid subject")]
+    InvalidSubject,
+    #[error("invalid teacher")]
+    InvalidTeacher,
+    #[error("invalid student")]
+    InvalidStudent,
+    #[error("invalid period id in assignments")]
+    InvalidPeriodIdInAssignements,
+    #[error("invalid subject id in assignments")]
+    InvalidSubjectIdInAssignments,
+    #[error("invalid student id in assignments")]
+    InvalidStudentIdInAssignments,
+    #[error("student assigned but not present")]
+    AssignedStudentNotPresentForPeriod,
+    #[error("wrong number of subjects in a period for assignments")]
+    WrongSubjectCountInAssignments,
+    #[error("wrong number of subjects in slots")]
+    WrongSubjectCountInSlots,
+    #[error("invalid slot")]
+    InvalidSlot,
+    #[error("invalid incompat")]
+    InvalidIncompat,
+    #[error("invalid group list")]
+    InvalidGroupList,
+    #[error("wrong number of periods in subject associations for group lists")]
+    WrongPeriodCountInSubjectAssociationsForGroupLists,
+    #[error("invalid group list id in subject associations")]
+    InvalidGroupListIdInSubjectAssociations,
+    #[error("invalid subject id in subject associations")]
+    InvalidSubjectIdInSubjectAssociations,
+    #[error("subject association given but subject does not have interrogations")]
+    SubjectAssociationForSubjectWithoutInterrogations,
+    #[error("subject association given but subject does not run on given period")]
+    SubjectAssociationForSubjectNotRunningOnPeriod,
+    #[error("invalid rule")]
+    InvalidRule,
+}
+
 impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
@@ -809,9 +857,14 @@ impl Data {
     fn check_invariants(&self) {
         self.check_no_duplicate_ids();
 
-        self.inner_data.main_params.check_invariants();
+        self.inner_data
+            .main_params
+            .check_invariants()
+            .expect("Invariant error in main params");
         for (_colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-            colloscope.check_invariants(&self.inner_data.main_params);
+            colloscope
+                .check_invariants(&self.inner_data.main_params)
+                .expect("Invariant error in colloscope");
         }
     }
 }
@@ -2274,10 +2327,7 @@ impl Data {
                     return Err(ColloscopeError::ColloscopeIdAlreadyExists(*new_id));
                 };
 
-                colloscope
-                    .id_maps
-                    .validate_source_ids(&self.inner_data.main_params)?;
-                colloscope.id_maps.validate_new_ids(&colloscope.params)?;
+                colloscope.check_invariants(&self.inner_data.main_params)?;
 
                 self.inner_data
                     .colloscopes
