@@ -6,6 +6,8 @@
 
 use assignments::Assignments;
 use collomatique_state::{tools, InMemoryData, Operation};
+use colloscope_params::ColloscopeIdMaps;
+use colloscope_params::ColloscopeParameters;
 use group_lists::GroupLists;
 use incompats::Incompats;
 use ops::AnnotatedSettingsOp;
@@ -859,6 +861,35 @@ impl Data {
     /// you can inspect the current data via this function
     pub fn get_inner_data(&self) -> &InnerData {
         &self.inner_data
+    }
+
+    pub fn copy_main_params(
+        &mut self,
+    ) -> (
+        ColloscopeParameters<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+        ColloscopeIdMaps<
+            PeriodId,
+            SubjectId,
+            TeacherId,
+            StudentId,
+            WeekPatternId,
+            SlotId,
+            IncompatId,
+            GroupListId,
+            RuleId,
+        >,
+    ) {
+        self.inner_data.main_params.duplicate(&mut self.id_issuer)
     }
 
     /// Used internally
