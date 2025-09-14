@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::Id;
+use crate::ids::{ColloscopeSubjectId, ColloscopeTeacherId, Id};
 
 /// Description of the teachers
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,6 +56,23 @@ impl<SubjectId: Id> Teacher<SubjectId> {
                 .collect(),
         }
     }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
+    ) -> Option<Teacher<ColloscopeSubjectId>> {
+        let mut subjects = BTreeSet::new();
+
+        for subject_id in &self.subjects {
+            let new_id = subjects_map.get(subject_id)?;
+            subjects.insert(*new_id);
+        }
+
+        Some(Teacher {
+            desc: self.desc.clone(),
+            subjects,
+        })
+    }
 }
 
 impl<TeacherId: Id, SubjectId: Id> Teachers<TeacherId, SubjectId> {
@@ -75,6 +92,22 @@ impl<TeacherId: Id, SubjectId: Id> Teachers<TeacherId, SubjectId> {
                 })
                 .collect(),
         }
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        teachers_map: &BTreeMap<TeacherId, ColloscopeTeacherId>,
+        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
+    ) -> Option<Teachers<ColloscopeTeacherId, ColloscopeSubjectId>> {
+        let mut teacher_map = BTreeMap::new();
+
+        for (teacher_id, teacher) in &self.teacher_map {
+            let new_id = teachers_map.get(teacher_id)?;
+            let new_teacher = teacher.duplicate_with_id_maps(subjects_map)?;
+            teacher_map.insert(*new_id, new_teacher);
+        }
+
+        Some(Teachers { teacher_map })
     }
 }
 

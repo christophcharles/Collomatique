@@ -2,6 +2,12 @@
 //!
 //! This module defines the relevant types to describes the full set of parameters for colloscopes
 
+use crate::ids::{
+    ColloscopeGroupListId, ColloscopeIncompatId, ColloscopePeriodId, ColloscopeRuleId,
+    ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId, ColloscopeTeacherId,
+    ColloscopeWeekPatternId,
+};
+
 use super::*;
 
 /// Full set of parameters to describe the constraints for colloscopes
@@ -35,6 +41,282 @@ pub struct ColloscopeParameters<
     pub group_lists: group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId>,
     pub rules: rules::Rules<RuleId, PeriodId, SlotId>,
     pub settings: settings::GeneralSettings,
+}
+
+/// Maps between global ids and colloscope specific ids
+///
+/// Params for a specific colloscope are stored when the colloscope is produced (even if empty).
+/// To avoid issues with ids, the parameter set is given new ids (with new types to avoid some programming errors).
+/// But it is useful to know to what ids the new ids correspond. This stores the map between the old ids and the new ones.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColloscopeIdMaps<
+    PeriodId: Id,
+    SubjectId: Id,
+    TeacherId: Id,
+    StudentId: Id,
+    WeekPatternId: Id,
+    SlotId: Id,
+    IncompatId: Id,
+    GroupListId: Id,
+    RuleId: Id,
+> {
+    pub periods: BTreeMap<PeriodId, ColloscopePeriodId>,
+    pub subjects: BTreeMap<SubjectId, ColloscopeSubjectId>,
+    pub teachers: BTreeMap<TeacherId, ColloscopeTeacherId>,
+    pub students: BTreeMap<StudentId, ColloscopeStudentId>,
+    pub week_patterns: BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
+    pub slots: BTreeMap<SlotId, ColloscopeSlotId>,
+    pub incompats: BTreeMap<IncompatId, ColloscopeIncompatId>,
+    pub group_lists: BTreeMap<GroupListId, ColloscopeGroupListId>,
+    pub rules: BTreeMap<RuleId, ColloscopeRuleId>,
+}
+
+impl<
+        PeriodId: Id,
+        SubjectId: Id,
+        TeacherId: Id,
+        StudentId: Id,
+        WeekPatternId: Id,
+        SlotId: Id,
+        IncompatId: Id,
+        GroupListId: Id,
+        RuleId: Id,
+    >
+    ColloscopeIdMaps<
+        PeriodId,
+        SubjectId,
+        TeacherId,
+        StudentId,
+        WeekPatternId,
+        SlotId,
+        IncompatId,
+        GroupListId,
+        RuleId,
+    >
+{
+    /// generate a complete set of new ids for some parameters
+    /// and returns the complete map for it
+    pub(crate) fn generate_for(
+        params: &ColloscopeParameters<
+            PeriodId,
+            SubjectId,
+            TeacherId,
+            StudentId,
+            WeekPatternId,
+            SlotId,
+            IncompatId,
+            GroupListId,
+            RuleId,
+        >,
+        id_issuer: &mut ids::IdIssuer,
+    ) -> Self {
+        ColloscopeIdMaps {
+            periods: params
+                .periods
+                .ordered_period_list
+                .iter()
+                .map(|(period_id, _)| (*period_id, id_issuer.get_colloscope_period_id()))
+                .collect(),
+            subjects: params
+                .subjects
+                .ordered_subject_list
+                .iter()
+                .map(|(subject_id, _)| (*subject_id, id_issuer.get_colloscope_subject_id()))
+                .collect(),
+            teachers: params
+                .teachers
+                .teacher_map
+                .iter()
+                .map(|(teacher_id, _)| (*teacher_id, id_issuer.get_colloscope_teacher_id()))
+                .collect(),
+            students: params
+                .students
+                .student_map
+                .iter()
+                .map(|(student_id, _)| (*student_id, id_issuer.get_colloscope_student_id()))
+                .collect(),
+            week_patterns: params
+                .week_patterns
+                .week_pattern_map
+                .iter()
+                .map(|(week_pattern_id, _)| {
+                    (*week_pattern_id, id_issuer.get_colloscope_week_pattern_id())
+                })
+                .collect(),
+            slots: params
+                .slots
+                .subject_map
+                .iter()
+                .flat_map(|(_subject_id, subject_slots)| {
+                    subject_slots
+                        .ordered_slots
+                        .iter()
+                        .map(|(slot_id, _)| *slot_id)
+                })
+                .map(|id| (id, id_issuer.get_colloscope_slot_id()))
+                .collect(),
+            incompats: params
+                .incompats
+                .incompat_map
+                .iter()
+                .map(|(incompat_id, _)| (*incompat_id, id_issuer.get_colloscope_incompat_id()))
+                .collect(),
+            group_lists: params
+                .group_lists
+                .group_list_map
+                .iter()
+                .map(|(group_list_id, _)| {
+                    (*group_list_id, id_issuer.get_colloscope_group_list_id())
+                })
+                .collect(),
+            rules: params
+                .rules
+                .rule_map
+                .iter()
+                .map(|(rule_id, _)| (*rule_id, id_issuer.get_colloscope_rule_id()))
+                .collect(),
+        }
+    }
+}
+
+impl<
+        PeriodId: Id,
+        SubjectId: Id,
+        TeacherId: Id,
+        StudentId: Id,
+        WeekPatternId: Id,
+        SlotId: Id,
+        IncompatId: Id,
+        GroupListId: Id,
+        RuleId: Id,
+    >
+    ColloscopeParameters<
+        PeriodId,
+        SubjectId,
+        TeacherId,
+        StudentId,
+        WeekPatternId,
+        SlotId,
+        IncompatId,
+        GroupListId,
+        RuleId,
+    >
+{
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        id_maps: &ColloscopeIdMaps<
+            PeriodId,
+            SubjectId,
+            TeacherId,
+            StudentId,
+            WeekPatternId,
+            SlotId,
+            IncompatId,
+            GroupListId,
+            RuleId,
+        >,
+    ) -> Option<
+        ColloscopeParameters<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    > {
+        let periods = self.periods.duplicate_with_id_maps(&id_maps.periods)?;
+        let subjects = self
+            .subjects
+            .duplicate_with_id_maps(&id_maps.periods, &id_maps.subjects)?;
+        let teachers = self
+            .teachers
+            .duplicate_with_id_maps(&id_maps.teachers, &id_maps.subjects)?;
+        let students = self
+            .students
+            .duplicate_with_id_maps(&id_maps.students, &id_maps.periods)?;
+        let assignments = self.assignments.duplicate_with_id_maps(
+            &id_maps.periods,
+            &id_maps.subjects,
+            &id_maps.students,
+        )?;
+        let week_patterns = self
+            .week_patterns
+            .duplicate_with_id_maps(&id_maps.week_patterns)?;
+        let slots = self.slots.duplicate_with_id_maps(
+            &id_maps.subjects,
+            &id_maps.slots,
+            &id_maps.teachers,
+            &id_maps.week_patterns,
+        )?;
+        let incompats = self.incompats.duplicate_with_id_maps(
+            &id_maps.incompats,
+            &id_maps.subjects,
+            &id_maps.week_patterns,
+        )?;
+        let group_lists = self.group_lists.duplicate_with_id_maps(
+            &id_maps.group_lists,
+            &id_maps.periods,
+            &id_maps.subjects,
+            &id_maps.students,
+        )?;
+        let rules =
+            self.rules
+                .duplicate_with_id_maps(&id_maps.rules, &id_maps.periods, &id_maps.slots)?;
+        let settings = self.settings.clone();
+
+        Some(ColloscopeParameters {
+            periods,
+            subjects,
+            teachers,
+            students,
+            assignments,
+            week_patterns,
+            slots,
+            incompats,
+            group_lists,
+            rules,
+            settings,
+        })
+    }
+
+    pub(crate) fn duplicate(
+        &self,
+        id_issuer: &mut ids::IdIssuer,
+    ) -> (
+        ColloscopeParameters<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+        ColloscopeIdMaps<
+            PeriodId,
+            SubjectId,
+            TeacherId,
+            StudentId,
+            WeekPatternId,
+            SlotId,
+            IncompatId,
+            GroupListId,
+            RuleId,
+        >,
+    ) {
+        let id_maps = ColloscopeIdMaps::generate_for(self, id_issuer);
+        let new_params = self
+            .duplicate_with_id_maps(&id_maps)
+            .expect("The id maps should be complete for this specific parameters set");
+
+        (new_params, id_maps)
+    }
 }
 
 impl<

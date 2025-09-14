@@ -4,7 +4,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::Id;
+use crate::ids::{
+    ColloscopeSlotId, ColloscopeSubjectId, ColloscopeTeacherId, ColloscopeWeekPatternId, Id,
+};
 
 /// Description of the interrogation slots
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,6 +83,25 @@ impl<TeacherId: Id, WeekPatternId: Id> Slot<TeacherId, WeekPatternId> {
             cost: external_data.cost,
         }
     }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        teachers_map: &BTreeMap<TeacherId, ColloscopeTeacherId>,
+        week_patterns_map: &BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
+    ) -> Option<Slot<ColloscopeTeacherId, ColloscopeWeekPatternId>> {
+        let week_pattern = match &self.week_pattern {
+            Some(id) => Some(*week_patterns_map.get(id)?),
+            None => None,
+        };
+
+        Some(Slot {
+            teacher_id: *teachers_map.get(&self.teacher_id)?,
+            start_time: self.start_time.clone(),
+            extra_info: self.extra_info.clone(),
+            week_pattern,
+            cost: self.cost,
+        })
+    }
 }
 
 impl<SlotId: Id, TeacherId: Id, WeekPatternId: Id> SubjectSlots<SlotId, TeacherId, WeekPatternId> {
@@ -121,6 +142,23 @@ impl<SlotId: Id, TeacherId: Id, WeekPatternId: Id> SubjectSlots<SlotId, TeacherI
                 .expect("Position should be valid at this point")
                 .1,
         )
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        slots_map: &BTreeMap<SlotId, ColloscopeSlotId>,
+        teachers_map: &BTreeMap<TeacherId, ColloscopeTeacherId>,
+        week_patterns_map: &BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
+    ) -> Option<SubjectSlots<ColloscopeSlotId, ColloscopeTeacherId, ColloscopeWeekPatternId>> {
+        let mut ordered_slots = vec![];
+
+        for (slot_id, slot) in &self.ordered_slots {
+            let new_id = slots_map.get(slot_id)?;
+            let new_slot = slot.duplicate_with_id_maps(teachers_map, week_patterns_map)?;
+            ordered_slots.push((*new_id, new_slot));
+        }
+
+        Some(SubjectSlots { ordered_slots })
     }
 }
 
@@ -167,6 +205,27 @@ impl<SubjectId: Id, SlotId: Id, TeacherId: Id, WeekPatternId: Id>
                 .expect("Position should be valid at this point")
                 .1,
         )
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
+        slots_map: &BTreeMap<SlotId, ColloscopeSlotId>,
+        teachers_map: &BTreeMap<TeacherId, ColloscopeTeacherId>,
+        week_patterns_map: &BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
+    ) -> Option<
+        Slots<ColloscopeSubjectId, ColloscopeSlotId, ColloscopeTeacherId, ColloscopeWeekPatternId>,
+    > {
+        let mut subject_map = BTreeMap::new();
+
+        for (subject_id, subject_slots) in &self.subject_map {
+            let new_id = subjects_map.get(subject_id)?;
+            let new_subject_slots =
+                subject_slots.duplicate_with_id_maps(slots_map, teachers_map, week_patterns_map)?;
+            subject_map.insert(*new_id, new_subject_slots);
+        }
+
+        Some(Slots { subject_map })
     }
 }
 

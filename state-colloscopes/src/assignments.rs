@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::Id;
+use crate::ids::{ColloscopePeriodId, ColloscopeStudentId, ColloscopeSubjectId, Id};
 
 /// Description of the assignments
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,6 +67,28 @@ impl<SubjectId: Id, StudentId: Id> PeriodAssignments<SubjectId, StudentId> {
                 .collect(),
         }
     }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
+        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
+    ) -> Option<PeriodAssignments<ColloscopeSubjectId, ColloscopeStudentId>> {
+        let mut subject_map = BTreeMap::new();
+
+        for (subject_id, student_set) in &self.subject_map {
+            let new_subject_id = subjects_map.get(subject_id)?;
+            let mut new_student_set = BTreeSet::new();
+
+            for student_id in student_set {
+                let new_student_id = students_map.get(student_id)?;
+                new_student_set.insert(*new_student_id);
+            }
+
+            subject_map.insert(*new_subject_id, new_student_set);
+        }
+
+        Some(PeriodAssignments { subject_map })
+    }
 }
 
 impl<PeriodId: Id, SubjectId: Id, StudentId: Id> Assignments<PeriodId, SubjectId, StudentId> {
@@ -86,6 +108,25 @@ impl<PeriodId: Id, SubjectId: Id, StudentId: Id> Assignments<PeriodId, SubjectId
                 })
                 .collect(),
         }
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
+        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
+        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
+    ) -> Option<Assignments<ColloscopePeriodId, ColloscopeSubjectId, ColloscopeStudentId>> {
+        let mut period_map = BTreeMap::new();
+
+        for (period_id, period_assignments) in &self.period_map {
+            let new_id = periods_map.get(period_id)?;
+            let new_period_assignments =
+                period_assignments.duplicate_with_id_maps(subjects_map, students_map)?;
+
+            period_map.insert(*new_id, new_period_assignments);
+        }
+
+        Some(Assignments { period_map })
     }
 }
 

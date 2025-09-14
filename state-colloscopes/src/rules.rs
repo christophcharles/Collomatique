@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ids::Id;
+use crate::ids::{ColloscopePeriodId, ColloscopeRuleId, ColloscopeSlotId, Id};
 
 /// Description of the rules
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -54,6 +54,32 @@ impl<SlotId: Id> LogicRule<SlotId> {
             LogicRule::Variable(id) => *id == slot_id,
         }
     }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        slots_map: &BTreeMap<SlotId, ColloscopeSlotId>,
+    ) -> Option<LogicRule<ColloscopeSlotId>> {
+        Some(match self {
+            LogicRule::And(l1, l2) => {
+                let new_l1 = l1.duplicate_with_id_maps(slots_map)?;
+                let new_l2 = l2.duplicate_with_id_maps(slots_map)?;
+                LogicRule::And(Box::new(new_l1), Box::new(new_l2))
+            }
+            LogicRule::Or(l1, l2) => {
+                let new_l1 = l1.duplicate_with_id_maps(slots_map)?;
+                let new_l2 = l2.duplicate_with_id_maps(slots_map)?;
+                LogicRule::Or(Box::new(new_l1), Box::new(new_l2))
+            }
+            LogicRule::Not(l) => {
+                let new_l = l.duplicate_with_id_maps(slots_map)?;
+                LogicRule::Not(Box::new(new_l))
+            }
+            LogicRule::Variable(slot_id) => {
+                let new_id = slots_map.get(slot_id)?;
+                LogicRule::Variable(*new_id)
+            }
+        })
+    }
 }
 
 impl<PeriodId: Id, SlotId: Id> Rule<PeriodId, SlotId> {
@@ -71,6 +97,25 @@ impl<PeriodId: Id, SlotId: Id> Rule<PeriodId, SlotId> {
                 .collect(),
             desc: unsafe { LogicRule::from_external_data(external_data.desc) },
         }
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
+        slots_map: &BTreeMap<SlotId, ColloscopeSlotId>,
+    ) -> Option<Rule<ColloscopePeriodId, ColloscopeSlotId>> {
+        let mut excluded_periods = BTreeSet::new();
+
+        for period_id in &self.excluded_periods {
+            let new_id = periods_map.get(period_id)?;
+            excluded_periods.insert(*new_id);
+        }
+
+        Some(Rule {
+            name: self.name.clone(),
+            excluded_periods,
+            desc: self.desc.duplicate_with_id_maps(slots_map)?,
+        })
     }
 }
 
@@ -91,6 +136,23 @@ impl<RuleId: Id, PeriodId: Id, SlotId: Id> Rules<RuleId, PeriodId, SlotId> {
                 })
                 .collect(),
         }
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        rules_map: &BTreeMap<RuleId, ColloscopeRuleId>,
+        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
+        slots_map: &BTreeMap<SlotId, ColloscopeSlotId>,
+    ) -> Option<Rules<ColloscopeRuleId, ColloscopePeriodId, ColloscopeSlotId>> {
+        let mut rule_map = BTreeMap::new();
+
+        for (rule_id, rule) in &self.rule_map {
+            let new_id = rules_map.get(rule_id)?;
+            let new_rule = rule.duplicate_with_id_maps(periods_map, slots_map)?;
+            rule_map.insert(*new_id, new_rule);
+        }
+
+        Some(Rules { rule_map })
     }
 }
 

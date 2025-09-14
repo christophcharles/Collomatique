@@ -2,7 +2,9 @@
 //!
 //! This module defines the relevant types to describes the periods
 
-use crate::ids::Id;
+use std::collections::BTreeMap;
+
+use crate::ids::{ColloscopePeriodId, Id};
 
 /// Description of the periods
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,6 +64,23 @@ impl<PeriodId: Id> Periods<PeriodId> {
         let pos = self.find_period_position(id)?;
 
         Some(&self.ordered_period_list[pos].1)
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
+    ) -> Option<Periods<ColloscopePeriodId>> {
+        let mut ordered_period_list = vec![];
+
+        for (period_id, period) in &self.ordered_period_list {
+            let new_id = periods_map.get(period_id)?;
+            ordered_period_list.push((*new_id, period.clone()));
+        }
+
+        Some(Periods {
+            first_week: self.first_week.clone(),
+            ordered_period_list,
+        })
     }
 }
 

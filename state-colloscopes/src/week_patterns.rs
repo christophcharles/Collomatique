@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ids::Id;
+use crate::ids::{ColloscopeWeekPatternId, Id};
 
 /// Description of the week patterns
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,5 +66,19 @@ impl<WeekPatternId: Id> WeekPatterns<WeekPatternId> {
                 .map(|(id, week_pattern)| (unsafe { WeekPatternId::new(id) }, week_pattern))
                 .collect(),
         }
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        week_patterns_map: &BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
+    ) -> Option<WeekPatterns<ColloscopeWeekPatternId>> {
+        let mut week_pattern_map = BTreeMap::new();
+
+        for (week_pattern_id, week_pattern) in &self.week_pattern_map {
+            let new_id = week_patterns_map.get(week_pattern_id)?;
+            week_pattern_map.insert(*new_id, week_pattern.clone());
+        }
+
+        Some(WeekPatterns { week_pattern_map })
     }
 }

@@ -2,9 +2,12 @@
 //!
 //! This module defines the relevant types to describes the subjects
 
-use std::{collections::BTreeSet, num::NonZeroU32};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    num::NonZeroU32,
+};
 
-use crate::ids::Id;
+use crate::ids::{ColloscopePeriodId, ColloscopeSubjectId, Id};
 
 /// Description of the subjects
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -261,6 +264,23 @@ impl<PeriodId: Id> Subject<PeriodId> {
                 .collect(),
         }
     }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
+    ) -> Option<Subject<ColloscopePeriodId>> {
+        let mut excluded_periods = BTreeSet::new();
+
+        for period_id in &self.excluded_periods {
+            let new_id = periods_map.get(period_id)?;
+            excluded_periods.insert(*new_id);
+        }
+
+        Some(Subject {
+            parameters: self.parameters.clone(),
+            excluded_periods,
+        })
+    }
 }
 
 impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
@@ -294,6 +314,24 @@ impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
         let pos = self.find_subject_position(id)?;
 
         Some(&self.ordered_subject_list[pos].1)
+    }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
+        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
+    ) -> Option<Subjects<ColloscopeSubjectId, ColloscopePeriodId>> {
+        let mut ordered_subject_list = vec![];
+
+        for (subject_id, subject) in &self.ordered_subject_list {
+            let new_id = subjects_map.get(subject_id)?;
+            let new_subject = subject.duplicate_with_id_maps(periods_map)?;
+            ordered_subject_list.push((*new_id, new_subject));
+        }
+
+        Some(Subjects {
+            ordered_subject_list,
+        })
     }
 }
 
