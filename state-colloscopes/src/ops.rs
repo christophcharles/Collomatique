@@ -9,15 +9,6 @@
 //! [AnnotatedOp] is the corresponding annotated type. See [collomatique_state::history]
 //! for a full discussion of annotation.
 
-use crate::{
-    colloscope_params::{ColloscopeIdMaps, ColloscopeParameters},
-    ids::{
-        ColloscopeGroupListId, ColloscopeIncompatId, ColloscopePeriodId, ColloscopeRuleId,
-        ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId, ColloscopeTeacherId,
-        ColloscopeWeekPatternId,
-    },
-};
-
 use super::*;
 
 /// Operation enumeration
