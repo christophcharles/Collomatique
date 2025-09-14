@@ -9,6 +9,15 @@
 //! [AnnotatedOp] is the corresponding annotated type. See [collomatique_state::history]
 //! for a full discussion of annotation.
 
+use crate::{
+    colloscope_params::{ColloscopeIdMaps, ColloscopeParameters},
+    ids::{
+        ColloscopeGroupListId, ColloscopeIncompatId, ColloscopePeriodId, ColloscopeRuleId,
+        ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId, ColloscopeTeacherId,
+        ColloscopeWeekPatternId,
+    },
+};
+
 use super::*;
 
 /// Operation enumeration
@@ -221,7 +230,7 @@ pub enum SettingsOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColloscopeOp {
     /// Add a colloscope
-    AddEmpty(String),
+    Add(colloscopes::Colloscope),
     /// Remove an existing colloscope
     Remove(ColloscopeId),
 }
@@ -559,7 +568,7 @@ pub enum AnnotatedSettingsOp {
 pub enum AnnotatedColloscopeOp {
     /// Add an empty colloscope
     /// First parameter is the colloscope id for the new colloscope
-    AddEmpty(ColloscopeId, String),
+    Add(ColloscopeId, colloscopes::Colloscope),
     /// Remove an existing colloscope
     Remove(ColloscopeId),
 }
@@ -870,9 +879,9 @@ impl AnnotatedColloscopeOp {
         id_issuer: &mut IdIssuer,
     ) -> (AnnotatedColloscopeOp, Option<ColloscopeId>) {
         match colloscope_op {
-            ColloscopeOp::AddEmpty(name) => {
+            ColloscopeOp::Add(colloscope) => {
                 let new_id = id_issuer.get_colloscope_id();
-                (AnnotatedColloscopeOp::AddEmpty(new_id, name), Some(new_id))
+                (AnnotatedColloscopeOp::Add(new_id, colloscope), Some(new_id))
             }
             ColloscopeOp::Remove(colloscope_id) => {
                 (AnnotatedColloscopeOp::Remove(colloscope_id), None)

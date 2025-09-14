@@ -179,6 +179,188 @@ impl<
     }
 }
 
+impl
+    ColloscopeIdMaps<
+        PeriodId,
+        SubjectId,
+        TeacherId,
+        StudentId,
+        WeekPatternId,
+        SlotId,
+        IncompatId,
+        GroupListId,
+        RuleId,
+    >
+{
+    /// Validate original ids against a parameter set
+    ///
+    /// This functions checks that all the original ids do indeed appear
+    pub(crate) fn validate_source_ids(
+        &self,
+        params: &ColloscopeParameters<
+            PeriodId,
+            SubjectId,
+            TeacherId,
+            StudentId,
+            WeekPatternId,
+            SlotId,
+            IncompatId,
+            GroupListId,
+            RuleId,
+        >,
+    ) -> Result<(), ColloscopeError> {
+        for (period_id, _) in &self.periods {
+            if params.periods.find_period(*period_id).is_none() {
+                return Err(ColloscopeError::InvalidPeriodId(*period_id));
+            }
+        }
+
+        for (subject_id, _) in &self.subjects {
+            if params.subjects.find_subject(*subject_id).is_none() {
+                return Err(ColloscopeError::InvalidSubjectId(*subject_id));
+            }
+        }
+
+        for (teacher_id, _) in &self.teachers {
+            if !params.teachers.teacher_map.contains_key(teacher_id) {
+                return Err(ColloscopeError::InvalidTeacherId(*teacher_id));
+            }
+        }
+
+        for (student_id, _) in &self.students {
+            if !params.students.student_map.contains_key(student_id) {
+                return Err(ColloscopeError::InvalidStudentId(*student_id));
+            }
+        }
+
+        for (week_pattern_id, _) in &self.week_patterns {
+            if !params
+                .week_patterns
+                .week_pattern_map
+                .contains_key(week_pattern_id)
+            {
+                return Err(ColloscopeError::InvalidWeekPatternId(*week_pattern_id));
+            }
+        }
+
+        for (slot_id, _) in &self.slots {
+            if params.slots.find_slot(*slot_id).is_none() {
+                return Err(ColloscopeError::InvalidSlotId(*slot_id));
+            }
+        }
+
+        for (incompat_id, _) in &self.incompats {
+            if !params.incompats.incompat_map.contains_key(incompat_id) {
+                return Err(ColloscopeError::InvalidIncompatId(*incompat_id));
+            }
+        }
+
+        for (group_list_id, _) in &self.group_lists {
+            if !params
+                .group_lists
+                .group_list_map
+                .contains_key(group_list_id)
+            {
+                return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+            }
+        }
+
+        for (rule_id, _) in &self.rules {
+            if !params.rules.rule_map.contains_key(rule_id) {
+                return Err(ColloscopeError::InvalidRuleId(*rule_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate original ids against a parameter set
+    ///
+    /// This functions checks that all the original ids do indeed appear
+    pub(crate) fn validate_new_ids(
+        &self,
+        params: &ColloscopeParameters<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    ) -> Result<(), ColloscopeError> {
+        for (_, period_id) in &self.periods {
+            if params.periods.find_period(*period_id).is_none() {
+                return Err(ColloscopeError::InvalidColloscopePeriodId(*period_id));
+            }
+        }
+
+        for (_, subject_id) in &self.subjects {
+            if params.subjects.find_subject(*subject_id).is_none() {
+                return Err(ColloscopeError::InvalidColloscopeSubjectId(*subject_id));
+            }
+        }
+
+        for (_, teacher_id) in &self.teachers {
+            if !params.teachers.teacher_map.contains_key(teacher_id) {
+                return Err(ColloscopeError::InvalidColloscopeTeacherId(*teacher_id));
+            }
+        }
+
+        for (_, student_id) in &self.students {
+            if !params.students.student_map.contains_key(student_id) {
+                return Err(ColloscopeError::InvalidColloscopeStudentId(*student_id));
+            }
+        }
+
+        for (_, week_pattern_id) in &self.week_patterns {
+            if !params
+                .week_patterns
+                .week_pattern_map
+                .contains_key(week_pattern_id)
+            {
+                return Err(ColloscopeError::InvalidColloscopeWeekPatternId(
+                    *week_pattern_id,
+                ));
+            }
+        }
+
+        for (_, slot_id) in &self.slots {
+            if params.slots.find_slot(*slot_id).is_none() {
+                return Err(ColloscopeError::InvalidColloscopeSlotId(*slot_id));
+            }
+        }
+
+        for (_, incompat_id) in &self.incompats {
+            if !params.incompats.incompat_map.contains_key(incompat_id) {
+                return Err(ColloscopeError::InvalidColloscopeIncompatId(*incompat_id));
+            }
+        }
+
+        for (_, group_list_id) in &self.group_lists {
+            if !params
+                .group_lists
+                .group_list_map
+                .contains_key(group_list_id)
+            {
+                return Err(ColloscopeError::InvalidColloscopeGroupListId(
+                    *group_list_id,
+                ));
+            }
+        }
+
+        for (_, rule_id) in &self.rules {
+            if !params.rules.rule_map.contains_key(rule_id) {
+                return Err(ColloscopeError::InvalidColloscopeRuleId(*rule_id));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl<
         PeriodId: Id,
         SubjectId: Id,

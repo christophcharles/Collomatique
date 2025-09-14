@@ -23,8 +23,10 @@ pub mod ids;
 use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
-    ColloscopeId, GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId,
-    TeacherId, WeekPatternId,
+    ColloscopeGroupListId, ColloscopeId, ColloscopeIncompatId, ColloscopePeriodId,
+    ColloscopeRuleId, ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId,
+    ColloscopeTeacherId, ColloscopeWeekPatternId, GroupListId, IncompatId, PeriodId, RuleId,
+    SlotId, StudentId, SubjectId, TeacherId, WeekPatternId,
 };
 pub mod ops;
 use ops::{
@@ -510,6 +512,78 @@ pub enum ColloscopeError {
     /// The colloscope id already exists
     #[error("colloscope id ({0:?}) already exists")]
     ColloscopeIdAlreadyExists(ColloscopeId),
+
+    /// Student original id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+
+    /// Period original id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// Subject original id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// Teacher original id is invalid
+    #[error("invalid teacher id ({0:?})")]
+    InvalidTeacherId(TeacherId),
+
+    /// Week pattern original id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// Slot original id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+
+    /// Incompat original id is invalid
+    #[error("invalid incompat id ({0:?})")]
+    InvalidIncompatId(IncompatId),
+
+    /// Group list original id is invalid
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(GroupListId),
+
+    /// Rule original id is invalid
+    #[error("invalid rule id ({0:?})")]
+    InvalidRuleId(RuleId),
+
+    /// Student colloscope id is invalid
+    #[error("invalid colloscope student id ({0:?})")]
+    InvalidColloscopeStudentId(ColloscopeStudentId),
+
+    /// Period colloscope id is invalid
+    #[error("invalid colloscope period id ({0:?})")]
+    InvalidColloscopePeriodId(ColloscopePeriodId),
+
+    /// Subject colloscope id is invalid
+    #[error("invalid colloscope subject id ({0:?})")]
+    InvalidColloscopeSubjectId(ColloscopeSubjectId),
+
+    /// Teacher colloscope id is invalid
+    #[error("invalid colloscope teacher id ({0:?})")]
+    InvalidColloscopeTeacherId(ColloscopeTeacherId),
+
+    /// Week pattern colloscope id is invalid
+    #[error("invalid colloscope week pattern id ({0:?})")]
+    InvalidColloscopeWeekPatternId(ColloscopeWeekPatternId),
+
+    /// Slot colloscope id is invalid
+    #[error("invalid colloscope slot id ({0:?})")]
+    InvalidColloscopeSlotId(ColloscopeSlotId),
+
+    /// Incompat colloscope id is invalid
+    #[error("invalid colloscope incompat id ({0:?})")]
+    InvalidColloscopeIncompatId(ColloscopeIncompatId),
+
+    /// Group list colloscope id is invalid
+    #[error("invalid colloscope group list id ({0:?})")]
+    InvalidColloscopeGroupListId(ColloscopeGroupListId),
+
+    /// Rule colloscope id is invalid
+    #[error("invalid colloscope rule id ({0:?})")]
+    InvalidColloscopeRuleId(ColloscopeRuleId),
 }
 
 /// Errors for colloscopes modification
@@ -734,6 +808,9 @@ impl Data {
         self.check_no_duplicate_ids();
 
         self.inner_data.main_params.check_invariants();
+        for (_colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+            colloscope.check_invariants(&self.inner_data.main_params);
+        }
     }
 }
 
@@ -2156,7 +2233,7 @@ impl Data {
         colloscope_op: &AnnotatedColloscopeOp,
     ) -> std::result::Result<(), ColloscopeError> {
         match colloscope_op {
-            AnnotatedColloscopeOp::AddEmpty(new_id, name) => {
+            AnnotatedColloscopeOp::Add(new_id, colloscope) => {
                 if self
                     .inner_data
                     .colloscopes
@@ -2166,12 +2243,15 @@ impl Data {
                     return Err(ColloscopeError::ColloscopeIdAlreadyExists(*new_id));
                 };
 
-                let new_colloscope = colloscopes::Colloscope { name: name.clone() };
+                colloscope
+                    .id_maps
+                    .validate_source_ids(&self.inner_data.main_params)?;
+                colloscope.id_maps.validate_new_ids(&colloscope.params)?;
 
                 self.inner_data
                     .colloscopes
                     .colloscope_map
-                    .insert(*new_id, new_colloscope);
+                    .insert(*new_id, colloscope.clone());
 
                 Ok(())
             }
@@ -2891,7 +2971,7 @@ impl Data {
         colloscope_op: &AnnotatedColloscopeOp,
     ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
         match colloscope_op {
-            AnnotatedColloscopeOp::AddEmpty(new_id, _name) => {
+            AnnotatedColloscopeOp::Add(new_id, _name) => {
                 Ok(AnnotatedColloscopeOp::Remove(new_id.clone()))
             }
             AnnotatedColloscopeOp::Remove(colloscope_id) => {
@@ -2904,9 +2984,9 @@ impl Data {
                     return Err(ColloscopeError::InvalidColloscopeId(*colloscope_id));
                 };
 
-                Ok(AnnotatedColloscopeOp::AddEmpty(
+                Ok(AnnotatedColloscopeOp::Add(
                     *colloscope_id,
-                    old_colloscope.name.clone(),
+                    old_colloscope.clone(),
                 ))
             }
         }
