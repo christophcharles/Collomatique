@@ -178,6 +178,12 @@ pub enum StudentError<StudentId: Id, PeriodId: Id, SubjectId: Id, GroupListId: I
     /// Student is still referenced by a pre-filled group list
     #[error("student id {0:?} is still referenced by a pre-filled group list {1:?}")]
     StudentIsStillReferencedByPrefilledGroupList(StudentId, GroupListId),
+
+    /// Student is referenced in a colloscope id map
+    #[error(
+        "student id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
+    )]
+    StudentIsReferencedInColloscopeIdMaps(StudentId, ColloscopeId),
 }
 
 /// Errors for periods operations
@@ -214,6 +220,10 @@ pub enum PeriodError<PeriodId: Id, SubjectId: Id, StudentId: Id, RuleId: Id> {
     /// The period is referenced by a rule
     #[error("period id ({0:?}) is referenced by rule {1:?}")]
     PeriodIsReferencedByRule(PeriodId, RuleId),
+
+    /// Period is referenced in a colloscope id map
+    #[error("period id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed")]
+    PeriodIsReferencedInColloscopeIdMaps(PeriodId, ColloscopeId),
 }
 
 /// Errors for subject operations
@@ -270,6 +280,12 @@ pub enum SubjectError<SubjectId: Id, PeriodId: Id, TeacherId: Id, IncompatId: Id
     /// The subject is associated to a group list
     #[error("subject id ({0:?}) is associated to group list id {1:?} for period {2:?}")]
     SubjectStillHasAssociatedGroupList(SubjectId, GroupListId, PeriodId),
+
+    /// Subject is referenced in a colloscope id map
+    #[error(
+        "subject id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
+    )]
+    SubjectIsReferencedInColloscopeIdMaps(SubjectId, ColloscopeId),
 }
 
 /// Errors for teacher operations
@@ -300,6 +316,12 @@ pub enum TeacherError<TeacherId: Id, SubjectId: Id, SlotId: Id> {
     /// The teacher is referenced by slots for a bad subject
     #[error("teacher id ({0:?}) gives interrogation in a now forbidden subject ({1:?})")]
     TeacherStillHasAssociatedSlotsInSubject(TeacherId, SubjectId),
+
+    /// Teacher is referenced in a colloscope id map
+    #[error(
+        "teacher id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
+    )]
+    TeacherIsReferencedInColloscopeIdMaps(TeacherId, ColloscopeId),
 }
 
 /// Errors for assignment operations
@@ -348,6 +370,12 @@ pub enum WeekPatternError<WeekPatternId: Id, SlotId: Id, IncompatId: Id> {
     /// The week pattern is referenced by a schedule incompatibility
     #[error("week pattern id ({0:?}) is referenced by an incompat ({1:?})")]
     WeekPatternStillHasAssociatedIncompat(WeekPatternId, IncompatId),
+
+    /// Week pattern is referenced in a colloscope id map
+    #[error(
+        "week pattern id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
+    )]
+    WeekPatternIsReferencedInColloscopeIdMaps(WeekPatternId, ColloscopeId),
 }
 
 /// Errors for interrogation slot operations
@@ -398,6 +426,10 @@ pub enum SlotError<SlotId: Id, SubjectId: Id, TeacherId: Id, WeekPatternId: Id, 
     /// The slot is referenced by a rule
     #[error("Slot id ({0:?}) is referenced by rule {1:?}")]
     SlotIsReferencedByRule(SlotId, RuleId),
+
+    /// Slot is referenced in a colloscope id map
+    #[error("slot id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed")]
+    SlotIsReferencedInColloscopeIdMaps(SlotId, ColloscopeId),
 }
 
 /// Errors for schedule incompatibility operations
@@ -420,6 +452,12 @@ pub enum IncompatError<IncompatId: Id, SubjectId: Id, WeekPatternId: Id> {
     /// week pattern id is invalid
     #[error("invalid week pattern id ({0:?})")]
     InvalidWeekPatternId(WeekPatternId),
+
+    /// Incompat is referenced in a colloscope id map
+    #[error(
+        "incompat id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
+    )]
+    IncompatIsReferencedInColloscopeIdMaps(IncompatId, ColloscopeId),
 }
 
 /// Errors for group list operations
@@ -478,6 +516,12 @@ pub enum GroupListError<GroupListId: Id, StudentId: Id, SubjectId: Id, PeriodId:
     /// cannot remove group list as there are still associated subjects
     #[error("Group list still is associated to subjects and cannot be removed")]
     RemainingAssociatedSubjects,
+
+    /// GroupList is referenced in a colloscope id map
+    #[error(
+        "group list id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
+    )]
+    GroupListIsReferencedInColloscopeIdMaps(GroupListId, ColloscopeId),
 }
 
 /// Errors for rules operations
@@ -500,6 +544,10 @@ pub enum RuleError<RuleId: Id, PeriodId: Id, SlotId: Id> {
     /// slot id is invalid
     #[error("invalid slot id ({0:?})")]
     InvalidSlotId(SlotId),
+
+    /// Rule is referenced in a colloscope id map
+    #[error("rule id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed")]
+    RuleIsReferencedInColloscopeIdMaps(RuleId, ColloscopeId),
 }
 
 /// Errors for colloscopes operations
@@ -981,6 +1029,15 @@ impl Data {
                     return Err(StudentError::InvalidStudentId(*id));
                 };
 
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.students.contains_key(id) {
+                        return Err(StudentError::StudentIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
+
                 for (group_list_id, group_list) in
                     &self.inner_data.main_params.group_lists.group_list_map
                 {
@@ -1155,6 +1212,15 @@ impl Data {
                 else {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
+
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.periods.contains_key(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedInColloscopeIdMaps(
+                            *period_id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
 
                 for (subject_id, subject) in
                     &self.inner_data.main_params.subjects.ordered_subject_list
@@ -1364,6 +1430,15 @@ impl Data {
                 else {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
+
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.subjects.contains_key(id) {
+                        return Err(SubjectError::SubjectIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
 
                 for (period_id, subject_map) in &self
                     .inner_data
@@ -1658,6 +1733,15 @@ impl Data {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 }
 
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.teachers.contains_key(id) {
+                        return Err(TeacherError::TeacherIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
+
                 for (_subject_id, subject_slots) in &self.inner_data.main_params.slots.subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if *id == slot.teacher_id {
@@ -1803,6 +1887,15 @@ impl Data {
                     .contains_key(id)
                 {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                }
+
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.week_patterns.contains_key(id) {
+                        return Err(WeekPatternError::WeekPatternIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
                 }
 
                 for (_subject_id, subject_slots) in &self.inner_data.main_params.slots.subject_map {
@@ -1951,6 +2044,15 @@ impl Data {
                     return Err(SlotError::InvalidSlotId(*id));
                 };
 
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.slots.contains_key(id) {
+                        return Err(SlotError::SlotIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
+
                 for (rule_id, rule) in &self.inner_data.main_params.rules.rule_map {
                     if rule.desc.references_slot(*id) {
                         return Err(SlotError::SlotIsReferencedByRule(*id, *rule_id));
@@ -2037,6 +2139,15 @@ impl Data {
                     return Err(IncompatError::InvalidIncompatId(*id));
                 }
 
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.incompats.contains_key(id) {
+                        return Err(IncompatError::IncompatIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
+
                 self.inner_data
                     .main_params
                     .incompats
@@ -2103,6 +2214,15 @@ impl Data {
                 Ok(())
             }
             AnnotatedGroupListOp::Remove(id) => {
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.group_lists.contains_key(id) {
+                        return Err(GroupListError::GroupListIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
+
                 let Some(old_group_list) = self
                     .inner_data
                     .main_params
@@ -2276,6 +2396,15 @@ impl Data {
                     return Err(RuleError::InvalidRuleId(*id));
                 }
 
+                for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
+                    if colloscope.id_maps.rules.contains_key(id) {
+                        return Err(RuleError::RuleIsReferencedInColloscopeIdMaps(
+                            *id,
+                            *colloscope_id,
+                        ));
+                    }
+                }
+
                 self.inner_data.main_params.rules.rule_map.remove(id);
 
                 Ok(())
@@ -2333,6 +2462,25 @@ impl Data {
                     .colloscopes
                     .colloscope_map
                     .insert(*new_id, colloscope.clone());
+
+                Ok(())
+            }
+            AnnotatedColloscopeOp::Update(colloscope_id, colloscope) => {
+                if !self
+                    .inner_data
+                    .colloscopes
+                    .colloscope_map
+                    .contains_key(colloscope_id)
+                {
+                    return Err(ColloscopeError::InvalidColloscopeId(*colloscope_id));
+                }
+
+                colloscope.check_invariants(&self.inner_data.main_params)?;
+
+                self.inner_data
+                    .colloscopes
+                    .colloscope_map
+                    .insert(*colloscope_id, colloscope.clone());
 
                 Ok(())
             }
@@ -3054,6 +3202,21 @@ impl Data {
         match colloscope_op {
             AnnotatedColloscopeOp::Add(new_id, _name) => {
                 Ok(AnnotatedColloscopeOp::Remove(new_id.clone()))
+            }
+            AnnotatedColloscopeOp::Update(colloscope_id, _colloscope) => {
+                let Some(old_colloscope) = self
+                    .inner_data
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return Err(ColloscopeError::InvalidColloscopeId(*colloscope_id));
+                };
+
+                Ok(AnnotatedColloscopeOp::Update(
+                    *colloscope_id,
+                    old_colloscope.clone(),
+                ))
             }
             AnnotatedColloscopeOp::Remove(colloscope_id) => {
                 let Some(old_colloscope) = self

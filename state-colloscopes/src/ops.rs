@@ -222,6 +222,8 @@ pub enum SettingsOp {
 pub enum ColloscopeOp {
     /// Add a colloscope
     Add(colloscopes::Colloscope),
+    /// Update a colloscope
+    Update(ColloscopeId, colloscopes::Colloscope),
     /// Remove an existing colloscope
     Remove(ColloscopeId),
 }
@@ -560,6 +562,8 @@ pub enum AnnotatedColloscopeOp {
     /// Add an empty colloscope
     /// First parameter is the colloscope id for the new colloscope
     Add(ColloscopeId, colloscopes::Colloscope),
+    /// Update a colloscope
+    Update(ColloscopeId, colloscopes::Colloscope),
     /// Remove an existing colloscope
     Remove(ColloscopeId),
 }
@@ -874,6 +878,10 @@ impl AnnotatedColloscopeOp {
                 let new_id = id_issuer.get_colloscope_id();
                 (AnnotatedColloscopeOp::Add(new_id, colloscope), Some(new_id))
             }
+            ColloscopeOp::Update(colloscope_id, colloscope) => (
+                AnnotatedColloscopeOp::Update(colloscope_id, colloscope),
+                None,
+            ),
             ColloscopeOp::Remove(colloscope_id) => {
                 (AnnotatedColloscopeOp::Remove(colloscope_id), None)
             }
