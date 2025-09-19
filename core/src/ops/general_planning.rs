@@ -20,6 +20,10 @@ pub enum GeneralPlanningUpdateWarning {
         collomatique_state_colloscopes::RuleId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseColloscopeLinkWithPeriod(
+        collomatique_state_colloscopes::ColloscopeId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GeneralPlanningUpdateWarning {
@@ -161,6 +165,34 @@ impl GeneralPlanningUpdateWarning {
                     period_index + 1
                 ))
             }
+            GeneralPlanningUpdateWarning::LooseColloscopeLinkWithPeriod(
+                colloscope_id,
+                period_id,
+            ) => {
+                let Some(colloscope) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return None;
+                };
+                let Some(period_index) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" sur les paramètres de la période {}",
+                    colloscope.name,
+                    period_index + 1
+                ))
+            }
         }
     }
 }
@@ -244,6 +276,26 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::CutPeriod(_, _) => None,
             GeneralPlanningUpdateOp::UpdateWeekStatus(_, _, _) => None,
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope.id_maps.periods.contains_key(period_id) {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.periods.remove(period_id);
+
+                        return Some(CleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseColloscopeLinkWithPeriod(
+                                *colloscope_id,
+                                *period_id,
+                            ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+
                 for (subject_id, subject) in &data
                     .get_data()
                     .get_inner_data()
@@ -357,6 +409,26 @@ impl GeneralPlanningUpdateOp {
                 None
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope.id_maps.periods.contains_key(period_id) {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.periods.remove(period_id);
+
+                        return Some(CleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseColloscopeLinkWithPeriod(
+                                *colloscope_id,
+                                *period_id,
+                            ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+
                 let Some(pos) = data
                     .get_data()
                     .get_inner_data()
