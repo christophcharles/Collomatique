@@ -328,6 +328,7 @@ impl EditorPanel {
             collomatique_core::ops::OpCategory::GroupLists => None,
             collomatique_core::ops::OpCategory::Rules => None,
             collomatique_core::ops::OpCategory::Settings => None,
+            collomatique_core::ops::OpCategory::Colloscopes => None,
         }
     }
 

@@ -39,6 +39,8 @@ pub mod rules;
 pub use rules::*;
 pub mod settings;
 pub use settings::*;
+pub mod colloscopes;
+pub use colloscopes::*;
 
 pub type Desc = (OpCategory, String);
 
@@ -56,6 +58,7 @@ pub enum OpCategory {
     GroupLists,
     Rules,
     Settings,
+    Colloscopes,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +74,7 @@ pub enum UpdateOp {
     GroupLists(GroupListsUpdateOp),
     Rules(RulesUpdateOp),
     Settings(SettingsUpdateOp),
+    Colloscopes(ColloscopesUpdateOp),
 }
 
 #[derive(Debug, Error)]
@@ -97,6 +101,8 @@ pub enum UpdateError {
     Rules(#[from] RulesUpdateError),
     #[error(transparent)]
     Settings(#[from] SettingsUpdateError),
+    #[error(transparent)]
+    Colloscopes(#[from] ColloscopesUpdateError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -112,6 +118,7 @@ pub enum UpdateWarning {
     GroupLists(GroupListsUpdateWarning),
     Rules(RulesUpdateWarning),
     Settings(SettingsUpdateWarning),
+    Colloscopes(ColloscopesUpdateWarning),
 }
 
 impl From<GeneralPlanningUpdateWarning> for UpdateWarning {
@@ -180,6 +187,12 @@ impl From<SettingsUpdateWarning> for UpdateWarning {
     }
 }
 
+impl From<ColloscopesUpdateWarning> for UpdateWarning {
+    fn from(value: ColloscopesUpdateWarning) -> Self {
+        UpdateWarning::Colloscopes(value)
+    }
+}
+
 impl UpdateWarning {
     fn build_desc_from_data<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
         &self,
@@ -197,6 +210,7 @@ impl UpdateWarning {
             UpdateWarning::GroupLists(w) => w.build_desc_from_data(data),
             UpdateWarning::Rules(w) => w.build_desc_from_data(data),
             UpdateWarning::Settings(w) => w.build_desc_from_data(data),
+            UpdateWarning::Colloscopes(w) => w.build_desc_from_data(data),
         }
     }
 }
@@ -270,6 +284,9 @@ impl UpdateOp {
             UpdateOp::Settings(settings_op) => {
                 CleaningOp::downcast(settings_op.get_next_cleaning_op(data))
             }
+            UpdateOp::Colloscopes(colloscopes_op) => {
+                CleaningOp::downcast(colloscopes_op.get_next_cleaning_op(data))
+            }
         }
     }
 
@@ -322,6 +339,10 @@ impl UpdateOp {
                 settings_op.apply_no_cleaning(data)?;
                 Ok(None)
             }
+            UpdateOp::Colloscopes(colloscope_op) => {
+                let result = colloscope_op.apply_no_cleaning(data)?;
+                Ok(result.map(|x| x.into()))
+            }
         }
     }
 
@@ -362,6 +383,7 @@ impl UpdateOp {
             UpdateOp::GroupLists(group_list_op) => group_list_op.get_desc(),
             UpdateOp::Rules(rule_op) => rule_op.get_desc(),
             UpdateOp::Settings(settings_op) => settings_op.get_desc(),
+            UpdateOp::Colloscopes(colloscope_op) => colloscope_op.get_desc(),
         }
     }
 

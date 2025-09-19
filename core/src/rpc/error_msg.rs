@@ -20,6 +20,8 @@ pub mod group_lists;
 pub use group_lists::*;
 pub mod rules;
 pub use rules::*;
+pub mod colloscopes;
+pub use colloscopes::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorMsg {
@@ -33,6 +35,7 @@ pub enum ErrorMsg {
     Incompats(IncompatibilitiesError),
     GroupLists(GroupListsError),
     Rules(RulesError),
+    Colloscopes(ColloscopesError),
 }
 
 impl From<crate::ops::UpdateError> for ErrorMsg {
@@ -49,6 +52,7 @@ impl From<crate::ops::UpdateError> for ErrorMsg {
             UpdateError::Incompatibilities(e) => ErrorMsg::Incompats(e.into()),
             UpdateError::GroupLists(e) => ErrorMsg::GroupLists(e.into()),
             UpdateError::Rules(e) => ErrorMsg::Rules(e.into()),
+            UpdateError::Colloscopes(e) => ErrorMsg::Colloscopes(e.into()),
         }
     }
 }
@@ -113,6 +117,12 @@ impl From<RulesError> for ErrorMsg {
     }
 }
 
+impl From<ColloscopesError> for ErrorMsg {
+    fn from(value: ColloscopesError) -> Self {
+        ErrorMsg::Colloscopes(value)
+    }
+}
+
 impl std::fmt::Display for ErrorMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -126,6 +136,7 @@ impl std::fmt::Display for ErrorMsg {
             ErrorMsg::Incompats(e) => e.fmt(f),
             ErrorMsg::GroupLists(e) => e.fmt(f),
             ErrorMsg::Rules(e) => e.fmt(f),
+            ErrorMsg::Colloscopes(e) => e.fmt(f),
         }
     }
 }

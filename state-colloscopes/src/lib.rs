@@ -37,8 +37,8 @@ use ops::{
     AnnotatedTeacherOp, AnnotatedWeekPatternOp,
 };
 pub use ops::{
-    AnnotatedOp, AssignmentOp, GroupListOp, IncompatOp, Op, PeriodOp, RuleOp, SettingsOp, SlotOp,
-    StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PeriodOp, RuleOp,
+    SettingsOp, SlotOp, StudentOp, SubjectOp, TeacherOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -132,10 +132,22 @@ pub struct InnerData {
 ///
 /// It does not necesserally correlate exactly to the data stored
 /// on disk. This is to allow versioning.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Data {
-    id_issuer: IdIssuer,
+    id_issuer: std::sync::Mutex<IdIssuer>,
     inner_data: InnerData,
+}
+
+impl Clone for Data {
+    fn clone(&self) -> Self {
+        let guard = self.id_issuer.lock().unwrap();
+
+        let id_issuer = guard.clone();
+        Data {
+            id_issuer: std::sync::Mutex::new(id_issuer),
+            inner_data: self.inner_data.clone(),
+        }
+    }
 }
 
 impl PartialEq for Data {
@@ -809,8 +821,9 @@ impl InMemoryData for Data {
     type NewInfo = Option<NewId>;
     type Error = Error;
 
-    fn annotate(&mut self, op: Op) -> (AnnotatedOp, Option<NewId>) {
-        AnnotatedOp::annotate(op, &mut self.id_issuer)
+    fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
+        let mut guard = self.id_issuer.lock().unwrap();
+        AnnotatedOp::annotate(op, &mut *guard)
     }
 
     fn build_rev_with_current_state(
@@ -944,7 +957,7 @@ impl Data {
         let colloscopes = colloscopes::Colloscopes::default();
 
         let data = Data {
-            id_issuer,
+            id_issuer: std::sync::Mutex::new(id_issuer),
             inner_data: InnerData {
                 main_params,
                 colloscopes,
@@ -965,7 +978,7 @@ impl Data {
     }
 
     pub fn copy_main_params(
-        &mut self,
+        &self,
     ) -> (
         ColloscopeParameters<
             ColloscopePeriodId,
@@ -990,7 +1003,8 @@ impl Data {
             RuleId,
         >,
     ) {
-        self.inner_data.main_params.duplicate(&mut self.id_issuer)
+        let mut guard = self.id_issuer.lock().unwrap();
+        self.inner_data.main_params.duplicate(&mut *guard)
     }
 
     /// Used internally

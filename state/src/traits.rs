@@ -49,10 +49,7 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// less complete description operation that should be annotated with ids.
     /// The [InMemoryData] object must then issue ids and complete the type
     /// accordingly.
-    fn annotate(
-        &mut self,
-        op: Self::OriginalOperation,
-    ) -> (Self::AnnotatedOperation, Self::NewInfo);
+    fn annotate(&self, op: Self::OriginalOperation) -> (Self::AnnotatedOperation, Self::NewInfo);
 
     /// Build the reverse of an operation
     ///
