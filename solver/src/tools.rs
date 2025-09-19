@@ -297,7 +297,7 @@ impl<ProblemVariable: UsableData + 'static> AggregatedVariables<ProblemVariable>
 /// Variable implementing a conversion from integer variable to a collection
 /// of binary variables.
 ///
-/// [IntToBinVariable] implements [AggregatedVariable] and can help
+/// [UIntToBinVariables] implements [AggregatedVariables] and can help
 /// convert a single variable having an integer value into a collection of binary
 /// variables with value 1 if a specific value is set. It takes a closure for
 /// the new variables and an initial integer variables (that should have a finite range).

@@ -2,8 +2,8 @@
 //!
 //! This submodule defines the various types to describe a colloscope.
 //!
-//! The main such structure is [Colloscope] which describes
-//! a (partially completed or not) colloscope.
+//! The main such structure is [GroupListSolution] which describes
+//! a (partially completed or not) group list.
 use std::collections::BTreeMap;
 
 use super::Identifier;

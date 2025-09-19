@@ -984,7 +984,7 @@ impl<
     }
 }
 
-/// Error type for [Data::promote_slot]
+/// Error type for [ColloscopeParameters::promote_slot]
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PromoteSlotError {
     #[error("Teacher id {0:?} is invalid")]
@@ -993,7 +993,7 @@ pub enum PromoteSlotError {
     InvalidWeekPatternId(u64),
 }
 
-/// Error type for [Data::promote_incompat]
+/// Error type for [ColloscopeParameters::promote_incompat]
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PromoteIncompatError {
     #[error("Subject id {0:?} is invalid")]
@@ -1002,21 +1002,21 @@ pub enum PromoteIncompatError {
     InvalidWeekPatternId(u64),
 }
 
-/// Error type for [Data::promote_group_list_params]
+/// Error type for [ColloscopeParameters::promote_group_list_params]
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PromoteGroupListParametersError {
     #[error("Student id {0:?} is invalid")]
     InvalidStudentId(u64),
 }
 
-/// Error type for [Data::promote_group_list_prefilled_groups]
+/// Error type for [ColloscopeParameters::promote_group_list_prefilled_groups]
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PromoteGroupListPrefilledGroupsError {
     #[error("Student id {0:?} is invalid")]
     InvalidStudentId(u64),
 }
 
-/// Error type for [Data::promote_logic_rule]
+/// Error type for [ColloscopeParameters::promote_logic_rule]
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PromoteLogicRuleError {
     #[error("Slot id {0:?} is invalid")]

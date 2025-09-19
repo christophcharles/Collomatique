@@ -2,11 +2,9 @@
 //!
 //! This module defines all the necessary constraints to define a colloscope.
 //!
-//! The main constraints are described in the module [main]. They define what a colloscope
-//! is but do not add anything extra.
-//!
-//! Other possible constraints are defined in the various other submodules and allow
-//! a finer description of your colloscope problem.
+//! Each constraint is in its own module.
+//! Some constraints are needed for all colloscopes. Some are extra contraints.
+//! Refer to each documentation.
 
 pub mod group_count;
 pub mod groups_per_slots;

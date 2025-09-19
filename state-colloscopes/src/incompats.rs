@@ -175,7 +175,7 @@ pub struct IncompatibilityExternalData {
 }
 
 impl IncompatibilityExternalData {
-    /// Checks the validity of a [SlotExternalData]
+    /// Checks the validity of a [IncompatibilityExternalData]
     pub fn validate(&self, subject_ids: &BTreeSet<u64>, week_pattern_ids: &BTreeSet<u64>) -> bool {
         if !subject_ids.contains(&self.subject_id) {
             return false;
