@@ -3,6 +3,10 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TeachersUpdateWarning {
     LooseInterrogationSlots(collomatique_state_colloscopes::TeacherId),
+    LooseColloscopeLinkWithTeacher(
+        collomatique_state_colloscopes::ColloscopeId,
+        collomatique_state_colloscopes::TeacherId,
+    ),
 }
 
 impl TeachersUpdateWarning {
@@ -27,6 +31,33 @@ impl TeachersUpdateWarning {
                 Some(format!(
                     "Pertes des créneaux de colle du colleur {} {}",
                     teacher.desc.firstname, teacher.desc.surname,
+                ))
+            }
+            TeachersUpdateWarning::LooseColloscopeLinkWithTeacher(colloscope_id, teacher_id) => {
+                let Some(colloscope) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return None;
+                };
+                let Some(teacher) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .teachers
+                    .teacher_map
+                    .get(teacher_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" sur les paramètres du colleur {} {}",
+                    colloscope.name,
+                    teacher.desc.firstname,
+                    teacher.desc.surname,
                 ))
             }
         }
@@ -114,6 +145,26 @@ impl TeachersUpdateOp {
                 None
             }
             Self::DeleteTeacher(teacher_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope.id_maps.teachers.contains_key(teacher_id) {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.teachers.remove(teacher_id);
+
+                        return Some(CleaningOp {
+                            warning: TeachersUpdateWarning::LooseColloscopeLinkWithTeacher(
+                                *colloscope_id,
+                                *teacher_id,
+                            ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+
                 for (_subject_id, subject_slots) in &data
                     .get_data()
                     .get_inner_data()
