@@ -3,16 +3,48 @@ use std::collections::BTreeSet;
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum RulesUpdateWarning {}
+pub enum RulesUpdateWarning {
+    LooseColloscopeLinkWithRule(
+        collomatique_state_colloscopes::ColloscopeId,
+        collomatique_state_colloscopes::RuleId,
+    ),
+}
 
 impl RulesUpdateWarning {
     pub(crate) fn build_desc_from_data<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<String> {
-        None
+        match self {
+            Self::LooseColloscopeLinkWithRule(colloscope_id, rule_id) => {
+                let Some(colloscope) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return None;
+                };
+                let Some(rule) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .rules
+                    .rule_map
+                    .get(rule_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" pour la règle \"{}\"",
+                    colloscope.name,
+                    rule.name,
+                ))
+            }
+        }
     }
 }
 
@@ -80,9 +112,35 @@ impl RulesUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<CleaningOp<RulesUpdateWarning>> {
-        None
+        match self {
+            Self::AddNewRule(_name, _desc) => None,
+            Self::UpdateRule(_rule_id, _name, _desc) => None,
+            Self::UpdatePeriodStatusForRule(_rule_id, _period_id, _status) => None,
+            Self::DeleteRule(rule_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope.id_maps.rules.contains_key(rule_id) {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.rules.remove(rule_id);
+
+                        return Some(CleaningOp {
+                            warning: RulesUpdateWarning::LooseColloscopeLinkWithRule(
+                                *colloscope_id,
+                                *rule_id,
+                            ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+                None
+            }
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
