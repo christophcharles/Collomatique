@@ -76,3 +76,51 @@ impl Colloscope {
         Ok(())
     }
 }
+
+/// Description of actual colloscope data
+///
+/// the ids should be valid with respect to the corresponding params
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeData {
+    pub period_map: BTreeMap<ColloscopePeriodId, ColloscopePeriod>,
+    pub group_lists: BTreeMap<ColloscopeGroupListId, ColloscopeGroupList>,
+}
+
+/// Description of a single period in a colloscope
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopePeriod {
+    /// Map between subjects and interrogations for these subjects
+    ///
+    /// Only subjects with interrogations are represented here
+    pub subject_map: BTreeMap<ColloscopeSubjectId, ColloscopeSubject>,
+}
+
+/// Description of a single subject in a period in a colloscope
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeSubject {
+    /// Map between slots and list of interrogations
+    ///
+    /// Each relevant slot are mapped to vec containing a cell
+    /// for each week in the period. If there cannot be an interrogation
+    /// there is is still a cell, but the option is set to None.
+    ///
+    /// If however there is a possible interrogation, it will be a Some
+    /// value, even if no group is actually assigned. This will rather
+    /// be described within the [ColloscopeInterrogation] struct.
+    pub slots: BTreeMap<ColloscopeSlotId, Vec<Option<ColloscopeInterrogation>>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeInterrogation {
+    /// List of groups assigned to the interrogation
+    pub assigned_groups: Vec<u32>,
+}
+
+/// Description of a group list in a colloscope
+///
+/// This is basically map between students that are in the group lists
+/// and actual group numbers
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ColloscopeGroupList {
+    pub groups_for_students: BTreeMap<ColloscopeStudentId, Option<u32>>,
+}
