@@ -14,6 +14,10 @@ pub enum StudentsUpdateWarning {
         collomatique_state_colloscopes::StudentId,
         collomatique_state_colloscopes::GroupListId,
     ),
+    LooseColloscopeLinkWithStudent(
+        collomatique_state_colloscopes::ColloscopeId,
+        collomatique_state_colloscopes::StudentId,
+    ),
 }
 
 impl StudentsUpdateWarning {
@@ -103,6 +107,33 @@ impl StudentsUpdateWarning {
                     group_list.params.name, student.desc.firstname, student.desc.surname,
                 ))
             }
+            StudentsUpdateWarning::LooseColloscopeLinkWithStudent(colloscope_id, student_id) => {
+                let Some(colloscope) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return None;
+                };
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" sur les paramètres de l'élève {} {}",
+                    colloscope.name,
+                    student.desc.firstname,
+                    student.desc.surname,
+                ))
+            }
         }
     }
 }
@@ -159,6 +190,26 @@ impl StudentsUpdateOp {
         match self {
             Self::AddNewStudent(_student) => None,
             Self::DeleteStudent(student_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope.id_maps.students.contains_key(student_id) {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.students.remove(student_id);
+
+                        return Some(CleaningOp {
+                            warning: StudentsUpdateWarning::LooseColloscopeLinkWithStudent(
+                                *colloscope_id,
+                                *student_id,
+                            ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+
                 let Some(old_student) = data
                     .get_data()
                     .get_inner_data()
