@@ -686,7 +686,21 @@ impl SubjectsUpdateOp {
                         ),
                         self.get_desc(),
                     )
-                    .expect("All data should be valid at this point");
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Subject(se) = e {
+                            match se {
+                                collomatique_state_colloscopes::SubjectError::InvalidSubjectId(
+                                    id,
+                                ) => DeleteSubjectError::InvalidSubjectId(id),
+                                _ => panic!(
+                                    "Unexpected subject error during DeleteSubject: {:?}",
+                                    se
+                                ),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteSubject: {:?}", e);
+                        }
+                    })?;
 
                 assert!(result.is_none());
 
