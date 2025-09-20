@@ -177,7 +177,18 @@ impl RulesUpdateOp {
                         ),
                         self.get_desc(),
                     )
-                    .expect("All data should be valid at this point");
+                    .map_err(|e| {
+                        if let collomatique_state_colloscopes::Error::Rule(re) = e {
+                            match re {
+                                collomatique_state_colloscopes::RuleError::InvalidRuleId(id) => {
+                                    DeleteRuleError::InvalidRuleId(id)
+                                }
+                                _ => panic!("Unexpected subject error during DeleteRule: {:?}", re),
+                            }
+                        } else {
+                            panic!("Unexpected error during DeleteRule: {:?}", e);
+                        }
+                    })?;
 
                 assert!(result.is_none());
 
