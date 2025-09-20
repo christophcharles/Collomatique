@@ -1,16 +1,48 @@
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum IncompatibilitiesUpdateWarning {}
+pub enum IncompatibilitiesUpdateWarning {
+    LooseColloscopeLinkWithIncompat(
+        collomatique_state_colloscopes::ColloscopeId,
+        collomatique_state_colloscopes::IncompatId,
+    ),
+}
 
 impl IncompatibilitiesUpdateWarning {
     pub(crate) fn build_desc_from_data<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<String> {
-        None
+        match self {
+            Self::LooseColloscopeLinkWithIncompat(colloscope_id, incompat_id) => {
+                let Some(colloscope) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return None;
+                };
+                let Some(incompat) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .incompats
+                    .incompat_map
+                    .get(incompat_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" pour l'incompatibilité \"{}\"",
+                    colloscope.name,
+                    incompat.name,
+                ))
+            }
+        }
     }
 }
 
@@ -71,9 +103,35 @@ impl IncompatibilitiesUpdateOp {
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
     >(
         &self,
-        _data: &T,
+        data: &T,
     ) -> Option<CleaningOp<IncompatibilitiesUpdateWarning>> {
-        None
+        match self {
+            Self::AddNewIncompat(_incompat) => None,
+            Self::UpdateIncompat(_incompat_id, _incompat) => None,
+            Self::DeleteIncompat(incompat_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope.id_maps.incompats.contains_key(incompat_id) {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.incompats.remove(incompat_id);
+
+                        return Some(CleaningOp {
+                            warning:
+                                IncompatibilitiesUpdateWarning::LooseColloscopeLinkWithIncompat(
+                                    *colloscope_id,
+                                    *incompat_id,
+                                ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+                None
+            }
+        }
     }
 
     pub(crate) fn apply_no_cleaning<
