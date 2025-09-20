@@ -4,6 +4,10 @@ use super::*;
 pub enum WeekPatternsUpdateWarning {
     LooseInterrogationSlot(collomatique_state_colloscopes::SlotId),
     LooseScheduleIncompat(collomatique_state_colloscopes::IncompatId),
+    LooseColloscopeLinkWithWeekPattern(
+        collomatique_state_colloscopes::ColloscopeId,
+        collomatique_state_colloscopes::WeekPatternId,
+    ),
 }
 
 impl WeekPatternsUpdateWarning {
@@ -97,6 +101,35 @@ impl WeekPatternsUpdateWarning {
                     slot_desc.join(", "),
                 ))
             }
+            WeekPatternsUpdateWarning::LooseColloscopeLinkWithWeekPattern(
+                colloscope_id,
+                week_pattern_id,
+            ) => {
+                let Some(colloscope) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscopes
+                    .colloscope_map
+                    .get(colloscope_id)
+                else {
+                    return None;
+                };
+                let Some(week_pattern) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .week_patterns
+                    .week_pattern_map
+                    .get(week_pattern_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" pour le modèle de périodicité \"{}\"",
+                    colloscope.name,
+                    week_pattern.name,
+                ))
+            }
         }
     }
 }
@@ -142,6 +175,30 @@ impl WeekPatternsUpdateOp {
             Self::AddNewWeekPattern(_) => None,
             Self::UpdateWeekPattern(_, _) => None,
             Self::DeleteWeekPattern(week_pattern_id) => {
+                for (colloscope_id, colloscope) in
+                    &data.get_data().get_inner_data().colloscopes.colloscope_map
+                {
+                    if colloscope
+                        .id_maps
+                        .week_patterns
+                        .contains_key(week_pattern_id)
+                    {
+                        let mut new_colloscope = colloscope.clone();
+                        new_colloscope.id_maps.week_patterns.remove(week_pattern_id);
+
+                        return Some(CleaningOp {
+                            warning: WeekPatternsUpdateWarning::LooseColloscopeLinkWithWeekPattern(
+                                *colloscope_id,
+                                *week_pattern_id,
+                            ),
+                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
+                                *colloscope_id,
+                                new_colloscope,
+                            )),
+                        });
+                    }
+                }
+
                 for (_subject_id, subject_slots) in &data
                     .get_data()
                     .get_inner_data()
