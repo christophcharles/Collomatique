@@ -1698,7 +1698,7 @@ impl<
     /// USED INTERNALLY
     ///
     /// Checks all the invariants of data
-    pub(crate) fn check_invariants(&self) -> Result<(), InvariantError> {
+    pub fn check_invariants(&self) -> Result<(), InvariantError> {
         if !self.check_no_duplicate_ids() {
             return Err(InvariantError::DuplicatedId);
         }
