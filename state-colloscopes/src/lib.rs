@@ -649,6 +649,39 @@ pub enum ColloscopeError {
 
     #[error(transparent)]
     InvariantErrorInParameters(#[from] InvariantError),
+
+    #[error("Wrong period count")]
+    WrongPeriodCountInColloscopeData,
+
+    #[error("Wrong group list count")]
+    WrongGroupListCountInColloscopeData,
+
+    #[error("Wrong subject count in period")]
+    WrongSubjectCountInPeriodInColloscopeData(ColloscopePeriodId),
+
+    #[error("Wrong slot count for subject in period")]
+    WrongSlotCountForSubjectInPeriodInColloscopeData(ColloscopePeriodId, ColloscopeSubjectId),
+
+    #[error("Wrong interrogation count for slot in period")]
+    WrongInterrogationCountForSlotInPeriodInColloscopeData(ColloscopePeriodId, ColloscopeSlotId),
+
+    #[error("Interrogation on non-interrogation week")]
+    InterrogationOnNonInterrogationWeek(ColloscopePeriodId, ColloscopeSlotId, usize),
+
+    #[error("Missing interrogation on interrogation week")]
+    MissingInterrogationOnInterrogationWeek(ColloscopePeriodId, ColloscopeSlotId, usize),
+
+    #[error("Invalid group number in interrogation")]
+    InvalidGroupNumInInterrogation(ColloscopePeriodId, ColloscopeSlotId, usize),
+
+    #[error("excluded student in group list")]
+    ExcludedStudentInGroupList(ColloscopeGroupListId, ColloscopeStudentId),
+
+    #[error("wrong student count in group list")]
+    WrongStudentCountInGroupList(ColloscopeGroupListId),
+
+    #[error("Invalid group number for student")]
+    InvalidGroupNumForStudentInGroupList(ColloscopeGroupListId, ColloscopeStudentId),
 }
 
 /// Errors for colloscopes modification

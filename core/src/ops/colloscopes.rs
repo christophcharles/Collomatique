@@ -79,10 +79,12 @@ impl ColloscopesUpdateOp {
         match self {
             Self::AddEmptyColloscope(name) => {
                 let (params, id_maps) = data.get_data().copy_main_params();
+                let collo_data = collomatique_state_colloscopes::colloscopes::ColloscopeData::new_empty_from_params(&params);
                 let new_colloscope = collomatique_state_colloscopes::colloscopes::Colloscope {
                     name: name.clone(),
                     params,
                     id_maps,
+                    data: collo_data,
                 };
 
                 let result = data
