@@ -567,6 +567,14 @@ pub enum RuleError<RuleId: Id, PeriodId: Id, SlotId: Id> {
 /// These errors can be returned when trying to modify [Data] with a colloscope op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ColloscopeError {
+    /// an internal id already exists in another colloscope
+    #[error("duplicate internal id with respect to another colloscope")]
+    DuplicateInternalId(u64),
+
+    /// an internal id already exists in global parameters
+    #[error("duplicate internal id with respect to global parameters")]
+    InternalIdAlreadyInMainParams(u64),
+
     /// colloscope id is invalid
     #[error("invalid colloscope id ({0:?})")]
     InvalidColloscopeId(ColloscopeId),
@@ -2503,6 +2511,22 @@ impl Data {
                     return Err(ColloscopeError::ColloscopeIdAlreadyExists(*new_id));
                 };
 
+                let ids: BTreeSet<_> = colloscope.params.ids().collect();
+
+                for (_collo_id, collo) in &self.inner_data.colloscopes.colloscope_map {
+                    for id in collo.params.ids() {
+                        if ids.contains(&id) {
+                            return Err(ColloscopeError::DuplicateInternalId(id));
+                        }
+                    }
+                }
+
+                for id in self.inner_data.main_params.ids() {
+                    if ids.contains(&id) {
+                        return Err(ColloscopeError::InternalIdAlreadyInMainParams(id));
+                    }
+                }
+
                 colloscope.check_invariants(&self.inner_data.main_params)?;
 
                 self.inner_data
@@ -2520,6 +2544,25 @@ impl Data {
                     .contains_key(colloscope_id)
                 {
                     return Err(ColloscopeError::InvalidColloscopeId(*colloscope_id));
+                }
+
+                let ids: BTreeSet<_> = colloscope.params.ids().collect();
+
+                for (collo_id, collo) in &self.inner_data.colloscopes.colloscope_map {
+                    if collo_id == colloscope_id {
+                        continue;
+                    }
+                    for id in collo.params.ids() {
+                        if ids.contains(&id) {
+                            return Err(ColloscopeError::DuplicateInternalId(id));
+                        }
+                    }
+                }
+
+                for id in self.inner_data.main_params.ids() {
+                    if ids.contains(&id) {
+                        return Err(ColloscopeError::InternalIdAlreadyInMainParams(id));
+                    }
                 }
 
                 colloscope.check_invariants(&self.inner_data.main_params)?;

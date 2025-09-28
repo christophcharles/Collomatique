@@ -134,6 +134,10 @@ pub enum UpdateColloscopeError {
         collomatique_state_colloscopes::ColloscopeGroupListId,
         collomatique_state_colloscopes::ColloscopeStudentId,
     ),
+    #[error("duplicate internal id with respect to another colloscope")]
+    DuplicateInternalId(u64),
+    #[error("duplicate internal id with respect to global parameters")]
+    InternalIdAlreadyInMainParams(u64),
 }
 
 #[derive(Debug, Error)]
@@ -320,6 +324,12 @@ impl ColloscopesUpdateOp {
                                 }
                                 collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id) => {
                                     UpdateColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::DuplicateInternalId(id) => {
+                                    UpdateColloscopeError::DuplicateInternalId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InternalIdAlreadyInMainParams(id) => {
+                                    UpdateColloscopeError::InternalIdAlreadyInMainParams(id)
                                 }
                             }
                         } else {

@@ -144,6 +144,8 @@ pub enum UpdateColloscopeError {
     ExcludedStudentInGroupList(MsgColloscopeGroupListId, MsgColloscopeStudentId),
     WrongStudentCountInGroupList(MsgColloscopeGroupListId),
     InvalidGroupNumForStudentInGroupList(MsgColloscopeGroupListId, MsgColloscopeStudentId),
+    DuplicateInternalId(u64),
+    InternalIdAlreadyInMainParams(u64),
 }
 
 impl std::fmt::Display for UpdateColloscopeError {
@@ -322,6 +324,20 @@ impl std::fmt::Display for UpdateColloscopeError {
             ) => {
                 write!(f, "Le numéro de groupe renseigné pour l'élève {} dans la liste de groupe {} est invalide", student_id.0, group_list_id.0)
             }
+            UpdateColloscopeError::DuplicateInternalId(id) => {
+                write!(
+                    f,
+                    "L'identifiant {} est déjà utilisé dans un autre colloscope",
+                    *id
+                )
+            }
+            UpdateColloscopeError::InternalIdAlreadyInMainParams(id) => {
+                write!(
+                    f,
+                    "L'identifiant {} est déjà utilisé dans les paramètres généraux",
+                    *id
+                )
+            }
         }
     }
 }
@@ -421,6 +437,12 @@ impl From<crate::ops::UpdateColloscopeError> for UpdateColloscopeError {
             }
             crate::ops::UpdateColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id) => {
                 UpdateColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id.into(), student_id.into())
+            }
+            crate::ops::UpdateColloscopeError::DuplicateInternalId(id) => {
+                UpdateColloscopeError::DuplicateInternalId(id)
+            }
+            crate::ops::UpdateColloscopeError::InternalIdAlreadyInMainParams(id) => {
+                UpdateColloscopeError::InternalIdAlreadyInMainParams(id)
             }
         }
     }
