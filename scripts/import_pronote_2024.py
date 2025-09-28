@@ -31,14 +31,16 @@ def build_subject_set(csv_content):
     return S
 
 def find_subject_or_new_id(session, subject, current_subjects):
+    file = session.get_current_collomatique_file()
     for sub in current_subjects:
         if sub.parameters.name == subject:
             return sub.id
-    return session.subjects_add(collomatique.SubjectParameters(subject))
+    return file.subjects_add(collomatique.SubjectParameters(subject))
 
 def add_subjects(session, subject_set):
+    file = session.get_current_collomatique_file()
     subject_ids = {}
-    current_subjects = session.get_main_params().subjects
+    current_subjects = file.get_main_params().subjects
     for subject in subject_set:
         sub_id = find_subject_or_new_id(session, subject, current_subjects)
         subject_ids[subject] = sub_id
@@ -67,6 +69,7 @@ def split_student_name(student_full_name):
     return firstname, surname
 
 def add_student_from_csv_line(session, csv_line, subject_ids):
+    file = session.get_current_collomatique_file()
     student_full_name = csv_line['\ufeff'][0] # Yes, the pronote CSV is that bad
     if not student_full_name:
         collomatique.log("Bad line: {}".format(csv_line))
@@ -76,9 +79,9 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
     firstname, surname = split_student_name(student_full_name)
 
     student = collomatique.Student(firstname, surname)
-    student_id = session.students_add(student)
+    student_id = file.students_add(student)
 
-    periods = session.get_main_params().periods
+    periods = file.get_main_params().periods
 
     for column in ["Option 1", "Option 2", "Option 3", "Autres options"]:
         opt = csv_line[column][0]
@@ -87,10 +90,11 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
         opt_id = subject_ids[opt]
 
         for period in periods:
-            session.assignments_set(period.id, student_id, opt_id, True)
+            file.assignments_set(period.id, student_id, opt_id, True)
 
 def main():
     session = collomatique.current_session()
+    file = session.get_current_collomatique_file()
 
     file_path = session.dialog_open_file("Ouvrir un CSV", [("Fichiers CSV", "csv"), ("Tous les fichiers", "*")])
     if file_path is None:
@@ -98,9 +102,9 @@ def main():
     
     csv_columns, csv_content = open_csv(file_path)
 
-    periods = session.get_main_params().periods
+    periods = file.get_main_params().periods
     if len(periods) == 0:
-        session.periods_add(10)
+        file.periods_add(10)
 
     subject_set = build_subject_set(csv_content)
     subject_ids = add_subjects(session, subject_set)

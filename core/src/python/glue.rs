@@ -69,12 +69,90 @@ pub fn log(msg: String) {
 
 #[pyfunction]
 pub fn current_session() -> Session {
-    Session { token: Token {} }
+    Session {}
 }
 
 #[pyclass]
-pub struct Session {
-    token: Token,
+#[derive(Clone, Debug)]
+pub struct Session {}
+
+impl Session {
+    fn send_msg(&self, msg: crate::rpc::CmdMsg) -> crate::rpc::ResultMsg {
+        crate::rpc::send_rpc(msg).expect("Valid result message")
+    }
+}
+
+#[pymethods]
+impl Session {
+    fn dialog_open_file(
+        self_: PyRef<'_, Self>,
+        title: String,
+        list: Vec<(String, String)>,
+    ) -> Option<std::path::PathBuf> {
+        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
+            crate::rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
+                title,
+                list: list
+                    .into_iter()
+                    .map(|ext| ExtensionDesc {
+                        desc: ext.0,
+                        extension: ext.1,
+                    })
+                    .collect(),
+            }),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::OpenFileDialog(answer)) => answer.file_path,
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn dialog_info_message(self_: PyRef<'_, Self>, text: String) {
+        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
+            crate::rpc::cmd_msg::GuiMsg::OkDialog(text),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::OkDialogClosed) => {}
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn dialog_confirm_action(self_: PyRef<'_, Self>, text: String) -> bool {
+        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
+            crate::rpc::cmd_msg::GuiMsg::ConfirmDialog(text),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::ConfirmDialog(value)) => value,
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    #[pyo3(signature = (info_text, placeholder_text=String::new()))]
+    fn dialog_input(
+        self_: PyRef<'_, Self>,
+        info_text: String,
+        placeholder_text: String,
+    ) -> Option<String> {
+        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
+            crate::rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text),
+        ));
+
+        match result {
+            ResultMsg::AckGui(GuiAnswer::InputDialog(value)) => value,
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn get_current_collomatique_file(self_: PyRef<'_, Self>) -> CollomatiqueFile {
+        CollomatiqueFile {
+            token: Token {
+                file: InternalFile::Session(self_.clone()),
+            },
+        }
+    }
 }
 
 mod common;
@@ -100,70 +178,13 @@ mod slots;
 
 use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
 
+#[pyclass]
+pub struct CollomatiqueFile {
+    token: Token,
+}
+
 #[pymethods]
-impl Session {
-    fn dialog_open_file(
-        self_: PyRef<'_, Self>,
-        title: String,
-        list: Vec<(String, String)>,
-    ) -> Option<std::path::PathBuf> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
-                title,
-                list: list
-                    .into_iter()
-                    .map(|ext| ExtensionDesc {
-                        desc: ext.0,
-                        extension: ext.1,
-                    })
-                    .collect(),
-            }),
-        ));
-
-        match result {
-            ResultMsg::AckGui(GuiAnswer::OpenFileDialog(answer)) => answer.file_path,
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    fn dialog_info_message(self_: PyRef<'_, Self>, text: String) {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::OkDialog(text),
-        ));
-
-        match result {
-            ResultMsg::AckGui(GuiAnswer::OkDialogClosed) => {}
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    fn dialog_confirm_action(self_: PyRef<'_, Self>, text: String) -> bool {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::ConfirmDialog(text),
-        ));
-
-        match result {
-            ResultMsg::AckGui(GuiAnswer::ConfirmDialog(value)) => value,
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
-    #[pyo3(signature = (info_text, placeholder_text=String::new()))]
-    fn dialog_input(
-        self_: PyRef<'_, Self>,
-        info_text: String,
-        placeholder_text: String,
-    ) -> Option<String> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text),
-        ));
-
-        match result {
-            ResultMsg::AckGui(GuiAnswer::InputDialog(value)) => value,
-            _ => panic!("Unexpected result: {:?}", result),
-        }
-    }
-
+impl CollomatiqueFile {
     fn periods_add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
             crate::rpc::UpdateMsg::GeneralPlanning(
@@ -1330,21 +1351,33 @@ impl Session {
 }
 
 #[derive(Clone, Debug)]
-struct Token {}
+enum InternalFile {
+    Session(Session),
+}
+
+#[derive(Clone, Debug)]
+struct Token {
+    file: InternalFile,
+}
 
 impl Token {
     fn get_data(&self) -> collomatique_state_colloscopes::Data {
-        use crate::rpc::ResultMsg;
+        match &self.file {
+            InternalFile::Session(session) => {
+                use crate::rpc::ResultMsg;
 
-        let result =
-            crate::rpc::send_rpc(crate::rpc::CmdMsg::GetData).expect("No error for getting data");
-        let ResultMsg::Data(serialized_data) = result else {
-            panic!("Unexpected response to GetData");
-        };
-        collomatique_state_colloscopes::Data::from(serialized_data)
+                let result = session.send_msg(crate::rpc::CmdMsg::GetData);
+                let ResultMsg::Data(serialized_data) = result else {
+                    panic!("Unexpected response to GetData");
+                };
+                collomatique_state_colloscopes::Data::from(serialized_data)
+            }
+        }
     }
 
     fn send_msg(&self, msg: crate::rpc::CmdMsg) -> crate::rpc::ResultMsg {
-        crate::rpc::send_rpc(msg).expect("Valid result message")
+        match &self.file {
+            InternalFile::Session(session) => session.send_msg(msg),
+        }
     }
 }
