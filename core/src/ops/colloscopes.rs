@@ -50,8 +50,90 @@ pub enum CopyColloscopeError {
 pub enum UpdateColloscopeError {
     #[error("Colloscope ID {0:?} is invalid")]
     InvalidColloscopeId(collomatique_state_colloscopes::ColloscopeId),
-    #[error("Bad invariant in colloscope")]
-    BadInvariantInColloscope(collomatique_state_colloscopes::InvariantError),
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(collomatique_state_colloscopes::StudentId),
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    #[error("invalid teacher id ({0:?})")]
+    InvalidTeacherId(collomatique_state_colloscopes::TeacherId),
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(collomatique_state_colloscopes::SlotId),
+    #[error("invalid incompat id ({0:?})")]
+    InvalidIncompatId(collomatique_state_colloscopes::IncompatId),
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
+    #[error("invalid rule id ({0:?})")]
+    InvalidRuleId(collomatique_state_colloscopes::RuleId),
+    #[error("invalid colloscope student id ({0:?})")]
+    InvalidColloscopeStudentId(collomatique_state_colloscopes::ColloscopeStudentId),
+    #[error("invalid colloscope period id ({0:?})")]
+    InvalidColloscopePeriodId(collomatique_state_colloscopes::ColloscopePeriodId),
+    #[error("invalid colloscope subject id ({0:?})")]
+    InvalidColloscopeSubjectId(collomatique_state_colloscopes::ColloscopeSubjectId),
+    #[error("invalid colloscope teacher id ({0:?})")]
+    InvalidColloscopeTeacherId(collomatique_state_colloscopes::ColloscopeTeacherId),
+    #[error("invalid colloscope week pattern id ({0:?})")]
+    InvalidColloscopeWeekPatternId(collomatique_state_colloscopes::ColloscopeWeekPatternId),
+    #[error("invalid colloscope slot id ({0:?})")]
+    InvalidColloscopeSlotId(collomatique_state_colloscopes::ColloscopeSlotId),
+    #[error("invalid colloscope incompat id ({0:?})")]
+    InvalidColloscopeIncompatId(collomatique_state_colloscopes::ColloscopeIncompatId),
+    #[error("invalid colloscope group list id ({0:?})")]
+    InvalidColloscopeGroupListId(collomatique_state_colloscopes::ColloscopeGroupListId),
+    #[error("invalid colloscope rule id ({0:?})")]
+    InvalidColloscopeRuleId(collomatique_state_colloscopes::ColloscopeRuleId),
+    #[error(transparent)]
+    InvariantErrorInParameters(#[from] collomatique_state_colloscopes::InvariantError),
+    #[error("Wrong period count")]
+    WrongPeriodCountInColloscopeData,
+    #[error("Wrong group list count")]
+    WrongGroupListCountInColloscopeData,
+    #[error("Wrong subject count in period")]
+    WrongSubjectCountInPeriodInColloscopeData(collomatique_state_colloscopes::ColloscopePeriodId),
+    #[error("Wrong slot count for subject in period")]
+    WrongSlotCountForSubjectInPeriodInColloscopeData(
+        collomatique_state_colloscopes::ColloscopePeriodId,
+        collomatique_state_colloscopes::ColloscopeSubjectId,
+    ),
+    #[error("Wrong interrogation count for slot in period")]
+    WrongInterrogationCountForSlotInPeriodInColloscopeData(
+        collomatique_state_colloscopes::ColloscopePeriodId,
+        collomatique_state_colloscopes::ColloscopeSlotId,
+    ),
+    #[error("Interrogation on non-interrogation week")]
+    InterrogationOnNonInterrogationWeek(
+        collomatique_state_colloscopes::ColloscopePeriodId,
+        collomatique_state_colloscopes::ColloscopeSlotId,
+        usize,
+    ),
+    #[error("Missing interrogation on interrogation week")]
+    MissingInterrogationOnInterrogationWeek(
+        collomatique_state_colloscopes::ColloscopePeriodId,
+        collomatique_state_colloscopes::ColloscopeSlotId,
+        usize,
+    ),
+    #[error("Invalid group number in interrogation")]
+    InvalidGroupNumInInterrogation(
+        collomatique_state_colloscopes::ColloscopePeriodId,
+        collomatique_state_colloscopes::ColloscopeSlotId,
+        usize,
+    ),
+    #[error("excluded student in group list")]
+    ExcludedStudentInGroupList(
+        collomatique_state_colloscopes::ColloscopeGroupListId,
+        collomatique_state_colloscopes::ColloscopeStudentId,
+    ),
+    #[error("wrong student count in group list")]
+    WrongStudentCountInGroupList(collomatique_state_colloscopes::ColloscopeGroupListId),
+    #[error("Invalid group number for student")]
+    InvalidGroupNumForStudentInGroupList(
+        collomatique_state_colloscopes::ColloscopeGroupListId,
+        collomatique_state_colloscopes::ColloscopeStudentId,
+    ),
 }
 
 #[derive(Debug, Error)]
@@ -147,9 +229,98 @@ impl ColloscopesUpdateOp {
                                     UpdateColloscopeError::InvalidColloscopeId(id)
                                 }
                                 collomatique_state_colloscopes::ColloscopeError::InvariantErrorInParameters(invariant_error) => {
-                                    UpdateColloscopeError::BadInvariantInColloscope(invariant_error)
+                                    UpdateColloscopeError::InvariantErrorInParameters(invariant_error)
                                 }
-                                _ => panic!("Unexpected colloscope error during UpdateColloscope: {:?}", ce),
+                                collomatique_state_colloscopes::ColloscopeError::ColloscopeIdAlreadyExists(_) => {
+                                    panic!("Unexpected error on ColloscopeOp::Update {:?}", ce);
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidStudentId(id) => {
+                                    UpdateColloscopeError::InvalidStudentId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidPeriodId(id) => {
+                                    UpdateColloscopeError::InvalidPeriodId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidSubjectId(id) => {
+                                    UpdateColloscopeError::InvalidSubjectId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidTeacherId(id) => {
+                                    UpdateColloscopeError::InvalidTeacherId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidWeekPatternId(id) => {
+                                    UpdateColloscopeError::InvalidWeekPatternId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidSlotId(id) => {
+                                    UpdateColloscopeError::InvalidSlotId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidIncompatId(id) => {
+                                    UpdateColloscopeError::InvalidIncompatId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupListId(id) => {
+                                    UpdateColloscopeError::InvalidGroupListId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidRuleId(id) => {
+                                    UpdateColloscopeError::InvalidRuleId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeStudentId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeStudentId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopePeriodId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopePeriodId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeSubjectId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeSubjectId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeTeacherId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeTeacherId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeWeekPatternId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeWeekPatternId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeSlotId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeSlotId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeIncompatId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeIncompatId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeGroupListId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeGroupListId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidColloscopeRuleId(id) => {
+                                    UpdateColloscopeError::InvalidColloscopeRuleId(id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::WrongPeriodCountInColloscopeData => {
+                                    UpdateColloscopeError::WrongPeriodCountInColloscopeData
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::WrongGroupListCountInColloscopeData => {
+                                    UpdateColloscopeError::WrongGroupListCountInColloscopeData
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::WrongSubjectCountInPeriodInColloscopeData(period_id) => {
+                                    UpdateColloscopeError::WrongSubjectCountInPeriodInColloscopeData(period_id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::WrongSlotCountForSubjectInPeriodInColloscopeData(period_id, subject_id) => {
+                                    UpdateColloscopeError::WrongSlotCountForSubjectInPeriodInColloscopeData(period_id, subject_id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::WrongInterrogationCountForSlotInPeriodInColloscopeData(period_id, slot_id) => {
+                                    UpdateColloscopeError::WrongInterrogationCountForSlotInPeriodInColloscopeData(period_id, slot_id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InterrogationOnNonInterrogationWeek(period_id, slot_id, week) => {
+                                    UpdateColloscopeError::InterrogationOnNonInterrogationWeek(period_id, slot_id, week)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::MissingInterrogationOnInterrogationWeek(period_id, slot_id, week) => {
+                                    UpdateColloscopeError::MissingInterrogationOnInterrogationWeek(period_id, slot_id, week)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumInInterrogation(period_id, slot_id, group_num) => {
+                                    UpdateColloscopeError::InvalidGroupNumInInterrogation(period_id, slot_id, group_num)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::ExcludedStudentInGroupList(group_list_id, student_id) => {
+                                    UpdateColloscopeError::ExcludedStudentInGroupList(group_list_id, student_id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::WrongStudentCountInGroupList(group_list_id) => {
+                                    UpdateColloscopeError::WrongStudentCountInGroupList(group_list_id)
+                                }
+                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id) => {
+                                    UpdateColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id)
+                                }
                             }
                         } else {
                             panic!("Unexpected error during UpdateColloscope: {:?}", e);

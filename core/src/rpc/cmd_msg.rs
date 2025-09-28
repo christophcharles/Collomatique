@@ -171,3 +171,84 @@ impl From<collomatique_state_colloscopes::ColloscopeId> for MsgColloscopeId {
         MsgColloscopeId(value.inner())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopePeriodId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopePeriodId> for MsgColloscopePeriodId {
+    fn from(value: collomatique_state_colloscopes::ColloscopePeriodId) -> Self {
+        MsgColloscopePeriodId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeStudentId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeStudentId> for MsgColloscopeStudentId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeStudentId) -> Self {
+        MsgColloscopeStudentId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeSubjectId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeSubjectId> for MsgColloscopeSubjectId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeSubjectId) -> Self {
+        MsgColloscopeSubjectId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeTeacherId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeTeacherId> for MsgColloscopeTeacherId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeTeacherId) -> Self {
+        MsgColloscopeTeacherId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeWeekPatternId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeWeekPatternId> for MsgColloscopeWeekPatternId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeWeekPatternId) -> Self {
+        MsgColloscopeWeekPatternId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeSlotId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeSlotId> for MsgColloscopeSlotId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeSlotId) -> Self {
+        MsgColloscopeSlotId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeIncompatId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeIncompatId> for MsgColloscopeIncompatId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeIncompatId) -> Self {
+        MsgColloscopeIncompatId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeGroupListId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeGroupListId> for MsgColloscopeGroupListId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeGroupListId) -> Self {
+        MsgColloscopeGroupListId(value.inner())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct MsgColloscopeRuleId(pub u64);
+
+impl From<collomatique_state_colloscopes::ColloscopeRuleId> for MsgColloscopeRuleId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeRuleId) -> Self {
+        MsgColloscopeRuleId(value.inner())
+    }
+}
