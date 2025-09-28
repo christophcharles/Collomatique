@@ -19,7 +19,7 @@ use super::*;
 /// - a main version is used in [InnerData] to represent the currently edited parameters
 /// - another version is used for each colloscope to store the parameters used for its generation
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ColloscopeParameters<
+pub struct Parameters<
     PeriodId: Id,
     SubjectId: Id,
     TeacherId: Id,
@@ -42,6 +42,29 @@ pub struct ColloscopeParameters<
     pub rules: rules::Rules<RuleId, PeriodId, SlotId>,
     pub settings: settings::GeneralSettings,
 }
+
+pub type GeneralParameters = Parameters<
+    PeriodId,
+    SubjectId,
+    TeacherId,
+    StudentId,
+    WeekPatternId,
+    SlotId,
+    IncompatId,
+    GroupListId,
+    RuleId,
+>;
+pub type ColloscopeParameters = Parameters<
+    ColloscopePeriodId,
+    ColloscopeSubjectId,
+    ColloscopeTeacherId,
+    ColloscopeStudentId,
+    ColloscopeWeekPatternId,
+    ColloscopeSlotId,
+    ColloscopeIncompatId,
+    ColloscopeGroupListId,
+    ColloscopeRuleId,
+>;
 
 /// Maps between global ids and colloscope specific ids
 ///
@@ -97,7 +120,7 @@ impl<
     /// generate a complete set of new ids for some parameters
     /// and returns the complete map for it
     pub(crate) fn generate_for(
-        params: &ColloscopeParameters<
+        params: &Parameters<
             PeriodId,
             SubjectId,
             TeacherId,
@@ -197,7 +220,7 @@ impl
     /// This functions checks that all the original ids do indeed appear
     pub(crate) fn validate_source_ids(
         &self,
-        params: &ColloscopeParameters<
+        params: &Parameters<
             PeriodId,
             SubjectId,
             TeacherId,
@@ -279,7 +302,7 @@ impl
     /// This functions checks that all the original ids do indeed appear
     pub(crate) fn validate_new_ids(
         &self,
-        params: &ColloscopeParameters<
+        params: &Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -372,7 +395,7 @@ impl<
         GroupListId: Id,
         RuleId: Id,
     >
-    ColloscopeParameters<
+    Parameters<
         PeriodId,
         SubjectId,
         TeacherId,
@@ -398,7 +421,7 @@ impl<
             RuleId,
         >,
     ) -> Option<
-        ColloscopeParameters<
+        Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -450,7 +473,7 @@ impl<
                 .duplicate_with_id_maps(&id_maps.rules, &id_maps.periods, &id_maps.slots)?;
         let settings = self.settings.clone();
 
-        Some(ColloscopeParameters {
+        Some(Parameters {
             periods,
             subjects,
             teachers,
@@ -469,7 +492,7 @@ impl<
         &self,
         id_issuer: &mut ids::IdIssuer,
     ) -> (
-        ColloscopeParameters<
+        Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -512,7 +535,7 @@ impl<
         GroupListId: Id,
         RuleId: Id,
     >
-    ColloscopeParameters<
+    Parameters<
         PeriodId,
         SubjectId,
         TeacherId,
@@ -537,7 +560,7 @@ impl<
         let group_lists = unsafe { GroupLists::from_external_data(external_data.group_lists) };
         let rules = unsafe { Rules::from_external_data(external_data.rules) };
 
-        colloscope_params::ColloscopeParameters {
+        colloscope_params::Parameters {
             periods,
             subjects,
             teachers,
@@ -683,7 +706,7 @@ impl<
         GroupListId: Id,
         RuleId: Id,
     >
-    ColloscopeParameters<
+    Parameters<
         PeriodId,
         SubjectId,
         TeacherId,
@@ -1034,7 +1057,7 @@ impl<
         GroupListId: Id,
         RuleId: Id,
     >
-    ColloscopeParameters<
+    Parameters<
         PeriodId,
         SubjectId,
         TeacherId,

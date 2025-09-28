@@ -7,7 +7,7 @@
 use assignments::Assignments;
 use collomatique_state::{tools, InMemoryData, Operation};
 use colloscope_params::ColloscopeIdMaps;
-use colloscope_params::ColloscopeParameters;
+use colloscope_params::Parameters;
 use group_lists::GroupLists;
 use incompats::Incompats;
 use ops::AnnotatedSettingsOp;
@@ -105,7 +105,7 @@ pub struct PersonWithContact {
 /// of [Eq] and [PartialEq] for [Data] relies on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InnerData {
-    pub main_params: colloscope_params::ColloscopeParameters<
+    pub main_params: colloscope_params::Parameters<
         PeriodId,
         SubjectId,
         TeacherId,
@@ -993,8 +993,7 @@ impl Data {
         main_params.validate()?;
 
         // Ids have been validated
-        let main_params =
-            unsafe { colloscope_params::ColloscopeParameters::from_external_data(main_params) };
+        let main_params = unsafe { colloscope_params::Parameters::from_external_data(main_params) };
         let colloscopes = colloscopes::Colloscopes::default();
 
         let data = Data {
@@ -1021,7 +1020,7 @@ impl Data {
     pub fn copy_main_params(
         &self,
     ) -> (
-        ColloscopeParameters<
+        Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,

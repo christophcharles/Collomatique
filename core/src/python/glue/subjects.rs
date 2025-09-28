@@ -1,6 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
+use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 #[pyclass(eq, hash, frozen)]
@@ -44,19 +45,16 @@ impl From<SubjectId> for crate::rpc::cmd_msg::MsgSubjectId {
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     pub id: SubjectId,
-    #[pyo3(set, get)]
+    #[pyo3(get)]
     pub parameters: SubjectParameters,
+    #[pyo3(get)]
+    pub excluded_periods: BTreeSet<PeriodId>,
 }
 
 #[pymethods]
 impl Subject {
-    #[new]
-    fn new(id: SubjectId, parameters: SubjectParameters) -> Self {
-        Subject { id, parameters }
-    }
-
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())

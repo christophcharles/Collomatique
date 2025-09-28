@@ -94,6 +94,7 @@ mod group_lists;
 mod incompatibilities;
 mod rules;
 use rules::RuleId;
+mod params;
 mod settings;
 mod slots;
 
@@ -564,6 +565,11 @@ impl Session {
             .map(|(id, data)| Subject {
                 id: MsgSubjectId::from(*id).into(),
                 parameters: data.parameters.clone().into(),
+                excluded_periods: data
+                    .excluded_periods
+                    .iter()
+                    .map(|period_id| MsgPeriodId::from(*period_id).into())
+                    .collect(),
             })
             .collect()
     }

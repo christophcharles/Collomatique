@@ -29,7 +29,7 @@ pub struct Colloscope {
     /// Name for the colloscope
     pub name: String,
     /// Parameters at the time of the colloscope creation
-    pub params: super::colloscope_params::ColloscopeParameters<
+    pub params: super::colloscope_params::Parameters<
         ColloscopePeriodId,
         ColloscopeSubjectId,
         ColloscopeTeacherId,
@@ -59,7 +59,7 @@ pub struct Colloscope {
 impl Colloscope {
     pub(crate) fn check_invariants(
         &self,
-        main_params: &super::colloscope_params::ColloscopeParameters<
+        main_params: &super::colloscope_params::Parameters<
             PeriodId,
             SubjectId,
             TeacherId,
@@ -95,7 +95,7 @@ impl ColloscopeData {
     /// The function might panic if the parameters do not satisfy parameters invariants
     /// You should check this before hand with [super::colloscope_params::ColloscopeParameters::check_invariants].
     pub fn new_empty_from_params(
-        params: &super::colloscope_params::ColloscopeParameters<
+        params: &super::colloscope_params::Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -216,7 +216,7 @@ impl ColloscopeData {
 
     pub(crate) fn validate_against_params(
         &self,
-        params: &super::colloscope_params::ColloscopeParameters<
+        params: &super::colloscope_params::Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -275,7 +275,7 @@ impl ColloscopePeriod {
     pub(crate) fn validate_against_params(
         &self,
         period_id: ColloscopePeriodId,
-        params: &super::colloscope_params::ColloscopeParameters<
+        params: &super::colloscope_params::Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -338,7 +338,7 @@ impl ColloscopeSubject {
         &self,
         period_id: ColloscopePeriodId,
         subject_id: ColloscopeSubjectId,
-        params: &super::colloscope_params::ColloscopeParameters<
+        params: &super::colloscope_params::Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -457,7 +457,7 @@ impl ColloscopeInterrogation {
         subject_id: ColloscopeSubjectId,
         slot_id: ColloscopeSlotId,
         week: usize,
-        params: &super::colloscope_params::ColloscopeParameters<
+        params: &super::colloscope_params::Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
@@ -516,7 +516,7 @@ impl ColloscopeGroupList {
     pub(crate) fn validate_against_params(
         &self,
         group_list_id: ColloscopeGroupListId,
-        params: &super::colloscope_params::ColloscopeParameters<
+        params: &super::colloscope_params::Parameters<
             ColloscopePeriodId,
             ColloscopeSubjectId,
             ColloscopeTeacherId,
