@@ -98,6 +98,10 @@ def main():
     
     csv_columns, csv_content = open_csv(file_path)
 
+    periods = session.get_main_params().periods
+    if len(periods) == 0:
+        session.periods_add(10)
+
     subject_set = build_subject_set(csv_content)
     subject_ids = add_subjects(session, subject_set)
 
