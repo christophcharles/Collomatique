@@ -323,34 +323,6 @@ impl Session {
         }
     }
 
-    fn periods_get_first_week(self_: PyRef<'_, Self>) -> Option<time::NaiveMondayDate> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .periods
-            .first_week
-            .as_ref()
-            .map(|x| x.clone().into())
-    }
-
-    fn periods_get_list(self_: PyRef<'_, Self>) -> Vec<Period> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, data)| Period {
-                id: MsgPeriodId::from(*id).into(),
-                weeks_status: data.clone(),
-            })
-            .collect()
-    }
-
     fn subjects_add(
         self_: PyRef<'_, Self>,
         subject_params: subjects::SubjectParameters,
@@ -512,68 +484,6 @@ impl Session {
         }
     }
 
-    fn subjects_get_period_status(
-        self_: PyRef<'_, Self>,
-        subject_id: SubjectId,
-        period_id: PeriodId,
-    ) -> PyResult<bool> {
-        let data = self_.token.get_data();
-
-        let Some(validated_subject_id) = data
-            .get_inner_data()
-            .main_params
-            .validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid subject id {:?}",
-                subject_id
-            )));
-        };
-
-        let Some(subject) = data
-            .get_inner_data()
-            .main_params
-            .subjects
-            .find_subject(validated_subject_id)
-        else {
-            panic!("subject id should be valid at this point");
-        };
-
-        let Some(validated_period_id) = data
-            .get_inner_data()
-            .main_params
-            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid period id {:?}",
-                period_id
-            )));
-        };
-
-        Ok(!subject.excluded_periods.contains(&validated_period_id))
-    }
-
-    fn subjects_get_list(self_: PyRef<'_, Self>) -> Vec<subjects::Subject> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .subjects
-            .ordered_subject_list
-            .iter()
-            .map(|(id, data)| Subject {
-                id: MsgSubjectId::from(*id).into(),
-                parameters: data.parameters.clone().into(),
-                excluded_periods: data
-                    .excluded_periods
-                    .iter()
-                    .map(|period_id| MsgPeriodId::from(*period_id).into())
-                    .collect(),
-            })
-            .collect()
-    }
-
     fn teachers_add(self_: PyRef<'_, Self>, teacher: teachers::Teacher) -> PyResult<TeacherId> {
         let result =
             self_
@@ -645,19 +555,6 @@ impl Session {
         }
     }
 
-    fn teachers_get_list(self_: PyRef<'_, Self>) -> BTreeMap<TeacherId, Teacher> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .teachers
-            .teacher_map
-            .iter()
-            .map(|(id, data)| (MsgTeacherId::from(*id).into(), data.clone().into()))
-            .collect()
-    }
-
     fn students_add(self_: PyRef<'_, Self>, student: students::Student) -> PyResult<StudentId> {
         let result =
             self_
@@ -727,19 +624,6 @@ impl Session {
         }
     }
 
-    fn students_get_list(self_: PyRef<'_, Self>) -> BTreeMap<StudentId, Student> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .students
-            .student_map
-            .iter()
-            .map(|(id, data)| (MsgStudentId::from(*id).into(), data.clone().into()))
-            .collect()
-    }
-
     fn assignments_set(
         self_: PyRef<'_, Self>,
         period_id: PeriodId,
@@ -785,81 +669,6 @@ impl Session {
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
-    }
-
-    fn assignments_get(
-        self_: PyRef<'_, Self>,
-        period_id: PeriodId,
-        student_id: StudentId,
-        subject_id: SubjectId,
-    ) -> PyResult<bool> {
-        let current_data = self_.token.get_data();
-
-        let Some(period_id) = current_data
-            .get_inner_data()
-            .main_params
-            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid period id {:?}",
-                period_id
-            )));
-        };
-        let Some(student_id) = current_data
-            .get_inner_data()
-            .main_params
-            .validate_student_id(MsgStudentId::from(student_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid student id {:?}",
-                student_id
-            )));
-        };
-        let Some(subject_id) = current_data
-            .get_inner_data()
-            .main_params
-            .validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid subject id {:?}",
-                subject_id
-            )));
-        };
-
-        let student = current_data
-            .get_inner_data()
-            .main_params
-            .students
-            .student_map
-            .get(&student_id)
-            .expect("Student id should be valid at this point");
-
-        if student.excluded_periods.contains(&period_id) {
-            return Err(PyValueError::new_err(format!(
-                "Student {:?} is not present on period {:?}",
-                student_id, period_id
-            )));
-        }
-
-        let Some(assigned_students) = current_data
-            .get_inner_data()
-            .main_params
-            .assignments
-            .period_map
-            .get(&period_id)
-            .expect("Period id should be valid at this point")
-            .subject_map
-            .get(&subject_id)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Subject {:?} does not run on period {:?}",
-                subject_id, period_id
-            )));
-        };
-
-        let value = assigned_students.contains(&student_id);
-
-        Ok(value)
     }
 
     fn assignments_duplicate_previous_period(
@@ -984,19 +793,6 @@ impl Session {
             }
             _ => panic!("Unexpected result: {:?}", result),
         }
-    }
-
-    fn week_patterns_get_list(self_: PyRef<'_, Self>) -> BTreeMap<WeekPatternId, WeekPattern> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .week_patterns
-            .week_pattern_map
-            .iter()
-            .map(|(id, data)| (MsgWeekPatternId::from(*id).into(), data.clone().into()))
-            .collect()
     }
 
     fn slots_add(
@@ -1153,31 +949,6 @@ impl Session {
         }
     }
 
-    fn slots_get_list(self_: PyRef<'_, Self>) -> BTreeMap<subjects::SubjectId, Vec<slots::Slot>> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .slots
-            .subject_map
-            .iter()
-            .map(|(subject_id, subject_slots)| {
-                (
-                    MsgSubjectId::from(*subject_id).into(),
-                    subject_slots
-                        .ordered_slots
-                        .iter()
-                        .map(|(id, data)| slots::Slot {
-                            id: MsgSlotId::from(*id).into(),
-                            parameters: data.clone().into(),
-                        })
-                        .collect(),
-                )
-            })
-            .collect()
-    }
-
     fn incompats_add(
         self_: PyRef<'_, Self>,
         incompat: incompatibilities::Incompat,
@@ -1261,26 +1032,6 @@ impl Session {
             }
             _ => panic!("Unexpected result: {:?}", result),
         }
-    }
-
-    fn incompats_get_list(
-        self_: PyRef<'_, Self>,
-    ) -> BTreeMap<incompatibilities::IncompatId, incompatibilities::Incompat> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .incompats
-            .incompat_map
-            .iter()
-            .map(|(incompat_id, incompat)| {
-                (
-                    MsgIncompatId::from(*incompat_id).into(),
-                    incompat.clone().into(),
-                )
-            })
-            .collect()
     }
 
     fn group_lists_add(
@@ -1406,26 +1157,6 @@ impl Session {
         }
     }
 
-    fn group_lists_get_list(
-        self_: PyRef<'_, Self>,
-    ) -> BTreeMap<group_lists::GroupListId, group_lists::GroupList> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .group_lists
-            .group_list_map
-            .iter()
-            .map(|(group_list_id, group_list)| {
-                (
-                    MsgGroupListId::from(*group_list_id).into(),
-                    group_list.clone().into(),
-                )
-            })
-            .collect()
-    }
-
     fn group_lists_set_association(
         self_: PyRef<'_, Self>,
         period_id: general_planning::PeriodId,
@@ -1471,48 +1202,6 @@ impl Session {
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
-    }
-
-    fn group_lists_get_association(
-        self_: PyRef<'_, Self>,
-        period_id: general_planning::PeriodId,
-        subject_id: subjects::SubjectId,
-    ) -> PyResult<Option<group_lists::GroupListId>> {
-        let current_data = self_.token.get_data();
-
-        let Some(period_id) = current_data
-            .get_inner_data()
-            .main_params
-            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid period id {:?}",
-                period_id
-            )));
-        };
-
-        let Some(subject_id) = current_data
-            .get_inner_data()
-            .main_params
-            .validate_subject_id(MsgSubjectId::from(subject_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid subject id {:?}",
-                subject_id
-            )));
-        };
-
-        let subject_map = current_data
-            .get_inner_data()
-            .main_params
-            .group_lists
-            .subjects_associations
-            .get(&period_id)
-            .expect("Period id should be valid at this point");
-
-        let group_list_id = subject_map.get(&subject_id);
-
-        Ok(group_list_id.map(|x| MsgGroupListId::from(*x).into()))
     }
 
     fn rules_add(self_: PyRef<'_, Self>, rule: rules::Rule) -> PyResult<rules::RuleId> {
@@ -1579,29 +1268,6 @@ impl Session {
         }
     }
 
-    fn rules_get_list(self_: PyRef<'_, Self>) -> PyResult<BTreeMap<rules::RuleId, rules::Rule>> {
-        let mut new_map = BTreeMap::new();
-
-        for (rule_id, rule) in &self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .rules
-            .rule_map
-        {
-            new_map.insert(
-                MsgRuleId::from(*rule_id).into(),
-                rules::Rule {
-                    name: rule.name.clone(),
-                    logic_rule: rule.desc.clone().try_into()?,
-                },
-            );
-        }
-
-        Ok(new_map)
-    }
-
     fn rules_update_period_status(
         self_: PyRef<'_, Self>,
         rule_id: RuleId,
@@ -1635,48 +1301,6 @@ impl Session {
         }
     }
 
-    fn rules_get_period_status(
-        self_: PyRef<'_, Self>,
-        rule_id: RuleId,
-        period_id: PeriodId,
-    ) -> PyResult<bool> {
-        let data = self_.token.get_data();
-
-        let Some(validated_rule_id) = data
-            .get_inner_data()
-            .main_params
-            .validate_rule_id(MsgRuleId::from(rule_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid rule id {:?}",
-                rule_id
-            )));
-        };
-
-        let Some(rule) = data
-            .get_inner_data()
-            .main_params
-            .rules
-            .rule_map
-            .get(&validated_rule_id)
-        else {
-            panic!("rule id should be valid at this point");
-        };
-
-        let Some(validated_period_id) = data
-            .get_inner_data()
-            .main_params
-            .validate_period_id(MsgPeriodId::from(period_id.clone()).0)
-        else {
-            return Err(PyValueError::new_err(format!(
-                "Invalid period id {:?}",
-                period_id
-            )));
-        };
-
-        Ok(!rule.excluded_periods.contains(&validated_period_id))
-    }
-
     fn settings_update_strict_limits(
         self_: PyRef<'_, Self>,
         strict_limits: settings::StrictLimits,
@@ -1692,17 +1316,6 @@ impl Session {
             ResultMsg::Ack(None) => Ok(()),
             _ => panic!("Unexpected result: {:?}", result),
         }
-    }
-
-    fn settings_get(self_: PyRef<'_, Self>) -> settings::GeneralSettings {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .settings
-            .clone()
-            .into()
     }
 
     fn get_main_params(self_: PyRef<'_, Self>) -> PyResult<params::GeneralParameters> {
