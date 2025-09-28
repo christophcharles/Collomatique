@@ -38,7 +38,7 @@ def find_subject_or_new_id(session, subject, current_subjects):
 
 def add_subjects(session, subject_set):
     subject_ids = {}
-    current_subjects = session.subjects_get_list()
+    current_subjects = session.get_main_params().subjects
     for subject in subject_set:
         sub_id = find_subject_or_new_id(session, subject, current_subjects)
         subject_ids[subject] = sub_id
@@ -78,7 +78,7 @@ def add_student_from_csv_line(session, csv_line, subject_ids):
     student = collomatique.Student(firstname, surname)
     student_id = session.students_add(student)
 
-    periods = session.periods_get_list()
+    periods = session.get_main_params().periods
 
     for column in ["Option 1", "Option 2", "Option 3", "Autres options"]:
         opt = csv_line[column][0]
