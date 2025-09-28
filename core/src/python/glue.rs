@@ -1704,6 +1704,16 @@ impl Session {
             .clone()
             .into()
     }
+
+    fn get_main_params(self_: PyRef<'_, Self>) -> PyResult<params::GeneralParameters> {
+        self_
+            .token
+            .get_data()
+            .get_inner_data()
+            .main_params
+            .clone()
+            .try_into()
+    }
 }
 
 #[derive(Clone, Debug)]
