@@ -33,11 +33,14 @@ pub struct GeneralParameters {
     pub settings: settings::GeneralSettings,
 }
 
-impl From<collomatique_state_colloscopes::colloscope_params::GeneralParameters>
+impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameters>
     for GeneralParameters
 {
-    fn from(value: collomatique_state_colloscopes::colloscope_params::GeneralParameters) -> Self {
-        GeneralParameters {
+    type Error = PyErr;
+    fn try_from(
+        value: collomatique_state_colloscopes::colloscope_params::GeneralParameters,
+    ) -> PyResult<Self> {
+        Ok(GeneralParameters {
             periods: value
                 .periods
                 .ordered_period_list
@@ -179,19 +182,16 @@ impl From<collomatique_state_colloscopes::colloscope_params::GeneralParameters>
                 .rule_map
                 .into_iter()
                 .map(|(rule_id, rule)| {
-                    (
-                        MsgRuleId::from(rule_id).into(),
+                    PyResult::Ok((
+                        RuleId::from(MsgRuleId::from(rule_id)),
                         rules::Rule {
                             name: rule.name,
-                            logic_rule: rule
-                                .desc
-                                .try_into()
-                                .expect("No error in Python memory handling"),
+                            logic_rule: rule.desc.try_into()?,
                         },
-                    )
+                    ))
                 })
-                .collect(),
+                .collect::<Result<_, _>>()?,
             settings: value.settings.into(),
-        }
+        })
     }
 }
