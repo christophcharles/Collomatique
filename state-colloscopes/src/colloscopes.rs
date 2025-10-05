@@ -23,6 +23,19 @@ pub struct Colloscopes {
     pub colloscope_map: BTreeMap<ColloscopeId, Colloscope>,
 }
 
+impl Colloscopes {
+    /// Promotes an u64 to a [ColloscopeId] if it is valid
+    pub fn validate_colloscope_id(&self, id: u64) -> Option<ColloscopeId> {
+        use crate::ids::Id;
+        let temp_colloscope_id = unsafe { ColloscopeId::new(id) };
+        if self.colloscope_map.contains_key(&temp_colloscope_id) {
+            return Some(temp_colloscope_id);
+        }
+
+        None
+    }
+}
+
 /// Description of a single colloscope
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Colloscope {

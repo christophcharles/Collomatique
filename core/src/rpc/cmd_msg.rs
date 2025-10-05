@@ -26,6 +26,8 @@ pub mod rules;
 pub use rules::*;
 pub mod settings;
 pub use settings::*;
+pub mod colloscopes;
+pub use colloscopes::*;
 
 use collomatique_state_colloscopes::ids::Id;
 
@@ -57,6 +59,7 @@ pub enum UpdateMsg {
     GroupLists(GroupListsCmdMsg),
     Rules(RulesCmdMsg),
     Settings(SettingsCmdMsg),
+    Colloscopes(ColloscopesCmdMsg),
 }
 
 impl UpdateMsg {
@@ -78,6 +81,7 @@ impl UpdateMsg {
             UpdateMsg::GroupLists(op) => crate::ops::UpdateOp::GroupLists(op.promote(data)?),
             UpdateMsg::Rules(op) => crate::ops::UpdateOp::Rules(op.promote(data)?),
             UpdateMsg::Settings(op) => crate::ops::UpdateOp::Settings(op.promote(data)),
+            UpdateMsg::Colloscopes(op) => crate::ops::UpdateOp::Colloscopes(op.promote(data)?),
         })
     }
 }
