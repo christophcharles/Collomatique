@@ -2,6 +2,7 @@
 //!
 //! This module defines the relevant types to describes the subjects
 
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     num::NonZeroU32,
@@ -10,7 +11,7 @@ use std::{
 use crate::ids::{ColloscopePeriodId, ColloscopeSubjectId, Id};
 
 /// Description of the subjects
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Subjects<SubjectId: Id, PeriodId: Id> {
     /// Ordered list of subjects
     ///
@@ -28,7 +29,7 @@ impl<SubjectId: Id, PeriodId: Id> Default for Subjects<SubjectId, PeriodId> {
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Subject<PeriodId: Id> {
     /// Parameters for the subject
     ///
@@ -51,7 +52,7 @@ impl<PeriodId: Id> Default for Subject<PeriodId> {
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectParameters {
     /// Name of the subject
     ///
@@ -65,7 +66,7 @@ pub struct SubjectParameters {
 }
 
 /// Description of the interrogations parameters for a subject
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectInterrogationParameters {
     /// Students per group
     ///
@@ -112,7 +113,7 @@ pub struct SubjectInterrogationParameters {
 }
 
 /// Periodicity information for a subject
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubjectPeriodicity {
     /// The interrogation must happen once for every block of time
     ///
@@ -207,7 +208,7 @@ pub enum SubjectPeriodicity {
 ///
 /// The second parameter is [WeekBlock::size_in_weeks]. This is the length of the block
 /// in weeks. It cannot be zero sized: a block always has at least one week.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekBlock {
     /// Delay (in weeks) between the previous blocks and the current one.
     ///

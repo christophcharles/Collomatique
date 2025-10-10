@@ -5,10 +5,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{ColloscopeIncompatId, ColloscopeSubjectId, ColloscopeWeekPatternId, Id};
 
 /// Description of the schedule incompatibilities
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Incompats<IncompatId: Id, SubjectId: Id, WeekPatternId: Id> {
     /// Incompats for subjects
     ///
@@ -27,7 +29,7 @@ impl<IncompatId: Id, SubjectId: Id, WeekPatternId: Id> Default
 }
 
 /// Description of a single schedule incompat
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Incompatibility<SubjectId: Id, WeekPatternId: Id> {
     /// Subject the incompatibility is linked to
     pub subject_id: SubjectId,

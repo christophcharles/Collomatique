@@ -445,6 +445,7 @@ dependencies = [
  "collomatique-state",
  "collomatique-time",
  "non-empty-string",
+ "serde",
  "thiserror",
 ]
 

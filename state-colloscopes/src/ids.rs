@@ -5,6 +5,7 @@
 //!
 
 use collomatique_state::tools;
+use serde::{Deserialize, Serialize};
 
 pub trait Id:
     Clone + Copy + std::fmt::Debug + Ord + PartialOrd + Eq + PartialEq + Send + Sync + 'static
@@ -21,7 +22,7 @@ pub trait Id:
 ///
 /// Every student gets a unique ID. IDs then identify students
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct StudentId(u64);
 
 impl Id for StudentId {
@@ -38,7 +39,7 @@ impl Id for StudentId {
 ///
 /// Every period gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PeriodId(u64);
 
 impl Id for PeriodId {
@@ -55,7 +56,7 @@ impl Id for PeriodId {
 ///
 /// Every subject gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SubjectId(u64);
 
 impl Id for SubjectId {
@@ -72,7 +73,7 @@ impl Id for SubjectId {
 ///
 /// Every teacher gets a unique ID. IDs then identify teachers
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TeacherId(u64);
 
 impl Id for TeacherId {
@@ -89,7 +90,7 @@ impl Id for TeacherId {
 ///
 /// Every week pattern gets a unique ID. IDs then identify week patterns
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct WeekPatternId(u64);
 
 impl Id for WeekPatternId {
@@ -106,7 +107,7 @@ impl Id for WeekPatternId {
 ///
 /// Every interrogation slot gets a unique ID. IDs then identify slots
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SlotId(u64);
 
 impl Id for SlotId {
@@ -123,7 +124,7 @@ impl Id for SlotId {
 ///
 /// Every incompatibility gets a unique ID. IDs then identify incompatibilities
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct IncompatId(u64);
 
 impl Id for IncompatId {
@@ -140,7 +141,7 @@ impl Id for IncompatId {
 ///
 /// Every group list gets a unique ID. IDs then identify group lists
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct GroupListId(u64);
 
 impl Id for GroupListId {
@@ -157,7 +158,7 @@ impl Id for GroupListId {
 ///
 /// Every rule gets a unique ID. IDs then identify rules
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RuleId(u64);
 
 impl Id for RuleId {
@@ -174,7 +175,7 @@ impl Id for RuleId {
 ///
 /// Every colloscope gets a unique ID. IDs then identify colloscopes
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeId(u64);
 
 impl Id for ColloscopeId {
@@ -191,7 +192,7 @@ impl Id for ColloscopeId {
 ///
 /// Every student gets a unique ID. IDs then identify students
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeStudentId(u64);
 
 impl Id for ColloscopeStudentId {
@@ -208,7 +209,7 @@ impl Id for ColloscopeStudentId {
 ///
 /// Every period gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopePeriodId(u64);
 
 impl Id for ColloscopePeriodId {
@@ -225,7 +226,7 @@ impl Id for ColloscopePeriodId {
 ///
 /// Every subject gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeSubjectId(u64);
 
 impl Id for ColloscopeSubjectId {
@@ -242,7 +243,7 @@ impl Id for ColloscopeSubjectId {
 ///
 /// Every teacher gets a unique ID. IDs then identify teachers
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeTeacherId(u64);
 
 impl Id for ColloscopeTeacherId {
@@ -259,7 +260,7 @@ impl Id for ColloscopeTeacherId {
 ///
 /// Every week pattern gets a unique ID. IDs then identify week patterns
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeWeekPatternId(u64);
 
 impl Id for ColloscopeWeekPatternId {
@@ -276,7 +277,7 @@ impl Id for ColloscopeWeekPatternId {
 ///
 /// Every interrogation slot gets a unique ID. IDs then identify slots
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeSlotId(u64);
 
 impl Id for ColloscopeSlotId {
@@ -293,7 +294,7 @@ impl Id for ColloscopeSlotId {
 ///
 /// Every incompatibility gets a unique ID. IDs then identify incompatibilities
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeIncompatId(u64);
 
 impl Id for ColloscopeIncompatId {
@@ -310,7 +311,7 @@ impl Id for ColloscopeIncompatId {
 ///
 /// Every group list gets a unique ID. IDs then identify group lists
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeGroupListId(u64);
 
 impl Id for ColloscopeGroupListId {
@@ -327,7 +328,7 @@ impl Id for ColloscopeGroupListId {
 ///
 /// Every rule gets a unique ID. IDs then identify rules
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColloscopeRuleId(u64);
 
 impl Id for ColloscopeRuleId {

@@ -9,6 +9,7 @@ mod tests;
 use std::num::NonZeroU32;
 
 use chrono::Timelike;
+use serde::{Deserialize, Serialize};
 
 /// DurationInMinutes obviously represents a duration in minutes.
 ///
@@ -19,7 +20,7 @@ use chrono::Timelike;
 /// Crucially all durations have always positive span.
 ///
 /// On top of that it implements a few utility functions to interact with chrono.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NonZeroDurationInMinutes(NonZeroU32);
 
 impl NonZeroDurationInMinutes {
@@ -55,7 +56,7 @@ impl From<NonZeroU32> for NonZeroDurationInMinutes {
 
 /// Encapsulates a [chrono::Weekday] and gives it a default ordering
 /// (monday is the lowest and sunday the biggest day)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Weekday(pub chrono::Weekday);
 
 impl PartialOrd for Weekday {
@@ -132,9 +133,23 @@ impl std::ops::DerefMut for Weekday {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct TimeOnMinutes {
     internal: chrono::NaiveTime,
+}
+
+impl<'de> serde::Deserialize<'de> for TimeOnMinutes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let naive_time = chrono::NaiveTime::deserialize(deserializer)?;
+        use serde::de::Error;
+        match Self::new(naive_time) {
+            Some(t) => Ok(t),
+            None => Err(D::Error::custom("Time not a whole minute")),
+        }
+    }
 }
 
 impl TimeOnMinutes {
@@ -167,7 +182,7 @@ impl std::ops::Deref for TimeOnMinutes {
 /// Type representing the beginning of a slot in time
 ///
 /// A slot starts on a given weekday at a certain time.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct SlotStart {
     /// Weekday the slot starts on
     pub weekday: Weekday,
@@ -188,7 +203,7 @@ pub struct SlotStart {
 /// cannot be zero minutes long.
 ///
 /// A slot cannot cross a day boundary
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct SlotWithDuration {
     /// start of the slot described by a [SlotStart]
     start: SlotStart,
@@ -266,8 +281,22 @@ impl SlotWithDuration {
 /// of a specific week.
 ///
 /// Internally it is just a [chrono::NaiveDate].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct NaiveMondayDate(chrono::NaiveDate);
+
+impl<'de> serde::Deserialize<'de> for NaiveMondayDate {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let naive_date = chrono::NaiveDate::deserialize(deserializer)?;
+        use serde::de::Error;
+        match Self::new(naive_date) {
+            Some(d) => Ok(d),
+            None => Err(D::Error::custom("Date is not a monday")),
+        }
+    }
+}
 
 impl NaiveMondayDate {
     /// Builds a [NaiveMondayDate] from a [chrono::NaiveDate]

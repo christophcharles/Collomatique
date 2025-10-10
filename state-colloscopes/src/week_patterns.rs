@@ -4,10 +4,12 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{ColloscopeWeekPatternId, Id};
 
 /// Description of the week patterns
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekPatterns<WeekPatternId: Id> {
     /// Week patterns
     ///
@@ -24,7 +26,7 @@ impl<WeekPatternId: Id> Default for WeekPatterns<WeekPatternId> {
 }
 
 /// Description of a week pattern
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekPattern {
     /// Name of the week pattern for identification
     pub name: String,

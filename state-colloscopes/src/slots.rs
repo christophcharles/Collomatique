@@ -4,12 +4,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{
     ColloscopeSlotId, ColloscopeSubjectId, ColloscopeTeacherId, ColloscopeWeekPatternId, Id,
 };
 
 /// Description of the interrogation slots
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slots<SubjectId: Id, SlotId: Id, TeacherId: Id, WeekPatternId: Id> {
     /// Slots for each subject
     ///
@@ -29,7 +31,7 @@ impl<SubjectId: Id, SlotId: Id, TeacherId: Id, WeekPatternId: Id> Default
 }
 
 /// Description of the interrogation slots for a subject
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectSlots<SlotId: Id, TeacherId: Id, WeekPatternId: Id> {
     /// Slots for the subject in order
     pub ordered_slots: Vec<(SlotId, Slot<TeacherId, WeekPatternId>)>,
@@ -46,7 +48,7 @@ impl<SlotId: Id, TeacherId: Id, WeekPatternId: Id> Default
 }
 
 /// Description of a single slot
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot<TeacherId: Id, WeekPatternId: Id> {
     /// Teacher for the interrogation
     pub teacher_id: TeacherId,

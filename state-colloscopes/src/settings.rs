@@ -4,15 +4,17 @@
 
 use std::num::NonZeroU32;
 
+use serde::{Deserialize, Serialize};
+
 /// Description of the general settings
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct GeneralSettings {
     /// Strict limits to impose during resolution
     pub strict_limits: StrictLimits,
 }
 
 /// Strict limits in resolution
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct StrictLimits {
     /// Number of interrogations for each student per week
     pub interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,

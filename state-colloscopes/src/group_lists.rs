@@ -6,12 +6,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{
     ColloscopeGroupListId, ColloscopePeriodId, ColloscopeStudentId, ColloscopeSubjectId, Id,
 };
 
 /// Description of the group lists
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupLists<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id> {
     /// Group lists
     ///
@@ -36,7 +38,7 @@ impl<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id> Default
 }
 
 /// Description of a single group list
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupList<StudentId: Id> {
     /// parameters for the group list
     pub params: GroupListParameters<StudentId>,
@@ -45,7 +47,7 @@ pub struct GroupList<StudentId: Id> {
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupListPrefilledGroups<StudentId: Id> {
     /// group list
     pub groups: Vec<PrefilledGroup<StudentId>>,
@@ -58,7 +60,7 @@ impl<StudentId: Id> Default for GroupListPrefilledGroups<StudentId> {
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefilledGroup<StudentId: Id> {
     /// Optional name for the group
     pub name: Option<non_empty_string::NonEmptyString>,
@@ -194,7 +196,7 @@ impl<StudentId: Id> GroupListPrefilledGroups<StudentId> {
 }
 
 /// Parameters for a single group list
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupListParameters<StudentId: Id> {
     /// Name for the list
     pub name: String,

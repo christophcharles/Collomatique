@@ -4,10 +4,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{ColloscopePeriodId, ColloscopeRuleId, ColloscopeSlotId, Id};
 
 /// Description of the rules
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rules<RuleId: Id, PeriodId: Id, SlotId: Id> {
     /// Rules
     ///
@@ -24,7 +26,7 @@ impl<RuleId: Id, PeriodId: Id, SlotId: Id> Default for Rules<RuleId, PeriodId, S
 }
 
 /// Description of a single rule
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rule<PeriodId: Id, SlotId: Id> {
     /// name for the rule
     pub name: String,
@@ -37,7 +39,7 @@ pub struct Rule<PeriodId: Id, SlotId: Id> {
 }
 
 /// Logic rule enumeration
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LogicRule<SlotId: Id> {
     And(Box<LogicRule<SlotId>>, Box<LogicRule<SlotId>>),
     Or(Box<LogicRule<SlotId>>, Box<LogicRule<SlotId>>),

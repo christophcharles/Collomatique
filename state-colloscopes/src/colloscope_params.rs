@@ -10,6 +10,8 @@ use crate::ids::{
 
 use super::*;
 
+use serde::{Deserialize, Serialize};
+
 /// Full set of parameters to describe the constraints for colloscopes
 ///
 /// This structure contains all the parameters we might want to adjust
@@ -18,7 +20,7 @@ use super::*;
 /// This structure is used in two ways:
 /// - a main version is used in [InnerData] to represent the currently edited parameters
 /// - another version is used for each colloscope to store the parameters used for its generation
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Parameters<
     PeriodId: Id,
     SubjectId: Id,
@@ -71,7 +73,7 @@ pub type ColloscopeParameters = Parameters<
 /// Params for a specific colloscope are stored when the colloscope is produced (even if empty).
 /// To avoid issues with ids, the parameter set is given new ids (with new types to avoid some programming errors).
 /// But it is useful to know to what ids the new ids correspond. This stores the map between the old ids and the new ones.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeIdMaps<
     PeriodId: Id,
     SubjectId: Id,

@@ -2,12 +2,13 @@
 //!
 //! This module defines the relevant types to describes the periods
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::ids::{ColloscopePeriodId, Id};
 
 /// Description of the periods
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Periods<PeriodId: Id> {
     /// Start date for the colloscope
     ///

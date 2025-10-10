@@ -4,6 +4,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{
     ColloscopeGroupListId, ColloscopeId, ColloscopeIncompatId, ColloscopePeriodId,
     ColloscopeRuleId, ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId,
@@ -15,7 +17,7 @@ use crate::ids::{
 };
 
 /// Description of the colloscopes
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Colloscopes {
     /// List of colloscopes
     ///
@@ -37,7 +39,7 @@ impl Colloscopes {
 }
 
 /// Description of a single colloscope
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Colloscope {
     /// Name for the colloscope
     pub name: String,
@@ -96,7 +98,7 @@ impl Colloscope {
 /// Description of actual colloscope data
 ///
 /// the ids should be valid with respect to the corresponding params
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeData {
     pub period_map: BTreeMap<ColloscopePeriodId, ColloscopePeriod>,
     pub group_lists: BTreeMap<ColloscopeGroupListId, ColloscopeGroupList>,
@@ -276,7 +278,7 @@ impl ColloscopeData {
 }
 
 /// Description of a single period in a colloscope
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopePeriod {
     /// Map between subjects and interrogations for these subjects
     ///
@@ -332,7 +334,7 @@ impl ColloscopePeriod {
 }
 
 /// Description of a single subject in a period in a colloscope
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeSubject {
     /// Map between slots and list of interrogations
     ///
@@ -457,7 +459,7 @@ impl ColloscopeSubject {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeInterrogation {
     /// List of groups assigned to the interrogation
     pub assigned_groups: BTreeSet<u32>,
@@ -520,7 +522,7 @@ impl ColloscopeInterrogation {
 ///
 /// This is basically map between students that are in the group lists
 /// and actual group numbers
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeGroupList {
     pub groups_for_students: BTreeMap<ColloscopeStudentId, Option<u32>>,
 }

@@ -4,10 +4,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{ColloscopePeriodId, ColloscopeStudentId, ColloscopeSubjectId, Id};
 
 /// Description of the assignments
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Assignments<PeriodId: Id, SubjectId: Id, StudentId: Id> {
     /// Assignments for each period
     ///
@@ -27,7 +29,7 @@ impl<PeriodId: Id, SubjectId: Id, StudentId: Id> Default
 }
 
 /// Description of an assignment for a period
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeriodAssignments<SubjectId: Id, StudentId: Id> {
     /// Assignments for each student on the period
     ///

@@ -4,10 +4,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::ids::{ColloscopeSubjectId, ColloscopeTeacherId, Id};
 
 /// Description of the teachers
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Teachers<TeacherId: Id, SubjectId: Id> {
     /// List of teachers
     ///
@@ -24,7 +26,7 @@ impl<TeacherId: Id, SubjectId: Id> Default for Teachers<TeacherId, SubjectId> {
 }
 
 /// Description of a single teacher
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Teacher<SubjectId: Id> {
     /// Description of the teacher in term of name and contact
     pub desc: crate::PersonWithContact,

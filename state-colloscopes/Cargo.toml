@@ -10,3 +10,4 @@ collomatique-time = { path = "../time" }
 thiserror.workspace = true
 non-empty-string.workspace = true
 chrono = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

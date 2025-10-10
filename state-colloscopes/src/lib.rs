@@ -4,6 +4,8 @@
 //! and the various traits for the specific case of colloscope representation.
 //!
 
+use serde::{Deserialize, Serialize};
+
 use assignments::Assignments;
 use collomatique_state::{tools, InMemoryData, Operation};
 use colloscope_params::ColloscopeIdMaps;
@@ -64,7 +66,7 @@ pub mod week_patterns;
 /// Each student and teacher has its own card with name and contacts.
 /// There are not used for the colloscope solving process
 /// but can help produce a nice colloscope output with contact info.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PersonWithContact {
     /// Surname of the person
     ///
@@ -103,7 +105,7 @@ pub struct PersonWithContact {
 /// [InnerData] represents this actual 'on-disk' data so we can
 /// directly use `derive(PartialEq, Eq)` with it. The implementation
 /// of [Eq] and [PartialEq] for [Data] relies on it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InnerData {
     pub main_params: colloscope_params::Parameters<
         PeriodId,
