@@ -121,6 +121,56 @@ pub struct InnerData {
     pub colloscopes: colloscopes::Colloscopes,
 }
 
+#[derive(Debug, Error, PartialEq, Eq, Clone)]
+pub enum InnerDataError {
+    #[error("Duplicate ids")]
+    DuplicateIds,
+    #[error("Error in main paramters: {0}")]
+    MainParams(InvariantError),
+    #[error("Error in colloscope {0:?}: {1}")]
+    ColloscopeError(ColloscopeId, ColloscopeError),
+}
+
+impl InnerData {
+    fn ids(&self) -> impl Iterator<Item = u64> {
+        self.main_params.ids().chain(
+            self.colloscopes
+                .colloscope_map
+                .iter()
+                .flat_map(|(colloscope_id, _colloscope)| [colloscope_id.inner()].into_iter()),
+        )
+    }
+
+    fn check_no_duplicate_ids(&self) -> bool {
+        let mut ids_so_far = BTreeSet::new();
+
+        for id in self.ids() {
+            if !ids_so_far.insert(id) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    pub fn check_invariants(&self) -> Result<(), InnerDataError> {
+        if !self.check_no_duplicate_ids() {
+            return Err(InnerDataError::DuplicateIds);
+        }
+
+        self.main_params
+            .check_invariants()
+            .map_err(InnerDataError::MainParams)?;
+        for (colloscope_id, colloscope) in &self.colloscopes.colloscope_map {
+            colloscope
+                .check_invariants(&self.main_params)
+                .map_err(|x| InnerDataError::ColloscopeError(*colloscope_id, x))?;
+        }
+
+        Ok(())
+    }
+}
+
 /// Complete data that can be handled in the colloscope
 ///
 /// This [Data] structure contains all the data that can
@@ -738,6 +788,15 @@ pub enum FromDataError {
     InconsistentRules,
 }
 
+/// Errors for IDs
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum FromInnerDataError {
+    #[error(transparent)]
+    IdError(#[from] tools::IdError),
+    #[error(transparent)]
+    InnerDataError(#[from] InnerDataError),
+}
+
 /// Potential new id returned by annotation
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NewId {
@@ -932,44 +991,22 @@ impl InMemoryData for Data {
 }
 
 impl Data {
-    fn ids(&self) -> impl Iterator<Item = u64> {
-        self.inner_data.main_params.ids().chain(
-            self.inner_data
-                .colloscopes
-                .colloscope_map
-                .iter()
-                .flat_map(|(colloscope_id, _colloscope)| [colloscope_id.inner()].into_iter()),
-        )
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks that there are no duplicate ids in data
-    ///
-    /// Even ids for different type of data should be different
-    fn check_no_duplicate_ids(&self) {
-        let mut ids_so_far = BTreeSet::new();
-
-        for id in self.ids() {
-            assert!(ids_so_far.insert(id));
-        }
-    }
-
     /// USED INTERNALLY
     ///
     /// Checks all the invariants of data
     fn check_invariants(&self) {
-        self.check_no_duplicate_ids();
+        let max_id = self.inner_data.ids().max();
+
+        if let Some(id) = max_id {
+            let guard = self.id_issuer.lock().expect("No error on lock");
+            if id >= guard.get_internal_counter() {
+                panic!("IdIssuer internal counter is not greater than all internal ids");
+            }
+        }
 
         self.inner_data
-            .main_params
             .check_invariants()
-            .expect("Invariant error in main params");
-        for (_colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-            colloscope
-                .check_invariants(&self.inner_data.main_params)
-                .expect("Invariant error in colloscope");
-        }
+            .expect("Invariants should be valid in Data");
     }
 }
 
@@ -981,6 +1018,25 @@ impl Data {
     pub fn new() -> Data {
         Self::from_data(colloscope_params::ColloscopeParametersExternalData::default())
             .expect("Default data should be valid")
+    }
+
+    /// Create a new [Data] from existing data
+    ///
+    /// This will check the consistency of the data
+    /// and will also do some internal checks, so this might fail.
+    pub fn from_inner_data(inner_data: InnerData) -> Result<Data, FromInnerDataError> {
+        inner_data.check_invariants()?;
+
+        let id_issuer = IdIssuer::new(inner_data.ids())?;
+
+        let data = Data {
+            id_issuer: std::sync::Mutex::new(id_issuer),
+            inner_data,
+        };
+
+        data.check_invariants();
+
+        Ok(data)
     }
 
     /// Create a new [Data] from existing data

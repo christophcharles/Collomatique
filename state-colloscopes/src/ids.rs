@@ -358,6 +358,11 @@ impl IdIssuer {
         })
     }
 
+    /// Returns internal counter
+    pub fn get_internal_counter(&self) -> u64 {
+        self.helper.get_internal_counter()
+    }
+
     /// Get a new unused ID for a student
     pub fn get_student_id(&mut self) -> StudentId {
         StudentId(self.helper.get_new_id().inner())

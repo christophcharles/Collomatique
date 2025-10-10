@@ -77,6 +77,13 @@ impl IdIssuerHelper {
         Ok(IdIssuerHelper { next_available_id })
     }
 
+    /// Returns internal counter
+    ///
+    /// This is useful for invariant checks
+    pub fn get_internal_counter(&self) -> u64 {
+        self.next_available_id
+    }
+
     /// Generates a new (untyped) id
     ///
     /// This function generates a new ID.
