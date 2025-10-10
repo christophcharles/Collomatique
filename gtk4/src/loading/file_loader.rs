@@ -111,12 +111,9 @@ impl FileLoader {
     fn generate_decode_error_message(decode_error: DecodeError) -> String {
         match decode_error {
             DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
-            DecodeError::DuplicatedEntry(_) => "Le fichier est mal formé et est probablement corrompu.\n(Entrée en double)".into(),
             DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
-            DecodeError::InvalidId => "Le fichier est mal formé et est probablement corrompu.\n(ID invalide)".into(),
             DecodeError::MismatchedSpecRequirementInEntry => "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans une entrée)".into(),
             DecodeError::ProbablyIllformedEntry => "Le fichier est mal formé et est probablement corrompu.\n(Entrée dans les spécifications mais non reconnue)".into(),
-            DecodeError::InvalidStartDate => "Le fichier est mal formé et est probablement corrompu.\n(Début de semaine pas sur un lundi)".into(),
             DecodeError::UnknownNeededEntry(version) => format!(
                 "Le fichier a été produit avec une version plus récente de Collomatique et ne peut être ouvert.\nUtiliser la version {} pour ouvrir ce fichier.",
                 version
@@ -125,22 +122,11 @@ impl FileLoader {
                 "Type de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
                 version
             ),
-            DecodeError::PeriodsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de périodes)".into(),
-            DecodeError::StudentsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs d'élèves)".into(),
-            DecodeError::SubjectsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de matières)".into(),
-            DecodeError::TeachersAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de colleurs)".into(),
-            DecodeError::InconsistentAssignmentData => "Le fichier est mal formé et est probablement corrompu.\n(Données d'affectations des élèves aux matières incohérentes)".into(),
-            DecodeError::SubjectsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des matières avant le bloc des périodes)".into(),
-            DecodeError::AssignmentsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des affectations avant le bloc des périodes)".into(),
-            DecodeError::WeekPatternsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de schéma de semaines)".into(),
-            DecodeError::InconsistentSlotsData => "Le fichier est mal formé et est probablement corrompu.\n(Données sur les créneaux de colle incohérentes)".into(),
-            DecodeError::SlotsDecodedBeforeSubjects => "Le fichier est mal formé et est probablement corrompu.\n(Bloc des créneaux avant le bloc des matières)".into(),
-            DecodeError::IllformedSlotInSubjectIncompatibilities => "Le fichier est mal formé et est probablement corrompu.\n(Incompatibilité horaire invalide)".into(),
-            DecodeError::IllformedGroupList => "Le fichier est mal formé et est probablement corrompu.\n(Liste de groupes de colles invalide)".into(),
-            DecodeError::GroupListsAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de listes de groupes de colles)".into(),
-            DecodeError::GroupListsDecodedBeforePeriods => "Le fichier est mal formé et est probablement corrompu.\n(Bloc de listes de groupes avant le bloc des périodes)".into(),
-            DecodeError::IllformedRules => "Le fichier est mal formé et est probablement corrompu.\n(Liste de règles avancées invalide)".into(),
-            DecodeError::RulesAlreadyDecoded => "Le fichier est mal formé et est probablement corrompu.\n(Multiples blocs de règles avancées)".into(),
+            DecodeError::InnerDataDumpUsedOnModifiedInnerData => "Fichier mal formé et est probablement corrompu.\n(Entrée InnerDataDump utilisée sur des données déjà remplies)".into(),
+            DecodeError::InnerDataError(error) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
+                error
+            ),
         }
     }
 }

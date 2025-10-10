@@ -134,9 +134,7 @@ impl std::ops::DerefMut for Weekday {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
-pub struct TimeOnMinutes {
-    internal: chrono::NaiveTime,
-}
+pub struct TimeOnMinutes(chrono::NaiveTime);
 
 impl<'de> serde::Deserialize<'de> for TimeOnMinutes {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -158,17 +156,15 @@ impl TimeOnMinutes {
             return None;
         }
 
-        Some(TimeOnMinutes {
-            internal: naive_time,
-        })
+        Some(TimeOnMinutes(naive_time))
     }
 
     pub fn inner(&self) -> &chrono::NaiveTime {
-        &self.internal
+        &self.0
     }
 
     pub fn into_inner(self) -> chrono::NaiveTime {
-        self.internal
+        self.0
     }
 }
 

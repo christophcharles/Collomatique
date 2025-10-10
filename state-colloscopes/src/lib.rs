@@ -778,6 +778,8 @@ pub enum Error {
 pub enum FromDataError {
     #[error(transparent)]
     IdError(#[from] tools::IdError),
+    #[error("Invalid ID")]
+    InvalidId,
     #[error("Inconsistent assignments")]
     InconsistentAssignments,
     #[error("Error in slots data")]

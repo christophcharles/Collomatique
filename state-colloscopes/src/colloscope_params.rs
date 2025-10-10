@@ -667,13 +667,13 @@ impl ColloscopeParametersExternalData {
             })
             .collect();
         if !self.subjects.validate_all(&period_ids) {
-            return Err(tools::IdError::InvalidId.into());
+            return Err(FromDataError::InvalidId);
         }
         if !self.teachers.validate_all(&self.subjects) {
-            return Err(tools::IdError::InvalidId.into());
+            return Err(FromDataError::InvalidId);
         }
         if !self.students.validate_all(&period_ids) {
-            return Err(tools::IdError::InvalidId.into());
+            return Err(FromDataError::InvalidId);
         }
         if !self
             .assignments
@@ -688,7 +688,7 @@ impl ColloscopeParametersExternalData {
             return Err(FromDataError::InconsistentSlots);
         }
         if !self.incompats.validate_all(&subject_ids, &week_pattern_ids) {
-            return Err(tools::IdError::InvalidId.into());
+            return Err(FromDataError::InvalidId);
         }
         if !self
             .group_lists

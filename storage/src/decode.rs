@@ -21,64 +21,26 @@ pub enum DecodeError {
     MismatchedSpecRequirementInEntry,
     #[error("An entry is probably ill-formed (and thus not recognized)")]
     ProbablyIllformedEntry,
-    #[error("An entry of type {0:?} is duplicated")]
-    DuplicatedEntry(EntryTag),
-    #[error("Duplicated ID found in file")]
-    DuplicatedID,
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
-    #[error("start date for periods is invalid (should be a monday)")]
-    InvalidStartDate,
-    #[error("Invalid ID found in file")]
-    InvalidId,
-    #[error("Periods were already decoded from a previous block")]
-    PeriodsAlreadyDecoded,
-    #[error("Students were already decoded from a previous block")]
-    StudentsAlreadyDecoded,
-    #[error("Subjects were already decoded from a previous block")]
-    SubjectsAlreadyDecoded,
-    #[error("Teachers were already decoded from a previous block")]
-    TeachersAlreadyDecoded,
-    #[error("Student assignments data is inconsistent")]
-    InconsistentAssignmentData,
-    #[error("Subjects were decoded before periods")]
-    SubjectsDecodedBeforePeriods,
-    #[error("Assignments were decoded before periods")]
-    AssignmentsDecodedBeforePeriods,
-    #[error("Week patterns were already decoded from a previous block")]
-    WeekPatternsAlreadyDecoded,
-    #[error("Interrogation slots data is inconsistent")]
-    InconsistentSlotsData,
-    #[error("Slots were decoded before subjects")]
-    SlotsDecodedBeforeSubjects,
-    #[error("A slot is ill-formed in subject incompatibilities")]
-    IllformedSlotInSubjectIncompatibilities,
-    #[error("A group list is ill-formed")]
-    IllformedGroupList,
-    #[error("Group lists were already decoded from a previous block")]
-    GroupListsAlreadyDecoded,
-    #[error("GroupLists were decoded before periods")]
-    GroupListsDecodedBeforePeriods,
-    #[error("Rules data is ill-formed")]
-    IllformedRules,
-    #[error("Rules were already decoded from a previous block")]
-    RulesAlreadyDecoded,
+    #[error("Duplicated ID")]
+    DuplicatedID,
+    #[error("InnerDataDump entry should only be used on non-modified inner-data")]
+    InnerDataDumpUsedOnModifiedInnerData,
+    #[error(transparent)]
+    InnerDataError(#[from] collomatique_state_colloscopes::InnerDataError),
 }
 
-impl From<collomatique_state_colloscopes::FromDataError> for DecodeError {
-    fn from(value: collomatique_state_colloscopes::FromDataError) -> Self {
+impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
+    fn from(value: collomatique_state_colloscopes::FromInnerDataError) -> Self {
         use collomatique_state::tools::IdError;
-        use collomatique_state_colloscopes::FromDataError;
+        use collomatique_state_colloscopes::FromInnerDataError;
         match value {
-            FromDataError::IdError(id_error) => match id_error {
+            FromInnerDataError::IdError(id_error) => match id_error {
                 IdError::DuplicatedId => DecodeError::DuplicatedID,
                 IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
-                IdError::InvalidId => DecodeError::InvalidId,
             },
-            FromDataError::InconsistentAssignments => DecodeError::InconsistentAssignmentData,
-            FromDataError::InconsistentSlots => DecodeError::InconsistentSlotsData,
-            FromDataError::InconsistentGroupLists => DecodeError::IllformedGroupList,
-            FromDataError::InconsistentRules => DecodeError::IllformedRules,
+            FromInnerDataError::InnerDataError(inner_data_error) => inner_data_error.into(),
         }
     }
 }
@@ -124,8 +86,6 @@ fn check_entries_consistency(
     caveats: &mut BTreeSet<Caveat>,
     version: &Version,
 ) -> Result<(), DecodeError> {
-    let mut entries_found_so_far = BTreeSet::new();
-
     for entry in entries {
         match &entry.content {
             EntryContent::UnknownEntry => {
@@ -143,10 +103,6 @@ fn check_entries_consistency(
                 }
                 if entry.needed_entry != valid_entry.needed_entry() {
                     return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-                let tag = EntryTag::from(valid_entry);
-                if !entries_found_so_far.insert(tag) {
-                    return Err(DecodeError::DuplicatedEntry(tag));
                 }
             }
         }
@@ -170,21 +126,10 @@ pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeErr
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 struct PreData {
-    main_params:
-        collomatique_state_colloscopes::colloscope_params::ColloscopeParametersExternalData,
+    inner_data: collomatique_state_colloscopes::InnerData,
 }
 
-mod assignment_map;
-mod group_list_list;
-mod incompat_list;
-mod period_list;
-mod rule_list;
-mod settings;
-mod slot_list;
-mod student_list;
-mod subject_list;
-mod teacher_list;
-mod week_pattern_list;
+mod inner_data_dump;
 
 fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
     let mut pre_data = PreData::default();
@@ -195,76 +140,12 @@ fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
         };
 
         match valid_entry {
-            ValidEntry::StudentList(student_list) => {
-                student_list::decode_entry(student_list, &mut pre_data)?;
-            }
-            ValidEntry::PeriodList(period_list) => {
-                period_list::decode_entry(period_list, &mut pre_data)?;
-            }
-            ValidEntry::SubjectList(subject_list) => {
-                subject_list::decode_entry(subject_list, &mut pre_data)?;
-            }
-            ValidEntry::TeacherList(teacher_list) => {
-                teacher_list::decode_entry(teacher_list, &mut pre_data)?;
-            }
-            ValidEntry::AssignmentMap(assignment_map) => {
-                assignment_map::decode_entry(assignment_map, &mut pre_data)?;
-            }
-            ValidEntry::WeekPatternList(week_pattern_list) => {
-                week_pattern_list::decode_entry(week_pattern_list, &mut pre_data)?;
-            }
-            ValidEntry::SlotList(slot_list) => {
-                slot_list::decode_entry(slot_list, &mut pre_data)?;
-            }
-            ValidEntry::IncompatList(incompat_list) => {
-                incompat_list::decode_entry(incompat_list, &mut pre_data)?;
-            }
-            ValidEntry::GroupListList(group_lists) => {
-                group_list_list::decode_entry(group_lists, &mut pre_data)?;
-            }
-            ValidEntry::RuleList(rule_list) => {
-                rule_list::decode_entry(rule_list, &mut pre_data)?;
-            }
-            ValidEntry::Settings(settings) => {
-                settings::decode_entry(settings, &mut pre_data)?;
+            ValidEntry::InnerDataDump(inner_data) => {
+                inner_data_dump::decode_entry(inner_data, &mut pre_data)?;
             }
         }
     }
 
-    let data = Data::from_data(pre_data.main_params)?;
+    let data = Data::from_inner_data(pre_data.inner_data)?;
     Ok(data)
-}
-
-/// Type of entries that can be found in a file
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum EntryTag {
-    StudentList,
-    PeriodList,
-    SubjectList,
-    TeacherList,
-    AssignmentMap,
-    WeekPatternList,
-    SlotList,
-    IncompatList,
-    GroupListList,
-    RuleList,
-    Settings,
-}
-
-impl From<&ValidEntry> for EntryTag {
-    fn from(value: &ValidEntry) -> Self {
-        match value {
-            ValidEntry::StudentList(_) => EntryTag::StudentList,
-            ValidEntry::PeriodList(_) => EntryTag::PeriodList,
-            ValidEntry::SubjectList(_) => EntryTag::SubjectList,
-            ValidEntry::TeacherList(_) => EntryTag::TeacherList,
-            ValidEntry::AssignmentMap(_) => EntryTag::AssignmentMap,
-            ValidEntry::WeekPatternList(_) => EntryTag::WeekPatternList,
-            ValidEntry::SlotList(_) => EntryTag::SlotList,
-            ValidEntry::IncompatList(_) => EntryTag::IncompatList,
-            ValidEntry::GroupListList(_) => EntryTag::GroupListList,
-            ValidEntry::RuleList(_) => EntryTag::RuleList,
-            ValidEntry::Settings(_) => EntryTag::Settings,
-        }
-    }
 }

@@ -94,19 +94,6 @@ pub struct Entry {
     pub content: EntryContent,
 }
 
-pub mod assignment_map;
-pub mod common;
-pub mod group_list_list;
-pub mod incompat_list;
-pub mod period_list;
-pub mod rule_list;
-pub mod settings;
-pub mod slot_list;
-pub mod student_list;
-pub mod subject_list;
-pub mod teacher_list;
-pub mod week_pattern_list;
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum EntryContent {
@@ -131,17 +118,7 @@ impl<'de> Deserialize<'de> for EntryContent {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValidEntry {
-    StudentList(student_list::List),
-    PeriodList(period_list::List),
-    SubjectList(subject_list::List),
-    TeacherList(teacher_list::List),
-    AssignmentMap(assignment_map::Map),
-    WeekPatternList(week_pattern_list::List),
-    SlotList(slot_list::List),
-    IncompatList(incompat_list::List),
-    GroupListList(group_list_list::List),
-    RuleList(rule_list::List),
-    Settings(settings::Settings),
+    InnerDataDump(collomatique_state_colloscopes::InnerData),
 }
 
 pub const CURRENT_SPEC_VERSION: u32 = 1;
@@ -149,33 +126,13 @@ pub const CURRENT_SPEC_VERSION: u32 = 1;
 impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {
         match self {
-            ValidEntry::StudentList(_) => 1,
-            ValidEntry::PeriodList(_) => 1,
-            ValidEntry::SubjectList(_) => 1,
-            ValidEntry::TeacherList(_) => 1,
-            ValidEntry::AssignmentMap(_) => 1,
-            ValidEntry::WeekPatternList(_) => 1,
-            ValidEntry::SlotList(_) => 1,
-            ValidEntry::IncompatList(_) => 1,
-            ValidEntry::GroupListList(_) => 1,
-            ValidEntry::RuleList(_) => 1,
-            ValidEntry::Settings(_) => 1,
+            ValidEntry::InnerDataDump(_) => 1,
         }
     }
 
     pub fn needed_entry(&self) -> bool {
         match self {
-            ValidEntry::StudentList(_) => true,
-            ValidEntry::PeriodList(_) => true,
-            ValidEntry::SubjectList(_) => true,
-            ValidEntry::TeacherList(_) => true,
-            ValidEntry::AssignmentMap(_) => true,
-            ValidEntry::WeekPatternList(_) => true,
-            ValidEntry::SlotList(_) => true,
-            ValidEntry::IncompatList(_) => true,
-            ValidEntry::GroupListList(_) => true,
-            ValidEntry::RuleList(_) => true,
-            ValidEntry::Settings(_) => true,
+            ValidEntry::InnerDataDump(_) => true,
         }
     }
 }
