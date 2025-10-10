@@ -45,6 +45,46 @@ pub struct Parameters<
     pub settings: settings::GeneralSettings,
 }
 
+impl<
+        PeriodId: Id,
+        SubjectId: Id,
+        TeacherId: Id,
+        StudentId: Id,
+        WeekPatternId: Id,
+        SlotId: Id,
+        IncompatId: Id,
+        GroupListId: Id,
+        RuleId: Id,
+    > Default
+    for Parameters<
+        PeriodId,
+        SubjectId,
+        TeacherId,
+        StudentId,
+        WeekPatternId,
+        SlotId,
+        IncompatId,
+        GroupListId,
+        RuleId,
+    >
+{
+    fn default() -> Self {
+        Parameters {
+            periods: periods::Periods::default(),
+            subjects: subjects::Subjects::default(),
+            teachers: teachers::Teachers::default(),
+            students: students::Students::default(),
+            assignments: assignments::Assignments::default(),
+            week_patterns: week_patterns::WeekPatterns::default(),
+            slots: slots::Slots::default(),
+            incompats: incompats::Incompats::default(),
+            group_lists: group_lists::GroupLists::default(),
+            rules: rules::Rules::default(),
+            settings: settings::GeneralSettings::default(),
+        }
+    }
+}
+
 pub type GeneralParameters = Parameters<
     PeriodId,
     SubjectId,

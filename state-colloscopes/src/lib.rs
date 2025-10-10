@@ -105,7 +105,7 @@ pub struct PersonWithContact {
 /// [InnerData] represents this actual 'on-disk' data so we can
 /// directly use `derive(PartialEq, Eq)` with it. The implementation
 /// of [Eq] and [PartialEq] for [Data] relies on it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct InnerData {
     pub main_params: colloscope_params::Parameters<
         PeriodId,
@@ -1016,8 +1016,7 @@ impl Data {
     /// This [Data] is basically empty and corresponds to the
     /// state of a new file
     pub fn new() -> Data {
-        Self::from_data(colloscope_params::ColloscopeParametersExternalData::default())
-            .expect("Default data should be valid")
+        Self::from_inner_data(InnerData::default()).expect("Default data should be valid")
     }
 
     /// Create a new [Data] from existing data
