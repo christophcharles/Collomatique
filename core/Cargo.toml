@@ -10,7 +10,6 @@ serde_json = { workspace = true }
 collomatique-time = { path = "../time" }
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
-collomatique-storage = { path = "../storage" }
 collomatique-solver = { path = "../solver" }
 collomatique-solver-colloscopes = { path = "../solver-colloscopes" }
 collomatique-ilp = { path = "../ilp" }

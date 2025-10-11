@@ -1340,13 +1340,7 @@ impl CollomatiqueFile {
     }
 
     fn get_main_params(self_: PyRef<'_, Self>) -> PyResult<params::GeneralParameters> {
-        self_
-            .token
-            .get_data()
-            .get_inner_data()
-            .main_params
-            .clone()
-            .try_into()
+        self_.token.get_data().main_params.clone().try_into()
     }
 }
 
@@ -1361,7 +1355,7 @@ struct Token {
 }
 
 impl Token {
-    fn get_data(&self) -> collomatique_state_colloscopes::Data {
+    fn get_data(&self) -> collomatique_state_colloscopes::InnerData {
         match &self.file {
             InternalFile::Session(session) => {
                 use crate::rpc::ResultMsg;
@@ -1370,7 +1364,7 @@ impl Token {
                 let ResultMsg::Data(serialized_data) = result else {
                     panic!("Unexpected response to GetData");
                 };
-                collomatique_state_colloscopes::Data::from(serialized_data)
+                collomatique_state_colloscopes::InnerData::from(serialized_data)
             }
         }
     }

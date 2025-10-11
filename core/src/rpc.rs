@@ -27,22 +27,19 @@ pub struct InternalDataStream {
     serialized: String,
 }
 
-impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
-    fn from(value: &collomatique_state_colloscopes::Data) -> Self {
+impl From<&collomatique_state_colloscopes::InnerData> for InternalDataStream {
+    fn from(value: &collomatique_state_colloscopes::InnerData) -> Self {
         InternalDataStream {
-            serialized: collomatique_storage::serialize_data(value),
+            serialized: serde_json::to_string(value)
+                .expect("Serialization of InnerData should never fail"),
         }
     }
 }
 
-impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
+impl From<InternalDataStream> for collomatique_state_colloscopes::InnerData {
     fn from(value: InternalDataStream) -> Self {
-        let (data, caveats) = collomatique_storage::deserialize_data(&value.serialized)
-            .expect("Correctly formatted serialization");
-        if !caveats.is_empty() {
-            panic!("There should be no caveats when decoding data stream from RPC");
-        }
-        data
+        serde_json::from_str::<collomatique_state_colloscopes::InnerData>(&value.serialized)
+            .expect("Data from data stream should always be deserializable")
     }
 }
 
@@ -92,7 +89,7 @@ pub enum ResultMsg {
 
 impl ResultMsg {
     pub fn generate_data_msg(data: &collomatique_state_colloscopes::Data) -> ResultMsg {
-        ResultMsg::Data(data.into())
+        ResultMsg::Data(data.get_inner_data().into())
     }
 }
 

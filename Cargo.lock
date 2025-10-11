@@ -353,7 +353,6 @@ dependencies = [
  "collomatique-solver-colloscopes",
  "collomatique-state",
  "collomatique-state-colloscopes",
- "collomatique-storage",
  "collomatique-time",
  "non-empty-string",
  "pyo3",
