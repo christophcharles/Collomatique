@@ -144,7 +144,7 @@ impl GroupListsUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GroupListsUpdateOp {
     AddNewGroupList(
         collomatique_state_colloscopes::group_lists::GroupListParameters<
@@ -171,7 +171,7 @@ pub enum GroupListsUpdateOp {
     ),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum GroupListsUpdateError {
     #[error(transparent)]
     AddNewGroupList(#[from] AddNewGroupListError),
@@ -185,7 +185,7 @@ pub enum GroupListsUpdateError {
     AssignGroupListToSubject(#[from] AssignGroupListToSubjectError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AddNewGroupListError {
     #[error("Student id ({0:?}) is invalid")]
     InvalidStudentId(collomatique_state_colloscopes::StudentId),
@@ -195,7 +195,7 @@ pub enum AddNewGroupListError {
     StudentsPerGroupRangeIsEmpty,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdateGroupListError {
     #[error("Group list id ({0:?}) is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
@@ -207,13 +207,13 @@ pub enum UpdateGroupListError {
     StudentsPerGroupRangeIsEmpty,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum DeleteGroupListError {
     #[error("Group list ID {0:?} is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum PrefillGroupListError {
     #[error("Group list ID {0:?} is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
@@ -226,7 +226,7 @@ pub enum PrefillGroupListError {
     ),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AssignGroupListToSubjectError {
     #[error("Group list ID {0:?} is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),

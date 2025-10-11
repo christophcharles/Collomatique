@@ -48,7 +48,7 @@ impl RulesUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RulesUpdateOp {
     AddNewRule(
         String,
@@ -67,7 +67,7 @@ pub enum RulesUpdateOp {
     ),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum RulesUpdateError {
     #[error(transparent)]
     AddNewRule(#[from] AddNewRuleError),
@@ -79,13 +79,13 @@ pub enum RulesUpdateError {
     UpdatePeriodStatusForRule(#[from] UpdatePeriodStatusForRuleError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AddNewRuleError {
     #[error("Slot ID {0:?} is invalid")]
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdateRuleError {
     #[error("Rule ID {0:?} is invalid")]
     InvalidRuleId(collomatique_state_colloscopes::RuleId),
@@ -93,13 +93,13 @@ pub enum UpdateRuleError {
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum DeleteRuleError {
     #[error("Rule ID {0:?} is invalid")]
     InvalidRuleId(collomatique_state_colloscopes::RuleId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdatePeriodStatusForRuleError {
     #[error("Rule ID {0:?} is invalid")]
     InvalidRuleId(collomatique_state_colloscopes::RuleId),

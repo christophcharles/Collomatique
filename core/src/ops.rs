@@ -14,6 +14,7 @@
 use collomatique_state::AppSession;
 use collomatique_state_colloscopes::Data;
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
@@ -61,7 +62,7 @@ pub enum OpCategory {
     Colloscopes,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateOp {
     GeneralPlanning(GeneralPlanningUpdateOp),
     Subjects(SubjectsUpdateOp),
@@ -77,7 +78,7 @@ pub enum UpdateOp {
     Colloscopes(ColloscopesUpdateOp),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdateError {
     #[error(transparent)]
     GeneralPlanning(#[from] GeneralPlanningUpdateError),

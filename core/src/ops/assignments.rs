@@ -14,7 +14,7 @@ impl AssignmentsUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AssignmentsUpdateOp {
     Assign(
         collomatique_state_colloscopes::PeriodId,
@@ -30,7 +30,7 @@ pub enum AssignmentsUpdateOp {
     ),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AssignmentsUpdateError {
     #[error(transparent)]
     Assign(#[from] AssignError),
@@ -40,7 +40,7 @@ pub enum AssignmentsUpdateError {
     AssignAll(#[from] AssignAllError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AssignError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
@@ -69,7 +69,7 @@ pub enum AssignError {
     ),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AssignAllError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
@@ -87,7 +87,7 @@ pub enum AssignAllError {
     ),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum DuplicatePreviousPeriodError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]

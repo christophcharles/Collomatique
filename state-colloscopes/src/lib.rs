@@ -877,7 +877,7 @@ impl From<ColloscopeId> for NewId {
 /// Errors for students operations
 ///
 /// These errors can be returned when trying to modify [Data] with a student op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[derive(Clone, Debug, PartialEq, Eq, Error, Serialize, Deserialize)]
 pub enum InvariantError {
     #[error("duplicated id")]
     DuplicatedId,

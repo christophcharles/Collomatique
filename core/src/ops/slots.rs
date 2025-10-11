@@ -88,7 +88,7 @@ impl SlotsUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SlotsUpdateOp {
     AddNewSlot(
         collomatique_state_colloscopes::SubjectId,
@@ -109,7 +109,7 @@ pub enum SlotsUpdateOp {
     MoveSlotDown(collomatique_state_colloscopes::SlotId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum SlotsUpdateError {
     #[error(transparent)]
     AddNewSlot(#[from] AddNewSlotError),
@@ -123,7 +123,7 @@ pub enum SlotsUpdateError {
     MoveSlotDown(#[from] MoveSlotDownError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AddNewSlotError {
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
@@ -142,7 +142,7 @@ pub enum AddNewSlotError {
     SlotOverlapsWithNextDay,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdateSlotError {
     #[error("Slot id ({0:?}) is invalid")]
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
@@ -163,13 +163,13 @@ pub enum UpdateSlotError {
     SlotOverlapsWithNextDay,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum DeleteSlotError {
     #[error("Slot ID {0:?} is invalid")]
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum MoveSlotUpError {
     #[error("Slot ID {0:?} is invalid")]
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
@@ -177,7 +177,7 @@ pub enum MoveSlotUpError {
     NoUpperPosition,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum MoveSlotDownError {
     #[error("Slot ID {0:?} is invalid")]
     InvalidSlotId(collomatique_state_colloscopes::SlotId),

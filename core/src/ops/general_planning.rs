@@ -197,7 +197,7 @@ impl GeneralPlanningUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GeneralPlanningUpdateOp {
     DeleteFirstWeek,
     UpdateFirstWeek(collomatique_time::NaiveMondayDate),
@@ -209,7 +209,7 @@ pub enum GeneralPlanningUpdateOp {
     UpdateWeekStatus(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum GeneralPlanningUpdateError {
     #[error(transparent)]
     UpdatePeriodWeekCount(#[from] UpdatePeriodWeekCountError),
@@ -223,7 +223,7 @@ pub enum GeneralPlanningUpdateError {
     UpdateWeekStatus(#[from] UpdateWeekStatusError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdatePeriodWeekCountError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
@@ -231,13 +231,13 @@ pub enum UpdatePeriodWeekCountError {
     SubjectImpliesMinimumWeekCount(collomatique_state_colloscopes::SubjectId, usize),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum DeletePeriodError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum CutPeriodError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
@@ -245,7 +245,7 @@ pub enum CutPeriodError {
     RemainingWeekCountTooBig(usize, usize),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum MergeWithPreviousPeriodError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
@@ -253,7 +253,7 @@ pub enum MergeWithPreviousPeriodError {
     NoPreviousPeriodToMergeWith,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdateWeekStatusError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),

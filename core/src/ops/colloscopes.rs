@@ -14,7 +14,7 @@ impl ColloscopesUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ColloscopesUpdateOp {
     AddEmptyColloscope(String),
     CopyColloscope(collomatique_state_colloscopes::ColloscopeId, String),
@@ -25,7 +25,7 @@ pub enum ColloscopesUpdateOp {
     DeleteColloscope(collomatique_state_colloscopes::ColloscopeId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum ColloscopesUpdateError {
     #[error(transparent)]
     AddEmptyColloscope(#[from] AddEmptyColloscopeError),
@@ -37,16 +37,16 @@ pub enum ColloscopesUpdateError {
     DeleteColloscope(#[from] DeleteColloscopeError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum AddEmptyColloscopeError {}
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum CopyColloscopeError {
     #[error("Colloscope ID {0:?} is invalid")]
     InvalidColloscopeId(collomatique_state_colloscopes::ColloscopeId),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum UpdateColloscopeError {
     #[error("Colloscope ID {0:?} is invalid")]
     InvalidColloscopeId(collomatique_state_colloscopes::ColloscopeId),
@@ -140,7 +140,7 @@ pub enum UpdateColloscopeError {
     InternalIdAlreadyInMainParams(u64),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Serialize, Deserialize)]
 pub enum DeleteColloscopeError {
     #[error("Colloscope ID {0:?} is invalid")]
     InvalidColloscopeId(collomatique_state_colloscopes::ColloscopeId),
