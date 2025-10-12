@@ -198,7 +198,8 @@ impl ColloscopesUpdateOp {
                     return Err(CopyColloscopeError::InvalidColloscopeId(*colloscope_id).into());
                 };
 
-                let mut new_colloscope = orig_colloscope.clone();
+                let mut new_colloscope =
+                    data.get_data().duplicate_colloscope_params(orig_colloscope);
                 new_colloscope.name = new_name.clone();
 
                 let result = data
