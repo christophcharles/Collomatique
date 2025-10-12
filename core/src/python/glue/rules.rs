@@ -4,7 +4,7 @@ use pyo3::types::PyString;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RuleId {
-    id: crate::rpc::cmd_msg::MsgRuleId,
+    id: collomatique_state_colloscopes::RuleId,
 }
 
 #[pymethods]
@@ -15,21 +15,21 @@ impl RuleId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgRuleId> for RuleId {
-    fn from(value: &crate::rpc::cmd_msg::MsgRuleId) -> Self {
+impl From<&collomatique_state_colloscopes::RuleId> for RuleId {
+    fn from(value: &collomatique_state_colloscopes::RuleId) -> Self {
         RuleId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgRuleId> for RuleId {
-    fn from(value: crate::rpc::cmd_msg::MsgRuleId) -> Self {
+impl From<collomatique_state_colloscopes::RuleId> for RuleId {
+    fn from(value: collomatique_state_colloscopes::RuleId) -> Self {
         RuleId::from(&value)
     }
 }
 
 impl From<&RuleId> for crate::rpc::cmd_msg::MsgRuleId {
     fn from(value: &RuleId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 
@@ -146,7 +146,7 @@ impl
                 let pl = LogicRule::try_from(*l)?;
                 Python::with_gil(|py| Ok(LogicRule::Not(Py::new(py, pl)?)))
             }
-            rules::LogicRule::Variable(id) => Ok(LogicRule::Variable(MsgSlotId::from(id).into())),
+            rules::LogicRule::Variable(id) => Ok(LogicRule::Variable(id.into())),
         }
     }
 }

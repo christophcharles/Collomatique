@@ -4,7 +4,7 @@ use pyo3::types::PyString;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupListId {
-    id: crate::rpc::cmd_msg::MsgGroupListId,
+    id: collomatique_state_colloscopes::GroupListId,
 }
 
 #[pymethods]
@@ -15,21 +15,21 @@ impl GroupListId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgGroupListId> for GroupListId {
-    fn from(value: &crate::rpc::cmd_msg::MsgGroupListId) -> Self {
+impl From<&collomatique_state_colloscopes::GroupListId> for GroupListId {
+    fn from(value: &collomatique_state_colloscopes::GroupListId) -> Self {
         GroupListId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgGroupListId> for GroupListId {
-    fn from(value: crate::rpc::cmd_msg::MsgGroupListId) -> Self {
+impl From<collomatique_state_colloscopes::GroupListId> for GroupListId {
+    fn from(value: collomatique_state_colloscopes::GroupListId) -> Self {
         GroupListId::from(&value)
     }
 }
 
 impl From<&GroupListId> for crate::rpc::cmd_msg::MsgGroupListId {
     fn from(value: &GroupListId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 
@@ -149,7 +149,7 @@ impl
             excluded_students: value
                 .excluded_students
                 .into_iter()
-                .map(|x| MsgStudentId::from(x).into())
+                .map(|x| x.into())
                 .collect(),
         }
     }
@@ -216,11 +216,7 @@ impl
                 None => String::new(),
                 Some(n) => n.into_inner(),
             },
-            students: value
-                .students
-                .into_iter()
-                .map(|x| MsgStudentId::from(x).into())
-                .collect(),
+            students: value.students.into_iter().map(|x| x.into()).collect(),
             sealed: value.sealed,
         }
     }

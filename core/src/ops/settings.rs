@@ -14,12 +14,12 @@ impl SettingsUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SettingsUpdateOp {
     UpdateStrictLimits(collomatique_state_colloscopes::settings::StrictLimits),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SettingsUpdateError {}
 
 impl SettingsUpdateOp {

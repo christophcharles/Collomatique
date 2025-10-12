@@ -46,7 +46,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .ordered_period_list
                 .into_iter()
                 .map(|(period_id, weeks_status)| Period {
-                    id: MsgPeriodId::from(period_id).into(),
+                    id: period_id.into(),
                     weeks_status,
                 })
                 .collect(),
@@ -59,12 +59,12 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .ordered_subject_list
                 .into_iter()
                 .map(|(subject_id, subject)| Subject {
-                    id: MsgSubjectId::from(subject_id).into(),
+                    id: subject_id.into(),
                     parameters: subject.parameters.into(),
                     excluded_periods: subject
                         .excluded_periods
                         .into_iter()
-                        .map(|period_id| MsgPeriodId::from(period_id).into())
+                        .map(|period_id| period_id.into())
                         .collect(),
                 })
                 .collect(),
@@ -72,17 +72,13 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .teachers
                 .teacher_map
                 .into_iter()
-                .map(|(teacher_id, teacher)| {
-                    (MsgTeacherId::from(teacher_id).into(), teacher.into())
-                })
+                .map(|(teacher_id, teacher)| (teacher_id.into(), teacher.into()))
                 .collect(),
             students: value
                 .students
                 .student_map
                 .into_iter()
-                .map(|(student_id, student)| {
-                    (MsgStudentId::from(student_id).into(), student.into())
-                })
+                .map(|(student_id, student)| (student_id.into(), student.into()))
                 .collect(),
             assignments: value
                 .assignments
@@ -90,17 +86,14 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .into_iter()
                 .map(|(period_id, period_assignements)| {
                     (
-                        MsgPeriodId::from(period_id).into(),
+                        period_id.into(),
                         period_assignements
                             .subject_map
                             .into_iter()
                             .map(|(subject_id, students)| {
                                 (
-                                    MsgSubjectId::from(subject_id).into(),
-                                    students
-                                        .into_iter()
-                                        .map(|id| MsgStudentId::from(id).into())
-                                        .collect(),
+                                    subject_id.into(),
+                                    students.into_iter().map(|id| id.into()).collect(),
                                 )
                             })
                             .collect(),
@@ -113,7 +106,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .into_iter()
                 .map(|(week_pattern_id, week_pattern)| {
                     (
-                        MsgWeekPatternId::from(week_pattern_id).into(),
+                        week_pattern_id.into(),
                         WeekPattern {
                             name: week_pattern.name,
                             weeks: week_pattern.weeks,
@@ -127,12 +120,12 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .into_iter()
                 .map(|(subject_id, subject_slots)| {
                     (
-                        MsgSubjectId::from(subject_id).into(),
+                        subject_id.into(),
                         subject_slots
                             .ordered_slots
                             .into_iter()
                             .map(|(slot_id, slot)| slots::Slot {
-                                id: MsgSlotId::from(slot_id).into(),
+                                id: slot_id.into(),
                                 parameters: slot.into(),
                             })
                             .collect(),
@@ -143,20 +136,13 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .incompats
                 .incompat_map
                 .into_iter()
-                .map(|(incompat_id, incompat)| {
-                    (MsgIncompatId::from(incompat_id).into(), incompat.into())
-                })
+                .map(|(incompat_id, incompat)| (incompat_id.into(), incompat.into()))
                 .collect(),
             group_lists: value
                 .group_lists
                 .group_list_map
                 .into_iter()
-                .map(|(group_list_id, group_list)| {
-                    (
-                        MsgGroupListId::from(group_list_id).into(),
-                        group_list.into(),
-                    )
-                })
+                .map(|(group_list_id, group_list)| (group_list_id.into(), group_list.into()))
                 .collect(),
             group_lists_associations: value
                 .group_lists
@@ -164,14 +150,11 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .into_iter()
                 .map(|(period_id, subject_map)| {
                     (
-                        MsgPeriodId::from(period_id).into(),
+                        period_id.into(),
                         subject_map
                             .into_iter()
                             .map(|(subject_id, group_list_id)| {
-                                (
-                                    MsgSubjectId::from(subject_id).into(),
-                                    MsgGroupListId::from(group_list_id).into(),
-                                )
+                                (subject_id.into(), group_list_id.into())
                             })
                             .collect(),
                     )
@@ -183,7 +166,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .into_iter()
                 .map(|(rule_id, rule)| {
                     PyResult::Ok((
-                        RuleId::from(MsgRuleId::from(rule_id)),
+                        RuleId::from(rule_id),
                         rules::Rule {
                             name: rule.name,
                             logic_rule: rule.desc.try_into()?,

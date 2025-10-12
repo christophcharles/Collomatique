@@ -800,7 +800,7 @@ pub enum FromInnerDataError {
 }
 
 /// Potential new id returned by annotation
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NewId {
     StudentId(StudentId),
     PeriodId(PeriodId),

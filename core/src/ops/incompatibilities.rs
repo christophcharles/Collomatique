@@ -46,7 +46,7 @@ impl IncompatibilitiesUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum IncompatibilitiesUpdateOp {
     AddNewIncompat(
         collomatique_state_colloscopes::incompats::Incompatibility<
@@ -64,7 +64,7 @@ pub enum IncompatibilitiesUpdateOp {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum IncompatibilitiesUpdateError {
     #[error(transparent)]
     AddNewIncompat(#[from] AddNewIncompatError),
@@ -74,7 +74,7 @@ pub enum IncompatibilitiesUpdateError {
     UpdateIncompat(#[from] UpdateIncompatError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddNewIncompatError {
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
@@ -82,13 +82,13 @@ pub enum AddNewIncompatError {
     InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeleteIncompatError {
     #[error("invalid incompat id ({0:?})")]
     InvalidIncompatId(collomatique_state_colloscopes::IncompatId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateIncompatError {
     #[error("invalid incompat id ({0:?})")]
     InvalidIncompatId(collomatique_state_colloscopes::IncompatId),

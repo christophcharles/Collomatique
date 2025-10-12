@@ -203,7 +203,7 @@ impl SubjectsUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubjectsUpdateOp {
     AddNewSubject(collomatique_state_colloscopes::subjects::SubjectParameters),
     UpdateSubject(
@@ -220,7 +220,7 @@ pub enum SubjectsUpdateOp {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubjectsUpdateError {
     #[error(transparent)]
     AddNewSubject(#[from] AddNewSubjectError),
@@ -236,7 +236,7 @@ pub enum SubjectsUpdateError {
     UpdatePeriodStatus(#[from] UpdatePeriodStatusError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddNewSubjectError {
     #[error("Students per group range should allow at least one value")]
     StudentsPerGroupRangeIsEmpty,
@@ -246,7 +246,7 @@ pub enum AddNewSubjectError {
     InterrogationCountRangeIsEmpty,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateSubjectError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
@@ -258,13 +258,13 @@ pub enum UpdateSubjectError {
     InterrogationCountRangeIsEmpty,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeleteSubjectError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MoveSubjectUpError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
@@ -272,7 +272,7 @@ pub enum MoveSubjectUpError {
     NoUpperPosition,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MoveSubjectDownError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
@@ -280,7 +280,7 @@ pub enum MoveSubjectDownError {
     NoLowerPosition,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdatePeriodStatusError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),

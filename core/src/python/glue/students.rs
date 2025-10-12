@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StudentId {
-    id: crate::rpc::cmd_msg::MsgStudentId,
+    id: collomatique_state_colloscopes::StudentId,
 }
 
 #[pymethods]
@@ -17,21 +17,21 @@ impl StudentId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgStudentId> for StudentId {
-    fn from(value: &crate::rpc::cmd_msg::MsgStudentId) -> Self {
+impl From<&collomatique_state_colloscopes::StudentId> for StudentId {
+    fn from(value: &collomatique_state_colloscopes::StudentId) -> Self {
         StudentId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgStudentId> for StudentId {
-    fn from(value: crate::rpc::cmd_msg::MsgStudentId) -> Self {
+impl From<collomatique_state_colloscopes::StudentId> for StudentId {
+    fn from(value: collomatique_state_colloscopes::StudentId) -> Self {
         StudentId::from(&value)
     }
 }
 
 impl From<&StudentId> for crate::rpc::cmd_msg::MsgStudentId {
     fn from(value: &StudentId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 
@@ -86,7 +86,7 @@ impl
             excluded_periods: value
                 .excluded_periods
                 .into_iter()
-                .map(|x| MsgPeriodId::from(x).into())
+                .map(|x| x.into())
                 .collect(),
         }
     }

@@ -134,7 +134,7 @@ impl WeekPatternsUpdateWarning {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WeekPatternsUpdateOp {
     AddNewWeekPattern(collomatique_state_colloscopes::week_patterns::WeekPattern),
     UpdateWeekPattern(
@@ -144,7 +144,7 @@ pub enum WeekPatternsUpdateOp {
     DeleteWeekPattern(collomatique_state_colloscopes::WeekPatternId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WeekPatternsUpdateError {
     #[error(transparent)]
     UpdateWeekPattern(#[from] UpdateWeekPatternError),
@@ -152,13 +152,13 @@ pub enum WeekPatternsUpdateError {
     DeleteWeekPattern(#[from] DeleteWeekPatternError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateWeekPatternError {
     #[error("Week pattern ID {0:?} is invalid")]
     InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeleteWeekPatternError {
     #[error("Week pattern ID {0:?} is invalid")]
     InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),

@@ -6,7 +6,7 @@ use pyo3::types::PyString;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncompatId {
-    id: crate::rpc::cmd_msg::MsgIncompatId,
+    id: collomatique_state_colloscopes::IncompatId,
 }
 
 #[pymethods]
@@ -17,21 +17,21 @@ impl IncompatId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgIncompatId> for IncompatId {
-    fn from(value: &crate::rpc::cmd_msg::MsgIncompatId) -> Self {
+impl From<&collomatique_state_colloscopes::IncompatId> for IncompatId {
+    fn from(value: &collomatique_state_colloscopes::IncompatId) -> Self {
         IncompatId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgIncompatId> for IncompatId {
-    fn from(value: crate::rpc::cmd_msg::MsgIncompatId) -> Self {
+impl From<collomatique_state_colloscopes::IncompatId> for IncompatId {
+    fn from(value: collomatique_state_colloscopes::IncompatId) -> Self {
         IncompatId::from(&value)
     }
 }
 
 impl From<&IncompatId> for crate::rpc::cmd_msg::MsgIncompatId {
     fn from(value: &IncompatId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 
@@ -95,13 +95,11 @@ impl
         >,
     ) -> Self {
         Incompat {
-            subject_id: MsgSubjectId::from(value.subject_id).into(),
+            subject_id: value.subject_id.into(),
             name: value.name,
             slots: value.slots.into_iter().map(|x| x.into()).collect(),
             minimum_free_slots: value.minimum_free_slots,
-            week_pattern_id: value
-                .week_pattern_id
-                .map(|x| MsgWeekPatternId::from(x).into()),
+            week_pattern_id: value.week_pattern_id.map(|x| x.into()),
         }
     }
 }

@@ -4,7 +4,7 @@ use pyo3::types::PyString;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PeriodId {
-    id: crate::rpc::cmd_msg::MsgPeriodId,
+    id: collomatique_state_colloscopes::PeriodId,
 }
 
 #[pymethods]
@@ -15,21 +15,21 @@ impl PeriodId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgPeriodId> for PeriodId {
-    fn from(value: &crate::rpc::cmd_msg::MsgPeriodId) -> Self {
+impl From<&collomatique_state_colloscopes::PeriodId> for PeriodId {
+    fn from(value: &collomatique_state_colloscopes::PeriodId) -> Self {
         PeriodId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgPeriodId> for PeriodId {
-    fn from(value: crate::rpc::cmd_msg::MsgPeriodId) -> Self {
+impl From<collomatique_state_colloscopes::PeriodId> for PeriodId {
+    fn from(value: collomatique_state_colloscopes::PeriodId) -> Self {
         PeriodId::from(&value)
     }
 }
 
 impl From<&PeriodId> for crate::rpc::cmd_msg::MsgPeriodId {
     fn from(value: &PeriodId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 

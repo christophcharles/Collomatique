@@ -7,7 +7,7 @@ use std::num::NonZeroU32;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubjectId {
-    id: crate::rpc::cmd_msg::MsgSubjectId,
+    id: collomatique_state_colloscopes::SubjectId,
 }
 
 #[pymethods]
@@ -18,21 +18,21 @@ impl SubjectId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgSubjectId> for SubjectId {
-    fn from(value: &crate::rpc::cmd_msg::MsgSubjectId) -> Self {
+impl From<&collomatique_state_colloscopes::SubjectId> for SubjectId {
+    fn from(value: &collomatique_state_colloscopes::SubjectId) -> Self {
         SubjectId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgSubjectId> for SubjectId {
-    fn from(value: crate::rpc::cmd_msg::MsgSubjectId) -> Self {
+impl From<collomatique_state_colloscopes::SubjectId> for SubjectId {
+    fn from(value: collomatique_state_colloscopes::SubjectId) -> Self {
         SubjectId::from(&value)
     }
 }
 
 impl From<&SubjectId> for crate::rpc::cmd_msg::MsgSubjectId {
     fn from(value: &SubjectId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 

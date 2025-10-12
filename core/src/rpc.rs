@@ -81,7 +81,7 @@ impl From<collomatique_state_colloscopes::NewId> for NewId {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResultMsg {
     InvalidMsg,
-    Ack(Option<NewId>),
+    Ack(Option<collomatique_state_colloscopes::NewId>),
     AckGui(GuiAnswer),
     Data(InternalDataStream),
     Error(ErrorMsg),

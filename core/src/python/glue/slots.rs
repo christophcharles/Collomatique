@@ -4,7 +4,7 @@ use pyo3::types::PyString;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotId {
-    id: crate::rpc::cmd_msg::MsgSlotId,
+    id: collomatique_state_colloscopes::SlotId,
 }
 
 #[pymethods]
@@ -15,21 +15,21 @@ impl SlotId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgSlotId> for SlotId {
-    fn from(value: &crate::rpc::cmd_msg::MsgSlotId) -> Self {
+impl From<&collomatique_state_colloscopes::SlotId> for SlotId {
+    fn from(value: &collomatique_state_colloscopes::SlotId) -> Self {
         SlotId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgSlotId> for SlotId {
-    fn from(value: crate::rpc::cmd_msg::MsgSlotId) -> Self {
+impl From<collomatique_state_colloscopes::SlotId> for SlotId {
+    fn from(value: collomatique_state_colloscopes::SlotId) -> Self {
         SlotId::from(&value)
     }
 }
 
 impl From<&SlotId> for crate::rpc::cmd_msg::MsgSlotId {
     fn from(value: &SlotId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 
@@ -110,10 +110,10 @@ impl
         >,
     ) -> Self {
         SlotParameters {
-            teacher_id: MsgTeacherId::from(value.teacher_id).into(),
+            teacher_id: value.teacher_id.into(),
             start_time: value.start_time.into(),
             extra_info: value.extra_info,
-            week_pattern: value.week_pattern.map(|x| MsgWeekPatternId::from(x).into()),
+            week_pattern: value.week_pattern.map(|x| x.into()),
             cost: value.cost,
         }
     }

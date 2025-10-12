@@ -3,10 +3,7 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use crate::rpc::{
-    cmd_msg::{
-        ExtensionDesc, MsgGroupListId, MsgIncompatId, MsgRuleId, MsgSlotId, MsgStudentId,
-        MsgWeekPatternId, OpenFileDialogMsg,
-    },
+    cmd_msg::{ExtensionDesc, MsgWeekPatternId, OpenFileDialogMsg},
     error_msg::{
         AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
         AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
@@ -176,7 +173,7 @@ mod params;
 mod settings;
 mod slots;
 
-use crate::rpc::cmd_msg::{MsgPeriodId, MsgSubjectId, MsgTeacherId};
+use crate::rpc::cmd_msg::MsgSubjectId;
 
 #[pyclass]
 pub struct CollomatiqueFile {
@@ -193,7 +190,7 @@ impl CollomatiqueFile {
         ));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(id))) => id.into(),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::PeriodId(id))) => id.into(),
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -259,7 +256,9 @@ impl CollomatiqueFile {
         ));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::PeriodId(new_id))) => Ok(new_id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::PeriodId(new_id))) => {
+                Ok(new_id.into())
+            }
             ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::CutPeriod(e))) => {
                 match e {
                     CutPeriodError::InvalidPeriodId(id) => {
@@ -356,7 +355,9 @@ impl CollomatiqueFile {
                 )));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::SubjectId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::SubjectId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::AddNewSubject(e))) => match e {
                 AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
                     PyValueError::new_err("groups per interrogation range cannot be empty"),
@@ -514,7 +515,9 @@ impl CollomatiqueFile {
                 )));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::TeacherId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::TeacherId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::Teachers(TeachersError::AddNewTeacher(e))) => match e {
                 AddNewTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
                     "Invalid subject id {:?}",
@@ -585,7 +588,9 @@ impl CollomatiqueFile {
                 )));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::StudentId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::StudentId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::Students(StudentsError::AddNewStudent(e))) => match e {
                 AddNewStudentError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -764,7 +769,9 @@ impl CollomatiqueFile {
         ));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::WeekPatternId(id))) => id.into(),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::WeekPatternId(id))) => {
+                id.into()
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -829,7 +836,9 @@ impl CollomatiqueFile {
                 )));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::SlotId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::SlotId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::Slots(SlotsError::AddNewSlot(e))) => match e {
                 AddNewSlotError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
                     "Invalid subject id {:?}",
@@ -981,7 +990,9 @@ impl CollomatiqueFile {
         ));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::IncompatId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::IncompatId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::AddNewIncompat(e))) => {
                 match e {
                     AddNewIncompatError::InvalidSubjectId(id) => Err(PyValueError::new_err(
@@ -1066,7 +1077,9 @@ impl CollomatiqueFile {
         ));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::GroupListId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::GroupListId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::AddNewGroupList(e))) => {
                 match e {
                     AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
@@ -1234,7 +1247,9 @@ impl CollomatiqueFile {
                 )));
 
         match result {
-            ResultMsg::Ack(Some(crate::rpc::NewId::RuleId(id))) => Ok(id.into()),
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::RuleId(id))) => {
+                Ok(id.into())
+            }
             ResultMsg::Error(ErrorMsg::Rules(RulesError::AddNewRule(e))) => match e {
                 AddNewRuleError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))

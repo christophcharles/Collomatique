@@ -4,7 +4,7 @@ use pyo3::types::PyString;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WeekPatternId {
-    id: crate::rpc::cmd_msg::MsgWeekPatternId,
+    id: collomatique_state_colloscopes::WeekPatternId,
 }
 
 #[pymethods]
@@ -15,21 +15,21 @@ impl WeekPatternId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgWeekPatternId> for WeekPatternId {
-    fn from(value: &crate::rpc::cmd_msg::MsgWeekPatternId) -> Self {
+impl From<&collomatique_state_colloscopes::WeekPatternId> for WeekPatternId {
+    fn from(value: &collomatique_state_colloscopes::WeekPatternId) -> Self {
         WeekPatternId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgWeekPatternId> for WeekPatternId {
-    fn from(value: crate::rpc::cmd_msg::MsgWeekPatternId) -> Self {
+impl From<collomatique_state_colloscopes::WeekPatternId> for WeekPatternId {
+    fn from(value: collomatique_state_colloscopes::WeekPatternId) -> Self {
         WeekPatternId::from(&value)
     }
 }
 
 impl From<&WeekPatternId> for crate::rpc::cmd_msg::MsgWeekPatternId {
     fn from(value: &WeekPatternId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 

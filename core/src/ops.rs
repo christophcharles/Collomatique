@@ -62,7 +62,7 @@ pub enum OpCategory {
     Colloscopes,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateOp {
     GeneralPlanning(GeneralPlanningUpdateOp),
     Subjects(SubjectsUpdateOp),
@@ -78,7 +78,7 @@ pub enum UpdateOp {
     Colloscopes(ColloscopesUpdateOp),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateError {
     #[error(transparent)]
     GeneralPlanning(#[from] GeneralPlanningUpdateError),

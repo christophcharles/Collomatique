@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TeacherId {
-    id: crate::rpc::cmd_msg::MsgTeacherId,
+    id: collomatique_state_colloscopes::TeacherId,
 }
 
 #[pymethods]
@@ -17,21 +17,21 @@ impl TeacherId {
     }
 }
 
-impl From<&crate::rpc::cmd_msg::MsgTeacherId> for TeacherId {
-    fn from(value: &crate::rpc::cmd_msg::MsgTeacherId) -> Self {
+impl From<&collomatique_state_colloscopes::TeacherId> for TeacherId {
+    fn from(value: &collomatique_state_colloscopes::TeacherId) -> Self {
         TeacherId { id: value.clone() }
     }
 }
 
-impl From<crate::rpc::cmd_msg::MsgTeacherId> for TeacherId {
-    fn from(value: crate::rpc::cmd_msg::MsgTeacherId) -> Self {
+impl From<collomatique_state_colloscopes::TeacherId> for TeacherId {
+    fn from(value: collomatique_state_colloscopes::TeacherId) -> Self {
         TeacherId::from(&value)
     }
 }
 
 impl From<&TeacherId> for crate::rpc::cmd_msg::MsgTeacherId {
     fn from(value: &TeacherId) -> Self {
-        value.id.clone()
+        value.id.clone().into()
     }
 }
 
@@ -85,11 +85,7 @@ impl
     ) -> Self {
         Teacher {
             desc: value.desc.into(),
-            subjects: value
-                .subjects
-                .into_iter()
-                .map(|x| MsgSubjectId::from(x).into())
-                .collect(),
+            subjects: value.subjects.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
