@@ -9,10 +9,7 @@ use std::io::Write;
 use serde::{Deserialize, Serialize};
 
 pub mod cmd_msg;
-pub use cmd_msg::{CmdMsg, UpdateMsg};
-
-pub mod error_msg;
-pub use error_msg::ErrorMsg;
+pub use cmd_msg::CmdMsg;
 
 pub mod gui_answer;
 pub use gui_answer::GuiAnswer;
@@ -40,41 +37,6 @@ impl From<InternalDataStream> for collomatique_state_colloscopes::InnerData {
     fn from(value: InternalDataStream) -> Self {
         serde_json::from_str::<collomatique_state_colloscopes::InnerData>(&value.serialized)
             .expect("Data from data stream should always be deserializable")
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NewId {
-    PeriodId(cmd_msg::MsgPeriodId),
-    StudentId(cmd_msg::MsgStudentId),
-    SubjectId(cmd_msg::MsgSubjectId),
-    TeacherId(cmd_msg::MsgTeacherId),
-    WeekPatternId(cmd_msg::MsgWeekPatternId),
-    SlotId(cmd_msg::MsgSlotId),
-    IncompatId(cmd_msg::MsgIncompatId),
-    GroupListId(cmd_msg::MsgGroupListId),
-    RuleId(cmd_msg::MsgRuleId),
-    ColloscopeId(cmd_msg::MsgColloscopeId),
-}
-
-impl From<collomatique_state_colloscopes::NewId> for NewId {
-    fn from(value: collomatique_state_colloscopes::NewId) -> Self {
-        match value {
-            collomatique_state_colloscopes::NewId::PeriodId(id) => NewId::PeriodId(id.into()),
-            collomatique_state_colloscopes::NewId::StudentId(id) => NewId::StudentId(id.into()),
-            collomatique_state_colloscopes::NewId::SubjectId(id) => NewId::SubjectId(id.into()),
-            collomatique_state_colloscopes::NewId::TeacherId(id) => NewId::TeacherId(id.into()),
-            collomatique_state_colloscopes::NewId::WeekPatternId(id) => {
-                NewId::WeekPatternId(id.into())
-            }
-            collomatique_state_colloscopes::NewId::SlotId(id) => NewId::SlotId(id.into()),
-            collomatique_state_colloscopes::NewId::IncompatId(id) => NewId::IncompatId(id.into()),
-            collomatique_state_colloscopes::NewId::GroupListId(id) => NewId::GroupListId(id.into()),
-            collomatique_state_colloscopes::NewId::RuleId(id) => NewId::RuleId(id.into()),
-            collomatique_state_colloscopes::NewId::ColloscopeId(id) => {
-                NewId::ColloscopeId(id.into())
-            }
-        }
     }
 }
 
