@@ -184,6 +184,7 @@ mod group_lists;
 mod incompatibilities;
 mod rules;
 use rules::{ColloscopeRuleId, RuleId};
+mod colloscopes;
 mod params;
 mod settings;
 mod slots;

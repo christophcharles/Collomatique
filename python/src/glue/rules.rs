@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 use pyo3::types::PyString;
 
@@ -46,13 +48,19 @@ pub struct Rule {
     pub name: String,
     #[pyo3(set, get)]
     pub logic_rule: LogicRule,
+    #[pyo3(set, get)]
+    pub excluded_periods: BTreeSet<PeriodId>,
 }
 
 #[pymethods]
 impl Rule {
     #[new]
     fn new(name: String, logic_rule: LogicRule) -> Self {
-        Rule { name, logic_rule }
+        Rule {
+            name,
+            logic_rule,
+            excluded_periods: BTreeSet::new(),
+        }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
@@ -228,13 +236,19 @@ pub struct ColloscopeRule {
     pub name: String,
     #[pyo3(set, get)]
     pub logic_rule: ColloscopeLogicRule,
+    #[pyo3(set, get)]
+    pub excluded_periods: BTreeSet<ColloscopePeriodId>,
 }
 
 #[pymethods]
 impl ColloscopeRule {
     #[new]
     fn new(name: String, logic_rule: ColloscopeLogicRule) -> Self {
-        ColloscopeRule { name, logic_rule }
+        ColloscopeRule {
+            name,
+            logic_rule,
+            excluded_periods: BTreeSet::new(),
+        }
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {

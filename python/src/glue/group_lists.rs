@@ -326,6 +326,30 @@ impl
     }
 }
 
+impl From<ColloscopeGroupList>
+    for collomatique_state_colloscopes::group_lists::GroupList<
+        collomatique_state_colloscopes::ColloscopeStudentId,
+    >
+{
+    fn from(
+        value: ColloscopeGroupList,
+    ) -> collomatique_state_colloscopes::group_lists::GroupList<
+        collomatique_state_colloscopes::ColloscopeStudentId,
+    > {
+        collomatique_state_colloscopes::group_lists::GroupList {
+            params: value.parameters.into(),
+            prefilled_groups:
+                collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                    groups: value
+                        .prefilled_groups
+                        .into_iter()
+                        .map(|x| x.into())
+                        .collect(),
+                },
+        }
+    }
+}
+
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeGroupListParameters {
