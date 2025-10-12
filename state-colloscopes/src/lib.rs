@@ -1068,6 +1068,26 @@ impl Data {
         self.inner_data.main_params.duplicate(&mut *guard)
     }
 
+    pub fn duplicate_colloscope_params(
+        &self,
+        colloscope: &colloscopes::Colloscope,
+    ) -> colloscopes::Colloscope {
+        let mut guard = self.id_issuer.lock().unwrap();
+        let (new_params, collo_id_maps) = colloscope.params.duplicate(&mut *guard);
+        colloscopes::Colloscope {
+            name: colloscope.name.clone(),
+            params: new_params,
+            id_maps: colloscope
+                .id_maps
+                .duplicate_with_id_maps(&collo_id_maps)
+                .expect("Colloscope ID map should have every ID"),
+            data: colloscope
+                .data
+                .duplicate_with_id_maps(&collo_id_maps)
+                .expect("Colloscope ID map should have every ID"),
+        }
+    }
+
     /// Used internally
     ///
     /// Apply student operations

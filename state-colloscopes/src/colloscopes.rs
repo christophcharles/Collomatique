@@ -105,6 +105,46 @@ pub struct ColloscopeData {
 }
 
 impl ColloscopeData {
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        collo_id_maps: &super::colloscope_params::ColloscopeIdMaps<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    ) -> Option<Self> {
+        Some(ColloscopeData {
+            period_map: self
+                .period_map
+                .iter()
+                .map(|(period_id, period)| {
+                    Some((
+                        collo_id_maps.periods.get(period_id).cloned()?,
+                        period.duplicate_with_id_maps(collo_id_maps)?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+            group_lists: self
+                .group_lists
+                .iter()
+                .map(|(group_list_id, group_list)| {
+                    Some((
+                        collo_id_maps.group_lists.get(group_list_id).cloned()?,
+                        group_list.duplicate_with_id_maps(collo_id_maps)?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        })
+    }
+}
+
+impl ColloscopeData {
     /// Builds an empty colloscope compatible with the given parameters
     ///
     /// The function might panic if the parameters do not satisfy parameters invariants
@@ -287,6 +327,36 @@ pub struct ColloscopePeriod {
 }
 
 impl ColloscopePeriod {
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        collo_id_maps: &super::colloscope_params::ColloscopeIdMaps<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    ) -> Option<Self> {
+        Some(ColloscopePeriod {
+            subject_map: self
+                .subject_map
+                .iter()
+                .map(|(subject_id, subject)| {
+                    Some((
+                        collo_id_maps.subjects.get(subject_id).cloned()?,
+                        subject.duplicate_with_id_maps(collo_id_maps)?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        })
+    }
+}
+
+impl ColloscopePeriod {
     pub(crate) fn validate_against_params(
         &self,
         period_id: ColloscopePeriodId,
@@ -346,6 +416,36 @@ pub struct ColloscopeSubject {
     /// value, even if no group is actually assigned. This will rather
     /// be described within the [ColloscopeInterrogation] struct.
     pub slots: BTreeMap<ColloscopeSlotId, Vec<Option<ColloscopeInterrogation>>>,
+}
+
+impl ColloscopeSubject {
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        collo_id_maps: &super::colloscope_params::ColloscopeIdMaps<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    ) -> Option<Self> {
+        Some(ColloscopeSubject {
+            slots: self
+                .slots
+                .iter()
+                .map(|(slot_id, interrogations)| {
+                    Some((
+                        collo_id_maps.slots.get(slot_id).cloned()?,
+                        interrogations.clone(),
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        })
+    }
 }
 
 impl ColloscopeSubject {
@@ -525,6 +625,36 @@ impl ColloscopeInterrogation {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeGroupList {
     pub groups_for_students: BTreeMap<ColloscopeStudentId, Option<u32>>,
+}
+
+impl ColloscopeGroupList {
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        collo_id_maps: &super::colloscope_params::ColloscopeIdMaps<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    ) -> Option<Self> {
+        Some(ColloscopeGroupList {
+            groups_for_students: self
+                .groups_for_students
+                .iter()
+                .map(|(student_id, groups)| {
+                    Some((
+                        collo_id_maps.students.get(student_id).cloned()?,
+                        groups.clone(),
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        })
+    }
 }
 
 impl ColloscopeGroupList {

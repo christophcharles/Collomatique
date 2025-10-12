@@ -242,6 +242,93 @@ impl<
                 .collect(),
         }
     }
+
+    pub(crate) fn duplicate_with_id_maps(
+        &self,
+        collo_id_maps: &ColloscopeIdMaps<
+            ColloscopePeriodId,
+            ColloscopeSubjectId,
+            ColloscopeTeacherId,
+            ColloscopeStudentId,
+            ColloscopeWeekPatternId,
+            ColloscopeSlotId,
+            ColloscopeIncompatId,
+            ColloscopeGroupListId,
+            ColloscopeRuleId,
+        >,
+    ) -> Option<Self> {
+        Some(ColloscopeIdMaps {
+            periods: self
+                .periods
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.periods.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+            subjects: self
+                .subjects
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.subjects.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+            teachers: self
+                .teachers
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.teachers.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+            students: self
+                .students
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.students.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+            week_patterns: self
+                .week_patterns
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((
+                        id.clone(),
+                        collo_id_maps.week_patterns.get(collo_id).cloned()?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+            slots: self
+                .slots
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.slots.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+            incompats: self
+                .incompats
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.incompats.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+            group_lists: self
+                .group_lists
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((
+                        id.clone(),
+                        collo_id_maps.group_lists.get(collo_id).cloned()?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+            rules: self
+                .rules
+                .iter()
+                .map(|(id, collo_id)| {
+                    Some((id.clone(), collo_id_maps.rules.get(collo_id).cloned()?))
+                })
+                .collect::<Option<_>>()?,
+        })
+    }
 }
 
 impl
