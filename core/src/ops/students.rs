@@ -150,7 +150,7 @@ pub enum StudentsUpdateOp {
     DeleteStudent(collomatique_state_colloscopes::StudentId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum StudentsUpdateError {
     #[error(transparent)]
     AddNewStudent(#[from] AddNewStudentError),
@@ -160,13 +160,13 @@ pub enum StudentsUpdateError {
     DeleteStudent(#[from] DeleteStudentError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddNewStudentError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateStudentError {
     #[error("Student ID {0:?} is invalid")]
     InvalidStudentId(collomatique_state_colloscopes::StudentId),
@@ -174,7 +174,7 @@ pub enum UpdateStudentError {
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeleteStudentError {
     #[error("Student ID {0:?} is invalid")]
     InvalidStudentId(collomatique_state_colloscopes::StudentId),

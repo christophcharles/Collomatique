@@ -80,7 +80,7 @@ pub enum TeachersUpdateOp {
     DeleteTeacher(collomatique_state_colloscopes::TeacherId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TeachersUpdateError {
     #[error(transparent)]
     AddNewTeacher(#[from] AddNewTeacherError),
@@ -90,13 +90,13 @@ pub enum TeachersUpdateError {
     DeleteTeacher(#[from] DeleteTeacherError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddNewTeacherError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateTeacherError {
     #[error("Teacher ID {0:?} is invalid")]
     InvalidTeacherId(collomatique_state_colloscopes::TeacherId),
@@ -104,7 +104,7 @@ pub enum UpdateTeacherError {
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeleteTeacherError {
     #[error("Teacher ID {0:?} is invalid")]
     InvalidTeacherId(collomatique_state_colloscopes::TeacherId),

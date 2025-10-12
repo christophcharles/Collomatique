@@ -29,15 +29,15 @@ impl From<collomatique_state_colloscopes::StudentId> for StudentId {
     }
 }
 
-impl From<&StudentId> for crate::rpc::cmd_msg::MsgStudentId {
+impl From<&StudentId> for collomatique_state_colloscopes::StudentId {
     fn from(value: &StudentId) -> Self {
         value.id.clone().into()
     }
 }
 
-impl From<StudentId> for crate::rpc::cmd_msg::MsgStudentId {
+impl From<StudentId> for collomatique_state_colloscopes::StudentId {
     fn from(value: StudentId) -> Self {
-        crate::rpc::cmd_msg::MsgStudentId::from(&value)
+        collomatique_state_colloscopes::StudentId::from(&value)
     }
 }
 
@@ -92,10 +92,11 @@ impl
     }
 }
 
-impl From<Student> for crate::rpc::cmd_msg::students::StudentMsg {
+impl From<Student>
+    for collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>
+{
     fn from(value: Student) -> Self {
-        use crate::rpc::cmd_msg::students::StudentMsg;
-        StudentMsg {
+        collomatique_state_colloscopes::students::Student {
             desc: value.desc.into(),
             excluded_periods: value
                 .excluded_periods

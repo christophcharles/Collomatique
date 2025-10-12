@@ -2,6 +2,7 @@ use super::*;
 
 use std::num::NonZeroU32;
 
+use collomatique_time::NonZeroDurationInMinutes;
 use pyo3::{exceptions::PyValueError, types::PyString};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -246,13 +247,21 @@ impl From<collomatique_time::SlotWithDuration> for SlotWithDuration {
     }
 }
 
-impl From<SlotWithDuration> for crate::rpc::cmd_msg::incompatibilities::IncompatSlotMsg {
-    fn from(value: SlotWithDuration) -> Self {
-        use crate::rpc::cmd_msg::incompatibilities::IncompatSlotMsg;
-        IncompatSlotMsg {
-            start_day: collomatique_time::Weekday::from(value.start_time.weekday).0,
-            start_time: value.start_time.start_time.internal.inner().clone(),
-            duration: value.duration_in_minutes,
-        }
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SlotWithDurationError {
+    SlotOverlapsWithNextDay,
+}
+
+impl TryFrom<SlotWithDuration> for collomatique_time::SlotWithDuration {
+    type Error = SlotWithDurationError;
+    fn try_from(value: SlotWithDuration) -> Result<Self, Self::Error> {
+        let slot_start = collomatique_time::SlotStart {
+            weekday: value.start_time.weekday.into(),
+            start_time: value.start_time.start_time.into(),
+        };
+        let duration = NonZeroDurationInMinutes::from(value.duration_in_minutes);
+        value.duration_in_minutes;
+        collomatique_time::SlotWithDuration::new(slot_start, duration)
+            .ok_or(SlotWithDurationError::SlotOverlapsWithNextDay)
     }
 }

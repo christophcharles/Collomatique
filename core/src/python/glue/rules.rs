@@ -27,15 +27,15 @@ impl From<collomatique_state_colloscopes::RuleId> for RuleId {
     }
 }
 
-impl From<&RuleId> for crate::rpc::cmd_msg::MsgRuleId {
+impl From<&RuleId> for collomatique_state_colloscopes::RuleId {
     fn from(value: &RuleId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<RuleId> for crate::rpc::cmd_msg::MsgRuleId {
+impl From<RuleId> for collomatique_state_colloscopes::RuleId {
     fn from(value: RuleId) -> Self {
-        crate::rpc::cmd_msg::MsgRuleId::from(&value)
+        collomatique_state_colloscopes::RuleId::from(&value)
     }
 }
 
@@ -151,25 +151,34 @@ impl
     }
 }
 
-impl From<LogicRule> for crate::rpc::cmd_msg::rules::LogicRuleMsg {
+impl From<LogicRule>
+    for collomatique_state_colloscopes::rules::LogicRule<collomatique_state_colloscopes::SlotId>
+{
     fn from(value: LogicRule) -> Self {
-        use crate::rpc::cmd_msg::rules::LogicRuleMsg;
         match value {
             LogicRule::And(pl1, pl2) => {
                 let l1 = Python::with_gil(|py| pl1.borrow(py).clone());
                 let l2 = Python::with_gil(|py| pl2.borrow(py).clone());
-                LogicRuleMsg::And(Box::new(l1.into()), Box::new(l2.into()))
+                collomatique_state_colloscopes::rules::LogicRule::And(
+                    Box::new(l1.into()),
+                    Box::new(l2.into()),
+                )
             }
             LogicRule::Or(pl1, pl2) => {
                 let l1 = Python::with_gil(|py| pl1.borrow(py).clone());
                 let l2 = Python::with_gil(|py| pl2.borrow(py).clone());
-                LogicRuleMsg::Or(Box::new(l1.into()), Box::new(l2.into()))
+                collomatique_state_colloscopes::rules::LogicRule::Or(
+                    Box::new(l1.into()),
+                    Box::new(l2.into()),
+                )
             }
             LogicRule::Not(pl) => {
                 let l = Python::with_gil(|py| pl.borrow(py).clone());
-                LogicRuleMsg::Not(Box::new(l.into()))
+                collomatique_state_colloscopes::rules::LogicRule::Not(Box::new(l.into()))
             }
-            LogicRule::Variable(id) => LogicRuleMsg::Variable(id.into()),
+            LogicRule::Variable(id) => {
+                collomatique_state_colloscopes::rules::LogicRule::Variable(id.into())
+            }
         }
     }
 }

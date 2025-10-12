@@ -27,15 +27,15 @@ impl From<collomatique_state_colloscopes::SlotId> for SlotId {
     }
 }
 
-impl From<&SlotId> for crate::rpc::cmd_msg::MsgSlotId {
+impl From<&SlotId> for collomatique_state_colloscopes::SlotId {
     fn from(value: &SlotId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<SlotId> for crate::rpc::cmd_msg::MsgSlotId {
+impl From<SlotId> for collomatique_state_colloscopes::SlotId {
     fn from(value: SlotId) -> Self {
-        crate::rpc::cmd_msg::MsgSlotId::from(&value)
+        collomatique_state_colloscopes::SlotId::from(&value)
     }
 }
 
@@ -119,14 +119,16 @@ impl
     }
 }
 
-impl From<SlotParameters> for crate::rpc::cmd_msg::slots::SlotMsg {
+impl From<SlotParameters>
+    for collomatique_state_colloscopes::slots::Slot<
+        collomatique_state_colloscopes::TeacherId,
+        collomatique_state_colloscopes::WeekPatternId,
+    >
+{
     fn from(value: SlotParameters) -> Self {
-        use crate::rpc::cmd_msg::slots::SlotMsg;
-        SlotMsg {
+        collomatique_state_colloscopes::slots::Slot {
             teacher_id: value.teacher_id.into(),
-            start_day: collomatique_time::Weekday::from(value.start_time.weekday).into_inner(),
-            start_time: collomatique_time::TimeOnMinutes::from(value.start_time.start_time)
-                .into_inner(),
+            start_time: value.start_time.into(),
             extra_info: value.extra_info,
             week_pattern: value.week_pattern.map(|x| x.into()),
             cost: value.cost,

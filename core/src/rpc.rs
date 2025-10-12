@@ -84,7 +84,7 @@ pub enum ResultMsg {
     Ack(Option<collomatique_state_colloscopes::NewId>),
     AckGui(GuiAnswer),
     Data(InternalDataStream),
-    Error(ErrorMsg),
+    Error(crate::ops::UpdateError),
 }
 
 impl ResultMsg {

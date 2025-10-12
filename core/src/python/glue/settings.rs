@@ -52,10 +52,9 @@ impl From<collomatique_state_colloscopes::settings::StrictLimits> for StrictLimi
     }
 }
 
-impl From<StrictLimits> for crate::rpc::cmd_msg::settings::StrictLimitsMsg {
+impl From<StrictLimits> for collomatique_state_colloscopes::settings::StrictLimits {
     fn from(value: StrictLimits) -> Self {
-        use crate::rpc::cmd_msg::settings::StrictLimitsMsg;
-        StrictLimitsMsg {
+        collomatique_state_colloscopes::settings::StrictLimits {
             interrogations_per_week: value.interrogations_per_week.map(|x| x.into()),
             max_interrogations_per_day: value.max_interrogations_per_day,
         }

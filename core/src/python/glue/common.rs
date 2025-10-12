@@ -31,10 +31,9 @@ impl From<collomatique_state_colloscopes::PersonWithContact> for PersonWithConta
     }
 }
 
-impl From<PersonWithContact> for crate::rpc::cmd_msg::common::PersonWithContactMsg {
+impl From<PersonWithContact> for collomatique_state_colloscopes::PersonWithContact {
     fn from(value: PersonWithContact) -> Self {
-        use crate::rpc::cmd_msg::common::PersonWithContactMsg;
-        PersonWithContactMsg {
+        collomatique_state_colloscopes::PersonWithContact {
             firstname: value.firstname,
             surname: value.surname,
             tel: non_empty_string::NonEmptyString::new(value.tel).ok(),

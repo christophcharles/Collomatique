@@ -3,22 +3,25 @@ use std::collections::BTreeMap;
 use pyo3::prelude::*;
 
 use crate::rpc::{
-    cmd_msg::{ExtensionDesc, MsgWeekPatternId, OpenFileDialogMsg},
-    error_msg::{
-        AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
-        AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
-        AssignGroupListToSubjectError, AssignmentsError, CutPeriodError, DeleteGroupListError,
-        DeleteIncompatError, DeletePeriodError, DeleteRuleError, DeleteSlotError,
-        DeleteStudentError, DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError,
-        DuplicatePreviousPeriodError, GeneralPlanningError, GroupListsError,
-        IncompatibilitiesError, MergeWithPreviousPeriodError, MoveDownError, MoveSlotDownError,
-        MoveSlotUpError, MoveUpError, PrefillGroupListError, RulesError, SlotsError, StudentsError,
-        SubjectsError, TeachersError, UpdateGroupListError, UpdateIncompatError,
-        UpdatePeriodStatusError, UpdatePeriodStatusForRuleError, UpdatePeriodWeekCountError,
-        UpdateRuleError, UpdateSlotError, UpdateStudentError, UpdateSubjectError,
-        UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError, WeekPatternsError,
-    },
-    ErrorMsg, GuiAnswer, ResultMsg,
+    cmd_msg::{ExtensionDesc, OpenFileDialogMsg},
+    GuiAnswer, ResultMsg,
+};
+
+use crate::ops::UpdateError;
+use crate::ops::{
+    AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
+    AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
+    AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
+    DeleteIncompatError, DeletePeriodError, DeleteRuleError, DeleteSlotError, DeleteStudentError,
+    DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
+    GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
+    MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
+    MoveSubjectUpError, PrefillGroupListError, RulesUpdateError, SlotsUpdateError,
+    StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
+    UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodStatusForRuleError,
+    UpdatePeriodWeekCountError, UpdateRuleError, UpdateSlotError, UpdateStudentError,
+    UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
+    WeekPatternsUpdateError,
 };
 
 use pyo3::exceptions::PyValueError;
@@ -173,8 +176,6 @@ mod params;
 mod settings;
 mod slots;
 
-use crate::rpc::cmd_msg::MsgSubjectId;
-
 #[pyclass]
 pub struct CollomatiqueFile {
     token: Token,
@@ -184,8 +185,8 @@ pub struct CollomatiqueFile {
 impl CollomatiqueFile {
     fn periods_add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(
-                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::AddNewPeriod(week_count),
+            crate::ops::UpdateOp::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateOp::AddNewPeriod(week_count),
             ),
         ));
 
@@ -197,8 +198,8 @@ impl CollomatiqueFile {
 
     fn periods_update(self_: PyRef<'_, Self>, id: PeriodId, new_week_count: usize) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(
-                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdatePeriodWeekCount(
+            crate::ops::UpdateOp::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateOp::UpdatePeriodWeekCount(
                     id.into(),
                     new_week_count,
                 ),
@@ -207,8 +208,8 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GeneralPlanning(
-                GeneralPlanningError::UpdatePeriodWeekCount(e),
+            ResultMsg::Error(UpdateError::GeneralPlanning(
+                GeneralPlanningUpdateError::UpdatePeriodWeekCount(e),
             )) => match e {
                 UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -226,20 +227,20 @@ impl CollomatiqueFile {
 
     fn periods_delete(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(
-                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeletePeriod(id.into()),
+            crate::ops::UpdateOp::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateOp::DeletePeriod(id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::DeletePeriod(e))) => {
-                match e {
-                    DeletePeriodError::InvalidPeriodId(id) => {
-                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
-                    }
+            ResultMsg::Error(UpdateError::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateError::DeletePeriod(e),
+            )) => match e {
+                DeletePeriodError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
-            }
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -250,40 +251,41 @@ impl CollomatiqueFile {
         remaining_weeks: usize,
     ) -> PyResult<PeriodId> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(
-                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::CutPeriod(id.into(), remaining_weeks),
-            ),
+            crate::ops::UpdateOp::GeneralPlanning(crate::ops::GeneralPlanningUpdateOp::CutPeriod(
+                id.into(),
+                remaining_weeks,
+            )),
         ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::PeriodId(new_id))) => {
                 Ok(new_id.into())
             }
-            ResultMsg::Error(ErrorMsg::GeneralPlanning(GeneralPlanningError::CutPeriod(e))) => {
-                match e {
-                    CutPeriodError::InvalidPeriodId(id) => {
-                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
-                    }
-                    CutPeriodError::RemainingWeekCountTooBig(w, t) => Err(PyValueError::new_err(
-                        format!("Remaining weeks too big ({} > {})", w, t),
-                    )),
+            ResultMsg::Error(UpdateError::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateError::CutPeriod(e),
+            )) => match e {
+                CutPeriodError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
-            }
+                CutPeriodError::RemainingWeekCountTooBig(w, t) => Err(PyValueError::new_err(
+                    format!("Remaining weeks too big ({} > {})", w, t),
+                )),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
 
     fn periods_merge_with_previous(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(
-                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::MergeWithPreviousPeriod(id.into()),
+            crate::ops::UpdateOp::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateOp::MergeWithPreviousPeriod(id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GeneralPlanning(
-                GeneralPlanningError::MergeWithPreviousPeriod(e),
+            ResultMsg::Error(UpdateError::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateError::MergeWithPreviousPeriod(e),
             )) => match e {
                 MergeWithPreviousPeriodError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -303,19 +305,15 @@ impl CollomatiqueFile {
         new_status: bool,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(
-                crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateWeekStatus(
-                    id.into(),
-                    week,
-                    new_status,
-                ),
+            crate::ops::UpdateOp::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateOp::UpdateWeekStatus(id.into(), week, new_status),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GeneralPlanning(
-                GeneralPlanningError::UpdateWeekStatus(e),
+            ResultMsg::Error(UpdateError::GeneralPlanning(
+                crate::ops::GeneralPlanningUpdateError::UpdateWeekStatus(e),
             )) => match e {
                 UpdateWeekStatusError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -330,11 +328,11 @@ impl CollomatiqueFile {
 
     fn periods_set_first_week(self_: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GeneralPlanning(match first_week {
-                Some(week) => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::UpdateFirstWeek(
-                    collomatique_time::NaiveMondayDate::from(week).into_inner(),
+            crate::ops::UpdateOp::GeneralPlanning(match first_week {
+                Some(week) => crate::ops::GeneralPlanningUpdateOp::UpdateFirstWeek(
+                    collomatique_time::NaiveMondayDate::from(week),
                 ),
-                None => crate::rpc::cmd_msg::GeneralPlanningCmdMsg::DeleteFirstWeek,
+                None => crate::ops::GeneralPlanningUpdateOp::DeleteFirstWeek,
             }),
         ));
 
@@ -350,25 +348,27 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
-                    crate::rpc::cmd_msg::SubjectsCmdMsg::AddNewSubject(subject_params.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
+                    crate::ops::SubjectsUpdateOp::AddNewSubject(subject_params.into()),
                 )));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::SubjectId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::AddNewSubject(e))) => match e {
-                AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
-                    PyValueError::new_err("groups per interrogation range cannot be empty"),
-                ),
-                AddNewSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
-                    "students per group range cannot be empty",
-                )),
-                AddNewSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
-                    "interrogation count range cannot be empty",
-                )),
-            },
+            ResultMsg::Error(UpdateError::Subjects(SubjectsUpdateError::AddNewSubject(e))) => {
+                match e {
+                    AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
+                        PyValueError::new_err("groups per interrogation range cannot be empty"),
+                    ),
+                    AddNewSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
+                        "students per group range cannot be empty",
+                    )),
+                    AddNewSubjectError::InterrogationCountRangeIsEmpty => Err(
+                        PyValueError::new_err("interrogation count range cannot be empty"),
+                    ),
+                }
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -381,8 +381,8 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
-                    crate::rpc::cmd_msg::SubjectsCmdMsg::UpdateSubject(
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
+                    crate::ops::SubjectsUpdateOp::UpdateSubject(
                         id.into(),
                         new_subject_params.into(),
                     ),
@@ -390,21 +390,22 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::UpdateSubject(e))) => match e {
-                UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
-                    PyValueError::new_err("groups per interrogation range cannot be empty"),
-                ),
-                UpdateSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
-                    "students per group range cannot be empty",
-                )),
-                UpdateSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-                UpdateSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
-                    "interrogation count range cannot be empty",
-                )),
-            },
+            ResultMsg::Error(UpdateError::Subjects(SubjectsUpdateError::UpdateSubject(e))) => {
+                match e {
+                    UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
+                        PyValueError::new_err("groups per interrogation range cannot be empty"),
+                    ),
+                    UpdateSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
+                        "students per group range cannot be empty",
+                    )),
+                    UpdateSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                    UpdateSubjectError::InterrogationCountRangeIsEmpty => Err(
+                        PyValueError::new_err("interrogation count range cannot be empty"),
+                    ),
+                }
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -413,18 +414,19 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
-                    crate::rpc::cmd_msg::SubjectsCmdMsg::DeleteSubject(id.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
+                    crate::ops::SubjectsUpdateOp::DeleteSubject(id.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::DeleteSubject(e))) => match e {
-                DeleteSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-            },
+            ResultMsg::Error(UpdateError::Subjects(SubjectsUpdateError::DeleteSubject(e))) => {
+                match e {
+                    DeleteSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                }
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -433,21 +435,22 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
-                    crate::rpc::cmd_msg::SubjectsCmdMsg::MoveUp(id.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
+                    crate::ops::SubjectsUpdateOp::MoveSubjectUp(id.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::MoveUp(e))) => match e {
-                MoveUpError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-                MoveUpError::NoUpperPosition => {
-                    Err(PyValueError::new_err("The subject is already the first"))
+            ResultMsg::Error(UpdateError::Subjects(SubjectsUpdateError::MoveSubjectUp(e))) => {
+                match e {
+                    MoveSubjectUpError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                    MoveSubjectUpError::NoUpperPosition => {
+                        Err(PyValueError::new_err("The subject is already the first"))
+                    }
                 }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -456,21 +459,22 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
-                    crate::rpc::cmd_msg::SubjectsCmdMsg::MoveDown(id.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
+                    crate::ops::SubjectsUpdateOp::MoveSubjectDown(id.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::MoveDown(e))) => match e {
-                MoveDownError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-                MoveDownError::NoLowerPosition => {
-                    Err(PyValueError::new_err("The subject is already the last"))
+            ResultMsg::Error(UpdateError::Subjects(SubjectsUpdateError::MoveSubjectDown(e))) => {
+                match e {
+                    MoveSubjectDownError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                    MoveSubjectDownError::NoLowerPosition => {
+                        Err(PyValueError::new_err("The subject is already the last"))
+                    }
                 }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -484,8 +488,8 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Subjects(
-                    crate::rpc::cmd_msg::SubjectsCmdMsg::UpdatePeriodStatus(
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
+                    crate::ops::SubjectsUpdateOp::UpdatePeriodStatus(
                         subject_id.into(),
                         period_id.into(),
                         new_status,
@@ -494,14 +498,16 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Subjects(SubjectsError::UpdatePeriodStatus(e))) => match e {
-                UpdatePeriodStatusError::InvalidSubjectId(id) => Err(PyValueError::new_err(
-                    format!("Invalid subject id {:?}", id),
-                )),
-                UpdatePeriodStatusError::InvalidPeriodId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+            ResultMsg::Error(UpdateError::Subjects(SubjectsUpdateError::UpdatePeriodStatus(e))) => {
+                match e {
+                    UpdatePeriodStatusError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                    UpdatePeriodStatusError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
                 }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -510,20 +516,21 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Teachers(
-                    crate::rpc::cmd_msg::TeachersCmdMsg::AddNewTeacher(teacher.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Teachers(
+                    crate::ops::TeachersUpdateOp::AddNewTeacher(teacher.into()),
                 )));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::TeacherId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::Teachers(TeachersError::AddNewTeacher(e))) => match e {
-                AddNewTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-            },
+            ResultMsg::Error(UpdateError::Teachers(TeachersUpdateError::AddNewTeacher(e))) => {
+                match e {
+                    AddNewTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(
+                        format!("Invalid subject id {:?}", id),
+                    )),
+                }
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -536,16 +543,13 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Teachers(
-                    crate::rpc::cmd_msg::TeachersCmdMsg::UpdateTeacher(
-                        id.into(),
-                        new_teacher.into(),
-                    ),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Teachers(
+                    crate::ops::TeachersUpdateOp::UpdateTeacher(id.into(), new_teacher.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Teachers(TeachersError::UpdateTeacher(e))) => {
+            ResultMsg::Error(UpdateError::Teachers(TeachersUpdateError::UpdateTeacher(e))) => {
                 match e {
                     UpdateTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(
                         format!("Invalid teacher id {:?}", id),
@@ -563,18 +567,19 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Teachers(
-                    crate::rpc::cmd_msg::TeachersCmdMsg::DeleteTeacher(id.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Teachers(
+                    crate::ops::TeachersUpdateOp::DeleteTeacher(id.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Teachers(TeachersError::DeleteTeacher(e))) => match e {
-                DeleteTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid teacher id {:?}",
-                    id
-                ))),
-            },
+            ResultMsg::Error(UpdateError::Teachers(TeachersUpdateError::DeleteTeacher(e))) => {
+                match e {
+                    DeleteTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(
+                        format!("Invalid teacher id {:?}", id),
+                    )),
+                }
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -583,19 +588,21 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Students(
-                    crate::rpc::cmd_msg::StudentsCmdMsg::AddNewStudent(student.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Students(
+                    crate::ops::StudentsUpdateOp::AddNewStudent(student.into()),
                 )));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::StudentId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::Students(StudentsError::AddNewStudent(e))) => match e {
-                AddNewStudentError::InvalidPeriodId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+            ResultMsg::Error(UpdateError::Students(StudentsUpdateError::AddNewStudent(e))) => {
+                match e {
+                    AddNewStudentError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
                 }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -608,24 +615,22 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Students(
-                    crate::rpc::cmd_msg::StudentsCmdMsg::UpdateStudent(
-                        id.into(),
-                        new_student.into(),
-                    ),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Students(
+                    crate::ops::StudentsUpdateOp::UpdateStudent(id.into(), new_student.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Students(StudentsError::UpdateStudent(e))) => match e {
-                UpdateStudentError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
-                UpdateStudentError::InvalidPeriodId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+            ResultMsg::Error(UpdateError::Students(StudentsUpdateError::UpdateStudent(e))) => {
+                match e {
+                    UpdateStudentError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                        format!("Invalid student id {:?}", id),
+                    )),
+                    UpdateStudentError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
                 }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -634,18 +639,19 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Students(
-                    crate::rpc::cmd_msg::StudentsCmdMsg::DeleteStudent(id.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Students(
+                    crate::ops::StudentsUpdateOp::DeleteStudent(id.into()),
                 )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Students(StudentsError::DeleteStudent(e))) => match e {
-                DeleteStudentError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
-            },
+            ResultMsg::Error(UpdateError::Students(StudentsUpdateError::DeleteStudent(e))) => {
+                match e {
+                    DeleteStudentError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                        format!("Invalid student id {:?}", id),
+                    )),
+                }
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -658,7 +664,7 @@ impl CollomatiqueFile {
         status: bool,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::Assignments(crate::rpc::cmd_msg::AssignmentsCmdMsg::Assign(
+            crate::ops::UpdateOp::Assignments(crate::ops::AssignmentsUpdateOp::Assign(
                 period_id.into(),
                 student_id.into(),
                 subject_id.into(),
@@ -668,31 +674,33 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Assignments(AssignmentsError::Assign(e))) => match e {
-                AssignError::InvalidPeriodId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+            ResultMsg::Error(UpdateError::Assignments(AssignmentsUpdateError::Assign(e))) => {
+                match e {
+                    AssignError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                    AssignError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                        "Invalid student id {:?}",
+                        id
+                    ))),
+                    AssignError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                        "Invalid subject id {:?}",
+                        id
+                    ))),
+                    AssignError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Subject {:?} does not run on period {:?}",
+                            subject_id, period_id
+                        )))
+                    }
+                    AssignError::StudentIsNotPresentOnPeriod(student_id, period_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Student {:?} is not present on period {:?}",
+                            student_id, period_id
+                        )))
+                    }
                 }
-                AssignError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
-                AssignError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-                AssignError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
-                    Err(PyValueError::new_err(format!(
-                        "Subject {:?} does not run on period {:?}",
-                        subject_id, period_id
-                    )))
-                }
-                AssignError::StudentIsNotPresentOnPeriod(student_id, period_id) => {
-                    Err(PyValueError::new_err(format!(
-                        "Student {:?} is not present on period {:?}",
-                        student_id, period_id
-                    )))
-                }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -702,16 +710,16 @@ impl CollomatiqueFile {
         period_id: PeriodId,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::Assignments(
-                crate::rpc::cmd_msg::AssignmentsCmdMsg::DuplicatePreviousPeriod(period_id.into()),
+            crate::ops::UpdateOp::Assignments(
+                crate::ops::AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Assignments(AssignmentsError::DuplicatePreviousPeriod(
-                e,
-            ))) => match e {
+            ResultMsg::Error(UpdateError::Assignments(
+                AssignmentsUpdateError::DuplicatePreviousPeriod(e),
+            )) => match e {
                 DuplicatePreviousPeriodError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
@@ -730,7 +738,7 @@ impl CollomatiqueFile {
         status: bool,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::Assignments(crate::rpc::cmd_msg::AssignmentsCmdMsg::AssignAll(
+            crate::ops::UpdateOp::Assignments(crate::ops::AssignmentsUpdateOp::AssignAll(
                 period_id.into(),
                 subject_id.into(),
                 status,
@@ -739,21 +747,23 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Assignments(AssignmentsError::AssignAll(e))) => match e {
-                AssignAllError::InvalidPeriodId(id) => {
-                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+            ResultMsg::Error(UpdateError::Assignments(AssignmentsUpdateError::AssignAll(e))) => {
+                match e {
+                    AssignAllError::InvalidPeriodId(id) => {
+                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                    }
+                    AssignAllError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                        "Invalid subject id {:?}",
+                        id
+                    ))),
+                    AssignAllError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Subject {:?} does not run on period {:?}",
+                            subject_id, period_id
+                        )))
+                    }
                 }
-                AssignAllError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
-                AssignAllError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
-                    Err(PyValueError::new_err(format!(
-                        "Subject {:?} does not run on period {:?}",
-                        subject_id, period_id
-                    )))
-                }
-            },
+            }
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -763,8 +773,8 @@ impl CollomatiqueFile {
         week_pattern: week_patterns::WeekPattern,
     ) -> WeekPatternId {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::WeekPatterns(
-                crate::rpc::cmd_msg::WeekPatternsCmdMsg::AddNewWeekPattern(week_pattern.into()),
+            crate::ops::UpdateOp::WeekPatterns(
+                crate::ops::WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern.into()),
             ),
         ));
 
@@ -782,8 +792,8 @@ impl CollomatiqueFile {
         new_week_pattern: week_patterns::WeekPattern,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::WeekPatterns(
-                crate::rpc::cmd_msg::WeekPatternsCmdMsg::UpdateWeekPattern(
+            crate::ops::UpdateOp::WeekPatterns(
+                crate::ops::WeekPatternsUpdateOp::UpdateWeekPattern(
                     id.into(),
                     new_week_pattern.into(),
                 ),
@@ -792,33 +802,33 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::WeekPatterns(WeekPatternsError::UpdateWeekPattern(e))) => {
-                match e {
-                    UpdateWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
-                        format!("Invalid week pattern id {:?}", id),
-                    )),
-                }
-            }
+            ResultMsg::Error(UpdateError::WeekPatterns(
+                WeekPatternsUpdateError::UpdateWeekPattern(e),
+            )) => match e {
+                UpdateWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                    format!("Invalid week pattern id {:?}", id),
+                )),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
 
     fn week_patterns_delete(self_: PyRef<'_, Self>, id: WeekPatternId) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::WeekPatterns(
-                crate::rpc::cmd_msg::WeekPatternsCmdMsg::DeleteWeekPattern(id.into()),
+            crate::ops::UpdateOp::WeekPatterns(
+                crate::ops::WeekPatternsUpdateOp::DeleteWeekPattern(id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::WeekPatterns(WeekPatternsError::DeleteWeekPattern(e))) => {
-                match e {
-                    DeleteWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
-                        format!("Invalid week pattern id {:?}", id),
-                    )),
-                }
-            }
+            ResultMsg::Error(UpdateError::WeekPatterns(
+                WeekPatternsUpdateError::DeleteWeekPattern(e),
+            )) => match e {
+                DeleteWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                    format!("Invalid week pattern id {:?}", id),
+                )),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -828,18 +838,17 @@ impl CollomatiqueFile {
         subject_id: subjects::SubjectId,
         slot: slots::SlotParameters,
     ) -> PyResult<slots::SlotId> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
-                    crate::rpc::cmd_msg::SlotsCmdMsg::AddNewSlot(subject_id.into(), slot.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
+                crate::ops::SlotsUpdateOp::AddNewSlot(subject_id.into(), slot.into()),
+            )));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::SlotId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::Slots(SlotsError::AddNewSlot(e))) => match e {
+            ResultMsg::Error(UpdateError::Slots(SlotsUpdateError::AddNewSlot(e))) => match e {
                 AddNewSlotError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
                     "Invalid subject id {:?}",
                     id
@@ -874,16 +883,15 @@ impl CollomatiqueFile {
         id: slots::SlotId,
         new_slot: slots::SlotParameters,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
-                    crate::rpc::cmd_msg::SlotsCmdMsg::UpdateSlot(id.into(), new_slot.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
+                crate::ops::SlotsUpdateOp::UpdateSlot(id.into(), new_slot.into()),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Slots(SlotsError::UpdateSlot(e))) => match e {
+            ResultMsg::Error(UpdateError::Slots(SlotsUpdateError::UpdateSlot(e))) => match e {
                 UpdateSlotError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
@@ -917,16 +925,15 @@ impl CollomatiqueFile {
     }
 
     fn slots_delete(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
-                    crate::rpc::cmd_msg::SlotsCmdMsg::DeleteSlot(id.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
+                crate::ops::SlotsUpdateOp::DeleteSlot(id.into()),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Slots(SlotsError::DeleteSlot(e))) => match e {
+            ResultMsg::Error(UpdateError::Slots(SlotsUpdateError::DeleteSlot(e))) => match e {
                 DeleteSlotError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
@@ -936,16 +943,15 @@ impl CollomatiqueFile {
     }
 
     fn slots_move_up(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
-                    crate::rpc::cmd_msg::SlotsCmdMsg::MoveSlotUp(id.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
+                crate::ops::SlotsUpdateOp::MoveSlotUp(id.into()),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Slots(SlotsError::MoveSlotUp(e))) => match e {
+            ResultMsg::Error(UpdateError::Slots(SlotsUpdateError::MoveSlotUp(e))) => match e {
                 MoveSlotUpError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
@@ -958,16 +964,15 @@ impl CollomatiqueFile {
     }
 
     fn slots_move_down(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Slots(
-                    crate::rpc::cmd_msg::SlotsCmdMsg::MoveSlotDown(id.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
+                crate::ops::SlotsUpdateOp::MoveSlotDown(id.into()),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Slots(SlotsError::MoveSlotDown(e))) => match e {
+            ResultMsg::Error(UpdateError::Slots(SlotsUpdateError::MoveSlotDown(e))) => match e {
                 MoveSlotDownError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
@@ -984,8 +989,14 @@ impl CollomatiqueFile {
         incompat: incompatibilities::Incompat,
     ) -> PyResult<incompatibilities::IncompatId> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::Incompats(
-                crate::rpc::cmd_msg::IncompatibilitiesCmdMsg::AddNewIncompat(incompat.into()),
+            crate::ops::UpdateOp::Incompatibilities(
+                crate::ops::IncompatibilitiesUpdateOp::AddNewIncompat(
+                    incompat.try_into().map_err(|e| match e {
+                        time::SlotWithDurationError::SlotOverlapsWithNextDay => {
+                            PyValueError::new_err("Slot overlaps with next day")
+                        }
+                    })?,
+                ),
             ),
         ));
 
@@ -993,19 +1004,17 @@ impl CollomatiqueFile {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::IncompatId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::AddNewIncompat(e))) => {
-                match e {
-                    AddNewIncompatError::InvalidSubjectId(id) => Err(PyValueError::new_err(
-                        format!("Invalid subject id {:?}", id),
-                    )),
-                    AddNewIncompatError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
-                        format!("Invalid week pattern id {:?}", id),
-                    )),
-                    AddNewIncompatError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(
-                        format!("Schedule incompatibility slot overlaps with next day",),
-                    )),
-                }
-            }
+            ResultMsg::Error(UpdateError::Incompatibilities(
+                IncompatibilitiesUpdateError::AddNewIncompat(e),
+            )) => match e {
+                AddNewIncompatError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                AddNewIncompatError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
+                    format!("Invalid week pattern id {:?}", id),
+                )),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1016,17 +1025,23 @@ impl CollomatiqueFile {
         new_incompat: incompatibilities::Incompat,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::Incompats(
-                crate::rpc::cmd_msg::IncompatibilitiesCmdMsg::UpdateIncompat(
+            crate::ops::UpdateOp::Incompatibilities(
+                crate::ops::IncompatibilitiesUpdateOp::UpdateIncompat(
                     id.into(),
-                    new_incompat.into(),
+                    new_incompat.try_into().map_err(|e| match e {
+                        time::SlotWithDurationError::SlotOverlapsWithNextDay => {
+                            PyValueError::new_err("Slot overlaps with next day")
+                        }
+                    })?,
                 ),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::UpdateIncompat(e))) => {
+            ResultMsg::Error(UpdateError::Incompatibilities(
+                IncompatibilitiesUpdateError::UpdateIncompat(e),
+            )) => {
                 match e {
                     UpdateIncompatError::InvalidIncompatId(id) => Err(PyValueError::new_err(
                         format!("Invalid incompat id {:?}", id),
@@ -1037,9 +1052,6 @@ impl CollomatiqueFile {
                     UpdateIncompatError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
                         format!("Invalid week pattern id {:?}", id),
                     )),
-                    UpdateIncompatError::SlotOverlapsWithNextDay => Err(PyValueError::new_err(
-                        format!("Schedule incompatibility slot overlaps with next day",),
-                    )),
                 }
             }
             _ => panic!("Unexpected result: {:?}", result),
@@ -1048,20 +1060,21 @@ impl CollomatiqueFile {
 
     fn incompats_delete(self_: PyRef<'_, Self>, id: incompatibilities::IncompatId) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::Incompats(
-                crate::rpc::cmd_msg::IncompatibilitiesCmdMsg::DeleteIncompat(id.into()),
+            crate::ops::UpdateOp::Incompatibilities(
+                crate::ops::IncompatibilitiesUpdateOp::DeleteIncompat(id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Incompats(IncompatibilitiesError::DeleteIncompat(e))) => {
-                match e {
-                    DeleteIncompatError::InvalidIncompatId(id) => Err(PyValueError::new_err(
-                        format!("Invalid incompat id {:?}", id),
-                    )),
-                }
-            }
+            ResultMsg::Error(UpdateError::Incompatibilities(
+                IncompatibilitiesUpdateError::DeleteIncompat(e),
+            )) => match e {
+                DeleteIncompatError::InvalidIncompatId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid incompat id {:?}",
+                    id
+                ))),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1071,28 +1084,29 @@ impl CollomatiqueFile {
         params: group_lists::GroupListParameters,
     ) -> PyResult<group_lists::GroupListId> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GroupLists(
-                crate::rpc::cmd_msg::GroupListsCmdMsg::AddNewGroupList(params.into()),
-            ),
+            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::AddNewGroupList(
+                params.into(),
+            )),
         ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::GroupListId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::AddNewGroupList(e))) => {
-                match e {
-                    AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
-                        format!("Invalid student id {:?}", id),
-                    )),
-                    AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
-                        Err(PyValueError::new_err("Empty students per group range"))
-                    }
-                    AddNewGroupListError::GroupCountRangeIsEmpty => {
-                        Err(PyValueError::new_err("Empty group count range"))
-                    }
+            ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::AddNewGroupList(
+                e,
+            ))) => match e {
+                AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+                AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
+                    Err(PyValueError::new_err("Empty students per group range"))
                 }
-            }
+                AddNewGroupListError::GroupCountRangeIsEmpty => {
+                    Err(PyValueError::new_err("Empty group count range"))
+                }
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1103,52 +1117,51 @@ impl CollomatiqueFile {
         new_params: group_lists::GroupListParameters,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GroupLists(
-                crate::rpc::cmd_msg::GroupListsCmdMsg::UpdateGroupList(
-                    id.into(),
-                    new_params.into(),
-                ),
-            ),
+            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::UpdateGroupList(
+                id.into(),
+                new_params.into(),
+            )),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::UpdateGroupList(e))) => {
-                match e {
-                    UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
-                        format!("Invalid group list id {:?}", id),
-                    )),
-                    UpdateGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
-                        format!("Invalid student id {:?}", id),
-                    )),
-                    UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
-                        Err(PyValueError::new_err("Empty students per group range"))
-                    }
-                    UpdateGroupListError::GroupCountRangeIsEmpty => {
-                        Err(PyValueError::new_err("Empty group count range"))
-                    }
+            ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::UpdateGroupList(
+                e,
+            ))) => match e {
+                UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                    format!("Invalid group list id {:?}", id),
+                )),
+                UpdateGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+                UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
+                    Err(PyValueError::new_err("Empty students per group range"))
                 }
-            }
+                UpdateGroupListError::GroupCountRangeIsEmpty => {
+                    Err(PyValueError::new_err("Empty group count range"))
+                }
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
 
     fn group_lists_delete(self_: PyRef<'_, Self>, id: group_lists::GroupListId) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GroupLists(
-                crate::rpc::cmd_msg::GroupListsCmdMsg::DeleteGroupList(id.into()),
-            ),
+            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::DeleteGroupList(
+                id.into(),
+            )),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::DeleteGroupList(e))) => {
-                match e {
-                    DeleteGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
-                        format!("Invalid group list id {:?}", id),
-                    )),
-                }
-            }
+            ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::DeleteGroupList(
+                e,
+            ))) => match e {
+                DeleteGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                    format!("Invalid group list id {:?}", id),
+                )),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1159,34 +1172,33 @@ impl CollomatiqueFile {
         prefilled_groups: Vec<group_lists::PrefilledGroup>,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GroupLists(
-                crate::rpc::cmd_msg::GroupListsCmdMsg::PrefillGroupList(
-                    id.into(),
-                    crate::rpc::cmd_msg::GroupListPrefilledGroupsMsg {
-                        groups: prefilled_groups.into_iter().map(|x| x.into()).collect(),
-                    },
-                ),
-            ),
+            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::PrefillGroupList(
+                id.into(),
+                collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                    groups: prefilled_groups.into_iter().map(|x| x.into()).collect(),
+                },
+            )),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::PrefillGroupList(e))) => {
-                match e {
-                    PrefillGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
-                        format!("Invalid group list id {:?}", id),
-                    )),
-                    PrefillGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(
-                        format!("Invalid student id {:?}", id),
-                    )),
-                    PrefillGroupListError::StudentIsExcluded(group_list_id, student_id) => {
-                        Err(PyValueError::new_err(format!(
-                            "Student id {:?} is excluded from group list {:?}",
-                            student_id, group_list_id
-                        )))
-                    }
+            ResultMsg::Error(UpdateError::GroupLists(GroupListsUpdateError::PrefillGroupList(
+                e,
+            ))) => match e {
+                PrefillGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                    format!("Invalid group list id {:?}", id),
+                )),
+                PrefillGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+                PrefillGroupListError::StudentIsExcluded(group_list_id, student_id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Student id {:?} is excluded from group list {:?}",
+                        student_id, group_list_id
+                    )))
                 }
-            }
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1198,8 +1210,8 @@ impl CollomatiqueFile {
         group_list_id: Option<group_lists::GroupListId>,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::rpc::UpdateMsg::GroupLists(
-                crate::rpc::cmd_msg::GroupListsCmdMsg::AssignGroupListToSubject(
+            crate::ops::UpdateOp::GroupLists(
+                crate::ops::GroupListsUpdateOp::AssignGroupListToSubject(
                     period_id.into(),
                     subject_id.into(),
                     group_list_id.map(|x| x.into()),
@@ -1209,9 +1221,9 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::GroupLists(GroupListsError::AssignGroupListToSubject(
-                e,
-            ))) => match e {
+            ResultMsg::Error(UpdateError::GroupLists(
+                GroupListsUpdateError::AssignGroupListToSubject(e),
+            )) => match e {
                 AssignGroupListToSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(
                     format!("Invalid subject id {:?}", id),
                 )),
@@ -1239,18 +1251,17 @@ impl CollomatiqueFile {
     }
 
     fn rules_add(self_: PyRef<'_, Self>, rule: rules::Rule) -> PyResult<rules::RuleId> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
-                    crate::rpc::cmd_msg::RulesCmdMsg::AddNewRule(rule.name, rule.logic_rule.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
+                crate::ops::RulesUpdateOp::AddNewRule(rule.name, rule.logic_rule.into()),
+            )));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::RuleId(id))) => {
                 Ok(id.into())
             }
-            ResultMsg::Error(ErrorMsg::Rules(RulesError::AddNewRule(e))) => match e {
+            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::AddNewRule(e))) => match e {
                 AddNewRuleError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
@@ -1260,20 +1271,15 @@ impl CollomatiqueFile {
     }
 
     fn rules_update(self_: PyRef<'_, Self>, id: rules::RuleId, rule: rules::Rule) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
-                    crate::rpc::cmd_msg::RulesCmdMsg::UpdateRule(
-                        id.into(),
-                        rule.name,
-                        rule.logic_rule.into(),
-                    ),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
+                crate::ops::RulesUpdateOp::UpdateRule(id.into(), rule.name, rule.logic_rule.into()),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Rules(RulesError::UpdateRule(e))) => match e {
+            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::UpdateRule(e))) => match e {
                 UpdateRuleError::InvalidRuleId(id) => {
                     Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
                 }
@@ -1286,16 +1292,15 @@ impl CollomatiqueFile {
     }
 
     fn rules_delete(self_: PyRef<'_, Self>, id: rules::RuleId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
-                    crate::rpc::cmd_msg::RulesCmdMsg::DeleteRule(id.into()),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
+                crate::ops::RulesUpdateOp::DeleteRule(id.into()),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Rules(RulesError::DeleteRule(e))) => match e {
+            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::DeleteRule(e))) => match e {
                 DeleteRuleError::InvalidRuleId(id) => {
                     Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
                 }
@@ -1310,29 +1315,28 @@ impl CollomatiqueFile {
         period_id: PeriodId,
         new_status: bool,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Rules(
-                    crate::rpc::cmd_msg::RulesCmdMsg::UpdatePeriodStatusForRule(
-                        rule_id.into(),
-                        period_id.into(),
-                        new_status,
-                    ),
-                )));
+        let result = self_
+            .token
+            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
+                crate::ops::RulesUpdateOp::UpdatePeriodStatusForRule(
+                    rule_id.into(),
+                    period_id.into(),
+                    new_status,
+                ),
+            )));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
-            ResultMsg::Error(ErrorMsg::Rules(RulesError::UpdatePeriodStatusForRule(e))) => {
-                match e {
-                    UpdatePeriodStatusForRuleError::InvalidRuleId(id) => {
-                        Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
-                    }
-                    UpdatePeriodStatusForRuleError::InvalidPeriodId(id) => {
-                        Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
-                    }
+            ResultMsg::Error(UpdateError::Rules(RulesUpdateError::UpdatePeriodStatusForRule(
+                e,
+            ))) => match e {
+                UpdatePeriodStatusForRuleError::InvalidRuleId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid rule id {:?}", id)))
                 }
-            }
+                UpdatePeriodStatusForRuleError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1344,8 +1348,8 @@ impl CollomatiqueFile {
         let result =
             self_
                 .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::rpc::UpdateMsg::Settings(
-                    crate::rpc::cmd_msg::SettingsCmdMsg::UpdateStrictLimits(strict_limits.into()),
+                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Settings(
+                    crate::ops::SettingsUpdateOp::UpdateStrictLimits(strict_limits.into()),
                 )));
 
         match result {

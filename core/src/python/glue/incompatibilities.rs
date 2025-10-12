@@ -29,15 +29,15 @@ impl From<collomatique_state_colloscopes::IncompatId> for IncompatId {
     }
 }
 
-impl From<&IncompatId> for crate::rpc::cmd_msg::MsgIncompatId {
+impl From<&IncompatId> for collomatique_state_colloscopes::IncompatId {
     fn from(value: &IncompatId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<IncompatId> for crate::rpc::cmd_msg::MsgIncompatId {
+impl From<IncompatId> for collomatique_state_colloscopes::IncompatId {
     fn from(value: IncompatId) -> Self {
-        crate::rpc::cmd_msg::MsgIncompatId::from(&value)
+        collomatique_state_colloscopes::IncompatId::from(&value)
     }
 }
 
@@ -104,15 +104,25 @@ impl
     }
 }
 
-impl From<Incompat> for crate::rpc::cmd_msg::incompatibilities::IncompatMsg {
-    fn from(value: Incompat) -> Self {
-        use crate::rpc::cmd_msg::incompatibilities::IncompatMsg;
-        IncompatMsg {
-            subject_id: MsgSubjectId::from(value.subject_id),
-            name: value.name,
-            slots: value.slots.into_iter().map(|x| x.into()).collect(),
-            minimum_free_slots: value.minimum_free_slots,
-            week_pattern_id: value.week_pattern_id.map(|x| MsgWeekPatternId::from(x)),
+impl TryFrom<Incompat>
+    for collomatique_state_colloscopes::incompats::Incompatibility<
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::WeekPatternId,
+    >
+{
+    type Error = super::time::SlotWithDurationError;
+    fn try_from(value: Incompat) -> Result<Self, Self::Error> {
+        let mut slots = vec![];
+        for slot in value.slots {
+            slots.push(slot.try_into()?);
         }
+
+        Ok(collomatique_state_colloscopes::incompats::Incompatibility {
+            subject_id: value.subject_id.into(),
+            name: value.name,
+            slots,
+            minimum_free_slots: value.minimum_free_slots,
+            week_pattern_id: value.week_pattern_id.map(|x| x.into()),
+        })
     }
 }

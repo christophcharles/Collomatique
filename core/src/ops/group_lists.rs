@@ -171,7 +171,7 @@ pub enum GroupListsUpdateOp {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GroupListsUpdateError {
     #[error(transparent)]
     AddNewGroupList(#[from] AddNewGroupListError),
@@ -185,7 +185,7 @@ pub enum GroupListsUpdateError {
     AssignGroupListToSubject(#[from] AssignGroupListToSubjectError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddNewGroupListError {
     #[error("Student id ({0:?}) is invalid")]
     InvalidStudentId(collomatique_state_colloscopes::StudentId),
@@ -195,7 +195,7 @@ pub enum AddNewGroupListError {
     StudentsPerGroupRangeIsEmpty,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateGroupListError {
     #[error("Group list id ({0:?}) is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
@@ -207,13 +207,13 @@ pub enum UpdateGroupListError {
     StudentsPerGroupRangeIsEmpty,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeleteGroupListError {
     #[error("Group list ID {0:?} is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PrefillGroupListError {
     #[error("Group list ID {0:?} is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
@@ -226,7 +226,7 @@ pub enum PrefillGroupListError {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AssignGroupListToSubjectError {
     #[error("Group list ID {0:?} is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),

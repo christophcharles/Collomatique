@@ -27,15 +27,15 @@ impl From<collomatique_state_colloscopes::GroupListId> for GroupListId {
     }
 }
 
-impl From<&GroupListId> for crate::rpc::cmd_msg::MsgGroupListId {
+impl From<&GroupListId> for collomatique_state_colloscopes::GroupListId {
     fn from(value: &GroupListId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<GroupListId> for crate::rpc::cmd_msg::MsgGroupListId {
+impl From<GroupListId> for collomatique_state_colloscopes::GroupListId {
     fn from(value: GroupListId) -> Self {
-        crate::rpc::cmd_msg::MsgGroupListId::from(&value)
+        collomatique_state_colloscopes::GroupListId::from(&value)
     }
 }
 
@@ -155,10 +155,13 @@ impl
     }
 }
 
-impl From<GroupListParameters> for crate::rpc::cmd_msg::group_lists::GroupListParametersMsg {
+impl From<GroupListParameters>
+    for collomatique_state_colloscopes::group_lists::GroupListParameters<
+        collomatique_state_colloscopes::StudentId,
+    >
+{
     fn from(value: GroupListParameters) -> Self {
-        use crate::rpc::cmd_msg::group_lists::GroupListParametersMsg;
-        GroupListParametersMsg {
+        collomatique_state_colloscopes::group_lists::GroupListParameters {
             name: value.name,
             students_per_group: value.students_per_group_min..=value.students_per_group_max,
             group_count: value.group_count_min..=value.group_count_max,
@@ -222,10 +225,13 @@ impl
     }
 }
 
-impl From<PrefilledGroup> for crate::rpc::cmd_msg::group_lists::PrefilledGroupMsg {
+impl From<PrefilledGroup>
+    for collomatique_state_colloscopes::group_lists::PrefilledGroup<
+        collomatique_state_colloscopes::StudentId,
+    >
+{
     fn from(value: PrefilledGroup) -> Self {
-        use crate::rpc::cmd_msg::group_lists::PrefilledGroupMsg;
-        PrefilledGroupMsg {
+        collomatique_state_colloscopes::group_lists::PrefilledGroup {
             name: non_empty_string::NonEmptyString::new(value.name).ok(),
             students: value.students.into_iter().map(|x| x.into()).collect(),
             sealed: value.sealed,

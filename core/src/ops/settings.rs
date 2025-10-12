@@ -19,7 +19,7 @@ pub enum SettingsUpdateOp {
     UpdateStrictLimits(collomatique_state_colloscopes::settings::StrictLimits),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SettingsUpdateError {}
 
 impl SettingsUpdateOp {

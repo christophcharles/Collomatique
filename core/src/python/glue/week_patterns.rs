@@ -27,15 +27,15 @@ impl From<collomatique_state_colloscopes::WeekPatternId> for WeekPatternId {
     }
 }
 
-impl From<&WeekPatternId> for crate::rpc::cmd_msg::MsgWeekPatternId {
+impl From<&WeekPatternId> for collomatique_state_colloscopes::WeekPatternId {
     fn from(value: &WeekPatternId) -> Self {
         value.id.clone().into()
     }
 }
 
-impl From<WeekPatternId> for crate::rpc::cmd_msg::MsgWeekPatternId {
+impl From<WeekPatternId> for collomatique_state_colloscopes::WeekPatternId {
     fn from(value: WeekPatternId) -> Self {
-        crate::rpc::cmd_msg::MsgWeekPatternId::from(&value)
+        collomatique_state_colloscopes::WeekPatternId::from(&value)
     }
 }
 
@@ -73,10 +73,9 @@ impl From<collomatique_state_colloscopes::week_patterns::WeekPattern> for WeekPa
     }
 }
 
-impl From<WeekPattern> for crate::rpc::cmd_msg::week_patterns::WeekPatternMsg {
+impl From<WeekPattern> for collomatique_state_colloscopes::week_patterns::WeekPattern {
     fn from(value: WeekPattern) -> Self {
-        use crate::rpc::cmd_msg::week_patterns::WeekPatternMsg;
-        WeekPatternMsg {
+        collomatique_state_colloscopes::week_patterns::WeekPattern {
             name: value.name,
             weeks: value.weeks,
         }

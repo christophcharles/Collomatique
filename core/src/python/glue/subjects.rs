@@ -30,15 +30,15 @@ impl From<collomatique_state_colloscopes::SubjectId> for SubjectId {
     }
 }
 
-impl From<&SubjectId> for crate::rpc::cmd_msg::MsgSubjectId {
+impl From<&SubjectId> for collomatique_state_colloscopes::SubjectId {
     fn from(value: &SubjectId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<SubjectId> for crate::rpc::cmd_msg::MsgSubjectId {
+impl From<SubjectId> for collomatique_state_colloscopes::SubjectId {
     fn from(value: SubjectId) -> Self {
-        crate::rpc::cmd_msg::MsgSubjectId::from(&value)
+        collomatique_state_colloscopes::SubjectId::from(&value)
     }
 }
 
@@ -79,10 +79,9 @@ impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParamete
     }
 }
 
-impl From<SubjectParameters> for crate::rpc::cmd_msg::subjects::SubjectParametersMsg {
+impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParameters {
     fn from(value: SubjectParameters) -> Self {
-        use crate::rpc::cmd_msg::subjects::SubjectParametersMsg;
-        SubjectParametersMsg {
+        collomatique_state_colloscopes::SubjectParameters {
             name: value.name,
             interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
         }
@@ -141,15 +140,14 @@ impl From<collomatique_state_colloscopes::SubjectInterrogationParameters>
 }
 
 impl From<SubjectInterrogationParameters>
-    for crate::rpc::cmd_msg::subjects::SubjectInterrogationParametersMsg
+    for collomatique_state_colloscopes::SubjectInterrogationParameters
 {
     fn from(value: SubjectInterrogationParameters) -> Self {
-        use crate::rpc::cmd_msg::subjects::SubjectInterrogationParametersMsg;
-        SubjectInterrogationParametersMsg {
+        collomatique_state_colloscopes::SubjectInterrogationParameters {
             students_per_group: value.students_per_group_min..=value.students_per_group_max,
             groups_per_interrogation: value.groups_per_interrogation_min
                 ..=value.groups_per_interrogation_max,
-            duration: value.duration,
+            duration: value.duration.into(),
             take_duration_into_account: value.take_duration_into_account,
             periodicity: value.periodicity.into(),
         }
@@ -247,27 +245,26 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
     }
 }
 
-impl From<SubjectPeriodicity> for crate::rpc::cmd_msg::subjects::SubjectPeriodicityMsg {
+impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodicity {
     fn from(value: SubjectPeriodicity) -> Self {
-        use crate::rpc::cmd_msg::subjects::SubjectPeriodicityMsg;
         match value {
             SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block,
                 minimum_week_separation,
-            } => SubjectPeriodicityMsg::OnceForEveryBlockOfWeeks {
+            } => collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block,
                 minimum_week_separation,
             },
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
-            } => SubjectPeriodicityMsg::ExactlyPeriodic {
+            } => collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             },
             SubjectPeriodicity::AmountInYear {
                 interrogation_count_in_year_min,
                 interrogation_count_in_year_max,
                 minimum_week_separation,
-            } => Self::AmountInYear {
+            } => collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
                 interrogation_count_in_year: interrogation_count_in_year_min
                     ..=interrogation_count_in_year_max,
                 minimum_week_separation,
@@ -275,7 +272,7 @@ impl From<SubjectPeriodicity> for crate::rpc::cmd_msg::subjects::SubjectPeriodic
             SubjectPeriodicity::OnceForEveryArbitraryBlock {
                 blocks,
                 minimum_week_separation,
-            } => SubjectPeriodicityMsg::AmountForEveryArbitraryBlock {
+            } => collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 minimum_week_separation,
                 blocks: blocks.into_iter().map(|b| b.into()).collect(),
             },
@@ -302,13 +299,12 @@ impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBl
     }
 }
 
-impl From<SubjectWeekBlock> for crate::rpc::cmd_msg::subjects::SubjectWeekBlock {
+impl From<SubjectWeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
     fn from(value: SubjectWeekBlock) -> Self {
-        use crate::rpc::cmd_msg::subjects::SubjectWeekBlock;
-        SubjectWeekBlock {
-            delay: value.delay_in_weeks,
-            size: value.size_in_weeks,
-            interrogation_count: value.interrogation_count_in_block_min
+        collomatique_state_colloscopes::subjects::WeekBlock {
+            delay_in_weeks: value.delay_in_weeks,
+            size_in_weeks: value.size_in_weeks,
+            interrogation_count_in_block: value.interrogation_count_in_block_min
                 ..=value.interrogation_count_in_block_max,
         }
     }

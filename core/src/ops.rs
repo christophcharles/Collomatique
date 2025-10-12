@@ -78,7 +78,7 @@ pub enum UpdateOp {
     Colloscopes(ColloscopesUpdateOp),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateError {
     #[error(transparent)]
     GeneralPlanning(#[from] GeneralPlanningUpdateError),

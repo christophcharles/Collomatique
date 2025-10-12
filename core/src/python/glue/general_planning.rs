@@ -27,15 +27,15 @@ impl From<collomatique_state_colloscopes::PeriodId> for PeriodId {
     }
 }
 
-impl From<&PeriodId> for crate::rpc::cmd_msg::MsgPeriodId {
+impl From<&PeriodId> for collomatique_state_colloscopes::PeriodId {
     fn from(value: &PeriodId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<PeriodId> for crate::rpc::cmd_msg::MsgPeriodId {
+impl From<PeriodId> for collomatique_state_colloscopes::PeriodId {
     fn from(value: PeriodId) -> Self {
-        crate::rpc::cmd_msg::MsgPeriodId::from(&value)
+        collomatique_state_colloscopes::PeriodId::from(&value)
     }
 }
 

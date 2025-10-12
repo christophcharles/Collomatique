@@ -29,15 +29,15 @@ impl From<collomatique_state_colloscopes::TeacherId> for TeacherId {
     }
 }
 
-impl From<&TeacherId> for crate::rpc::cmd_msg::MsgTeacherId {
+impl From<&TeacherId> for collomatique_state_colloscopes::TeacherId {
     fn from(value: &TeacherId) -> Self {
-        value.id.clone().into()
+        value.id.clone()
     }
 }
 
-impl From<TeacherId> for crate::rpc::cmd_msg::MsgTeacherId {
+impl From<TeacherId> for collomatique_state_colloscopes::TeacherId {
     fn from(value: TeacherId) -> Self {
-        crate::rpc::cmd_msg::MsgTeacherId::from(&value)
+        collomatique_state_colloscopes::TeacherId::from(&value)
     }
 }
 
@@ -90,10 +90,11 @@ impl
     }
 }
 
-impl From<Teacher> for crate::rpc::cmd_msg::teachers::TeacherMsg {
+impl From<Teacher>
+    for collomatique_state_colloscopes::teachers::Teacher<collomatique_state_colloscopes::SubjectId>
+{
     fn from(value: Teacher) -> Self {
-        use crate::rpc::cmd_msg::teachers::TeacherMsg;
-        TeacherMsg {
+        collomatique_state_colloscopes::teachers::Teacher {
             desc: value.desc.into(),
             subjects: value.subjects.into_iter().map(|x| x.into()).collect(),
         }

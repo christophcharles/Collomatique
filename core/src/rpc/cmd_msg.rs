@@ -33,7 +33,7 @@ use collomatique_state_colloscopes::ids::Id;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
-    Update(UpdateMsg),
+    Update(crate::ops::UpdateOp),
     GuiRequest(GuiMsg),
     GetData,
 }

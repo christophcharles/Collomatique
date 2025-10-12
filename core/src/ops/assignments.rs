@@ -30,7 +30,7 @@ pub enum AssignmentsUpdateOp {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AssignmentsUpdateError {
     #[error(transparent)]
     Assign(#[from] AssignError),
@@ -40,7 +40,7 @@ pub enum AssignmentsUpdateError {
     AssignAll(#[from] AssignAllError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AssignError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
@@ -69,7 +69,7 @@ pub enum AssignError {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AssignAllError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
@@ -87,7 +87,7 @@ pub enum AssignAllError {
     ),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DuplicatePreviousPeriodError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]

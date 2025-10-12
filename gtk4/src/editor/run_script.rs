@@ -289,7 +289,7 @@ impl Component for Dialog {
                         .expect("there should be some current state to accept");
                     let data = app_session.get_data();
 
-                    let update_msg = match cmd_msg {
+                    let update_op = match cmd_msg {
                         CmdMsg::GetData => {
                             self.rpc_logger
                                 .sender()
@@ -306,23 +306,11 @@ impl Component for Dialog {
                         CmdMsg::Update(update_msg) => update_msg,
                     };
 
-                    let op = match update_msg.promote(data) {
-                        Ok(op) => op,
-                        Err(e) => {
-                            self.add_command(sender, msg_display::EntryData::Failed(e.to_string()));
-                            self.rpc_logger
-                                .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Error(e)))
-                                .unwrap();
-                            return;
-                        }
-                    };
-
-                    match op.apply(app_session) {
+                    match update_op.apply(app_session) {
                         Ok(new_id) => {
                             self.add_command(
                                 sender,
-                                msg_display::EntryData::Success(op.get_desc().1),
+                                msg_display::EntryData::Success(update_op.get_desc().1),
                             );
                             self.rpc_logger
                                 .sender()

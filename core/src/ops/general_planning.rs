@@ -209,7 +209,7 @@ pub enum GeneralPlanningUpdateOp {
     UpdateWeekStatus(collomatique_state_colloscopes::PeriodId, usize, bool),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GeneralPlanningUpdateError {
     #[error(transparent)]
     UpdatePeriodWeekCount(#[from] UpdatePeriodWeekCountError),
@@ -223,7 +223,7 @@ pub enum GeneralPlanningUpdateError {
     UpdateWeekStatus(#[from] UpdateWeekStatusError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdatePeriodWeekCountError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
@@ -231,13 +231,13 @@ pub enum UpdatePeriodWeekCountError {
     SubjectImpliesMinimumWeekCount(collomatique_state_colloscopes::SubjectId, usize),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeletePeriodError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CutPeriodError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
@@ -245,7 +245,7 @@ pub enum CutPeriodError {
     RemainingWeekCountTooBig(usize, usize),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MergeWithPreviousPeriodError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
@@ -253,7 +253,7 @@ pub enum MergeWithPreviousPeriodError {
     NoPreviousPeriodToMergeWith,
 }
 
-#[derive(Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateWeekStatusError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
