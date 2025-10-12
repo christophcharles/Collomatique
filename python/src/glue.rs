@@ -54,6 +54,18 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<common::RangeInclusiveU32>()?;
     m.add_class::<settings::StrictLimits>()?;
 
+    m.add_class::<general_planning::ColloscopePeriod>()?;
+    m.add_class::<subjects::ColloscopeSubject>()?;
+    m.add_class::<teachers::ColloscopeTeacher>()?;
+    m.add_class::<students::ColloscopeStudent>()?;
+    m.add_class::<slots::ColloscopeSlot>()?;
+    m.add_class::<slots::ColloscopeSlotParameters>()?;
+    m.add_class::<incompatibilities::ColloscopeIncompat>()?;
+    m.add_class::<group_lists::ColloscopeGroupListParameters>()?;
+    m.add_class::<group_lists::ColloscopePrefilledGroup>()?;
+    m.add_class::<rules::ColloscopeLogicRule>()?;
+    m.add_class::<rules::ColloscopeRule>()?;
+
     m.add_function(wrap_pyfunction!(log, m)?)?;
     m.add_function(wrap_pyfunction!(current_session, m)?)?;
 
@@ -158,16 +170,16 @@ impl Session {
 mod common;
 use common::PersonWithContact;
 mod general_planning;
-use general_planning::{Period, PeriodId};
+use general_planning::{ColloscopePeriodId, Period, PeriodId};
 mod subjects;
-use subjects::{Subject, SubjectId};
+use subjects::{ColloscopeSubjectId, Subject, SubjectId};
 mod teachers;
 mod time;
-use teachers::{Teacher, TeacherId};
+use teachers::{ColloscopeTeacherId, Teacher, TeacherId};
 mod students;
-use students::{Student, StudentId};
+use students::{ColloscopeStudentId, Student, StudentId};
 mod week_patterns;
-use week_patterns::{WeekPattern, WeekPatternId};
+use week_patterns::{ColloscopeWeekPatternId, WeekPattern, WeekPatternId};
 mod group_lists;
 mod incompatibilities;
 mod rules;

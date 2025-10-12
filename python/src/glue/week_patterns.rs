@@ -81,3 +81,41 @@ impl From<WeekPattern> for collomatique_state_colloscopes::week_patterns::WeekPa
         }
     }
 }
+
+#[pyclass(eq, hash, frozen)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ColloscopeWeekPatternId {
+    id: collomatique_state_colloscopes::ColloscopeWeekPatternId,
+}
+
+#[pymethods]
+impl ColloscopeWeekPatternId {
+    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
+        let output = format!("{:?}", *self_);
+        PyString::new(self_.py(), output.as_str())
+    }
+}
+
+impl From<&collomatique_state_colloscopes::ColloscopeWeekPatternId> for ColloscopeWeekPatternId {
+    fn from(value: &collomatique_state_colloscopes::ColloscopeWeekPatternId) -> Self {
+        ColloscopeWeekPatternId { id: value.clone() }
+    }
+}
+
+impl From<collomatique_state_colloscopes::ColloscopeWeekPatternId> for ColloscopeWeekPatternId {
+    fn from(value: collomatique_state_colloscopes::ColloscopeWeekPatternId) -> Self {
+        ColloscopeWeekPatternId::from(&value)
+    }
+}
+
+impl From<&ColloscopeWeekPatternId> for collomatique_state_colloscopes::ColloscopeWeekPatternId {
+    fn from(value: &ColloscopeWeekPatternId) -> Self {
+        value.id.clone().into()
+    }
+}
+
+impl From<ColloscopeWeekPatternId> for collomatique_state_colloscopes::ColloscopeWeekPatternId {
+    fn from(value: ColloscopeWeekPatternId) -> Self {
+        collomatique_state_colloscopes::ColloscopeWeekPatternId::from(&value)
+    }
+}
