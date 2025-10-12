@@ -3,7 +3,7 @@ use relm4::factory::FactoryVecDeque;
 use relm4::gtk;
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
 
-use collomatique_core::ops::AssignmentsUpdateOp;
+use collomatique_ops::AssignmentsUpdateOp;
 
 mod assignments_display;
 

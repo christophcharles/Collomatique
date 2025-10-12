@@ -5,7 +5,7 @@ pub use open_file_dialog::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CmdMsg {
-    Update(crate::ops::UpdateOp),
+    Update(collomatique_ops::UpdateOp),
     GuiRequest(GuiMsg),
     GetData,
 }

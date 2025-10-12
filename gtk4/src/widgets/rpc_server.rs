@@ -7,7 +7,7 @@ use tokio::io::BufReader;
 
 use std::io::Write;
 
-use collomatique_core::rpc::{CmdMsg, CompleteCmdMsg, InitMsg, ResultMsg};
+use collomatique_rpc::{CmdMsg, CompleteCmdMsg, InitMsg, ResultMsg};
 
 #[derive(Debug)]
 pub enum RpcLoggerInput {

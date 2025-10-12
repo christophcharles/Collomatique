@@ -6,12 +6,12 @@ use std::marker::PhantomData;
 /// value explicitly which might panic if done incorrectly.
 #[derive(Debug, Clone)]
 pub struct ColumnItem<T> {
-    inner: glib::BoxedAnyObject,
+    inner: libadwaita::glib::BoxedAnyObject,
     _ty: PhantomData<*const T>,
 }
 
 impl<T: 'static> ColumnItem<T> {
-    pub(super) fn new(inner: glib::BoxedAnyObject) -> Self {
+    pub(super) fn new(inner: libadwaita::glib::BoxedAnyObject) -> Self {
         Self {
             inner,
             _ty: PhantomData,

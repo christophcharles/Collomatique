@@ -1,7 +1,7 @@
 use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
-use glib::object::Cast;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
+use libadwaita::prelude::Cast;
 use relm4::prelude::{ComponentController, RelmWidgetExt};
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
-use collomatique_core::ops::Desc;
+use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
@@ -41,12 +41,9 @@ pub enum EditorInput {
     SaveClicked,
     UndoClicked,
     RedoClicked,
-    UpdateOp(collomatique_core::ops::UpdateOp),
+    UpdateOp(collomatique_ops::UpdateOp),
     CommitUpdateOp(
-        collomatique_state::AppState<
-            collomatique_state_colloscopes::Data,
-            collomatique_core::ops::Desc,
-        >,
+        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
     ),
     ContinueOp,
     CancelOp,
@@ -141,10 +138,7 @@ pub struct EditorPanel {
     pages_names: Vec<&'static str>,
     pages_titles_map: BTreeMap<&'static str, &'static str>,
     state_to_commit: Option<
-        collomatique_state::AppState<
-            collomatique_state_colloscopes::Data,
-            collomatique_core::ops::Desc,
-        >,
+        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
     >,
 
     show_particular_panel: Option<PanelNumbers>,
@@ -312,23 +306,21 @@ impl EditorPanel {
             .unwrap();
     }
 
-    fn op_cat_to_panel_number(op: &collomatique_core::ops::OpCategory) -> Option<PanelNumbers> {
+    fn op_cat_to_panel_number(op: &collomatique_ops::OpCategory) -> Option<PanelNumbers> {
         match op {
-            collomatique_core::ops::OpCategory::None => None,
-            collomatique_core::ops::OpCategory::GeneralPlanning => {
-                Some(PanelNumbers::GeneralPlanning)
-            }
-            collomatique_core::ops::OpCategory::Subjects => Some(PanelNumbers::Subjects),
-            collomatique_core::ops::OpCategory::Teachers => Some(PanelNumbers::Teachers),
-            collomatique_core::ops::OpCategory::Students => Some(PanelNumbers::Students),
-            collomatique_core::ops::OpCategory::Assignments => Some(PanelNumbers::Assignments),
-            collomatique_core::ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
-            collomatique_core::ops::OpCategory::Slots => None,
-            collomatique_core::ops::OpCategory::Incompatibilities => None,
-            collomatique_core::ops::OpCategory::GroupLists => None,
-            collomatique_core::ops::OpCategory::Rules => None,
-            collomatique_core::ops::OpCategory::Settings => None,
-            collomatique_core::ops::OpCategory::Colloscopes => None,
+            collomatique_ops::OpCategory::None => None,
+            collomatique_ops::OpCategory::GeneralPlanning => Some(PanelNumbers::GeneralPlanning),
+            collomatique_ops::OpCategory::Subjects => Some(PanelNumbers::Subjects),
+            collomatique_ops::OpCategory::Teachers => Some(PanelNumbers::Teachers),
+            collomatique_ops::OpCategory::Students => Some(PanelNumbers::Students),
+            collomatique_ops::OpCategory::Assignments => Some(PanelNumbers::Assignments),
+            collomatique_ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
+            collomatique_ops::OpCategory::Slots => None,
+            collomatique_ops::OpCategory::Incompatibilities => None,
+            collomatique_ops::OpCategory::GroupLists => None,
+            collomatique_ops::OpCategory::Rules => None,
+            collomatique_ops::OpCategory::Settings => None,
+            collomatique_ops::OpCategory::Colloscopes => None,
         }
     }
 
@@ -513,37 +505,37 @@ impl Component for EditorPanel {
         let general_planning = general_planning::GeneralPlanning::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::GeneralPlanning(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::GeneralPlanning(op))
             });
 
         let subjects = subjects::Subjects::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Subjects(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Subjects(op))
             });
 
         let teachers = teachers::Teachers::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Teachers(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Teachers(op))
             });
 
         let students = students::Students::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Students(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Students(op))
             });
 
         let assignments = assignments::Assignments::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::Assignments(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Assignments(op))
             });
 
         let week_patterns = week_patterns::WeekPatterns::builder()
             .launch(())
             .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_core::ops::UpdateOp::WeekPatterns(op))
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::WeekPatterns(op))
             });
 
         let check_script_dialog = check_script::Dialog::builder()

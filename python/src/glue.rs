@@ -2,13 +2,13 @@ use std::collections::BTreeMap;
 
 use pyo3::prelude::*;
 
-use crate::rpc::{
+use collomatique_rpc::{
     cmd_msg::{ExtensionDesc, OpenFileDialogMsg},
     GuiAnswer, ResultMsg,
 };
 
-use crate::ops::UpdateError;
-use crate::ops::{
+use collomatique_ops::UpdateError;
+use collomatique_ops::{
     AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
     AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
     AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
@@ -77,8 +77,8 @@ pub fn current_session() -> Session {
 pub struct Session {}
 
 impl Session {
-    fn send_msg(&self, msg: crate::rpc::CmdMsg) -> crate::rpc::ResultMsg {
-        crate::rpc::send_rpc(msg).expect("Valid result message")
+    fn send_msg(&self, msg: collomatique_rpc::CmdMsg) -> collomatique_rpc::ResultMsg {
+        collomatique_rpc::send_rpc(msg).expect("Valid result message")
     }
 }
 
@@ -89,8 +89,8 @@ impl Session {
         title: String,
         list: Vec<(String, String)>,
     ) -> Option<std::path::PathBuf> {
-        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
+        let result = self_.send_msg(collomatique_rpc::CmdMsg::GuiRequest(
+            collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(OpenFileDialogMsg {
                 title,
                 list: list
                     .into_iter()
@@ -109,8 +109,8 @@ impl Session {
     }
 
     fn dialog_info_message(self_: PyRef<'_, Self>, text: String) {
-        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::OkDialog(text),
+        let result = self_.send_msg(collomatique_rpc::CmdMsg::GuiRequest(
+            collomatique_rpc::cmd_msg::GuiMsg::OkDialog(text),
         ));
 
         match result {
@@ -120,8 +120,8 @@ impl Session {
     }
 
     fn dialog_confirm_action(self_: PyRef<'_, Self>, text: String) -> bool {
-        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::ConfirmDialog(text),
+        let result = self_.send_msg(collomatique_rpc::CmdMsg::GuiRequest(
+            collomatique_rpc::cmd_msg::GuiMsg::ConfirmDialog(text),
         ));
 
         match result {
@@ -136,8 +136,8 @@ impl Session {
         info_text: String,
         placeholder_text: String,
     ) -> Option<String> {
-        let result = self_.send_msg(crate::rpc::CmdMsg::GuiRequest(
-            crate::rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text),
+        let result = self_.send_msg(collomatique_rpc::CmdMsg::GuiRequest(
+            collomatique_rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text),
         ));
 
         match result {
@@ -184,9 +184,9 @@ pub struct CollomatiqueFile {
 #[pymethods]
 impl CollomatiqueFile {
     fn periods_add(self_: PyRef<'_, Self>, week_count: usize) -> PeriodId {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateOp::AddNewPeriod(week_count),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::AddNewPeriod(week_count),
             ),
         ));
 
@@ -197,9 +197,9 @@ impl CollomatiqueFile {
     }
 
     fn periods_update(self_: PyRef<'_, Self>, id: PeriodId, new_week_count: usize) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateOp::UpdatePeriodWeekCount(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::UpdatePeriodWeekCount(
                     id.into(),
                     new_week_count,
                 ),
@@ -226,16 +226,16 @@ impl CollomatiqueFile {
     }
 
     fn periods_delete(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateOp::DeletePeriod(id.into()),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriod(id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(UpdateError::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateError::DeletePeriod(e),
+                collomatique_ops::GeneralPlanningUpdateError::DeletePeriod(e),
             )) => match e {
                 DeletePeriodError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -250,11 +250,10 @@ impl CollomatiqueFile {
         id: PeriodId,
         remaining_weeks: usize,
     ) -> PyResult<PeriodId> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(crate::ops::GeneralPlanningUpdateOp::CutPeriod(
-                id.into(),
-                remaining_weeks,
-            )),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::CutPeriod(id.into(), remaining_weeks),
+            ),
         ));
 
         match result {
@@ -262,7 +261,7 @@ impl CollomatiqueFile {
                 Ok(new_id.into())
             }
             ResultMsg::Error(UpdateError::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateError::CutPeriod(e),
+                collomatique_ops::GeneralPlanningUpdateError::CutPeriod(e),
             )) => match e {
                 CutPeriodError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -276,16 +275,16 @@ impl CollomatiqueFile {
     }
 
     fn periods_merge_with_previous(self_: PyRef<'_, Self>, id: PeriodId) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateOp::MergeWithPreviousPeriod(id.into()),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::MergeWithPreviousPeriod(id.into()),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(UpdateError::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateError::MergeWithPreviousPeriod(e),
+                collomatique_ops::GeneralPlanningUpdateError::MergeWithPreviousPeriod(e),
             )) => match e {
                 MergeWithPreviousPeriodError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -304,16 +303,20 @@ impl CollomatiqueFile {
         week: usize,
         new_status: bool,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateOp::UpdateWeekStatus(id.into(), week, new_status),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::UpdateWeekStatus(
+                    id.into(),
+                    week,
+                    new_status,
+                ),
             ),
         ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
             ResultMsg::Error(UpdateError::GeneralPlanning(
-                crate::ops::GeneralPlanningUpdateError::UpdateWeekStatus(e),
+                collomatique_ops::GeneralPlanningUpdateError::UpdateWeekStatus(e),
             )) => match e {
                 UpdateWeekStatusError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
@@ -327,12 +330,12 @@ impl CollomatiqueFile {
     }
 
     fn periods_set_first_week(self_: PyRef<'_, Self>, first_week: Option<time::NaiveMondayDate>) {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GeneralPlanning(match first_week {
-                Some(week) => crate::ops::GeneralPlanningUpdateOp::UpdateFirstWeek(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(match first_week {
+                Some(week) => collomatique_ops::GeneralPlanningUpdateOp::UpdateFirstWeek(
                     collomatique_time::NaiveMondayDate::from(week),
                 ),
-                None => crate::ops::GeneralPlanningUpdateOp::DeleteFirstWeek,
+                None => collomatique_ops::GeneralPlanningUpdateOp::DeleteFirstWeek,
             }),
         ));
 
@@ -345,12 +348,11 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         subject_params: subjects::SubjectParameters,
     ) -> PyResult<SubjectId> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
-                    crate::ops::SubjectsUpdateOp::AddNewSubject(subject_params.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::AddNewSubject(subject_params.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::SubjectId(id))) => {
@@ -378,15 +380,14 @@ impl CollomatiqueFile {
         id: SubjectId,
         new_subject_params: subjects::SubjectParameters,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
-                    crate::ops::SubjectsUpdateOp::UpdateSubject(
-                        id.into(),
-                        new_subject_params.into(),
-                    ),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::UpdateSubject(
+                    id.into(),
+                    new_subject_params.into(),
+                ),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -411,12 +412,11 @@ impl CollomatiqueFile {
     }
 
     fn subjects_delete(self_: PyRef<'_, Self>, id: SubjectId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
-                    crate::ops::SubjectsUpdateOp::DeleteSubject(id.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::DeleteSubject(id.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -432,12 +432,11 @@ impl CollomatiqueFile {
     }
 
     fn subjects_move_up(self_: PyRef<'_, Self>, id: SubjectId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
-                    crate::ops::SubjectsUpdateOp::MoveSubjectUp(id.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::MoveSubjectUp(id.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -456,12 +455,11 @@ impl CollomatiqueFile {
     }
 
     fn subjects_move_down(self_: PyRef<'_, Self>, id: SubjectId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
-                    crate::ops::SubjectsUpdateOp::MoveSubjectDown(id.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::MoveSubjectDown(id.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -485,16 +483,15 @@ impl CollomatiqueFile {
         period_id: PeriodId,
         new_status: bool,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Subjects(
-                    crate::ops::SubjectsUpdateOp::UpdatePeriodStatus(
-                        subject_id.into(),
-                        period_id.into(),
-                        new_status,
-                    ),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::UpdatePeriodStatus(
+                    subject_id.into(),
+                    period_id.into(),
+                    new_status,
+                ),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -513,12 +510,11 @@ impl CollomatiqueFile {
     }
 
     fn teachers_add(self_: PyRef<'_, Self>, teacher: teachers::Teacher) -> PyResult<TeacherId> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Teachers(
-                    crate::ops::TeachersUpdateOp::AddNewTeacher(teacher.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Teachers(
+                collomatique_ops::TeachersUpdateOp::AddNewTeacher(teacher.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::TeacherId(id))) => {
@@ -540,12 +536,11 @@ impl CollomatiqueFile {
         id: TeacherId,
         new_teacher: teachers::Teacher,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Teachers(
-                    crate::ops::TeachersUpdateOp::UpdateTeacher(id.into(), new_teacher.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Teachers(
+                collomatique_ops::TeachersUpdateOp::UpdateTeacher(id.into(), new_teacher.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -564,12 +559,11 @@ impl CollomatiqueFile {
     }
 
     fn teachers_delete(self_: PyRef<'_, Self>, id: TeacherId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Teachers(
-                    crate::ops::TeachersUpdateOp::DeleteTeacher(id.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Teachers(
+                collomatique_ops::TeachersUpdateOp::DeleteTeacher(id.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -585,12 +579,11 @@ impl CollomatiqueFile {
     }
 
     fn students_add(self_: PyRef<'_, Self>, student: students::Student) -> PyResult<StudentId> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Students(
-                    crate::ops::StudentsUpdateOp::AddNewStudent(student.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Students(
+                collomatique_ops::StudentsUpdateOp::AddNewStudent(student.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::StudentId(id))) => {
@@ -612,12 +605,11 @@ impl CollomatiqueFile {
         id: StudentId,
         new_student: students::Student,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Students(
-                    crate::ops::StudentsUpdateOp::UpdateStudent(id.into(), new_student.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Students(
+                collomatique_ops::StudentsUpdateOp::UpdateStudent(id.into(), new_student.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -636,12 +628,11 @@ impl CollomatiqueFile {
     }
 
     fn students_delete(self_: PyRef<'_, Self>, id: StudentId) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Students(
-                    crate::ops::StudentsUpdateOp::DeleteStudent(id.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Students(
+                collomatique_ops::StudentsUpdateOp::DeleteStudent(id.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -663,8 +654,8 @@ impl CollomatiqueFile {
         subject_id: SubjectId,
         status: bool,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::Assignments(crate::ops::AssignmentsUpdateOp::Assign(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Assignments(collomatique_ops::AssignmentsUpdateOp::Assign(
                 period_id.into(),
                 student_id.into(),
                 subject_id.into(),
@@ -709,9 +700,9 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         period_id: PeriodId,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::Assignments(
-                crate::ops::AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id.into()),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Assignments(
+                collomatique_ops::AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id.into()),
             ),
         ));
 
@@ -737,12 +728,14 @@ impl CollomatiqueFile {
         subject_id: SubjectId,
         status: bool,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::Assignments(crate::ops::AssignmentsUpdateOp::AssignAll(
-                period_id.into(),
-                subject_id.into(),
-                status,
-            )),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Assignments(
+                collomatique_ops::AssignmentsUpdateOp::AssignAll(
+                    period_id.into(),
+                    subject_id.into(),
+                    status,
+                ),
+            ),
         ));
 
         match result {
@@ -772,9 +765,9 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         week_pattern: week_patterns::WeekPattern,
     ) -> WeekPatternId {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::WeekPatterns(
-                crate::ops::WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern.into()),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::WeekPatterns(
+                collomatique_ops::WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern.into()),
             ),
         ));
 
@@ -791,9 +784,9 @@ impl CollomatiqueFile {
         id: WeekPatternId,
         new_week_pattern: week_patterns::WeekPattern,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::WeekPatterns(
-                crate::ops::WeekPatternsUpdateOp::UpdateWeekPattern(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::WeekPatterns(
+                collomatique_ops::WeekPatternsUpdateOp::UpdateWeekPattern(
                     id.into(),
                     new_week_pattern.into(),
                 ),
@@ -814,9 +807,9 @@ impl CollomatiqueFile {
     }
 
     fn week_patterns_delete(self_: PyRef<'_, Self>, id: WeekPatternId) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::WeekPatterns(
-                crate::ops::WeekPatternsUpdateOp::DeleteWeekPattern(id.into()),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::WeekPatterns(
+                collomatique_ops::WeekPatternsUpdateOp::DeleteWeekPattern(id.into()),
             ),
         ));
 
@@ -838,11 +831,12 @@ impl CollomatiqueFile {
         subject_id: subjects::SubjectId,
         slot: slots::SlotParameters,
     ) -> PyResult<slots::SlotId> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
-                crate::ops::SlotsUpdateOp::AddNewSlot(subject_id.into(), slot.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Slots(collomatique_ops::SlotsUpdateOp::AddNewSlot(
+                subject_id.into(),
+                slot.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::SlotId(id))) => {
@@ -883,11 +877,12 @@ impl CollomatiqueFile {
         id: slots::SlotId,
         new_slot: slots::SlotParameters,
     ) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
-                crate::ops::SlotsUpdateOp::UpdateSlot(id.into(), new_slot.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Slots(collomatique_ops::SlotsUpdateOp::UpdateSlot(
+                id.into(),
+                new_slot.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -925,11 +920,11 @@ impl CollomatiqueFile {
     }
 
     fn slots_delete(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
-                crate::ops::SlotsUpdateOp::DeleteSlot(id.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Slots(collomatique_ops::SlotsUpdateOp::DeleteSlot(
+                id.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -943,11 +938,11 @@ impl CollomatiqueFile {
     }
 
     fn slots_move_up(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
-                crate::ops::SlotsUpdateOp::MoveSlotUp(id.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Slots(collomatique_ops::SlotsUpdateOp::MoveSlotUp(
+                id.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -964,11 +959,11 @@ impl CollomatiqueFile {
     }
 
     fn slots_move_down(self_: PyRef<'_, Self>, id: slots::SlotId) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Slots(
-                crate::ops::SlotsUpdateOp::MoveSlotDown(id.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Slots(collomatique_ops::SlotsUpdateOp::MoveSlotDown(
+                id.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -988,9 +983,9 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         incompat: incompatibilities::Incompat,
     ) -> PyResult<incompatibilities::IncompatId> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::Incompatibilities(
-                crate::ops::IncompatibilitiesUpdateOp::AddNewIncompat(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Incompatibilities(
+                collomatique_ops::IncompatibilitiesUpdateOp::AddNewIncompat(
                     incompat.try_into().map_err(|e| match e {
                         time::SlotWithDurationError::SlotOverlapsWithNextDay => {
                             PyValueError::new_err("Slot overlaps with next day")
@@ -1024,9 +1019,9 @@ impl CollomatiqueFile {
         id: incompatibilities::IncompatId,
         new_incompat: incompatibilities::Incompat,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::Incompatibilities(
-                crate::ops::IncompatibilitiesUpdateOp::UpdateIncompat(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Incompatibilities(
+                collomatique_ops::IncompatibilitiesUpdateOp::UpdateIncompat(
                     id.into(),
                     new_incompat.try_into().map_err(|e| match e {
                         time::SlotWithDurationError::SlotOverlapsWithNextDay => {
@@ -1059,9 +1054,9 @@ impl CollomatiqueFile {
     }
 
     fn incompats_delete(self_: PyRef<'_, Self>, id: incompatibilities::IncompatId) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::Incompatibilities(
-                crate::ops::IncompatibilitiesUpdateOp::DeleteIncompat(id.into()),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Incompatibilities(
+                collomatique_ops::IncompatibilitiesUpdateOp::DeleteIncompat(id.into()),
             ),
         ));
 
@@ -1083,10 +1078,10 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         params: group_lists::GroupListParameters,
     ) -> PyResult<group_lists::GroupListId> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::AddNewGroupList(
-                params.into(),
-            )),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(params.into()),
+            ),
         ));
 
         match result {
@@ -1116,11 +1111,10 @@ impl CollomatiqueFile {
         id: group_lists::GroupListId,
         new_params: group_lists::GroupListParameters,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::UpdateGroupList(
-                id.into(),
-                new_params.into(),
-            )),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::UpdateGroupList(id.into(), new_params.into()),
+            ),
         ));
 
         match result {
@@ -1147,10 +1141,10 @@ impl CollomatiqueFile {
     }
 
     fn group_lists_delete(self_: PyRef<'_, Self>, id: group_lists::GroupListId) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::DeleteGroupList(
-                id.into(),
-            )),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::DeleteGroupList(id.into()),
+            ),
         ));
 
         match result {
@@ -1171,13 +1165,15 @@ impl CollomatiqueFile {
         id: group_lists::GroupListId,
         prefilled_groups: Vec<group_lists::PrefilledGroup>,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GroupLists(crate::ops::GroupListsUpdateOp::PrefillGroupList(
-                id.into(),
-                collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
-                    groups: prefilled_groups.into_iter().map(|x| x.into()).collect(),
-                },
-            )),
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::PrefillGroupList(
+                    id.into(),
+                    collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+                        groups: prefilled_groups.into_iter().map(|x| x.into()).collect(),
+                    },
+                ),
+            ),
         ));
 
         match result {
@@ -1209,9 +1205,9 @@ impl CollomatiqueFile {
         subject_id: subjects::SubjectId,
         group_list_id: Option<group_lists::GroupListId>,
     ) -> PyResult<()> {
-        let result = self_.token.send_msg(crate::rpc::CmdMsg::Update(
-            crate::ops::UpdateOp::GroupLists(
-                crate::ops::GroupListsUpdateOp::AssignGroupListToSubject(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::AssignGroupListToSubject(
                     period_id.into(),
                     subject_id.into(),
                     group_list_id.map(|x| x.into()),
@@ -1251,11 +1247,12 @@ impl CollomatiqueFile {
     }
 
     fn rules_add(self_: PyRef<'_, Self>, rule: rules::Rule) -> PyResult<rules::RuleId> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
-                crate::ops::RulesUpdateOp::AddNewRule(rule.name, rule.logic_rule.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Rules(collomatique_ops::RulesUpdateOp::AddNewRule(
+                rule.name,
+                rule.logic_rule.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::RuleId(id))) => {
@@ -1271,11 +1268,13 @@ impl CollomatiqueFile {
     }
 
     fn rules_update(self_: PyRef<'_, Self>, id: rules::RuleId, rule: rules::Rule) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
-                crate::ops::RulesUpdateOp::UpdateRule(id.into(), rule.name, rule.logic_rule.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Rules(collomatique_ops::RulesUpdateOp::UpdateRule(
+                id.into(),
+                rule.name,
+                rule.logic_rule.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -1292,11 +1291,11 @@ impl CollomatiqueFile {
     }
 
     fn rules_delete(self_: PyRef<'_, Self>, id: rules::RuleId) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
-                crate::ops::RulesUpdateOp::DeleteRule(id.into()),
-            )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Rules(collomatique_ops::RulesUpdateOp::DeleteRule(
+                id.into(),
+            )),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -1315,15 +1314,15 @@ impl CollomatiqueFile {
         period_id: PeriodId,
         new_status: bool,
     ) -> PyResult<()> {
-        let result = self_
-            .token
-            .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Rules(
-                crate::ops::RulesUpdateOp::UpdatePeriodStatusForRule(
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Rules(
+                collomatique_ops::RulesUpdateOp::UpdatePeriodStatusForRule(
                     rule_id.into(),
                     period_id.into(),
                     new_status,
                 ),
-            )));
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -1345,12 +1344,11 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         strict_limits: settings::StrictLimits,
     ) -> PyResult<()> {
-        let result =
-            self_
-                .token
-                .send_msg(crate::rpc::CmdMsg::Update(crate::ops::UpdateOp::Settings(
-                    crate::ops::SettingsUpdateOp::UpdateStrictLimits(strict_limits.into()),
-                )));
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Settings(
+                collomatique_ops::SettingsUpdateOp::UpdateStrictLimits(strict_limits.into()),
+            ),
+        ));
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
@@ -1377,9 +1375,9 @@ impl Token {
     fn get_data(&self) -> collomatique_state_colloscopes::InnerData {
         match &self.file {
             InternalFile::Session(session) => {
-                use crate::rpc::ResultMsg;
+                use collomatique_rpc::ResultMsg;
 
-                let result = session.send_msg(crate::rpc::CmdMsg::GetData);
+                let result = session.send_msg(collomatique_rpc::CmdMsg::GetData);
                 let ResultMsg::Data(serialized_data) = result else {
                     panic!("Unexpected response to GetData");
                 };
@@ -1388,7 +1386,7 @@ impl Token {
         }
     }
 
-    fn send_msg(&self, msg: crate::rpc::CmdMsg) -> crate::rpc::ResultMsg {
+    fn send_msg(&self, msg: collomatique_rpc::CmdMsg) -> collomatique_rpc::ResultMsg {
         match &self.file {
             InternalFile::Session(session) => session.send_msg(msg),
         }

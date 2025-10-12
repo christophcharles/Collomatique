@@ -5,7 +5,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
 
-use collomatique_core::ops::SubjectsUpdateOp;
+use collomatique_ops::SubjectsUpdateOp;
 
 mod subject_params;
 mod subjects_display;

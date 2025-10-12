@@ -4,7 +4,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
 
-use collomatique_core::ops::TeachersUpdateOp;
+use collomatique_ops::TeachersUpdateOp;
 
 mod dialog;
 

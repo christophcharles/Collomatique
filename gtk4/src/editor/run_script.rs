@@ -1,12 +1,12 @@
-use collomatique_core::rpc::gui_answer::OpenFileDialogAnswer;
-use collomatique_core::rpc::{CmdMsg, ResultMsg};
+use collomatique_rpc::gui_answer::OpenFileDialogAnswer;
+use collomatique_rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{adw, gtk, Component, ComponentController};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
-use collomatique_core::ops::Desc;
+use collomatique_ops::Desc;
 use collomatique_state::{AppSession, AppState};
 use collomatique_state_colloscopes::Data;
 
@@ -44,7 +44,7 @@ pub enum DialogInput {
 
     Cancel,
     ProcessFinished,
-    Cmd(Result<collomatique_core::rpc::CmdMsg, String>),
+    Cmd(Result<collomatique_rpc::CmdMsg, String>),
     Error(String),
 }
 
@@ -183,7 +183,7 @@ impl Component for Dialog {
             .launch(())
             .forward(sender.command_sender(), |msg| match msg {
                 ok_dialog::DialogOutput::Ok => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::OkDialogClosed),
+                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::OkDialogClosed),
                 ),
             });
 
@@ -192,10 +192,10 @@ impl Component for Dialog {
             .launch(())
             .forward(sender.command_sender(), |msg| match msg {
                 confirm_dialog::DialogOutput::Confirmed => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::ConfirmDialog(true)),
+                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(true)),
                 ),
                 confirm_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::ConfirmDialog(false)),
+                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(false)),
                 ),
             });
 
@@ -204,10 +204,10 @@ impl Component for Dialog {
             .launch(())
             .forward(sender.command_sender(), |msg| match msg {
                 input_dialog::DialogOutput::Accepted(text) => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::InputDialog(Some(text))),
+                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(Some(text))),
                 ),
                 input_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_core::rpc::GuiAnswer::InputDialog(None)),
+                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(None)),
                 ),
             });
 
@@ -260,7 +260,7 @@ impl Component for Dialog {
                 self.rpc_logger
                     .sender()
                     .send(rpc_server::RpcLoggerInput::RunRcpEngine(
-                        collomatique_core::rpc::InitMsg::RunPythonScript(script),
+                        collomatique_rpc::InitMsg::RunPythonScript(script),
                     ))
                     .unwrap();
             }
@@ -348,7 +348,7 @@ impl Component for Dialog {
                     .expect("there should be some current state to accept");
                 let last_op_cat = match app_session.get_undo_name() {
                     Some((cat, _desc)) => cat.clone(),
-                    None => collomatique_core::ops::OpCategory::None,
+                    None => collomatique_ops::OpCategory::None,
                 };
                 sender
                     .output(DialogOutput::NewData(app_session.commit((
@@ -409,10 +409,10 @@ impl Dialog {
     fn handle_gui_request(
         &mut self,
         sender: ComponentSender<Self>,
-        gui_cmd: collomatique_core::rpc::cmd_msg::GuiMsg,
+        gui_cmd: collomatique_rpc::cmd_msg::GuiMsg,
     ) {
         match gui_cmd {
-            collomatique_core::rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
+            collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
                 let path = self.path.clone();
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
@@ -429,25 +429,25 @@ impl Dialog {
                     .await;
 
                     DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
-                        collomatique_core::rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
+                        collomatique_rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
                             file_path: file_name,
                         }),
                     ))
                 });
             }
-            collomatique_core::rpc::cmd_msg::GuiMsg::OkDialog(text) => {
+            collomatique_rpc::cmd_msg::GuiMsg::OkDialog(text) => {
                 self.ok_dialog
                     .sender()
                     .send(ok_dialog::DialogInput::Show(text))
                     .unwrap();
             }
-            collomatique_core::rpc::cmd_msg::GuiMsg::ConfirmDialog(text) => {
+            collomatique_rpc::cmd_msg::GuiMsg::ConfirmDialog(text) => {
                 self.confirm_dialog
                     .sender()
                     .send(confirm_dialog::DialogInput::Show(text))
                     .unwrap();
             }
-            collomatique_core::rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text) => {
+            collomatique_rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text) => {
                 self.input_dialog
                     .sender()
                     .send(input_dialog::DialogInput::Show(info_text, placeholder_text))

@@ -59,7 +59,7 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     println!("\nBuilding ILP problem...");
 
     let problem_with_translators =
-        collomatique_core::solver::colloscopes::ColloscopeProblemWithTranslators::from_data(&data)
+        collomatique_solver_glue::colloscopes::ColloscopeProblemWithTranslators::from_data(&data)
             .expect("Data should be complete for resolution");
 
     println!("Start resolution...");
@@ -79,7 +79,7 @@ fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
     if args.rpc_engine {
-        return collomatique_core::rpc::run_rpc_engine();
+        return collomatique_rpc_engine::run_rpc_engine();
     }
 
     if args.solve {

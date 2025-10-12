@@ -1,6 +1,5 @@
-use glib::object::ObjectExt;
-use glib::SignalHandlerId;
-use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, ObjectExt, OrientableExt, WidgetExt};
+use libadwaita::glib::SignalHandlerId;
 use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent};

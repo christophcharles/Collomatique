@@ -7,7 +7,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
 
-use collomatique_core::ops::WeekPatternsUpdateOp;
+use collomatique_ops::WeekPatternsUpdateOp;
 
 mod dialog;
 

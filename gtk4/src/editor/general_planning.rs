@@ -5,7 +5,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
 };
 
-use collomatique_core::ops::GeneralPlanningUpdateOp;
+use collomatique_ops::GeneralPlanningUpdateOp;
 
 mod period_cut;
 mod period_duration;
