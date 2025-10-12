@@ -6,22 +6,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use assignments::Assignments;
 use collomatique_state::{tools, InMemoryData, Operation};
 use colloscope_params::ColloscopeIdMaps;
 use colloscope_params::Parameters;
-use group_lists::GroupLists;
-use incompats::Incompats;
 use ops::AnnotatedSettingsOp;
-use periods::Periods;
-use rules::Rules;
-use slots::Slots;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use students::Students;
-use subjects::{Subjects, SubjectsExternalData};
-use teachers::Teachers;
-use week_patterns::WeekPatterns;
 
 pub mod ids;
 use ids::Id;
@@ -1033,34 +1023,6 @@ impl Data {
         let data = Data {
             id_issuer: std::sync::Mutex::new(id_issuer),
             inner_data,
-        };
-
-        data.check_invariants();
-
-        Ok(data)
-    }
-
-    /// Create a new [Data] from existing data
-    ///
-    /// This will check the consistency of the data
-    /// and will also do some internal checks, so this might fail.
-    pub fn from_data(
-        main_params: colloscope_params::ColloscopeParametersExternalData,
-    ) -> Result<Data, FromDataError> {
-        let id_issuer = IdIssuer::new(main_params.ids())?;
-
-        main_params.validate()?;
-
-        // Ids have been validated
-        let main_params = unsafe { colloscope_params::Parameters::from_external_data(main_params) };
-        let colloscopes = colloscopes::Colloscopes::default();
-
-        let data = Data {
-            id_issuer: std::sync::Mutex::new(id_issuer),
-            inner_data: InnerData {
-                main_params,
-                colloscopes,
-            },
         };
 
         data.check_invariants();

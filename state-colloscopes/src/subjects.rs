@@ -251,21 +251,6 @@ impl Default for SubjectInterrogationParameters {
 }
 
 impl<PeriodId: Id> Subject<PeriodId> {
-    /// Builds a subject from external data
-    ///
-    /// No checks is done for consistency so this is unsafe.
-    /// See [SubjectExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: SubjectExternalData) -> Self {
-        Subject {
-            parameters: external_data.parameters,
-            excluded_periods: external_data
-                .excluded_periods
-                .into_iter()
-                .map(|x| unsafe { PeriodId::new(x) })
-                .collect(),
-        }
-    }
-
     pub(crate) fn duplicate_with_id_maps(
         &self,
         periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
@@ -285,24 +270,6 @@ impl<PeriodId: Id> Subject<PeriodId> {
 }
 
 impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
-    /// Builds subjects from external data
-    ///
-    /// No checks is done for consistency so this is unsafe.
-    /// See [SubjectsExternalData::validate_all] and [SubjectExternalData::validate].
-    pub(crate) unsafe fn from_external_data(external_data: SubjectsExternalData) -> Self {
-        Subjects {
-            ordered_subject_list: external_data
-                .ordered_subject_list
-                .into_iter()
-                .map(|(id, data)| {
-                    (unsafe { SubjectId::new(id) }, unsafe {
-                        Subject::from_external_data(data)
-                    })
-                })
-                .collect(),
-        }
-    }
-
     /// Finds the position of a subject by id
     pub fn find_subject_position(&self, id: SubjectId) -> Option<usize> {
         self.ordered_subject_list
@@ -333,125 +300,5 @@ impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
         Some(Subjects {
             ordered_subject_list,
         })
-    }
-}
-
-/// Description of the subjects but unchecked
-///
-/// This structure is an unchecked equivalent of [Subjects].
-/// The main difference is that there are no garantees for the
-/// validity of the ids.
-///
-/// This should be used when extracting from a file for instance
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct SubjectsExternalData {
-    /// Ordered list of subjects
-    ///
-    /// Each item represent a subject. It is described
-    /// by what should be a unique id and a description of type [SubjectExternalData]
-    pub ordered_subject_list: Vec<(u64, SubjectExternalData)>,
-}
-
-impl SubjectsExternalData {
-    /// Checks the validity of all [SubjectExternalData] in the ordered list.
-    ///
-    /// In practice, this means checking that the ids for periods are valid,
-    /// that the ranges are non-empty and that week references are in bound
-    ///
-    /// **Beware**, this does not check the validity of the ids for the subjects!
-    pub fn validate_all(&self, period_ids: &BTreeSet<u64>) -> bool {
-        self.ordered_subject_list
-            .iter()
-            .all(|(_id, data)| data.validate(period_ids))
-    }
-
-    /// Finds the position of a subject by id
-    pub fn find_subject_position(&self, id: u64) -> Option<usize> {
-        self.ordered_subject_list
-            .iter()
-            .position(|(current_id, _desc)| *current_id == id)
-    }
-
-    /// Finds a subject by id
-    pub fn find_subject(&self, id: u64) -> Option<&SubjectExternalData> {
-        let pos = self.find_subject_position(id)?;
-
-        Some(&self.ordered_subject_list[pos].1)
-    }
-}
-
-/// Description of one subject but unchecked
-///
-/// This structure is an unchecked equivalent of [Subject].
-/// The main difference is that there are no garantees for the
-/// validity of the ids.
-///
-/// This should be used when extracting from a file for instance
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct SubjectExternalData {
-    /// Parameters for the subject
-    ///
-    /// This is separated because those parameters do
-    /// not need to be checked
-    pub parameters: SubjectParameters,
-    /// Periods that should not be covered by the subject
-    ///
-    /// By default a subject is present for every period.
-    /// Ids that appear here should be period ids.
-    pub excluded_periods: BTreeSet<u64>,
-}
-
-impl SubjectExternalData {
-    /// Checks the validity of a [SubjectExternalData].
-    ///
-    /// In practice, this means checking that the ids for periods and week patterns are valid
-    /// that the ranges are non-empty
-    pub fn validate(&self, period_ids: &BTreeSet<u64>) -> bool {
-        if !self.excluded_periods.iter().all(|x| period_ids.contains(x)) {
-            return false;
-        }
-        let Some(interrogation_parameters) = &self.parameters.interrogation_parameters else {
-            return true;
-        };
-        if interrogation_parameters.students_per_group.is_empty()
-            || interrogation_parameters.groups_per_interrogation.is_empty()
-        {
-            return false;
-        }
-        match &interrogation_parameters.periodicity {
-            SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                blocks,
-                minimum_week_separation: _,
-            } => {
-                for block in blocks {
-                    if block.interrogation_count_in_block.is_empty() {
-                        return false;
-                    }
-                }
-            }
-            SubjectPeriodicity::AmountInYear {
-                interrogation_count_in_year,
-                minimum_week_separation: _,
-            } => {
-                if interrogation_count_in_year.is_empty() {
-                    return false;
-                }
-            }
-            _ => {}
-        }
-        true
-    }
-}
-
-impl<PeriodId: Id> From<Subject<PeriodId>> for SubjectExternalData {
-    fn from(value: Subject<PeriodId>) -> Self {
-        SubjectExternalData {
-            parameters: value.parameters,
-            excluded_periods: value
-                .excluded_periods
-                .into_iter()
-                .map(|x| x.inner())
-                .collect(),
-        }
     }
 }

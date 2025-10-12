@@ -41,35 +41,7 @@ pub struct WeekPattern {
     pub weeks: Vec<bool>,
 }
 
-/// Description of week patterns but unchecked
-///
-/// This structure is an unchecked equivalent of [WeekPatterns].
-/// The main difference is that there are no garantees for the
-/// validity of the ids.
-///
-/// This should be used when extracting from a file for instance
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct WeekPatternsExternalData {
-    /// Week patterns
-    ///
-    /// Each item associate to a single ID a sequence of weeks
-    pub week_pattern_map: BTreeMap<u64, WeekPattern>,
-}
-
 impl<WeekPatternId: Id> WeekPatterns<WeekPatternId> {
-    /// Builds week patterns from external data
-    ///
-    /// No checks is done for consistency so this is unsafe.
-    pub(crate) unsafe fn from_external_data(external_data: WeekPatternsExternalData) -> Self {
-        WeekPatterns {
-            week_pattern_map: external_data
-                .week_pattern_map
-                .into_iter()
-                .map(|(id, week_pattern)| (unsafe { WeekPatternId::new(id) }, week_pattern))
-                .collect(),
-        }
-    }
-
     pub(crate) fn duplicate_with_id_maps(
         &self,
         week_patterns_map: &BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
