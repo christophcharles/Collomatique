@@ -376,7 +376,7 @@ impl ColloscopePeriod {
 
         let mut subject_with_interrogation_count = 0usize;
 
-        for (subject_id, subject) in &params.subjects.ordered_subject_list {
+        for (_subject_id, subject) in &params.subjects.ordered_subject_list {
             if subject.excluded_periods.contains(&period_id) {
                 continue;
             }
