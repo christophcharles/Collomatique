@@ -52,6 +52,15 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
         }
     };
 
+    let Some((_collo_id, collo)) = data
+        .get_inner_data()
+        .colloscopes
+        .colloscope_map
+        .last_key_value()
+    else {
+        return Err(anyhow!("No colloscope to solve in file"));
+    };
+
     for caveat in caveats {
         println!("Caveat: {:?}", caveat);
     }
@@ -59,8 +68,10 @@ fn try_solve(file: Option<PathBuf>) -> Result<(), anyhow::Error> {
     println!("\nBuilding ILP problem...");
 
     let problem_with_translators =
-        collomatique_solver_glue::colloscopes::ColloscopeProblemWithTranslators::from_data(&data)
-            .expect("Data should be complete for resolution");
+        collomatique_solver_glue::colloscopes::ColloscopeProblemWithTranslators::from_collo_params(
+            &collo.params,
+        )
+        .expect("Data should be complete for resolution");
 
     println!("Start resolution...");
 
