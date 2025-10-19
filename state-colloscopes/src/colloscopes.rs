@@ -374,10 +374,19 @@ impl ColloscopePeriod {
     ) -> Result<(), super::ColloscopeError> {
         use super::ColloscopeError;
 
-        let Some(period_assignments) = params.assignments.period_map.get(&period_id) else {
-            return Err(ColloscopeError::InvalidColloscopePeriodId(period_id));
-        };
-        if period_assignments.subject_map.len() != self.subject_map.len() {
+        let mut subject_with_interrogation_count = 0usize;
+
+        for (subject_id, subject) in &params.subjects.ordered_subject_list {
+            if subject.excluded_periods.contains(&period_id) {
+                continue;
+            }
+            if subject.parameters.interrogation_parameters.is_none() {
+                continue;
+            }
+            subject_with_interrogation_count += 1;
+        }
+
+        if self.subject_map.len() != subject_with_interrogation_count {
             return Err(ColloscopeError::WrongSubjectCountInPeriodInColloscopeData(
                 period_id,
             ));
