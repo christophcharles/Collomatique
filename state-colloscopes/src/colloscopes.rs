@@ -233,7 +233,7 @@ impl ColloscopeData {
                         let is_week_active = match week_pattern_opt {
                             None => true,
                             Some(week_pattern) => {
-                                if current_week > week_pattern.weeks.len() {
+                                if current_week >= week_pattern.weeks.len() {
                                     true
                                 } else {
                                     week_pattern.weeks[current_week]
