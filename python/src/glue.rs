@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use colloscopes::ColloscopeId;
 use pyo3::prelude::*;
 
 use collomatique_rpc::{
@@ -1369,8 +1370,107 @@ impl CollomatiqueFile {
         }
     }
 
+    fn colloscopes_add_empty(
+        self_: PyRef<'_, Self>,
+        name: String,
+    ) -> PyResult<colloscopes::ColloscopeId> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Colloscopes(
+                collomatique_ops::ColloscopesUpdateOp::AddEmptyColloscope(name),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::ColloscopeId(id))) => {
+                Ok(id.into())
+            }
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn colloscopes_copy(
+        self_: PyRef<'_, Self>,
+        colloscope_id: ColloscopeId,
+        name: String,
+    ) -> PyResult<colloscopes::ColloscopeId> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Colloscopes(
+                collomatique_ops::ColloscopesUpdateOp::CopyColloscope(colloscope_id.into(), name),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::ColloscopeId(id))) => {
+                Ok(id.into())
+            }
+            ResultMsg::Error(collomatique_ops::UpdateError::Colloscopes(
+                collomatique_ops::ColloscopesUpdateError::CopyColloscope(ce),
+            )) => match ce {
+                collomatique_ops::CopyColloscopeError::InvalidColloscopeId(id) => Err(
+                    PyValueError::new_err(format!("Invalid colloscope id {:?}", id)),
+                ),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn colloscopes_update(
+        self_: PyRef<'_, Self>,
+        colloscope_id: ColloscopeId,
+        colloscope: colloscopes::Colloscope,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Colloscopes(
+                collomatique_ops::ColloscopesUpdateOp::UpdateColloscope(
+                    colloscope_id.into(),
+                    colloscope.try_into()?,
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(collomatique_ops::UpdateError::Colloscopes(
+                collomatique_ops::ColloscopesUpdateError::UpdateColloscope(ue),
+            )) => Err(PyValueError::new_err(format!("{:?}", ue))),
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn colloscopes_delete(self_: PyRef<'_, Self>, colloscope_id: ColloscopeId) -> PyResult<()> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Colloscopes(
+                collomatique_ops::ColloscopesUpdateOp::DeleteColloscope(colloscope_id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(collomatique_ops::UpdateError::Colloscopes(
+                collomatique_ops::ColloscopesUpdateError::DeleteColloscope(de),
+            )) => match de {
+                collomatique_ops::DeleteColloscopeError::InvalidColloscopeId(id) => Err(
+                    PyValueError::new_err(format!("Invalid colloscope id {:?}", id)),
+                ),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
     fn get_main_params(self_: PyRef<'_, Self>) -> PyResult<params::GeneralParameters> {
         self_.token.get_data().main_params.clone().try_into()
+    }
+
+    fn get_colloscopes(
+        self_: PyRef<'_, Self>,
+    ) -> PyResult<BTreeMap<ColloscopeId, colloscopes::Colloscope>> {
+        let colloscopes = &self_.token.get_data().colloscopes;
+
+        colloscopes
+            .colloscope_map
+            .iter()
+            .map(|(collo_id, collo)| Ok((collo_id.into(), collo.clone().try_into()?)))
+            .collect::<PyResult<_>>()
     }
 }
 
