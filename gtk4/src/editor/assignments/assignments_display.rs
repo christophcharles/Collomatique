@@ -36,6 +36,7 @@ pub struct PeriodEntry {
     subjects_dropdown: Controller<crate::widgets::droplist::Widget>,
     current_subject: Option<collomatique_state_colloscopes::SubjectId>,
     column_view: DynamicColumnView<StudentItem, gtk::SingleSelection>,
+    current_items: Vec<StudentItemData>,
     shown: bool,
 }
 
@@ -210,6 +211,7 @@ impl FactoryComponent for PeriodEntry {
             index: index.clone(),
             data,
             column_view,
+            current_items: vec![],
             subjects_dropdown,
             current_subject: None,
             shown: index.current_index() == 0,
@@ -259,6 +261,16 @@ impl FactoryComponent for PeriodEntry {
                 if current_status == new_status {
                     return;
                 }
+
+                self.current_items.iter_mut().for_each(|x| {
+                    if x.student_id == student_id {
+                        if new_status {
+                            x.assigned_subjects.insert(subject_id);
+                        } else {
+                            x.assigned_subjects.remove(&subject_id);
+                        }
+                    }
+                });
 
                 sender
                     .output(PeriodEntryOutput::UpdateStatus(
@@ -351,41 +363,113 @@ impl PeriodEntry {
     }
 
     fn update_view_wrapper(&mut self, sender: FactorySender<Self>) {
+        let new_items: Vec<_> = self
+            .data
+            .filtered_students
+            .iter()
+            .map(|(student_id, student)| StudentItemData {
+                student_id: *student_id,
+                surname: student.desc.surname.clone(),
+                firstname: student.desc.firstname.clone(),
+                assigned_subjects: self
+                    .data
+                    .period_assignments
+                    .subject_map
+                    .iter()
+                    .filter_map(|(subject_id, assigned_students)| {
+                        if assigned_students.contains(student_id) {
+                            Some(*subject_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            })
+            .collect();
+
+        let Some((first_modified, to_remove_count, to_add_count)) =
+            compute_update_data(&self.current_items, &new_items)
+        else {
+            return;
+        };
+
         self.column_view.splice(
-            0,
-            self.column_view.len(),
-            self.data
-                .filtered_students
-                .iter()
-                .map(|(student_id, student)| StudentItem {
-                    student_id: *student_id,
-                    surname: student.desc.surname.clone(),
-                    firstname: student.desc.firstname.clone(),
-                    assigned_subjects: self
-                        .data
-                        .period_assignments
-                        .subject_map
-                        .iter()
-                        .filter_map(|(subject_id, assigned_students)| {
-                            if assigned_students.contains(student_id) {
-                                Some(*subject_id)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
+            first_modified as u32,
+            to_remove_count as u32,
+            new_items
+                .clone()
+                .into_iter()
+                .skip(first_modified)
+                .take(to_add_count)
+                .map(|data| StudentItem {
+                    data,
                     sender: sender.clone(),
                     handler_ids: BTreeMap::new(),
                 }),
         );
+        self.current_items = new_items;
     }
 }
 
-struct StudentItem {
+fn compute_update_data<T: Eq>(
+    old_list: &Vec<T>,
+    new_list: &Vec<T>,
+) -> Option<(usize, usize, usize)> {
+    let mut first_modified = 0usize;
+    let mut count_to_remove = 0usize;
+    let mut count_to_add = 0usize;
+    if old_list.len() != new_list.len() {
+        let min_len = old_list.len().min(new_list.len());
+        first_modified = min_len;
+        for i in 0..min_len {
+            if new_list[i] != old_list[i] {
+                first_modified = i;
+                break;
+            }
+        }
+
+        count_to_remove = old_list.len() - first_modified;
+        count_to_add = new_list.len() - first_modified;
+    } else if old_list.len() == new_list.len() {
+        first_modified = old_list.len();
+        let mut last_modified = None;
+        for i in 0..old_list.len() {
+            if new_list[i] != old_list[i] {
+                if i < first_modified {
+                    first_modified = i;
+                }
+                match last_modified {
+                    Some(val) => {
+                        if i > val {
+                            last_modified = Some(i);
+                        }
+                    }
+                    None => last_modified = Some(i),
+                }
+            }
+        }
+
+        let Some(last_modified) = last_modified else {
+            return None;
+        };
+
+        count_to_remove = last_modified - first_modified + 1;
+        count_to_add = count_to_remove;
+    }
+
+    Some((first_modified, count_to_remove, count_to_add))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StudentItemData {
     student_id: collomatique_state_colloscopes::StudentId,
     surname: String,
     firstname: String,
     assigned_subjects: BTreeSet<collomatique_state_colloscopes::SubjectId>,
+}
+
+struct StudentItem {
+    data: StudentItemData,
     sender: FactorySender<PeriodEntry>,
     handler_ids: BTreeMap<collomatique_state_colloscopes::SubjectId, SignalHandlerId>,
 }
@@ -408,7 +492,7 @@ impl LabelColumn for FirstnameColumn {
     }
 
     fn get_cell_value(&self, item: &Self::Item) -> Self::Value {
-        item.firstname.clone()
+        item.data.firstname.clone()
     }
 }
 
@@ -430,7 +514,7 @@ impl LabelColumn for SurnameColumn {
     }
 
     fn get_cell_value(&self, item: &Self::Item) -> Self::Value {
-        item.surname.clone()
+        item.data.surname.clone()
     }
 }
 
@@ -457,9 +541,9 @@ impl RelmColumn for SubjectColumn {
     }
 
     fn bind(&self, item: &mut Self::Item, _: &mut Self::Widgets, root: &mut Self::Root) {
-        root.set_active(item.assigned_subjects.contains(&self.subject_id));
+        root.set_active(item.data.assigned_subjects.contains(&self.subject_id));
         let sender = item.sender.clone();
-        let student_id = item.student_id;
+        let student_id = item.data.student_id;
         let subject_id = self.subject_id;
         item.handler_ids.insert(
             subject_id.clone(),
