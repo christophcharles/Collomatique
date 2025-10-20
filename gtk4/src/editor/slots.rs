@@ -69,6 +69,14 @@ impl Component for Slots {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
                 set_spacing: 5,
+                gtk::Label {
+                    set_margin_top: 10,
+                    #[watch]
+                    set_visible: model.slots.subject_map.is_empty(),
+                    set_halign: gtk::Align::Start,
+                    set_label: "<big><b>Aucune matière à afficher</b></big>",
+                    set_use_markup: true,
+                },
                 #[local_ref]
                 subjects_box -> gtk::Box {
                     set_hexpand: true,
@@ -113,24 +121,41 @@ impl Component for Slots {
                 self.week_patterns = week_patterns;
                 self.slots = slots;
 
-                let new_data: Vec<_> =
-                    self.subjects
-                        .ordered_subject_list
-                        .iter()
-                        .filter_map(|(id, desc)| {
-                            if desc.parameters.interrogation_parameters.is_none() {
-                                return None;
-                            }
+                let new_data: Vec<_> = self
+                    .subjects
+                    .ordered_subject_list
+                    .iter()
+                    .filter_map(|(id, desc)| {
+                        if desc.parameters.interrogation_parameters.is_none() {
+                            return None;
+                        }
 
-                            let _subject_slots = self.slots.subject_map.get(id).expect(
-                                "Subject should appear in slots if it can have interrogations",
-                            );
-                            Some(slots_display::EntryData {
-                                subject_params: desc.parameters.clone(),
-                                subject_id: id.clone(),
-                            })
+                        let subject_slots = self
+                            .slots
+                            .subject_map
+                            .get(id)
+                            .expect("Subject should appear in slots if it can have interrogations")
+                            .clone();
+                        Some(slots_display::EntryData {
+                            subject_params: desc.parameters.clone(),
+                            subject_id: id.clone(),
+                            teachers: self
+                                .teachers
+                                .teacher_map
+                                .iter()
+                                .filter_map(|(teacher_id, teacher)| {
+                                    if teacher.subjects.contains(id) {
+                                        Some((teacher_id.clone(), teacher.clone()))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect(),
+                            week_patterns: self.week_patterns.clone(),
+                            subject_slots,
                         })
-                        .collect();
+                    })
+                    .collect();
 
                 crate::tools::factories::update_vec_deque(
                     &mut self.subjects_list,
