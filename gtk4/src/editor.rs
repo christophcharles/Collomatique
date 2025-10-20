@@ -21,6 +21,7 @@ mod assignments;
 mod check_script;
 mod general_planning;
 mod run_script;
+mod slots;
 mod students;
 mod subjects;
 mod teachers;
@@ -155,6 +156,7 @@ pub struct EditorPanel {
     students: Controller<students::Students>,
     assignments: Controller<assignments::Assignments>,
     week_patterns: Controller<week_patterns::WeekPatterns>,
+    slots: Controller<slots::Slots>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
@@ -305,6 +307,35 @@ impl EditorPanel {
                     .get_inner_data()
                     .main_params
                     .week_patterns
+                    .clone(),
+            ))
+            .unwrap();
+        self.slots
+            .sender()
+            .send(slots::SlotsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .teachers
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .week_patterns
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .slots
                     .clone(),
             ))
             .unwrap();
@@ -542,6 +573,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::WeekPatterns(op))
             });
 
+        let slots = slots::Slots::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Slots(op))
+            });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -593,6 +630,7 @@ impl Component for EditorPanel {
             students,
             assignments,
             week_patterns,
+            slots,
             check_script_dialog,
             run_script_dialog,
             warning_op_dialog,
@@ -607,7 +645,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Teachers => model.teachers.widget().clone().upcast(),
                 PanelNumbers::Students => model.students.widget().clone().upcast(),
                 PanelNumbers::Assignments => model.assignments.widget().clone().upcast(),
-                PanelNumbers::Slots => gtk::Label::new(Some("Placeholder")).upcast(),
+                PanelNumbers::Slots => model.slots.widget().clone().upcast(),
             };
             widgets
                 .main_stack
