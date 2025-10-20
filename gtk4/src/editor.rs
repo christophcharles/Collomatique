@@ -90,8 +90,9 @@ enum PanelNumbers {
     Subjects = 1,
     Teachers = 2,
     WeekPatterns = 3,
-    Students = 4,
-    Assignments = 5,
+    Slots = 4,
+    Students = 5,
+    Assignments = 6,
 }
 
 impl PanelNumbers {
@@ -101,6 +102,7 @@ impl PanelNumbers {
             PanelNumbers::Subjects,
             PanelNumbers::Teachers,
             PanelNumbers::WeekPatterns,
+            PanelNumbers::Slots,
             PanelNumbers::Students,
             PanelNumbers::Assignments,
         ]
@@ -115,6 +117,7 @@ impl PanelNumbers {
             PanelNumbers::Teachers => "teachers",
             PanelNumbers::Students => "students",
             PanelNumbers::Assignments => "assignments",
+            PanelNumbers::Slots => "slots",
         }
     }
 
@@ -126,6 +129,7 @@ impl PanelNumbers {
             PanelNumbers::Teachers => "Colleurs",
             PanelNumbers::Students => "Élèves",
             PanelNumbers::Assignments => "Inscriptions dans les matières",
+            PanelNumbers::Slots => "Créneaux de colles",
         }
     }
 }
@@ -315,7 +319,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Students => Some(PanelNumbers::Students),
             collomatique_ops::OpCategory::Assignments => Some(PanelNumbers::Assignments),
             collomatique_ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
-            collomatique_ops::OpCategory::Slots => None,
+            collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
             collomatique_ops::OpCategory::Incompatibilities => None,
             collomatique_ops::OpCategory::GroupLists => None,
             collomatique_ops::OpCategory::Rules => None,
@@ -603,6 +607,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Teachers => model.teachers.widget().clone().upcast(),
                 PanelNumbers::Students => model.students.widget().clone().upcast(),
                 PanelNumbers::Assignments => model.assignments.widget().clone().upcast(),
+                PanelNumbers::Slots => gtk::Label::new(Some("Placeholder")).upcast(),
             };
             widgets
                 .main_stack
