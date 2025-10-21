@@ -235,15 +235,7 @@ impl Slot {
     fn generate_slot_start_text(&self) -> String {
         format!(
             "{} {}",
-            match self.data.slot_start.weekday.inner() {
-                chrono::Weekday::Mon => "Lundi",
-                chrono::Weekday::Tue => "Mardi",
-                chrono::Weekday::Wed => "Mercredi",
-                chrono::Weekday::Thu => "Jeudi",
-                chrono::Weekday::Fri => "Vendredi",
-                chrono::Weekday::Sat => "Samedi",
-                chrono::Weekday::Sun => "Dimanche",
-            },
+            self.data.slot_start.weekday.capitalize(),
             self.data.slot_start.start_time.format("%Hh%M"),
         )
     }

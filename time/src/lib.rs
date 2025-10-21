@@ -94,6 +94,18 @@ impl std::fmt::Display for Weekday {
 }
 
 impl Weekday {
+    pub fn capitalize(&self) -> &'static str {
+        match self.0 {
+            chrono::Weekday::Mon => "Lundi",
+            chrono::Weekday::Tue => "Mardi",
+            chrono::Weekday::Wed => "Mercredi",
+            chrono::Weekday::Thu => "Jeudi",
+            chrono::Weekday::Fri => "Vendredi",
+            chrono::Weekday::Sat => "Samedi",
+            chrono::Weekday::Sun => "Dimanche",
+        }
+    }
+
     pub fn iter() -> impl Iterator<Item = Weekday> {
         [
             Weekday(chrono::Weekday::Mon),
