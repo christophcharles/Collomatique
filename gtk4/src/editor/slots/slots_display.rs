@@ -274,7 +274,7 @@ impl Slot {
     }
 
     fn generate_slot_start_text(&self) -> String {
-        self.data.slot_start.to_string()
+        self.data.slot_start.capitalize()
     }
 
     fn generate_extra(&self) -> String {

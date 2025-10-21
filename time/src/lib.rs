@@ -54,6 +54,19 @@ impl From<NonZeroU32> for NonZeroDurationInMinutes {
     }
 }
 
+const MINUTES_PER_HOUR: u32 = 60;
+
+impl std::fmt::Display for NonZeroDurationInMinutes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}h{:02}",
+            self.0.get() / MINUTES_PER_HOUR,
+            self.0.get() % MINUTES_PER_HOUR,
+        )
+    }
+}
+
 /// Encapsulates a [chrono::Weekday] and gives it a default ordering
 /// (monday is the lowest and sunday the biggest day)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -180,6 +193,12 @@ impl TimeOnMinutes {
     }
 }
 
+impl std::fmt::Display for TimeOnMinutes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.format("%Hh%M"),)
+    }
+}
+
 impl std::ops::Deref for TimeOnMinutes {
     type Target = chrono::NaiveTime;
     fn deref(&self) -> &Self::Target {
@@ -204,14 +223,15 @@ pub struct SlotStart {
     pub start_time: TimeOnMinutes,
 }
 
+impl SlotStart {
+    pub fn capitalize(&self) -> String {
+        format!("{} {}", self.weekday.capitalize(), self.start_time,)
+    }
+}
+
 impl std::fmt::Display for SlotStart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {}",
-            self.weekday.capitalize(),
-            self.start_time.format("%Hh%M"),
-        )
+        write!(f, "{} {}", self.weekday, self.start_time,)
     }
 }
 
@@ -275,6 +295,10 @@ impl SlotWithDuration {
         *self.start.start_time.inner() + self.duration.time_delta()
     }
 
+    pub fn end_time_on_minute(&self) -> TimeOnMinutes {
+        TimeOnMinutes::new(self.end_time()).unwrap()
+    }
+
     /// Returns the duration of a slot
     pub fn duration(&self) -> NonZeroDurationInMinutes {
         self.duration
@@ -291,6 +315,27 @@ impl SlotWithDuration {
         } else {
             *self.start.start_time.inner() < other.end_time()
         }
+    }
+
+    pub fn capitalize(&self) -> String {
+        let end_time_on_minute = self.end_time_on_minute();
+        format!(
+            "{} {}-{}",
+            self.start.weekday.capitalize(),
+            self.start.start_time,
+            end_time_on_minute,
+        )
+    }
+}
+
+impl std::fmt::Display for SlotWithDuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let end_time_on_minute = self.end_time_on_minute();
+        write!(
+            f,
+            "{} {}-{}",
+            self.start.weekday, self.start.start_time, end_time_on_minute,
+        )
     }
 }
 

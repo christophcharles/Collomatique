@@ -81,6 +81,8 @@ impl Entry {
             incompat_id,
             incompat_name: incompat.name.clone(),
             week_pattern_name,
+            slots: incompat.slots.clone(),
+            minimum_free_slots: incompat.minimum_free_slots,
         }
     }
 }
@@ -208,6 +210,8 @@ pub struct IncompatData {
     pub incompat_id: collomatique_state_colloscopes::IncompatId,
     pub incompat_name: String,
     pub week_pattern_name: String,
+    pub slots: Vec<collomatique_time::SlotWithDuration>,
+    pub minimum_free_slots: std::num::NonZeroU32,
 }
 
 #[derive(Debug)]
@@ -231,7 +235,28 @@ pub enum IncompatOutput {
 
 impl Incompat {
     fn generate_extra(&self) -> String {
-        String::new()
+        if self.data.minimum_free_slots.get() == 1 {
+            "1 créneau libre".into()
+        } else {
+            format!("{} créneaux libres", self.data.minimum_free_slots)
+        }
+    }
+
+    fn generate_slots(&self) -> String {
+        let slots: Vec<_> = self
+            .data
+            .slots
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| {
+                if i == 0 {
+                    slot.capitalize()
+                } else {
+                    slot.to_string()
+                }
+            })
+            .collect();
+        slots.join(", ")
     }
 }
 
@@ -265,7 +290,7 @@ impl FactoryComponent for Incompat {
                 set_margin_end: 5,
                 #[watch]
                 set_label: &self.data.incompat_name,
-                set_size_request: (200, -1),
+                set_size_request: (130, -1),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -277,7 +302,18 @@ impl FactoryComponent for Incompat {
                 set_margin_end: 5,
                 #[watch]
                 set_label: &self.data.week_pattern_name,
-                set_size_request: (200, -1),
+                set_size_request: (150, -1),
+            },
+            gtk::Separator {
+                set_orientation: gtk::Orientation::Vertical,
+            },
+            gtk::Label {
+                set_halign: gtk::Align::Start,
+                set_xalign: 0.,
+                set_margin_start: 5,
+                set_margin_end: 5,
+                #[watch]
+                set_label: &self.generate_slots(),
             },
             gtk::Box {
                 set_hexpand: true,
