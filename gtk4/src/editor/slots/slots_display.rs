@@ -100,6 +100,8 @@ impl Entry {
             slot_start,
             slot_count,
             week_pattern_name,
+            extra_info: slot.extra_info.clone(),
+            cost: slot.cost,
         }
     }
 }
@@ -235,6 +237,8 @@ pub struct SlotData {
     pub slot_start: collomatique_time::SlotStart,
     pub week_pattern_name: String,
     pub slot_count: usize,
+    pub extra_info: String,
+    pub cost: i32,
 }
 
 #[derive(Debug)]
@@ -271,6 +275,17 @@ impl Slot {
 
     fn generate_slot_start_text(&self) -> String {
         self.data.slot_start.to_string()
+    }
+
+    fn generate_extra(&self) -> String {
+        let mut extra_texts = Vec::new();
+        if !self.data.extra_info.is_empty() {
+            extra_texts.push(self.data.extra_info.clone());
+        }
+        if self.data.cost != 0 {
+            extra_texts.push(format!("coût : {}", self.data.cost));
+        }
+        extra_texts.join(", ")
     }
 }
 
@@ -316,7 +331,7 @@ impl FactoryComponent for Slot {
                 set_margin_end: 5,
                 #[watch]
                 set_label: &self.generate_slot_start_text(),
-                set_size_request: (200, -1),
+                set_size_request: (130, -1),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -332,6 +347,13 @@ impl FactoryComponent for Slot {
             },
             gtk::Box {
                 set_hexpand: true,
+            },
+            gtk::Label {
+                set_halign: gtk::Align::End,
+                set_margin_end: 5,
+                #[watch]
+                set_label: &self.generate_extra(),
+                set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
