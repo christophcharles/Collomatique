@@ -51,6 +51,8 @@ pub struct Entry {
 #[derive(Debug, Clone)]
 pub enum EntryInput {
     UpdateData(EntryData),
+
+    AddSlotClicked,
 }
 
 #[derive(Debug)]
@@ -58,6 +60,8 @@ pub enum EntryOutput {
     MoveSlotUp(collomatique_state_colloscopes::SlotId),
     MoveSlotDown(collomatique_state_colloscopes::SlotId),
     DeleteSlot(collomatique_state_colloscopes::SlotId),
+    AddSlot(collomatique_state_colloscopes::SubjectId),
+    EditSlot(collomatique_state_colloscopes::SlotId),
 }
 
 impl Entry {
@@ -140,6 +144,9 @@ impl FactoryComponent for Entry {
                     set_icon_name: "edit-add",
                     set_label: "Ajouter un créneau",
                 },
+                #[watch]
+                set_sensitive: !self.teachers.is_empty(),
+                connect_clicked => EntryInput::AddSlotClicked,
             }
         },
     }
@@ -151,6 +158,7 @@ impl FactoryComponent for Entry {
                 SlotOutput::MoveSlotUp(slot_id) => EntryOutput::MoveSlotUp(slot_id),
                 SlotOutput::MoveSlotDown(slot_id) => EntryOutput::MoveSlotDown(slot_id),
                 SlotOutput::DeleteSlot(slot_id) => EntryOutput::DeleteSlot(slot_id),
+                SlotOutput::EditSlot(slot_id) => EntryOutput::EditSlot(slot_id),
             });
 
         let mut model = Self {
@@ -180,7 +188,7 @@ impl FactoryComponent for Entry {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let slots_list = self.slots.widget();
         let widgets = view_output!();
@@ -188,7 +196,7 @@ impl FactoryComponent for Entry {
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             EntryInput::UpdateData(new_data) => {
                 self.subject_params = new_data.subject_params;
@@ -208,6 +216,11 @@ impl FactoryComponent for Entry {
                     slots_vec.into_iter(),
                     |x| SlotInput::UpdateData(x),
                 );
+            }
+            EntryInput::AddSlotClicked => {
+                sender
+                    .output(EntryOutput::AddSlot(self.subject_id))
+                    .unwrap();
             }
         }
     }
@@ -237,6 +250,7 @@ pub enum SlotInput {
     MoveUpClicked,
     MoveDownClicked,
     DeleteClicked,
+    EditSlotClicked,
 }
 
 #[derive(Debug)]
@@ -244,6 +258,7 @@ pub enum SlotOutput {
     MoveSlotUp(collomatique_state_colloscopes::SlotId),
     MoveSlotDown(collomatique_state_colloscopes::SlotId),
     DeleteSlot(collomatique_state_colloscopes::SlotId),
+    EditSlot(collomatique_state_colloscopes::SlotId),
 }
 
 impl Slot {
@@ -277,6 +292,7 @@ impl FactoryComponent for Slot {
             gtk::Button {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
+                connect_clicked => SlotInput::EditSlotClicked,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -384,6 +400,11 @@ impl FactoryComponent for Slot {
             SlotInput::DeleteClicked => {
                 sender
                     .output(SlotOutput::DeleteSlot(self.data.slot_id))
+                    .unwrap();
+            }
+            SlotInput::EditSlotClicked => {
+                sender
+                    .output(SlotOutput::EditSlot(self.data.slot_id))
                     .unwrap();
             }
         }
