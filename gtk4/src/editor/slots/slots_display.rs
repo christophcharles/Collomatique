@@ -54,7 +54,11 @@ pub enum EntryInput {
 }
 
 #[derive(Debug)]
-pub enum EntryOutput {}
+pub enum EntryOutput {
+    MoveSlotUp(collomatique_state_colloscopes::SlotId),
+    MoveSlotDown(collomatique_state_colloscopes::SlotId),
+    DeleteSlot(collomatique_state_colloscopes::SlotId),
+}
 
 impl Entry {
     fn slot_data_from_slot(
@@ -140,10 +144,14 @@ impl FactoryComponent for Entry {
         },
     }
 
-    fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+    fn init_model(data: Self::Init, _index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
         let slots = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
-            .detach();
+            .forward(sender.output_sender(), |msg| match msg {
+                SlotOutput::MoveSlotUp(slot_id) => EntryOutput::MoveSlotUp(slot_id),
+                SlotOutput::MoveSlotDown(slot_id) => EntryOutput::MoveSlotDown(slot_id),
+                SlotOutput::DeleteSlot(slot_id) => EntryOutput::DeleteSlot(slot_id),
+            });
 
         let mut model = Self {
             subject_params: data.subject_params,
@@ -225,10 +233,18 @@ pub struct Slot {
 #[derive(Debug, Clone)]
 pub enum SlotInput {
     UpdateData(SlotData),
+
+    MoveUpClicked,
+    MoveDownClicked,
+    DeleteClicked,
 }
 
 #[derive(Debug)]
-pub enum SlotOutput {}
+pub enum SlotOutput {
+    MoveSlotUp(collomatique_state_colloscopes::SlotId),
+    MoveSlotDown(collomatique_state_colloscopes::SlotId),
+    DeleteSlot(collomatique_state_colloscopes::SlotId),
+}
 
 impl Slot {
     fn generate_teacher_name(&self) -> String {
@@ -310,6 +326,7 @@ impl FactoryComponent for Slot {
                 #[watch]
                 set_sensitive: self.index.current_index() != 0,
                 set_tooltip_text: Some("Remonter dans la liste"),
+                connect_clicked => SlotInput::MoveUpClicked,
             },
             gtk::Button {
                 set_icon_name: "go-down",
@@ -317,6 +334,7 @@ impl FactoryComponent for Slot {
                 #[watch]
                 set_sensitive: self.index.current_index() < self.data.slot_count-1,
                 set_tooltip_text: Some("Descendre dans la liste"),
+                connect_clicked => SlotInput::MoveDownClicked,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -324,6 +342,7 @@ impl FactoryComponent for Slot {
             gtk::Button {
                 set_icon_name: "edit-delete",
                 add_css_class: "flat",
+                connect_clicked => SlotInput::DeleteClicked,
             },
         }
     }
@@ -340,17 +359,32 @@ impl FactoryComponent for Slot {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
 
         widgets
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             SlotInput::UpdateData(new_data) => {
                 self.data = new_data;
+            }
+            SlotInput::MoveUpClicked => {
+                sender
+                    .output(SlotOutput::MoveSlotUp(self.data.slot_id))
+                    .unwrap();
+            }
+            SlotInput::MoveDownClicked => {
+                sender
+                    .output(SlotOutput::MoveSlotDown(self.data.slot_id))
+                    .unwrap();
+            }
+            SlotInput::DeleteClicked => {
+                sender
+                    .output(SlotOutput::DeleteSlot(self.data.slot_id))
+                    .unwrap();
             }
         }
     }

@@ -93,11 +93,21 @@ impl Component for Slots {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let subjects_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.output_sender(), |msg| match msg {
+                slots_display::EntryOutput::MoveSlotUp(slot_id) => {
+                    SlotsUpdateOp::MoveSlotUp(slot_id)
+                }
+                slots_display::EntryOutput::MoveSlotDown(slot_id) => {
+                    SlotsUpdateOp::MoveSlotDown(slot_id)
+                }
+                slots_display::EntryOutput::DeleteSlot(slot_id) => {
+                    SlotsUpdateOp::DeleteSlot(slot_id)
+                }
+            });
 
         let model = Slots {
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
