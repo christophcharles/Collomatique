@@ -116,6 +116,12 @@ impl FactoryComponent for Entry {
                 set_label: &self.subject_params.name,
                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
             },
+            gtk::Label {
+                set_halign: gtk::Align::Start,
+                set_label: "Aucun créneau à afficher",
+                #[watch]
+                set_visible: self.slots.is_empty(),
+            },
             #[local_ref]
             slots_list -> gtk::ListBox {
                 set_hexpand: true,
