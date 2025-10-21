@@ -233,11 +233,7 @@ impl Slot {
     }
 
     fn generate_slot_start_text(&self) -> String {
-        format!(
-            "{} {}",
-            self.data.slot_start.weekday.capitalize(),
-            self.data.slot_start.start_time.format("%Hh%M"),
-        )
+        self.data.slot_start.to_string()
     }
 }
 

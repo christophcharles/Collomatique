@@ -204,6 +204,17 @@ pub struct SlotStart {
     pub start_time: TimeOnMinutes,
 }
 
+impl std::fmt::Display for SlotStart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            self.weekday.capitalize(),
+            self.start_time.format("%Hh%M"),
+        )
+    }
+}
+
 /// Type representing a slot in time, with it its start time but
 /// also the corresponding duration.
 ///
