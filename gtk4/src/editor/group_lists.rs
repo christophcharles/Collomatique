@@ -1,4 +1,3 @@
-use adw::prelude::PreferencesRowExt;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
@@ -54,6 +53,7 @@ pub struct GroupLists {
     >,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
+    period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
 }
 
 #[relm4::component(pub)]
@@ -107,50 +107,11 @@ impl Component for GroupLists {
                         connect_clicked => GroupListsInput::AddGroupList,
                     }
                 },
-                gtk::Box {
+                #[local_ref]
+                period_box -> gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_spacing: 30,
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_spacing: 10,
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_label: "Associations pour la période 1",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                        },
-                        adw::PreferencesGroup {
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::ComboRow {
-                                set_title: "Français",
-                            },
-                            adw::ComboRow {
-                                set_title: "Maths",
-                            },
-                        },
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_spacing: 10,
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_label: "Associations pour la période 2",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                        },
-                        adw::PreferencesGroup {
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::ComboRow {
-                                set_title: "Français",
-                            },
-                            adw::ComboRow {
-                                set_title: "Maths",
-                            },
-                        },
-                    }
                 },
             }
         }
@@ -175,15 +136,21 @@ impl Component for GroupLists {
                 }
             });
 
+        let period_entries = FactoryVecDeque::builder()
+            .launch(gtk::Box::default())
+            .detach();
+
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
             group_list_entries,
+            period_entries,
         };
 
         let list_box = model.group_list_entries.widget();
+        let period_box = model.period_entries.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -198,6 +165,7 @@ impl Component for GroupLists {
                 self.group_lists = group_lists;
 
                 self.update_group_list_entries();
+                self.update_period_entries();
             }
             GroupListsInput::AddGroupList => {}
             GroupListsInput::EditGroupList(_id) => {}
@@ -229,6 +197,54 @@ impl GroupLists {
             &mut self.group_list_entries,
             group_lists_vec.into_iter(),
             |data| group_lists_display::EntryInput::UpdateData(data),
+        );
+    }
+
+    fn update_period_entries(&mut self) {
+        let periods_vec: Vec<_> = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .enumerate()
+            .scan(0usize, |acc, (num, (id, desc))| {
+                let out = associations_display::PeriodEntryData {
+                    period_id: id.clone(),
+                    period_text: super::generate_week_succession_title(
+                        "Associations pour la période",
+                        &self.periods.first_week,
+                        num,
+                        *acc,
+                        desc.len(),
+                    ),
+                    subjects: self
+                        .subjects
+                        .ordered_subject_list
+                        .iter()
+                        .filter_map(|(subject_id, subject)| {
+                            if subject.excluded_periods.contains(id) {
+                                return None;
+                            }
+
+                            Some((subject_id.clone(), subject.clone()))
+                        })
+                        .collect(),
+                    group_list_associations: self
+                        .group_lists
+                        .subjects_associations
+                        .get(id)
+                        .expect("Period ID should be valid")
+                        .clone(),
+                };
+
+                *acc += desc.len();
+
+                Some(out)
+            })
+            .collect();
+        crate::tools::factories::update_vec_deque(
+            &mut self.period_entries,
+            periods_vec.into_iter(),
+            |data| associations_display::PeriodEntryInput::UpdateData(data),
         );
     }
 }
