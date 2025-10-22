@@ -320,7 +320,7 @@ impl GroupListsUpdateOp {
                 };
 
                 if !old_group_list.prefilled_groups.is_empty() {
-                    Some(CleaningOp {
+                    return Some(CleaningOp {
                         warning: GroupListsUpdateWarning::LooseWholePrefilledGroupList(
                             *group_list_id,
                         ),
