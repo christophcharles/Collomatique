@@ -20,6 +20,7 @@ mod error_dialog;
 mod assignments;
 mod check_script;
 mod general_planning;
+mod group_lists;
 mod incompats;
 mod run_script;
 mod slots;
@@ -96,6 +97,7 @@ enum PanelNumbers {
     Incompats = 5,
     Students = 6,
     Assignments = 7,
+    GroupLists = 8,
 }
 
 impl PanelNumbers {
@@ -109,6 +111,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats,
             PanelNumbers::Students,
             PanelNumbers::Assignments,
+            PanelNumbers::GroupLists,
         ]
         .into_iter()
     }
@@ -123,6 +126,7 @@ impl PanelNumbers {
             PanelNumbers::Assignments => "assignments",
             PanelNumbers::Slots => "slots",
             PanelNumbers::Incompats => "incompats",
+            PanelNumbers::GroupLists => "group_lists",
         }
     }
 
@@ -136,6 +140,7 @@ impl PanelNumbers {
             PanelNumbers::Assignments => "Inscriptions dans les matières",
             PanelNumbers::Slots => "Créneaux de colles",
             PanelNumbers::Incompats => "Incompatibilités horaires",
+            PanelNumbers::GroupLists => "Groupes de colles",
         }
     }
 }
@@ -163,6 +168,7 @@ pub struct EditorPanel {
     week_patterns: Controller<week_patterns::WeekPatterns>,
     slots: Controller<slots::Slots>,
     incompats: Controller<incompats::Incompats>,
+    group_lists: Controller<group_lists::GroupLists>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
@@ -368,6 +374,35 @@ impl EditorPanel {
                     .clone(),
             ))
             .unwrap();
+        self.group_lists
+            .sender()
+            .send(group_lists::GroupListsInput::Update(
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
+                    .clone(),
+            ))
+            .unwrap();
     }
 
     fn op_cat_to_panel_number(op: &collomatique_ops::OpCategory) -> Option<PanelNumbers> {
@@ -381,7 +416,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
             collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
             collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
-            collomatique_ops::OpCategory::GroupLists => None,
+            collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Rules => None,
             collomatique_ops::OpCategory::Settings => None,
             collomatique_ops::OpCategory::Colloscopes => None,
@@ -614,6 +649,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Incompatibilities(op))
             });
 
+        let group_lists = group_lists::GroupLists::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::GroupLists(op))
+            });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -667,6 +708,7 @@ impl Component for EditorPanel {
             week_patterns,
             slots,
             incompats,
+            group_lists,
             check_script_dialog,
             run_script_dialog,
             warning_op_dialog,
@@ -683,6 +725,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Assignments => model.assignments.widget().clone().upcast(),
                 PanelNumbers::Slots => model.slots.widget().clone().upcast(),
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
+                PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
             };
             widgets
                 .main_stack
