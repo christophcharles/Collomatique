@@ -109,7 +109,8 @@ impl FactoryComponent for Entry {
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
-                set_label: "Aucune incompatibilité à afficher",
+                set_label: "<i>Aucune incompatibilité à afficher</i>",
+                set_use_markup: true,
                 #[watch]
                 set_visible: self.incompats.is_empty(),
             },

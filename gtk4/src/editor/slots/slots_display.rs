@@ -128,7 +128,8 @@ impl FactoryComponent for Entry {
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
-                set_label: "Aucun créneau à afficher",
+                set_label: "<i>Aucun créneau à afficher</i>",
+                set_use_markup: true,
                 #[watch]
                 set_visible: self.slots.is_empty(),
             },
