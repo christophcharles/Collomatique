@@ -88,6 +88,15 @@ impl Component for GroupLists {
                         set_hexpand: true,
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
+                        #[watch]
+                        set_visible: !model.group_lists.group_list_map.is_empty(),
+                    },
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        set_label: "<i>Aucune liste à afficher</i>",
+                        set_use_markup: true,
+                        #[watch]
+                        set_visible: model.group_lists.group_list_map.is_empty(),
                     },
                     gtk::Button {
                         set_margin_top: 10,
