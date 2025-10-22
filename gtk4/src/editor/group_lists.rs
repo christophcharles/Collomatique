@@ -138,7 +138,17 @@ impl Component for GroupLists {
 
         let period_entries = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.output_sender(), |msg| match msg {
+                associations_display::PeriodEntryOutput::UpdateGroupListForSubjectOnPeriod(
+                    period_id,
+                    subject_id,
+                    group_list_id,
+                ) => GroupListsUpdateOp::AssignGroupListToSubject(
+                    period_id,
+                    subject_id,
+                    group_list_id,
+                ),
+            });
 
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -224,6 +234,9 @@ impl GroupLists {
                             if subject.excluded_periods.contains(id) {
                                 return None;
                             }
+                            if subject.parameters.interrogation_parameters.is_none() {
+                                return None;
+                            }
 
                             Some((subject_id.clone(), subject.clone()))
                         })
@@ -234,6 +247,7 @@ impl GroupLists {
                         .get(id)
                         .expect("Period ID should be valid")
                         .clone(),
+                    group_lists: self.group_lists.group_list_map.clone(),
                 };
 
                 *acc += desc.len();
