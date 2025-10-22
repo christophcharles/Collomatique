@@ -380,7 +380,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Assignments => Some(PanelNumbers::Assignments),
             collomatique_ops::OpCategory::WeekPatterns => Some(PanelNumbers::WeekPatterns),
             collomatique_ops::OpCategory::Slots => Some(PanelNumbers::Slots),
-            collomatique_ops::OpCategory::Incompatibilities => None,
+            collomatique_ops::OpCategory::Incompatibilities => Some(PanelNumbers::Incompats),
             collomatique_ops::OpCategory::GroupLists => None,
             collomatique_ops::OpCategory::Rules => None,
             collomatique_ops::OpCategory::Settings => None,
