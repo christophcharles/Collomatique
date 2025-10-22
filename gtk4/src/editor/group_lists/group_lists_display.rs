@@ -84,6 +84,7 @@ impl FactoryComponent for Entry {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::EditClicked,
+                set_tooltip_text: Some("Modifier les paramètres"),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -101,6 +102,7 @@ impl FactoryComponent for Entry {
                 set_icon_name: "view-list-bullet-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::PrefillClicked,
+                set_tooltip_text: Some("Préremplir la liste"),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -154,6 +156,7 @@ impl FactoryComponent for Entry {
                 set_icon_name: "edit-delete",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::DeleteClicked,
+                set_tooltip_text: Some("Supprimer la liste"),
             },
         }
     }

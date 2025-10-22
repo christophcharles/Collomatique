@@ -280,6 +280,7 @@ impl FactoryComponent for Incompat {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => IncompatInput::EditIncompatClicked,
+                set_tooltip_text: Some("Modifier l'incompatibilité"),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -333,6 +334,7 @@ impl FactoryComponent for Incompat {
                 set_icon_name: "edit-delete",
                 add_css_class: "flat",
                 connect_clicked => IncompatInput::DeleteClicked,
+                set_tooltip_text: Some("Supprimer l'incompatibilité"),
             },
         }
     }

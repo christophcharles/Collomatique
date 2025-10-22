@@ -185,6 +185,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             gtk::Button {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
+                set_tooltip_text: Some("Modifier le contact"),
                 connect_clicked => EntryInput::EditClicked,
             },
             gtk::Separator {
@@ -252,6 +253,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_icon_name: "edit-delete",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::DeleteClicked,
+                set_tooltip_text: Some("Supprimer le contact"),
             },
         },
     }

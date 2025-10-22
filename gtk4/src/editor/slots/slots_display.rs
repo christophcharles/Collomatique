@@ -309,6 +309,7 @@ impl FactoryComponent for Slot {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => SlotInput::EditSlotClicked,
+                set_tooltip_text: Some("Modifier le créneau"),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -382,6 +383,7 @@ impl FactoryComponent for Slot {
                 set_icon_name: "edit-delete",
                 add_css_class: "flat",
                 connect_clicked => SlotInput::DeleteClicked,
+                set_tooltip_text: Some("Supprimer le créneau"),
             },
         }
     }
