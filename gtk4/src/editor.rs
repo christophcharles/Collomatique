@@ -479,9 +479,6 @@ impl Component for EditorPanel {
                             set_size_request: (200, -1),
                             set_stack: &main_stack,
                         },
-                        gtk::Box {
-                            set_vexpand: true,
-                        },
                         gtk::Button {
                             set_hexpand: true,
                             set_size_request: (-1,50),
