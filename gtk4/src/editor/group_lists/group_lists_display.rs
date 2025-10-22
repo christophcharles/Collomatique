@@ -113,6 +113,7 @@ impl FactoryComponent for Entry {
                 #[watch]
                 set_label: &self.generate_students_per_group_text(),
                 set_use_markup: true,
+                set_size_request: (200, -1),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Horizontal,
