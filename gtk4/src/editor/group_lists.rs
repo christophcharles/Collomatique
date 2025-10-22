@@ -1,9 +1,13 @@
 use adw::prelude::PreferencesRowExt;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
+use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
 
 use collomatique_ops::GroupListsUpdateOp;
+
+mod associations_display;
+mod group_lists_display;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
@@ -24,6 +28,11 @@ pub enum GroupListsInput {
             collomatique_state_colloscopes::StudentId,
         >,
     ),
+
+    EditGroupList(collomatique_state_colloscopes::GroupListId),
+    PrefillGroupList(collomatique_state_colloscopes::GroupListId),
+    DeleteGroupList(collomatique_state_colloscopes::GroupListId),
+    AddGroupList,
 }
 
 pub struct GroupLists {
@@ -43,6 +52,8 @@ pub struct GroupLists {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::StudentId,
     >,
+
+    group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
 }
 
 #[relm4::component(pub)]
@@ -72,68 +83,11 @@ impl Component for GroupLists {
                         set_label: "Listes de groupes",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                     },
-                    gtk::ListBox {
+                    #[local_ref]
+                    list_box -> gtk::ListBox {
                         set_hexpand: true,
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
-                        append = &gtk::Box {
-                            set_hexpand: true,
-                            set_margin_all: 5,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 5,
-                            gtk::Button {
-                                set_icon_name: "edit-symbolic",
-                                add_css_class: "flat",
-                            },
-                            gtk::Separator {
-                                set_orientation: gtk::Orientation::Vertical,
-                            },
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_xalign: 0.,
-                                set_margin_start: 5,
-                                set_margin_end: 5,
-                                set_label: "Liste 1",
-                                set_size_request: (150, -1),
-                            },
-                            gtk::Button {
-                                set_icon_name: "view-list-bullet-symbolic",
-                                add_css_class: "flat",
-                            },
-                            gtk::Separator {
-                                set_orientation: gtk::Orientation::Vertical,
-                            },
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_xalign: 0.,
-                                set_margin_start: 5,
-                                set_margin_end: 5,
-                                set_label: "<b>Élèves par groupe :</b> 2 à 3",
-                                set_use_markup: true,
-                            },
-                            gtk::Separator {
-                                set_orientation: gtk::Orientation::Horizontal,
-                                add_css_class: "spacer",
-                            },
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                set_xalign: 0.,
-                                set_margin_start: 5,
-                                set_margin_end: 5,
-                                set_label: "<b>Nombre de groupes :</b> 7 à 8",
-                                set_use_markup: true,
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            gtk::Separator {
-                                set_orientation: gtk::Orientation::Vertical,
-                            },
-                            gtk::Button {
-                                set_icon_name: "edit-delete",
-                                add_css_class: "flat",
-                            },
-                        },
                     },
                     gtk::Button {
                         set_margin_top: 10,
@@ -141,6 +95,7 @@ impl Component for GroupLists {
                             set_icon_name: "edit-add",
                             set_label: "Ajouter une liste de groupes",
                         },
+                        connect_clicked => GroupListsInput::AddGroupList,
                     }
                 },
                 gtk::Box {
@@ -195,28 +150,76 @@ impl Component for GroupLists {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let group_list_entries = FactoryVecDeque::builder()
+            .launch(gtk::ListBox::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                group_lists_display::EntryOutput::EditGroupList(id) => {
+                    GroupListsInput::EditGroupList(id)
+                }
+                group_lists_display::EntryOutput::PrefillGroupList(id) => {
+                    GroupListsInput::PrefillGroupList(id)
+                }
+                group_lists_display::EntryOutput::DeleteGroupList(id) => {
+                    GroupListsInput::DeleteGroupList(id)
+                }
+            });
+
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
+            group_list_entries,
         };
 
+        let list_box = model.group_list_entries.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             GroupListsInput::Update(periods, subjects, students, group_lists) => {
                 self.periods = periods;
                 self.subjects = subjects;
                 self.students = students;
                 self.group_lists = group_lists;
+
+                self.update_group_list_entries();
+            }
+            GroupListsInput::AddGroupList => {}
+            GroupListsInput::EditGroupList(_id) => {}
+            GroupListsInput::PrefillGroupList(_id) => {}
+            GroupListsInput::DeleteGroupList(id) => {
+                sender
+                    .output(GroupListsUpdateOp::DeleteGroupList(id))
+                    .unwrap();
             }
         }
+    }
+}
+
+impl GroupLists {
+    fn update_group_list_entries(&mut self) {
+        let mut group_lists_vec: Vec<_> = self
+            .group_lists
+            .group_list_map
+            .iter()
+            .map(|(id, group_list)| group_lists_display::EntryData {
+                id: id.clone(),
+                group_list: group_list.clone(),
+            })
+            .collect();
+
+        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id.clone()));
+
+        crate::tools::factories::update_vec_deque(
+            &mut self.group_list_entries,
+            group_lists_vec.into_iter(),
+            |data| group_lists_display::EntryInput::UpdateData(data),
+        );
     }
 }
