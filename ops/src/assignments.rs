@@ -320,7 +320,7 @@ impl AssignmentsUpdateOp {
                     }
                 }
                 AssignmentsUpdateOp::DuplicatePreviousPeriod(_) => {
-                    "Dupliquer les inscriptions d'un période".into()
+                    "Dupliquer les inscriptions d'une période".into()
                 }
                 AssignmentsUpdateOp::AssignAll(_, _, status) => {
                     if *status {
