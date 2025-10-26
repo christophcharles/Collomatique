@@ -1,4 +1,4 @@
-use adw::prelude::AdjustmentExt;
+use adw::prelude::{AdjustmentExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{adw, gtk};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
@@ -58,8 +58,8 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Configuration de la liste de groupes"),
-            set_default_size: (500, 500),
+            set_title: Some("Préremplissage de la liste de groupes"),
+            set_default_size: (500, 700),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -79,14 +79,104 @@ impl SimpleComponent for Dialog {
                 #[wrap(Some)]
                 set_content = &gtk::ScrolledWindow {
                     set_hexpand: true,
+                    set_vexpand: true,
                     set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
                     gtk::Box {
                         set_hexpand: true,
+                        set_vexpand: true,
                         set_margin_all: 5,
                         set_spacing: 10,
                         set_orientation: gtk::Orientation::Vertical,
-                        gtk::Label {
-                            set_label: "Stub",
+                        adw::PreferencesGroup {
+                            set_title: "Paramètres du préremplissage",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::SpinRow {
+                                set_hexpand: true,
+                                set_title: "Nombre de groupes",
+                                #[wrap(Some)]
+                                set_adjustment = &gtk::Adjustment {
+                                    set_lower: 1.,
+                                    set_upper: 20.,
+                                    set_step_increment: 1.,
+                                    set_page_increment: 5.,
+                                },
+                                set_wrap: false,
+                                set_snap_to_ticks: true,
+                                set_numeric: true,
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "Groupe 1",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::EntryRow {
+                                set_hexpand: true,
+                                set_title: "Nom du groupe",
+                            },
+                            adw::SwitchRow {
+                                set_hexpand: true,
+                                set_use_markup: false,
+                                set_title: "Groupe scellé",
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::ButtonRow {
+                                set_hexpand: true,
+                                set_title: "Ajouter un élève",
+                                set_start_icon_name: Some("edit-add"),
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "Groupe 2",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::EntryRow {
+                                set_hexpand: true,
+                                set_title: "Nom du groupe",
+                            },
+                            adw::SwitchRow {
+                                set_hexpand: true,
+                                set_use_markup: false,
+                                set_title: "Groupe scellé",
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::ButtonRow {
+                                set_hexpand: true,
+                                set_title: "Ajouter un élève",
+                                set_start_icon_name: Some("edit-add"),
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "Groupe 3",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::EntryRow {
+                                set_hexpand: true,
+                                set_title: "Nom du groupe",
+                            },
+                            adw::SwitchRow {
+                                set_hexpand: true,
+                                set_use_markup: false,
+                                set_title: "Groupe scellé",
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            adw::ButtonRow {
+                                set_hexpand: true,
+                                set_title: "Ajouter un élève",
+                                set_start_icon_name: Some("edit-add"),
+                            },
                         },
                     },
                 },
