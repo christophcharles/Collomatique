@@ -103,10 +103,29 @@ impl Component for GroupLists {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_spacing: 10,
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_label: "Listes de groupes",
-                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Horizontal,
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_label: "Listes de groupes",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                        },
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_orientation: gtk::Orientation::Horizontal,
+                        },
+                        gtk::Button {
+                            set_size_request: (150,-1),
+                            add_css_class: "frame",
+                            add_css_class: "accent",
+                            set_sensitive: false,
+                            set_margin_all: 5,
+                            adw::ButtonContent {
+                                set_icon_name: "run-build",
+                                set_label: "Générer des listes",
+                            },
+                        },
                     },
                     #[local_ref]
                     list_box -> gtk::ListBox {
