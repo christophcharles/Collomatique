@@ -210,10 +210,17 @@ impl Component for GroupLists {
             }
             GroupListsInput::AddGroupList => {
                 self.params_selection_reason = GroupListParamsSelectionReason::New;
+
+                let mut group_list_params =
+                    collomatique_state_colloscopes::group_lists::GroupListParameters::default();
+                let max_group_count = (self.students.student_map.len() as u32)
+                    / (group_list_params.students_per_group.start().get());
+                group_list_params.group_count = 0..=max_group_count.max(1);
+
                 self.params_dialog
                     .sender()
                     .send(params_dialog::DialogInput::Show(
-                        collomatique_state_colloscopes::group_lists::GroupListParameters::default(),
+                        group_list_params,
                         self.students.clone(),
                     ))
                     .unwrap();

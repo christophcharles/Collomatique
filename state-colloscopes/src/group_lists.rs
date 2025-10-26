@@ -180,7 +180,7 @@ impl<StudentId: Id> Default for GroupListParameters<StudentId> {
     fn default() -> Self {
         GroupListParameters {
             name: "Liste".into(),
-            students_per_group: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
             group_count: 0..=u32::MAX,
             excluded_students: BTreeSet::new(),
         }
