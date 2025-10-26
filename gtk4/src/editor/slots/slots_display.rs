@@ -104,6 +104,17 @@ impl Entry {
             cost: slot.cost,
         }
     }
+
+    fn generate_tooltip_text(&self) -> Option<String> {
+        if !self.teachers.is_empty() {
+            return None;
+        }
+
+        Some(format!(
+            "Ajouter des colleurs en \"{}\" pour ajouter des créneaux",
+            self.subject_params.name,
+        ))
+    }
 }
 
 #[relm4::factory(pub)]
@@ -149,6 +160,8 @@ impl FactoryComponent for Entry {
                 },
                 #[watch]
                 set_sensitive: !self.teachers.is_empty(),
+                #[watch]
+                set_tooltip_text: self.generate_tooltip_text().as_ref().map(|x| x.as_str()),
                 connect_clicked => EntryInput::AddSlotClicked,
             }
         },
