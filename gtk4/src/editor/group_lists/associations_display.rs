@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use adw::prelude::{ComboRowExt, PreferencesRowExt};
-use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
@@ -29,6 +29,7 @@ pub struct PeriodEntryData {
 }
 
 pub struct PeriodEntry {
+    index: DynamicIndex,
     data: PeriodEntryData,
     subject_entries: FactoryVecDeque<SubjectEntry>,
 }
@@ -41,6 +42,7 @@ pub enum PeriodEntryInput {
         collomatique_state_colloscopes::SubjectId,
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
+    CopyPreviousPeriod,
 }
 
 #[derive(Debug)]
@@ -50,6 +52,7 @@ pub enum PeriodEntryOutput {
         collomatique_state_colloscopes::SubjectId,
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
+    CopyPreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
 #[relm4::factory(pub)]
@@ -66,11 +69,24 @@ impl FactoryComponent for PeriodEntry {
             set_hexpand: true,
             set_orientation: gtk::Orientation::Vertical,
             set_spacing: 10,
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                #[watch]
-                set_label: &self.data.period_text,
-                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+            gtk::Box {
+                set_hexpand: true,
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    #[watch]
+                    set_label: &self.data.period_text,
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                },
+                gtk::Button {
+                    set_icon_name: "edit-copy-symbolic",
+                    add_css_class: "flat",
+                    #[watch]
+                    set_visible: self.index.current_index() != 0,
+                    set_tooltip_text: Some("Dupliquer les associations de la période précédente"),
+                    connect_clicked => PeriodEntryInput::CopyPreviousPeriod,
+                },
             },
             #[local_ref]
             subject_group -> adw::PreferencesGroup {
@@ -80,7 +96,7 @@ impl FactoryComponent for PeriodEntry {
         },
     }
 
-    fn init_model(data: Self::Init, _index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
+    fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
         let subject_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -90,6 +106,7 @@ impl FactoryComponent for PeriodEntry {
             });
 
         let mut model = Self {
+            index: index.clone(),
             data,
             subject_entries,
         };
@@ -104,7 +121,7 @@ impl FactoryComponent for PeriodEntry {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let subject_group = self.subject_entries.widget();
         let widgets = view_output!();
@@ -126,6 +143,11 @@ impl FactoryComponent for PeriodEntry {
                         subject_id,
                         group_list_id,
                     ))
+                    .unwrap();
+            }
+            PeriodEntryInput::CopyPreviousPeriod => {
+                sender
+                    .output(PeriodEntryOutput::CopyPreviousPeriod(self.data.period_id))
                     .unwrap();
             }
         }

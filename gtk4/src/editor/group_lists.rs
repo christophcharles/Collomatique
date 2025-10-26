@@ -148,6 +148,9 @@ impl Component for GroupLists {
                     subject_id,
                     group_list_id,
                 ),
+                associations_display::PeriodEntryOutput::CopyPreviousPeriod(period_id) => {
+                    GroupListsUpdateOp::DuplicatePreviousPeriod(period_id)
+                }
             });
 
         let model = GroupLists {

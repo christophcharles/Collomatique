@@ -169,6 +169,7 @@ pub enum GroupListsUpdateOp {
         collomatique_state_colloscopes::SubjectId,
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
+    DuplicatePreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -183,6 +184,8 @@ pub enum GroupListsUpdateError {
     PrefillGroupList(#[from] PrefillGroupListError),
     #[error(transparent)]
     AssignGroupListToSubject(#[from] AssignGroupListToSubjectError),
+    #[error(transparent)]
+    DuplicatePreviousPeriod(#[from] DuplicatePreviousPeriodAssociationsError),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -241,6 +244,16 @@ pub enum AssignGroupListToSubjectError {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DuplicatePreviousPeriodAssociationsError {
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    /// trying to override first period
+    #[error("given period ({0:?}) is the first period")]
+    FirstPeriodHasNoPreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
 impl GroupListsUpdateOp {
@@ -366,6 +379,7 @@ impl GroupListsUpdateOp {
                 _subject_id,
                 _group_list_id,
             ) => None,
+            GroupListsUpdateOp::DuplicatePreviousPeriod(_period_id) => None,
         }
     }
 
@@ -611,6 +625,85 @@ impl GroupListsUpdateOp {
 
                 Ok(None)
             }
+            Self::DuplicatePreviousPeriod(period_id) => {
+                let Some(position) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return Err(DuplicatePreviousPeriodAssociationsError::InvalidPeriodId(
+                        period_id.clone(),
+                    )
+                    .into());
+                };
+
+                if position == 0 {
+                    return Err(
+                        DuplicatePreviousPeriodAssociationsError::FirstPeriodHasNoPreviousPeriod(
+                            period_id.clone(),
+                        )
+                        .into(),
+                    );
+                }
+
+                let previous_period_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[position - 1]
+                    .0;
+                let previous_period_assignments = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .group_lists
+                    .subjects_associations
+                    .get(&previous_period_id)
+                    .expect("Previous period id should be valid at this point")
+                    .clone();
+
+                let subjects = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .subjects
+                    .ordered_subject_list
+                    .clone();
+
+                for (subject_id, subject) in &subjects {
+                    if subject.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    if subject.excluded_periods.contains(&previous_period_id) {
+                        continue;
+                    }
+                    if subject.parameters.interrogation_parameters.is_none() {
+                        continue;
+                    }
+
+                    let previous_group_list_id =
+                        previous_period_assignments.get(subject_id).cloned();
+
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::GroupList(
+                                collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                    *period_id,
+                                    *subject_id,
+                                    previous_group_list_id,
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("All data should be valid at this point");
+                    assert!(result.is_none());
+                }
+
+                Ok(None)
+            }
         }
     }
 
@@ -638,6 +731,9 @@ impl GroupListsUpdateOp {
                     } else {
                         "Supprimer l'affectation d'une liste de groupes à une matière".into()
                     }
+                }
+                GroupListsUpdateOp::DuplicatePreviousPeriod(_period_id) => {
+                    "Dupliquer les listes de groupes d'une période".into()
                 }
             },
         )
