@@ -176,6 +176,17 @@ pub struct GroupListParameters<StudentId: Id> {
     pub excluded_students: BTreeSet<StudentId>,
 }
 
+impl<StudentId: Id> Default for GroupListParameters<StudentId> {
+    fn default() -> Self {
+        GroupListParameters {
+            name: "Liste".into(),
+            students_per_group: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(3).unwrap(),
+            group_count: 0..=u32::MAX,
+            excluded_students: BTreeSet::new(),
+        }
+    }
+}
+
 impl<StudentId: Id> GroupListParameters<StudentId> {
     pub(crate) fn duplicate_with_id_maps(
         &self,
@@ -212,7 +223,7 @@ impl<StudentId: Id> GroupList<StudentId> {
             return false;
         }
         let max_group_count = *self.params.group_count.end();
-        self.prefilled_groups.groups.len() != (max_group_count as usize)
+        self.prefilled_groups.groups.len() == (max_group_count as usize)
     }
 
     /// Returns the set of students that are not already in a prefilled group
