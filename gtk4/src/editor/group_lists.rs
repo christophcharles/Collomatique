@@ -1,12 +1,15 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+};
 
 use collomatique_ops::GroupListsUpdateOp;
 
 mod associations_display;
 mod group_lists_display;
+mod params_dialog;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
@@ -32,6 +35,17 @@ pub enum GroupListsInput {
     PrefillGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
+    GroupListParamsSelected(
+        collomatique_state_colloscopes::group_lists::GroupListParameters<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    ),
+}
+
+#[derive(Debug)]
+enum GroupListParamsSelectionReason {
+    New,
+    Edit(collomatique_state_colloscopes::GroupListId),
 }
 
 pub struct GroupLists {
@@ -54,6 +68,9 @@ pub struct GroupLists {
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
+    params_dialog: Controller<params_dialog::Dialog>,
+
+    params_selection_reason: GroupListParamsSelectionReason,
 }
 
 #[relm4::component(pub)]
@@ -153,6 +170,15 @@ impl Component for GroupLists {
                 }
             });
 
+        let params_dialog = params_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                params_dialog::DialogOutput::Accepted(params) => {
+                    GroupListsInput::GroupListParamsSelected(params)
+                }
+            });
+
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
@@ -160,6 +186,8 @@ impl Component for GroupLists {
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
             group_list_entries,
             period_entries,
+            params_dialog,
+            params_selection_reason: GroupListParamsSelectionReason::New,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -180,13 +208,52 @@ impl Component for GroupLists {
                 self.update_group_list_entries();
                 self.update_period_entries();
             }
-            GroupListsInput::AddGroupList => {}
-            GroupListsInput::EditGroupList(_id) => {}
+            GroupListsInput::AddGroupList => {
+                self.params_selection_reason = GroupListParamsSelectionReason::New;
+                self.params_dialog
+                    .sender()
+                    .send(params_dialog::DialogInput::Show(
+                        collomatique_state_colloscopes::group_lists::GroupListParameters::default(),
+                        self.students.clone(),
+                    ))
+                    .unwrap();
+            }
+            GroupListsInput::EditGroupList(group_list_id) => {
+                let group_list_params = self
+                    .group_lists
+                    .group_list_map
+                    .get(&group_list_id)
+                    .expect("Group list ID should be valid")
+                    .params
+                    .clone();
+                self.params_selection_reason = GroupListParamsSelectionReason::Edit(group_list_id);
+                self.params_dialog
+                    .sender()
+                    .send(params_dialog::DialogInput::Show(
+                        group_list_params,
+                        self.students.clone(),
+                    ))
+                    .unwrap();
+            }
             GroupListsInput::PrefillGroupList(_id) => {}
             GroupListsInput::DeleteGroupList(id) => {
                 sender
                     .output(GroupListsUpdateOp::DeleteGroupList(id))
                     .unwrap();
+            }
+            GroupListsInput::GroupListParamsSelected(params) => {
+                match self.params_selection_reason {
+                    GroupListParamsSelectionReason::New => {
+                        sender
+                            .output(GroupListsUpdateOp::AddNewGroupList(params))
+                            .unwrap();
+                    }
+                    GroupListParamsSelectionReason::Edit(group_list_id) => {
+                        sender
+                            .output(GroupListsUpdateOp::UpdateGroupList(group_list_id, params))
+                            .unwrap();
+                    }
+                }
             }
         }
     }
