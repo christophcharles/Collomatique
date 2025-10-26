@@ -116,14 +116,13 @@ impl Component for GroupLists {
                             set_orientation: gtk::Orientation::Horizontal,
                         },
                         gtk::Button {
-                            set_size_request: (150,-1),
                             add_css_class: "frame",
                             add_css_class: "accent",
                             set_sensitive: false,
                             set_margin_all: 5,
                             adw::ButtonContent {
-                                set_icon_name: "run-build",
-                                set_label: "Générer des listes",
+                                set_icon_name: "run-build-configure",
+                                set_label: "Générer des listes automatiquement",
                             },
                         },
                     },
