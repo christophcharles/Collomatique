@@ -10,6 +10,7 @@ use collomatique_ops::GroupListsUpdateOp;
 mod associations_display;
 mod group_lists_display;
 mod params_dialog;
+mod prefill_dialog;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
@@ -37,6 +38,11 @@ pub enum GroupListsInput {
     AddGroupList,
     GroupListParamsSelected(
         collomatique_state_colloscopes::group_lists::GroupListParameters<
+            collomatique_state_colloscopes::StudentId,
+        >,
+    ),
+    GroupListPrefillSelected(
+        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
             collomatique_state_colloscopes::StudentId,
         >,
     ),
@@ -69,8 +75,10 @@ pub struct GroupLists {
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
     params_dialog: Controller<params_dialog::Dialog>,
+    prefill_dialog: Controller<prefill_dialog::Dialog>,
 
     params_selection_reason: GroupListParamsSelectionReason,
+    prefill_group_list_id: Option<collomatique_state_colloscopes::GroupListId>,
 }
 
 #[relm4::component(pub)]
@@ -179,6 +187,15 @@ impl Component for GroupLists {
                 }
             });
 
+        let prefill_dialog = prefill_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                prefill_dialog::DialogOutput::Accepted(prefill) => {
+                    GroupListsInput::GroupListPrefillSelected(prefill)
+                }
+            });
+
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
@@ -188,6 +205,8 @@ impl Component for GroupLists {
             period_entries,
             params_dialog,
             params_selection_reason: GroupListParamsSelectionReason::New,
+            prefill_dialog,
+            prefill_group_list_id: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -242,7 +261,33 @@ impl Component for GroupLists {
                     ))
                     .unwrap();
             }
-            GroupListsInput::PrefillGroupList(_id) => {}
+            GroupListsInput::PrefillGroupList(group_list_id) => {
+                let group_list = self
+                    .group_lists
+                    .group_list_map
+                    .get(&group_list_id)
+                    .expect("Group list ID should be valid")
+                    .clone();
+                let filtered_students = self
+                    .students
+                    .student_map
+                    .iter()
+                    .filter_map(|(student_id, student)| {
+                        if group_list.params.excluded_students.contains(student_id) {
+                            return None;
+                        }
+                        Some((student_id.clone(), student.clone()))
+                    })
+                    .collect();
+                self.prefill_group_list_id = Some(group_list_id);
+                self.prefill_dialog
+                    .sender()
+                    .send(prefill_dialog::DialogInput::Show(
+                        group_list,
+                        filtered_students,
+                    ))
+                    .unwrap();
+            }
             GroupListsInput::DeleteGroupList(id) => {
                 sender
                     .output(GroupListsUpdateOp::DeleteGroupList(id))
@@ -261,6 +306,15 @@ impl Component for GroupLists {
                             .unwrap();
                     }
                 }
+            }
+            GroupListsInput::GroupListPrefillSelected(prefill) => {
+                let group_list_id = self
+                    .prefill_group_list_id
+                    .take()
+                    .expect("There should be a currently edited group list ID");
+                sender
+                    .output(GroupListsUpdateOp::PrefillGroupList(group_list_id, prefill))
+                    .unwrap();
             }
         }
     }
