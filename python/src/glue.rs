@@ -8,7 +8,6 @@ use collomatique_rpc::{
     GuiAnswer, ResultMsg,
 };
 
-use collomatique_ops::UpdateError;
 use collomatique_ops::{
     AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
     AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
@@ -24,6 +23,7 @@ use collomatique_ops::{
     UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
     WeekPatternsUpdateError,
 };
+use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
 
 use pyo3::exceptions::PyValueError;
 
@@ -1253,6 +1253,35 @@ impl CollomatiqueFile {
                     Err(PyValueError::new_err(format!(
                         "Subject id {:?} does not have interrogations",
                         subject_id
+                    )))
+                }
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn group_lists_duplicate_previous_period_associations(
+        self_: PyRef<'_, Self>,
+        period_id: general_planning::PeriodId,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::DuplicatePreviousPeriod(period_id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(UpdateError::GroupLists(
+                GroupListsUpdateError::DuplicatePreviousPeriod(e),
+            )) => match e {
+                DuplicatePreviousPeriodAssociationsError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                DuplicatePreviousPeriodAssociationsError::FirstPeriodHasNoPreviousPeriod(id) => {
+                    Err(PyValueError::new_err(format!(
+                        "Period id {:?} is the first period",
+                        id
                     )))
                 }
             },
