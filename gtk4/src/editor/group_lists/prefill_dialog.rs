@@ -98,7 +98,7 @@ impl SimpleComponent for Dialog {
                         set_spacing: 10,
                         set_orientation: gtk::Orientation::Vertical,
                         adw::PreferencesGroup {
-                            set_title: "Paramètres du préremplissage",
+                            set_title: "",
                             set_margin_all: 5,
                             set_hexpand: true,
                             adw::SpinRow {
