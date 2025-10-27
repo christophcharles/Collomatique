@@ -83,7 +83,6 @@ impl SimpleComponent for Dialog {
                         set_label: "Valider",
                         add_css_class: "suggested-action",
                         connect_clicked => DialogInput::Accept,
-                        set_sensitive: false,
                     },
                 },
                 #[name(scrolled_window)]
@@ -321,7 +320,27 @@ impl Dialog {
     ) -> collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
         collomatique_state_colloscopes::StudentId,
     > {
-        todo!()
+        let entries_count = self.selected_group_count as usize;
+        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
+            groups: self
+                .group_data
+                .iter()
+                .take(entries_count)
+                .map(|group| {
+                    let student_count = group.selected_student_count as usize;
+                    collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                        name: non_empty_string::NonEmptyString::new(group.name.clone()).ok(),
+                        sealed: group.sealed,
+                        students: group
+                            .students
+                            .iter()
+                            .take(student_count)
+                            .filter_map(|student| student.clone())
+                            .collect(),
+                    }
+                })
+                .collect(),
+        }
     }
 }
 
