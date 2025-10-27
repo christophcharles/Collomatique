@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
+    list_name: String,
     filtered_students: BTreeMap<
         collomatique_state_colloscopes::StudentId,
         collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
@@ -53,7 +54,11 @@ pub enum DialogOutput {
     ),
 }
 
-impl Dialog {}
+impl Dialog {
+    fn generate_list_name(&self) -> String {
+        format!("Liste concernée : {}", self.list_name)
+    }
+}
 
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
@@ -85,50 +90,63 @@ impl SimpleComponent for Dialog {
                         connect_clicked => DialogInput::Accept,
                     },
                 },
-                #[name(scrolled_window)]
                 #[wrap(Some)]
-                set_content = &gtk::ScrolledWindow {
+                set_content = &gtk::Box {
                     set_hexpand: true,
                     set_vexpand: true,
-                    set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                    gtk::Box {
+                    set_margin_all: 5,
+                    set_spacing: 10,
+                    set_orientation: gtk::Orientation::Vertical,
+                    #[name(scrolled_window)]
+                    gtk::ScrolledWindow {
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_margin_all: 5,
-                        set_spacing: 10,
-                        set_orientation: gtk::Orientation::Vertical,
-                        adw::PreferencesGroup {
-                            set_title: "",
+                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_vexpand: true,
                             set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::SpinRow {
-                                set_hexpand: true,
-                                set_title: "Nombre de groupes",
-                                #[wrap(Some)]
-                                set_adjustment = &gtk::Adjustment {
-                                    set_lower: 0.,
-                                    set_upper: u32::MAX as f64,
-                                    set_step_increment: 1.,
-                                    set_page_increment: 5.,
-                                },
-                                set_wrap: false,
-                                set_snap_to_ticks: true,
-                                set_numeric: true,
-                                #[track(model.should_redraw)]
-                                set_value: model.selected_group_count as f64,
-                                connect_value_notify[sender] => move |widget| {
-                                    let value = widget.value() as u32;
-                                    sender.input(DialogInput::UpdateSelectedGroupCount(value));
-                                },
-                            },
-                        },
-                        #[local_ref]
-                        entries_widget -> gtk::Box {
-                            set_hexpand: true,
-                            set_margin_all: 0,
                             set_spacing: 10,
                             set_orientation: gtk::Orientation::Vertical,
+                            adw::PreferencesGroup {
+                                set_title: "",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Nombre de groupes",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 0.,
+                                        set_upper: u32::MAX as f64,
+                                        set_step_increment: 1.,
+                                        set_page_increment: 5.,
+                                    },
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    #[track(model.should_redraw)]
+                                    set_value: model.selected_group_count as f64,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value() as u32;
+                                        sender.input(DialogInput::UpdateSelectedGroupCount(value));
+                                    },
+                                },
+                            },
+                            #[local_ref]
+                            entries_widget -> gtk::Box {
+                                set_hexpand: true,
+                                set_margin_all: 0,
+                                set_spacing: 10,
+                                set_orientation: gtk::Orientation::Vertical,
+                            },
                         },
+                    },
+                    gtk::Label {
+                        set_margin_all: 5,
+                        #[watch]
+                        set_label: &model.generate_list_name(),
+                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                     },
                 },
             }
@@ -156,6 +174,7 @@ impl SimpleComponent for Dialog {
             group_data: vec![],
             group_entries,
             available_students: BTreeSet::new(),
+            list_name: String::new(),
         };
 
         let entries_widget = model.group_entries.widget();
@@ -219,6 +238,7 @@ impl Dialog {
         >,
     ) {
         let selected_students: BTreeSet<_> = data.prefilled_groups.iter_students().collect();
+        self.list_name = data.params.name.clone();
         self.available_students = self
             .filtered_students
             .iter()
