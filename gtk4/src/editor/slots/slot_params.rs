@@ -198,7 +198,6 @@ impl SimpleComponent for Dialog {
                         connect_clicked => DialogInput::Accept,
                     },
                 },
-                #[name(scrolled_window)]
                 #[wrap(Some)]
                 set_content = &gtk::Box {
                     set_hexpand: true,
