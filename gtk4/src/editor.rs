@@ -744,6 +744,7 @@ impl Component for EditorPanel {
                 self.file_name = file_name;
                 self.data = AppState::new(data);
                 self.dirty = dirty;
+                self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
