@@ -175,5 +175,9 @@ fn limits_to_string(limits: &collomatique_state_colloscopes::settings::Limits) -
         ));
     }
 
-    parts.join("    ―    ")
+    if parts.is_empty() {
+        String::from("aucune contrainte")
+    } else {
+        parts.join("    ―    ")
+    }
 }
