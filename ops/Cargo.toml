@@ -11,3 +11,4 @@ collomatique-state = { path = "../state" }
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 chrono.workspace = true
+non-empty-string = { workspace = true, features = ["serde"] }

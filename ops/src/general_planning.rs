@@ -207,6 +207,11 @@ pub enum GeneralPlanningUpdateOp {
     CutPeriod(collomatique_state_colloscopes::PeriodId, usize),
     MergeWithPreviousPeriod(collomatique_state_colloscopes::PeriodId),
     UpdateWeekStatus(collomatique_state_colloscopes::PeriodId, usize, bool),
+    UpdateWeekAnnotation(
+        collomatique_state_colloscopes::PeriodId,
+        usize,
+        Option<non_empty_string::NonEmptyString>,
+    ),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -221,6 +226,8 @@ pub enum GeneralPlanningUpdateError {
     MergeWithPreviousPeriod(#[from] MergeWithPreviousPeriodError),
     #[error(transparent)]
     UpdateWeekStatus(#[from] UpdateWeekStatusError),
+    #[error(transparent)]
+    UpdateWeekAnnotation(#[from] UpdateWeekAnnotationError),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -261,6 +268,14 @@ pub enum UpdateWeekStatusError {
     InvalidWeekNumber(usize, usize),
 }
 
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum UpdateWeekAnnotationError {
+    #[error("Period ID {0:?} is invalid")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    #[error("Week number {0} is larger that the number of available weeks ({1})")]
+    InvalidWeekNumber(usize, usize),
+}
+
 impl GeneralPlanningUpdateOp {
     pub(crate) fn get_next_cleaning_op<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
@@ -275,6 +290,7 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_, _) => None,
             GeneralPlanningUpdateOp::CutPeriod(_, _) => None,
             GeneralPlanningUpdateOp::UpdateWeekStatus(_, _, _) => None,
+            GeneralPlanningUpdateOp::UpdateWeekAnnotation(_, _, _) => None,
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
                 for (colloscope_id, colloscope) in
                     &data.get_data().get_inner_data().colloscopes.colloscope_map
@@ -1042,6 +1058,45 @@ impl GeneralPlanningUpdateOp {
                 }
                 Ok(None)
             }
+            GeneralPlanningUpdateOp::UpdateWeekAnnotation(period_id, week_num, annotation) => {
+                let pos = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .find_period_position(*period_id)
+                    .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
+                let mut desc = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .periods
+                    .ordered_period_list[pos]
+                    .1
+                    .clone();
+
+                if *week_num >= desc.len() {
+                    Err(UpdateWeekStatusError::InvalidWeekNumber(
+                        *week_num,
+                        desc.len(),
+                    ))?;
+                }
+
+                desc[*week_num].annotation = annotation.clone();
+
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Period(
+                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("At this point, parameters should be valid");
+                if result.is_some() {
+                    panic!("Unexpected result! {:?}", result);
+                }
+                Ok(None)
+            }
         }
     }
 
@@ -1069,6 +1124,17 @@ impl GeneralPlanningUpdateOp {
                         "Ajouter une semaine de colle".into()
                     } else {
                         "Supprimer une semaine de colle".into()
+                    }
+                }
+                GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+                    _period_id,
+                    _week_num,
+                    annotation,
+                ) => {
+                    if annotation.is_some() {
+                        "Annoter une semaine de colle".into()
+                    } else {
+                        "Effacer l'annotation d'une semaine de colle".into()
                     }
                 }
             },

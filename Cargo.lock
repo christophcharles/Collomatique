@@ -386,6 +386,7 @@ dependencies = [
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
+ "non-empty-string",
  "serde",
  "thiserror",
 ]
