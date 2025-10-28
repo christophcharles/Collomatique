@@ -13,7 +13,8 @@ pub struct StrictLimits<
 > {
     weeks: Vec<bool>,
     students: BTreeSet<StudentId>,
-    interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,
+    interrogations_per_week_min: Option<u32>,
+    interrogations_per_week_max: Option<u32>,
     max_interrogations_per_day: Option<NonZeroU32>,
     _phantom1: std::marker::PhantomData<SlotId>,
     _phantom2: std::marker::PhantomData<GroupListId>,
@@ -26,14 +27,16 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
     pub fn new(
         students: BTreeSet<StudentId>,
         weeks: Vec<bool>,
-        interrogations_per_week: Option<std::ops::RangeInclusive<u32>>,
+        interrogations_per_week_min: Option<u32>,
+        interrogations_per_week_max: Option<u32>,
         max_interrogations_per_day: Option<NonZeroU32>,
     ) -> Self {
         use std::marker::PhantomData;
         StrictLimits {
             weeks,
             students,
-            interrogations_per_week,
+            interrogations_per_week_min,
+            interrogations_per_week_max,
             max_interrogations_per_day,
             _phantom1: PhantomData,
             _phantom2: PhantomData,
@@ -160,24 +163,24 @@ impl<SubjectId: Identifier, SlotId: Identifier, GroupListId: Identifier, Student
                     }
                 }
 
-                if let Some(count_per_week_range) = &self.interrogations_per_week {
-                    let max_count = *count_per_week_range.end();
-                    let rhs = LinExpr::constant(f64::from(max_count));
+                if let Some(max_count) = &self.interrogations_per_week_max {
+                    let rhs = LinExpr::constant(f64::from(*max_count));
                     constraints.push((
                         counting_interrogations_in_week_expr.leq(&rhs),
                         StrictLimitsDesc::AtMostCountInterrogationPerWeekForStudentOnWeek(
-                            max_count,
+                            *max_count,
                             *student_id,
                             week,
                         ),
                     ));
+                }
 
-                    let min_count = *count_per_week_range.start();
-                    let rhs = LinExpr::constant(f64::from(min_count));
+                if let Some(min_count) = &self.interrogations_per_week_min {
+                    let rhs = LinExpr::constant(f64::from(*min_count));
                     constraints.push((
                         counting_interrogations_in_week_expr.geq(&rhs),
                         StrictLimitsDesc::AtMinimumCountInterrogationPerWeekForStudentOnWeek(
-                            min_count,
+                            *min_count,
                             *student_id,
                             week,
                         ),

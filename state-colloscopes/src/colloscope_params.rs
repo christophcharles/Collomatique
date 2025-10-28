@@ -42,7 +42,7 @@ pub struct Parameters<
     pub incompats: incompats::Incompats<IncompatId, SubjectId, WeekPatternId>,
     pub group_lists: group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId>,
     pub rules: rules::Rules<RuleId, PeriodId, SlotId>,
-    pub settings: settings::GeneralSettings,
+    pub settings: settings::Settings<StudentId>,
 }
 
 impl<
@@ -80,7 +80,7 @@ impl<
             incompats: incompats::Incompats::default(),
             group_lists: group_lists::GroupLists::default(),
             rules: rules::Rules::default(),
-            settings: settings::GeneralSettings::default(),
+            settings: settings::Settings::default(),
         }
     }
 }
@@ -600,7 +600,7 @@ impl<
         let rules =
             self.rules
                 .duplicate_with_id_maps(&id_maps.rules, &id_maps.periods, &id_maps.slots)?;
-        let settings = self.settings.clone();
+        let settings = self.settings.duplicate_with_id_maps(&id_maps.students)?;
 
         Some(Parameters {
             periods,

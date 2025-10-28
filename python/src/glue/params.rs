@@ -30,7 +30,7 @@ pub struct GeneralParameters {
     #[pyo3(get)]
     pub rules: BTreeMap<rules::RuleId, rules::Rule>,
     #[pyo3(get)]
-    pub settings: settings::GeneralSettings,
+    pub settings: settings::Settings,
 }
 
 impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameters>
@@ -217,7 +217,7 @@ pub struct ColloscopeParameters {
     #[pyo3(get)]
     pub rules: BTreeMap<rules::ColloscopeRuleId, rules::ColloscopeRule>,
     #[pyo3(get)]
-    pub settings: settings::GeneralSettings,
+    pub settings: settings::ColloscopeSettings,
 }
 
 impl TryFrom<collomatique_state_colloscopes::colloscope_params::ColloscopeParameters>
@@ -543,8 +543,14 @@ impl TryFrom<ColloscopeParameters>
                         })
                         .collect(),
                 },
-                settings: collomatique_state_colloscopes::settings::GeneralSettings {
-                    strict_limits: value.settings.strict_limits.into(),
+                settings: collomatique_state_colloscopes::settings::Settings {
+                    global: value.settings.global.into(),
+                    students: value
+                        .settings
+                        .students
+                        .into_iter()
+                        .map(|(id, limits)| (id.into(), limits.into()))
+                        .collect(),
                 },
             },
         )

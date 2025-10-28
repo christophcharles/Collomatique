@@ -527,8 +527,21 @@ fn add_strict_limits_constraints(
         collomatique_solver_colloscopes::constraints::strict_limits::StrictLimits::new(
             students,
             weeks.iter().map(|x| x.interrogations).collect(),
-            settings.strict_limits.interrogations_per_week.clone(),
-            settings.strict_limits.max_interrogations_per_day.clone(),
+            settings
+                .global
+                .interrogations_per_week_min
+                .as_ref()
+                .map(|x| x.value),
+            settings
+                .global
+                .interrogations_per_week_max
+                .as_ref()
+                .map(|x| x.value),
+            settings
+                .global
+                .max_interrogations_per_day
+                .as_ref()
+                .map(|x| x.value),
         );
     translators.push(ColloscopeTranslator::StrictLimits(
         problem_builder

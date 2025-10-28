@@ -211,7 +211,7 @@ pub enum RuleOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsOp {
     /// Update the settings
-    Update(settings::GeneralSettings),
+    Update(settings::Settings<StudentId>),
 }
 
 /// Colloscope operation enumeration
@@ -547,7 +547,7 @@ pub enum AnnotatedRuleOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedSettingsOp {
     /// Update the settings
-    Update(settings::GeneralSettings),
+    Update(settings::Settings<StudentId>),
 }
 
 /// Colloscope operation enumeration

@@ -53,7 +53,9 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<rules::Rule>()?;
     m.add_class::<common::PersonWithContact>()?;
     m.add_class::<common::RangeInclusiveU32>()?;
-    m.add_class::<settings::StrictLimits>()?;
+    m.add_class::<settings::Limits>()?;
+    m.add_class::<settings::SoftU32>()?;
+    m.add_class::<settings::SoftNonZeroU32>()?;
 
     m.add_class::<general_planning::ColloscopePeriod>()?;
     m.add_class::<subjects::ColloscopeSubject>()?;
@@ -1415,13 +1417,13 @@ impl CollomatiqueFile {
         }
     }
 
-    fn settings_update_strict_limits(
+    fn settings_update_global_limits(
         self_: PyRef<'_, Self>,
-        strict_limits: settings::StrictLimits,
+        limits: settings::Limits,
     ) -> PyResult<()> {
         let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
             collomatique_ops::UpdateOp::Settings(
-                collomatique_ops::SettingsUpdateOp::UpdateStrictLimits(strict_limits.into()),
+                collomatique_ops::SettingsUpdateOp::UpdateGlobalLimits(limits.into()),
             ),
         ));
 

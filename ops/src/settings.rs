@@ -16,7 +16,7 @@ impl SettingsUpdateWarning {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SettingsUpdateOp {
-    UpdateStrictLimits(collomatique_state_colloscopes::settings::StrictLimits),
+    UpdateGlobalLimits(collomatique_state_colloscopes::settings::Limits),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -30,7 +30,7 @@ impl SettingsUpdateOp {
         _data: &T,
     ) -> Option<CleaningOp<WeekPatternsUpdateWarning>> {
         match self {
-            SettingsUpdateOp::UpdateStrictLimits(_) => None,
+            SettingsUpdateOp::UpdateGlobalLimits(_) => None,
         }
     }
 
@@ -41,14 +41,14 @@ impl SettingsUpdateOp {
         data: &mut T,
     ) -> Result<(), SettingsUpdateError> {
         match self {
-            Self::UpdateStrictLimits(strict_limits) => {
+            Self::UpdateGlobalLimits(limits) => {
                 let mut new_settings = data
                     .get_data()
                     .get_inner_data()
                     .main_params
                     .settings
                     .clone();
-                new_settings.strict_limits = strict_limits.clone();
+                new_settings.global = limits.clone();
 
                 let result = data
                     .apply(
@@ -70,8 +70,8 @@ impl SettingsUpdateOp {
         (
             OpCategory::Settings,
             match self {
-                SettingsUpdateOp::UpdateStrictLimits(_) => {
-                    "Mettre à jour les paramètres de limites strictes".into()
+                SettingsUpdateOp::UpdateGlobalLimits(_) => {
+                    "Mettre à jour les paramètres généraux de limites".into()
                 }
             },
         )
