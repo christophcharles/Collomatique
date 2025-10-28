@@ -645,7 +645,8 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
-                let new_desc = vec![true; *week_count];
+                let new_desc =
+                    vec![collomatique_state_colloscopes::periods::WeekDesc::new(true); *week_count];
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
@@ -692,7 +693,12 @@ impl GeneralPlanningUpdateOp {
                     .1
                     .clone();
 
-                desc.resize(*week_count, desc.last().copied().unwrap_or(true));
+                desc.resize(
+                    *week_count,
+                    desc.last()
+                        .cloned()
+                        .unwrap_or(collomatique_state_colloscopes::periods::WeekDesc::new(true)),
+                );
 
                 let result = match data.apply(
                     collomatique_state_colloscopes::Op::Period(
@@ -1021,7 +1027,7 @@ impl GeneralPlanningUpdateOp {
                     ))?;
                 }
 
-                desc[*week_num] = *state;
+                desc[*week_num].interrogations = *state;
 
                 let result = data
                     .apply(

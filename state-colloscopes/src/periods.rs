@@ -25,7 +25,31 @@ pub struct Periods<PeriodId: Id> {
     /// Each boolean represents a week. If it is true
     /// there is an interrogation on the given week
     /// otherwise there isn't.
-    pub ordered_period_list: Vec<(PeriodId, Vec<bool>)>,
+    pub ordered_period_list: Vec<(PeriodId, Vec<WeekDesc>)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WeekDesc {
+    pub interrogations: bool,
+    pub annotation: Option<non_empty_string::NonEmptyString>,
+}
+
+impl Default for WeekDesc {
+    fn default() -> Self {
+        WeekDesc {
+            interrogations: true,
+            annotation: None,
+        }
+    }
+}
+
+impl WeekDesc {
+    pub fn new(interrogations: bool) -> WeekDesc {
+        WeekDesc {
+            interrogations,
+            annotation: None,
+        }
+    }
 }
 
 impl<PeriodId: Id> Default for Periods<PeriodId> {
@@ -46,7 +70,7 @@ impl<PeriodId: Id> Periods<PeriodId> {
     }
 
     /// Finds a period by id
-    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<bool>> {
+    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekDesc>> {
         let pos = self.find_period_position(id)?;
 
         Some(&self.ordered_period_list[pos].1)

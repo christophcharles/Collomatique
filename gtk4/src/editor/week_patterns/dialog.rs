@@ -289,13 +289,13 @@ impl SimpleComponent for Dialog {
                 let mut next_status = false;
 
                 let status_in_periods = self.build_status_in_periods();
-                for (status, week_has_interrogations) in self
+                for (status, week_desc) in self
                     .week_pattern
                     .weeks
                     .iter_mut()
                     .zip(status_in_periods.iter())
                 {
-                    if *week_has_interrogations {
+                    if week_desc.interrogations {
                         *status = next_status;
                         next_status = !next_status;
                     } else {
@@ -309,13 +309,13 @@ impl SimpleComponent for Dialog {
                 let mut next_status = true;
 
                 let status_in_periods = self.build_status_in_periods();
-                for (status, week_has_interrogations) in self
+                for (status, week_desc) in self
                     .week_pattern
                     .weeks
                     .iter_mut()
                     .zip(status_in_periods.iter())
                 {
-                    if *week_has_interrogations {
+                    if week_desc.interrogations {
                         *status = next_status;
                         next_status = !next_status;
                     } else {
@@ -349,7 +349,7 @@ impl Dialog {
         }
     }
 
-    fn build_status_in_periods(&self) -> Vec<bool> {
+    fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
         let mut output = vec![];
         for (_id, period) in &self.periods.ordered_period_list {
             output.extend(period.iter().cloned());
@@ -368,7 +368,7 @@ impl Dialog {
                 Some(PeriodData {
                     global_first_week: self.periods.first_week.clone(),
                     first_week_num: current_first_week,
-                    period_desc: desc.clone(),
+                    period_desc: desc.iter().map(|x| x.interrogations).collect(),
                     weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
                         .into_iter()
                         .map(|index| {

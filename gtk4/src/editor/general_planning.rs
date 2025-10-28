@@ -66,7 +66,7 @@ impl GeneralPlanning {
         let mut count = 0usize;
         for (_id, desc) in &self.periods.ordered_period_list {
             for v in desc {
-                if *v {
+                if v.interrogations {
                     count += 1;
                 }
             }

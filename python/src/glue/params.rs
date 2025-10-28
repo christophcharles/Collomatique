@@ -47,7 +47,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::GeneralParameter
                 .into_iter()
                 .map(|(period_id, weeks_status)| Period {
                     id: period_id.into(),
-                    weeks_status,
+                    weeks_status: weeks_status.into_iter().map(|x| x.into()).collect(),
                 })
                 .collect(),
             periods_first_week: match value.periods.first_week {
@@ -234,7 +234,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::ColloscopeParame
                 .into_iter()
                 .map(|(period_id, weeks_status)| ColloscopePeriod {
                     id: period_id.into(),
-                    weeks_status,
+                    weeks_status: weeks_status.into_iter().map(|x| x.into()).collect(),
                 })
                 .collect(),
             periods_first_week: match value.periods.first_week {
@@ -388,7 +388,12 @@ impl TryFrom<ColloscopeParameters>
                     ordered_period_list: value
                         .periods
                         .into_iter()
-                        .map(|period| (period.id.into(), period.weeks_status))
+                        .map(|period| {
+                            (
+                                period.id.into(),
+                                period.weeks_status.into_iter().map(|x| x.into()).collect(),
+                            )
+                        })
                         .collect(),
                 },
                 subjects: collomatique_state_colloscopes::subjects::Subjects {

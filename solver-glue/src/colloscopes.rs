@@ -227,20 +227,24 @@ impl ColloscopeProblemWithTranslators {
 
 fn generate_active_weeks_list(
     collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
-) -> Vec<bool> {
+) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
     generate_active_weeks_list_with_excluded_periods(collo_params, &BTreeSet::new())
 }
 
 fn generate_active_weeks_list_with_excluded_periods(
     collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
     excluded_periods: &BTreeSet<ColloscopePeriodId>,
-) -> Vec<bool> {
+) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
     let mut weeks = vec![];
     for (period_id, period) in &collo_params.periods.ordered_period_list {
         if !excluded_periods.contains(period_id) {
-            weeks.extend(period.into_iter().copied());
+            weeks.extend(period.into_iter().cloned());
         } else {
-            weeks.extend(period.into_iter().map(|_| false));
+            weeks.extend(
+                period
+                    .into_iter()
+                    .map(|_| collomatique_state_colloscopes::periods::WeekDesc::new(false)),
+            );
         }
     }
     weeks
@@ -284,7 +288,7 @@ fn collo_params_to_colloscope_problem_desc(
                 }
 
                 for week in period {
-                    if !*week {
+                    if !week.interrogations {
                         weeks.push(false);
                         continue;
                     }
@@ -344,7 +348,7 @@ fn collo_params_to_colloscope_problem_desc(
             });
 
             for week in period {
-                group_assignments.push(if *week {
+                group_assignments.push(if week.interrogations {
                     group_assignment.clone()
                 } else {
                     None
@@ -411,7 +415,7 @@ fn add_groups_per_slots_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
     collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
-    weeks: &Vec<bool>,
+    weeks: &Vec<collomatique_state_colloscopes::periods::WeekDesc>,
 ) {
     for (subject_id, subject) in &collo_params.subjects.ordered_subject_list {
         if subject.parameters.interrogation_parameters.is_none() {
@@ -420,7 +424,7 @@ fn add_groups_per_slots_constraints(
         let groups_per_slots_constraints =
             collomatique_solver_colloscopes::constraints::groups_per_slots::GroupsPerSlots::new(
                 *subject_id,
-                weeks.clone(),
+                weeks.iter().map(|x| x.interrogations).collect(),
             );
         translators.push(ColloscopeTranslator::GroupsPerSlot(
             problem_builder
@@ -514,7 +518,7 @@ fn add_strict_limits_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
     collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
-    weeks: &Vec<bool>,
+    weeks: &Vec<collomatique_state_colloscopes::periods::WeekDesc>,
 ) {
     let students = collo_params.students.student_map.keys().copied().collect();
     let settings = &collo_params.settings;
@@ -522,7 +526,7 @@ fn add_strict_limits_constraints(
     let strict_limits_constraints =
         collomatique_solver_colloscopes::constraints::strict_limits::StrictLimits::new(
             students,
-            weeks.clone(),
+            weeks.iter().map(|x| x.interrogations).collect(),
             settings.strict_limits.interrogations_per_week.clone(),
             settings.strict_limits.max_interrogations_per_day.clone(),
         );
@@ -537,14 +541,14 @@ fn add_one_interrogation_at_a_time_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
     collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
-    weeks: &Vec<bool>,
+    weeks: &Vec<collomatique_state_colloscopes::periods::WeekDesc>,
 ) {
     let students = collo_params.students.student_map.keys().copied().collect();
 
     let one_interrogation_at_a_time_constraints =
         collomatique_solver_colloscopes::constraints::one_interrogation_at_a_time::OneInterrogationAtATime::new(
             students,
-            weeks.clone(),
+            weeks.iter().map(|x| x.interrogations).collect(),
         );
     translators.push(ColloscopeTranslator::OneInterrogationAtATime(
         problem_builder

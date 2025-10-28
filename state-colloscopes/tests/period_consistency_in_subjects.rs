@@ -1,5 +1,6 @@
 use collomatique_state::{traits::Manager, AppState};
 use collomatique_state_colloscopes::{
+    periods::WeekDesc,
     subjects::{SubjectInterrogationParameters, WeekBlock},
     Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters, SubjectPeriodicity,
 };
@@ -11,13 +12,20 @@ fn add_subject_referencing_period_then_remove_period() {
 
     // Prepare periods
     let Ok(Some(NewId::PeriodId(id1))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![true, true, false])),
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(false),
+        ])),
         "Add first period".into(),
     ) else {
         panic!("Unexpected result after adding first period");
     };
     let Ok(Some(NewId::PeriodId(id2))) = app_state.apply(
-        Op::Period(PeriodOp::AddAfter(id1, vec![false, true])),
+        Op::Period(PeriodOp::AddAfter(
+            id1,
+            vec![WeekDesc::new(false), WeekDesc::new(true)],
+        )),
         "Add second period".into(),
     ) else {
         panic!("Unexpected result after adding second period");
@@ -70,13 +78,20 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
 
     // Prepare periods
     let Ok(Some(NewId::PeriodId(id1))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![true, true, false])),
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(false),
+        ])),
         "Add first period".into(),
     ) else {
         panic!("Unexpected result after adding first period");
     };
     let Ok(Some(NewId::PeriodId(id2))) = app_state.apply(
-        Op::Period(PeriodOp::AddAfter(id1, vec![false, true])),
+        Op::Period(PeriodOp::AddAfter(
+            id1,
+            vec![WeekDesc::new(false), WeekDesc::new(true)],
+        )),
         "Add second period".into(),
     ) else {
         panic!("Unexpected result after adding second period");
@@ -169,7 +184,13 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
 
     // Prepare periods
     let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![true, true, true, true, true])),
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ])),
         "Add first period".into(),
     ) else {
         panic!("Unexpected result after adding first period");
@@ -216,7 +237,15 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
 
     // Shrink period but keep week
     let Ok(None) = app_state.apply(
-        Op::Period(PeriodOp::Update(period_id, vec![true, true, true, true])),
+        Op::Period(PeriodOp::Update(
+            period_id,
+            vec![
+                WeekDesc::new(true),
+                WeekDesc::new(true),
+                WeekDesc::new(true),
+                WeekDesc::new(true),
+            ],
+        )),
         "Shrink period".into(),
     ) else {
         panic!("Unexpected result after updating period");

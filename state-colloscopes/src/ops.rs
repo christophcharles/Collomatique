@@ -67,13 +67,13 @@ pub enum PeriodOp {
     /// Set the start of periods on a specific week
     ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
     /// Add a new period at the beginning
-    AddFront(Vec<bool>),
+    AddFront(Vec<periods::WeekDesc>),
     /// Add a period after an existing period
-    AddAfter(PeriodId, Vec<bool>),
+    AddAfter(PeriodId, Vec<periods::WeekDesc>),
     /// Remove an existing period
     Remove(PeriodId),
     /// Update an existing period
-    Update(PeriodId, Vec<bool>),
+    Update(PeriodId, Vec<periods::WeekDesc>),
 }
 
 /// Subject operation enumeration
@@ -364,14 +364,14 @@ pub enum AnnotatedPeriodOp {
     /// Set the start of periods on a specific week
     ChangeStartDate(Option<collomatique_time::NaiveMondayDate>),
     /// Add a new period at the beginning
-    AddFront(PeriodId, Vec<bool>),
+    AddFront(PeriodId, Vec<periods::WeekDesc>),
     /// Add a period after an existing period
     /// First parameter is the period id for the new period
-    AddAfter(PeriodId, PeriodId, Vec<bool>),
+    AddAfter(PeriodId, PeriodId, Vec<periods::WeekDesc>),
     /// Remove an existing period
     Remove(PeriodId),
     /// Update an existing period
-    Update(PeriodId, Vec<bool>),
+    Update(PeriodId, Vec<periods::WeekDesc>),
 }
 
 /// Subject annotated operation enumeration

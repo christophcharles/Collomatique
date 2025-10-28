@@ -8,7 +8,7 @@ use relm4::FactorySender;
 pub struct EntryData {
     pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
     pub first_week_num: usize,
-    pub desc: Vec<bool>,
+    pub desc: Vec<collomatique_state_colloscopes::periods::WeekDesc>,
     pub period_id: collomatique_state_colloscopes::PeriodId,
 }
 
@@ -62,7 +62,7 @@ impl Entry {
         global_first_week: Option<collomatique_time::NaiveMondayDate>,
         first_week_in_period: usize,
         week_num_in_period: usize,
-        state: bool,
+        state: collomatique_state_colloscopes::periods::WeekDesc,
     ) -> WeekData {
         WeekData {
             global_first_week: global_first_week,
@@ -236,7 +236,7 @@ pub struct WeekData {
     pub global_first_week: Option<collomatique_time::NaiveMondayDate>,
     pub first_week_in_period: usize,
     pub week_num_in_period: usize,
-    pub state: bool,
+    pub state: collomatique_state_colloscopes::periods::WeekDesc,
 }
 
 #[derive(Debug)]
@@ -287,8 +287,8 @@ impl FactoryComponent for Week {
             },
             #[name(switch)]
             gtk::Switch {
-                #[track(self.data.state != switch.is_active())]
-                set_active: self.data.state,
+                #[track(self.data.state.interrogations != switch.is_active())]
+                set_active: self.data.state.interrogations,
                 connect_state_set[sender] => move |_widget,state| {
                     sender.input(WeekInput::StatusChanged(state));
                     gtk::glib::Propagation::Proceed
@@ -310,7 +310,7 @@ impl FactoryComponent for Week {
     ) -> Self::Widgets {
         let widgets = view_output!();
 
-        if !self.data.state {
+        if !self.data.state.interrogations {
             widgets.root_widget.add_css_class("dimmed");
         }
 
@@ -323,14 +323,14 @@ impl FactoryComponent for Week {
                 self.data = new_data;
             }
             WeekInput::StatusChanged(status) => {
-                if self.data.state == status {
+                if self.data.state.interrogations == status {
                     // Ignore status change that brought the component
                     // inline with internal data
                     return;
                 }
                 // Otherwise, bring internal data to the correct state right away
                 // to avoid endless loops
-                self.data.state = status;
+                self.data.state.interrogations = status;
                 sender
                     .output(WeekOutput::StatusChanged(
                         self.data.week_num_in_period,
@@ -342,7 +342,7 @@ impl FactoryComponent for Week {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if self.data.state {
+        if self.data.state.interrogations {
             widgets.root_widget.remove_css_class("dimmed");
         } else {
             widgets.root_widget.add_css_class("dimmed");
