@@ -604,6 +604,16 @@ pub enum RuleError<RuleId: Id, PeriodId: Id, SlotId: Id> {
     RuleIsReferencedInColloscopeIdMaps(RuleId, ColloscopeId),
 }
 
+/// Errors for settings operations
+///
+/// These errors can be returned when trying to modify [Data] with a settings op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SettingsError<StudentId: Id> {
+    /// student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+}
+
 /// Errors for colloscopes operations
 ///
 /// These errors can be returned when trying to modify [Data] with a colloscope op.
@@ -760,6 +770,8 @@ pub enum Error {
     #[error(transparent)]
     Rule(#[from] RuleError<RuleId, PeriodId, SlotId>),
     #[error(transparent)]
+    Settings(#[from] SettingsError<StudentId>),
+    #[error(transparent)]
     Colloscope(#[from] ColloscopeError),
 }
 
@@ -907,6 +919,8 @@ pub enum InvariantError {
     SubjectAssociationForSubjectNotRunningOnPeriod,
     #[error("invalid rule")]
     InvalidRule,
+    #[error("invalid student id in settings")]
+    InvalidStudentIdInSettings,
 }
 
 impl InMemoryData for Data {
@@ -974,7 +988,7 @@ impl InMemoryData for Data {
             AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Rule(rule_op) => self.apply_rule(rule_op)?,
-            AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op),
+            AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
             AnnotatedOp::Colloscopes(colloscope_op) => self.apply_colloscope(colloscope_op)?,
         }
         self.check_invariants();
@@ -2525,10 +2539,17 @@ impl Data {
     /// Used internally
     ///
     /// Apply settings operations
-    fn apply_settings(&mut self, settings_op: &AnnotatedSettingsOp) {
+    fn apply_settings(
+        &mut self,
+        settings_op: &AnnotatedSettingsOp,
+    ) -> std::result::Result<(), SettingsError<StudentId>> {
         match settings_op {
             AnnotatedSettingsOp::Update(new_settings) => {
+                self.inner_data
+                    .main_params
+                    .validate_settings(new_settings)?;
                 self.inner_data.main_params.settings = new_settings.clone();
+                Ok(())
             }
         }
     }

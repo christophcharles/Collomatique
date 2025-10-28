@@ -1386,6 +1386,33 @@ impl<
 
     /// USED INTERNALLY
     ///
+    /// used to check settings before commiting a settings op
+    pub(crate) fn validate_settings(
+        &self,
+        settings: &settings::Settings<StudentId>,
+    ) -> Result<(), SettingsError<StudentId>> {
+        for (student_id, _limits) in &settings.students {
+            if !self.students.student_map.contains_key(student_id) {
+                return Err(SettingsError::InvalidStudentId(*student_id));
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in rules data
+    fn check_settings_data_consistency(&self) -> Result<(), InvariantError> {
+        match self.validate_settings(&self.settings) {
+            Ok(()) => Ok(()),
+            Err(SettingsError::InvalidStudentId(_id)) => {
+                Err(InvariantError::InvalidStudentIdInSettings)
+            }
+        }
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -1474,6 +1501,7 @@ impl<
         self.check_incompats_data_consistency(&week_pattern_ids, &subject_ids)?;
         self.check_group_lists_data_consistency()?;
         self.check_rules_data_consistency(&period_ids, &slot_ids)?;
+        self.check_settings_data_consistency()?;
 
         Ok(())
     }
