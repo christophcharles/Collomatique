@@ -282,6 +282,14 @@ impl Week {
             .map(|x| x.clone().into_inner())
             .unwrap_or_default()
     }
+
+    fn generate_switch_tooltip(&self) -> String {
+        if self.data.state.interrogations {
+            "Désactiver les colles pour la semaine".into()
+        } else {
+            "Réactiver les colles pour la semaine".into()
+        }
+    }
 }
 
 #[relm4::factory(pub)]
@@ -326,6 +334,8 @@ impl FactoryComponent for Week {
             #[name(switch)]
             gtk::Switch {
                 set_margin_all: 3,
+                #[watch]
+                set_tooltip_text: Some(&self.generate_switch_tooltip()),
                 #[track(self.data.state.interrogations != switch.is_active())]
                 set_active: self.data.state.interrogations,
                 connect_state_set[sender] => move |_widget,state| {
