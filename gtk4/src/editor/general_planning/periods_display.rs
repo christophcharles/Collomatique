@@ -261,6 +261,15 @@ impl Week {
         let week_number = self.data.first_week_in_period + self.data.week_num_in_period;
         super::super::generate_week_title(&self.data.global_first_week, week_number)
     }
+
+    fn generate_annotation(&self) -> String {
+        self.data
+            .state
+            .annotation
+            .as_ref()
+            .map(|x| x.clone().into_inner())
+            .unwrap_or_default()
+    }
 }
 
 #[relm4::factory(pub)]
@@ -276,6 +285,7 @@ impl FactoryComponent for Week {
         root_widget = gtk::Box {
             set_hexpand: true,
             set_margin_all: 5,
+            set_spacing: 5,
             set_orientation: gtk::Orientation::Horizontal,
             gtk::Label {
                 set_margin_all: 5,
@@ -285,8 +295,24 @@ impl FactoryComponent for Week {
             gtk::Box {
                 set_hexpand: true,
             },
+            gtk::Label {
+                set_halign: gtk::Align::End,
+                set_margin_end: 5,
+                #[watch]
+                set_label: &self.generate_annotation(),
+                set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
+            },
+            gtk::Button {
+                set_icon_name: "edit-symbolic",
+                add_css_class: "flat",
+                set_tooltip_text: Some("Modifier l'annotation"),
+            },
+            gtk::Separator {
+                set_orientation: gtk::Orientation::Vertical,
+            },
             #[name(switch)]
             gtk::Switch {
+                set_margin_all: 3,
                 #[track(self.data.state.interrogations != switch.is_active())]
                 set_active: self.data.state.interrogations,
                 connect_state_set[sender] => move |_widget,state| {
