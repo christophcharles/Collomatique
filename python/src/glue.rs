@@ -16,12 +16,13 @@ use collomatique_ops::{
     DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
     GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
     MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, PrefillGroupListError, RulesUpdateError, SlotsUpdateError,
-    StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
-    UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodStatusForRuleError,
-    UpdatePeriodWeekCountError, UpdateRuleError, UpdateSlotError, UpdateStudentError,
-    UpdateSubjectError, UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError,
-    UpdateWeekStatusError, WeekPatternsUpdateError,
+    MoveSubjectUpError, PrefillGroupListError, RemoveStudentLimitsError, RulesUpdateError,
+    SettingsUpdateError, SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError,
+    TeachersUpdateError, UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
+    UpdatePeriodStatusForRuleError, UpdatePeriodWeekCountError, UpdateRuleError, UpdateSlotError,
+    UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
+    UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
+    WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
 
@@ -1429,6 +1430,59 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(None) => Ok(()),
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn settings_update_student_limits(
+        self_: PyRef<'_, Self>,
+        student_id: StudentId,
+        limits: settings::Limits,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Settings(
+                collomatique_ops::SettingsUpdateOp::UpdateStudentLimits(
+                    student_id.into(),
+                    limits.into(),
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(UpdateError::Settings(SettingsUpdateError::UpdateStudentLimits(
+                ue,
+            ))) => match ue {
+                UpdateStudentLimitsError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                    format!("Invalid student id {:?}", id),
+                )),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn settings_remove_student_limits(
+        self_: PyRef<'_, Self>,
+        student_id: StudentId,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::Settings(
+                collomatique_ops::SettingsUpdateOp::RemoveStudentLimits(student_id.into()),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(UpdateError::Settings(SettingsUpdateError::RemoveStudentLimits(
+                re,
+            ))) => match re {
+                RemoveStudentLimitsError::InvalidStudentId(id) => Err(PyValueError::new_err(
+                    format!("Invalid student id {:?}", id),
+                )),
+                RemoveStudentLimitsError::NoLimitsForStudent(id) => Err(PyValueError::new_err(
+                    format!("Student id {:?} has no associated limits", id),
+                )),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
