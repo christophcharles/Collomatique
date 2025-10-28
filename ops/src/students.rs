@@ -18,6 +18,7 @@ pub enum StudentsUpdateWarning {
         collomatique_state_colloscopes::ColloscopeId,
         collomatique_state_colloscopes::StudentId,
     ),
+    LooseLimitsForStudent(collomatique_state_colloscopes::StudentId),
 }
 
 impl StudentsUpdateWarning {
@@ -132,6 +133,22 @@ impl StudentsUpdateWarning {
                     colloscope.name,
                     student.desc.firstname,
                     student.desc.surname,
+                ))
+            }
+            StudentsUpdateWarning::LooseLimitsForStudent(student_id) => {
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .students
+                    .student_map
+                    .get(student_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des limites paramétrées pour l'élève {} {}",
+                    student.desc.firstname, student.desc.surname,
                 ))
             }
         }
@@ -292,6 +309,20 @@ impl StudentsUpdateOp {
                             });
                         }
                     }
+                }
+
+                if data
+                    .get_data()
+                    .get_inner_data()
+                    .main_params
+                    .settings
+                    .students
+                    .contains_key(student_id)
+                {
+                    return Some(CleaningOp {
+                        warning: StudentsUpdateWarning::LooseLimitsForStudent(*student_id),
+                        op: UpdateOp::Settings(SettingsUpdateOp::RemoveStudentLimits(*student_id)),
+                    });
                 }
 
                 None
