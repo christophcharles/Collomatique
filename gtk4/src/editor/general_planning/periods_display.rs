@@ -31,6 +31,7 @@ pub enum EntryInput {
     MergeClicked,
 
     WeekStatusUpdated(usize, bool),
+    EditAnnotationClicked(usize),
 }
 
 #[derive(Debug)]
@@ -40,6 +41,7 @@ pub enum EntryOutput {
     CutClicked(collomatique_state_colloscopes::PeriodId),
     MergeClicked(collomatique_state_colloscopes::PeriodId),
     WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
+    EditAnnotationClicked(collomatique_state_colloscopes::PeriodId, usize),
 }
 
 impl Entry {
@@ -144,6 +146,9 @@ impl FactoryComponent for Entry {
                 WeekOutput::StatusChanged(week_num, status) => {
                     EntryInput::WeekStatusUpdated(week_num, status)
                 }
+                WeekOutput::EditAnnotationClicked(week_num) => {
+                    EntryInput::EditAnnotationClicked(week_num)
+                }
             });
 
         let mut model = Self {
@@ -227,6 +232,11 @@ impl FactoryComponent for Entry {
                     .output(EntryOutput::WeekStatusUpdated(self.period_id, num, state))
                     .unwrap();
             }
+            EntryInput::EditAnnotationClicked(num) => {
+                sender
+                    .output(EntryOutput::EditAnnotationClicked(self.period_id, num))
+                    .unwrap();
+            }
         }
     }
 }
@@ -249,11 +259,13 @@ pub enum WeekInput {
     UpdateData(WeekData),
 
     StatusChanged(bool),
+    EditAnnotationClicked,
 }
 
 #[derive(Debug)]
 pub enum WeekOutput {
     StatusChanged(usize, bool),
+    EditAnnotationClicked(usize),
 }
 
 impl Week {
@@ -306,6 +318,7 @@ impl FactoryComponent for Week {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
                 set_tooltip_text: Some("Modifier l'annotation"),
+                connect_clicked => WeekInput::EditAnnotationClicked,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -361,6 +374,13 @@ impl FactoryComponent for Week {
                     .output(WeekOutput::StatusChanged(
                         self.data.week_num_in_period,
                         status,
+                    ))
+                    .unwrap();
+            }
+            WeekInput::EditAnnotationClicked => {
+                sender
+                    .output(WeekOutput::EditAnnotationClicked(
+                        self.data.week_num_in_period,
                     ))
                     .unwrap();
             }

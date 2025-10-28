@@ -7,6 +7,7 @@ use relm4::{
 
 use collomatique_ops::GeneralPlanningUpdateOp;
 
+mod annotation_dialog;
 mod period_cut;
 mod period_duration;
 mod periods_display;
@@ -30,6 +31,8 @@ pub enum GeneralPlanningInput {
     DeletePeriodClicked(collomatique_state_colloscopes::PeriodId),
     MergePeriodClicked(collomatique_state_colloscopes::PeriodId),
     WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
+    EditAnnotationClicked(collomatique_state_colloscopes::PeriodId, usize),
+    AnnotationSelected(String),
 }
 
 #[derive(Debug)]
@@ -38,6 +41,7 @@ enum WeekCountSelectionReason {
     Edit(collomatique_state_colloscopes::PeriodId),
     Cut(collomatique_state_colloscopes::PeriodId),
 }
+
 pub struct GeneralPlanning {
     periods:
         collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
@@ -47,6 +51,9 @@ pub struct GeneralPlanning {
     select_start_date_dialog: Controller<select_start_date::Dialog>,
     period_duration_dialog: Controller<period_duration::Dialog>,
     period_cut_dialog: Controller<period_cut::Dialog>,
+    annotation_dialog: Controller<annotation_dialog::Dialog>,
+
+    week_being_annotated: Option<(collomatique_state_colloscopes::PeriodId, usize)>,
 }
 
 impl GeneralPlanning {
@@ -182,6 +189,14 @@ impl Component for GeneralPlanning {
                     GeneralPlanningInput::WeekCountSelected(week_count)
                 }
             });
+        let annotation_dialog = annotation_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                annotation_dialog::DialogOutput::Accepted(new_annotation) => {
+                    GeneralPlanningInput::AnnotationSelected(new_annotation)
+                }
+            });
         let periods_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -200,6 +215,9 @@ impl Component for GeneralPlanning {
                 periods_display::EntryOutput::WeekStatusUpdated(period_id, num, state) => {
                     GeneralPlanningInput::WeekStatusUpdated(period_id, num, state)
                 }
+                periods_display::EntryOutput::EditAnnotationClicked(period_id, num) => {
+                    GeneralPlanningInput::EditAnnotationClicked(period_id, num)
+                }
             });
         let model = GeneralPlanning {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -208,6 +226,8 @@ impl Component for GeneralPlanning {
             select_start_date_dialog,
             period_duration_dialog,
             period_cut_dialog,
+            annotation_dialog,
+            week_being_annotated: None,
         };
         let periods_box = model.periods_list.widget();
         let widgets = view_output!();
@@ -318,6 +338,37 @@ impl Component for GeneralPlanning {
                     period_id, week_num, state,
                 ))
                 .unwrap(),
+            GeneralPlanningInput::EditAnnotationClicked(period_id, week_num) => {
+                self.week_being_annotated = Some((period_id, week_num));
+                let current_annotation = self
+                    .periods
+                    .find_period(period_id)
+                    .expect("Period ID should be valid")
+                    .get(week_num)
+                    .expect("Week number should be valid")
+                    .annotation
+                    .clone()
+                    .map(|x| x.into_inner())
+                    .unwrap_or_default();
+                self.annotation_dialog
+                    .sender()
+                    .send(annotation_dialog::DialogInput::Show(current_annotation))
+                    .unwrap();
+            }
+            GeneralPlanningInput::AnnotationSelected(new_annotation) => {
+                let (period_id, week_num) = self
+                    .week_being_annotated
+                    .take()
+                    .expect("There should be a selected week for the annotation");
+
+                sender
+                    .output(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+                        period_id,
+                        week_num,
+                        non_empty_string::NonEmptyString::new(new_annotation).ok(),
+                    ))
+                    .unwrap();
+            }
         }
     }
 }
