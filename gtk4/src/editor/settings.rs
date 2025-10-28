@@ -1,4 +1,4 @@
-use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::gtk;
 use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
 
@@ -44,11 +44,65 @@ impl Component for Settings {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
-                set_spacing: 5,
+                set_spacing: 10,
                 gtk::Label {
-                    set_label: "<b>En construction...</b>",
+                    set_halign: gtk::Align::Start,
+                    set_label: "Paramètres globaux",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                },
+                gtk::ListBox {
+                    set_hexpand: true,
+                    add_css_class: "boxed-list",
+                    set_selection_mode: gtk::SelectionMode::None,
+                    append = &gtk::Box {
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_margin_all: 5,
+                        set_spacing: 5,
+                        gtk::Button {
+                            set_icon_name: "edit-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Modifier les paramètres globaux"),
+                        },
+                        gtk::Separator {
+                            set_orientation: gtk::Orientation::Vertical,
+                        },
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_xalign: 0.,
+                            set_margin_start: 5,
+                            set_margin_end: 5,
+                            set_label: "Paramètres globaux",
+                            set_size_request: (200, -1),
+                        },
+                        gtk::Separator {
+                            set_orientation: gtk::Orientation::Vertical,
+                        },
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_xalign: 0.,
+                            set_margin_start: 5,
+                            set_margin_end: 5,
+                            #[watch]
+                            set_label: &limits_to_string(&model.settings.global),
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
+                        },
+                    },
+                },
+                gtk::Label {
+                    set_margin_top: 30,
+                    set_halign: gtk::Align::Start,
+                    set_label: "Paramètres par élève",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                },
+                gtk::Label {
+                    set_margin_top: 10,
+                    #[watch]
+                    set_visible: model.students.student_map.is_empty(),
+                    set_halign: gtk::Align::Start,
+                    set_label: "<i>Aucun élève à afficher</i>",
                     set_use_markup: true,
-                }
+                },
             }
         }
     }
@@ -75,4 +129,51 @@ impl Component for Settings {
             }
         }
     }
+}
+
+fn soft_less_than(soft: bool) -> String {
+    if soft {
+        String::from("⪅")
+    } else {
+        String::from("⩽")
+    }
+}
+
+fn limits_to_string(limits: &collomatique_state_colloscopes::settings::Limits) -> String {
+    let mut parts = vec![];
+
+    if limits.interrogations_per_week_max.is_some() || limits.interrogations_per_week_min.is_some()
+    {
+        let mut text = String::new();
+
+        if let Some(min_per_week) = &limits.interrogations_per_week_min {
+            text += &format!(
+                "{} {} ",
+                min_per_week.value,
+                soft_less_than(min_per_week.soft),
+            );
+        }
+
+        text += "colles par semaine";
+
+        if let Some(max_per_week) = &limits.interrogations_per_week_max {
+            text += &format!(
+                " {} {}",
+                soft_less_than(max_per_week.soft),
+                max_per_week.value,
+            );
+        }
+
+        parts.push(text);
+    }
+
+    if let Some(max_per_day) = &limits.max_interrogations_per_day {
+        parts.push(format!(
+            "colles par jour {} {}",
+            soft_less_than(max_per_day.soft),
+            max_per_day.value,
+        ));
+    }
+
+    parts.join("    ―    ")
 }
