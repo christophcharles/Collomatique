@@ -1065,7 +1065,7 @@ impl GeneralPlanningUpdateOp {
                     .main_params
                     .periods
                     .find_period_position(*period_id)
-                    .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
+                    .ok_or(UpdateWeekAnnotationError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
@@ -1076,7 +1076,7 @@ impl GeneralPlanningUpdateOp {
                     .clone();
 
                 if *week_num >= desc.len() {
-                    Err(UpdateWeekStatusError::InvalidWeekNumber(
+                    Err(UpdateWeekAnnotationError::InvalidWeekNumber(
                         *week_num,
                         desc.len(),
                     ))?;
