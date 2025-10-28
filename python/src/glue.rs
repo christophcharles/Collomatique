@@ -20,8 +20,8 @@ use collomatique_ops::{
     StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
     UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodStatusForRuleError,
     UpdatePeriodWeekCountError, UpdateRuleError, UpdateSlotError, UpdateStudentError,
-    UpdateSubjectError, UpdateTeacherError, UpdateWeekPatternError, UpdateWeekStatusError,
-    WeekPatternsUpdateError,
+    UpdateSubjectError, UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError,
+    UpdateWeekStatusError, WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
 
@@ -336,6 +336,38 @@ impl CollomatiqueFile {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
                 UpdateWeekStatusError::InvalidWeekNumber(w, t) => Err(PyValueError::new_err(
+                    format!("Week number too big ({} >= {}", w, t),
+                )),
+            },
+            _ => panic!("Unexpected result: {:?}", result),
+        }
+    }
+
+    fn periods_update_week_annotation(
+        self_: PyRef<'_, Self>,
+        id: PeriodId,
+        week: usize,
+        annotation: String,
+    ) -> PyResult<()> {
+        let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
+            collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+                    id.into(),
+                    week,
+                    non_empty_string::NonEmptyString::new(annotation).ok(),
+                ),
+            ),
+        ));
+
+        match result {
+            ResultMsg::Ack(None) => Ok(()),
+            ResultMsg::Error(UpdateError::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateError::UpdateWeekAnnotation(e),
+            )) => match e {
+                UpdateWeekAnnotationError::InvalidPeriodId(id) => {
+                    Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
+                }
+                UpdateWeekAnnotationError::InvalidWeekNumber(w, t) => Err(PyValueError::new_err(
                     format!("Week number too big ({} >= {}", w, t),
                 )),
             },
