@@ -193,7 +193,11 @@ impl Component for Settings {
                 self.dialog
                     .sender()
                     .send(limits_dialog::DialogInput::Show(
-                        self.settings.global.clone(),
+                        self.settings
+                            .students
+                            .get(&student_id)
+                            .cloned()
+                            .unwrap_or(self.settings.global.clone()),
                         Some(format!(
                             "{} {}",
                             student.desc.firstname, student.desc.surname
