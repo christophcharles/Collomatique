@@ -3,7 +3,11 @@ use relm4::factory::FactoryView;
 use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+};
+
+mod limits_dialog;
 
 use collomatique_ops::SettingsUpdateOp;
 
@@ -22,6 +26,7 @@ pub enum SettingsInput {
     EditGlobalLimits,
     EditStudentLimits(collomatique_state_colloscopes::StudentId),
     DeleteStudentLimits(collomatique_state_colloscopes::StudentId),
+    LimitsAccepted(collomatique_state_colloscopes::settings::Limits),
 }
 
 pub struct Settings {
@@ -34,6 +39,8 @@ pub struct Settings {
     >,
 
     student_entries: FactoryVecDeque<StudentEntry>,
+    edit_reason: Option<collomatique_state_colloscopes::StudentId>,
+    dialog: Controller<limits_dialog::Dialog>,
 }
 
 #[relm4::component(pub)]
@@ -137,10 +144,21 @@ impl Component for Settings {
                 StudentEntryOutput::DeleteClicked(id) => SettingsInput::DeleteStudentLimits(id),
             });
 
+        let dialog = limits_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                limits_dialog::DialogOutput::Accepted(limits) => {
+                    SettingsInput::LimitsAccepted(limits)
+                }
+            });
+
         let model = Settings {
             students: collomatique_state_colloscopes::students::Students::default(),
             settings: collomatique_state_colloscopes::settings::Settings::default(),
             student_entries,
+            edit_reason: None,
+            dialog,
         };
         let students_widget = model.student_entries.widget();
         let widgets = view_output!();
@@ -148,16 +166,58 @@ impl Component for Settings {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             SettingsInput::Update(students, settings) => {
                 self.students = students;
                 self.settings = settings;
                 self.update_student_entries();
             }
-            SettingsInput::EditGlobalLimits => {}
-            SettingsInput::EditStudentLimits(student_id) => {}
-            SettingsInput::DeleteStudentLimits(student_id) => {}
+            SettingsInput::EditGlobalLimits => {
+                self.edit_reason = None;
+                self.dialog
+                    .sender()
+                    .send(limits_dialog::DialogInput::Show(
+                        self.settings.global.clone(),
+                        None,
+                    ))
+                    .unwrap();
+            }
+            SettingsInput::EditStudentLimits(student_id) => {
+                self.edit_reason = Some(student_id);
+                let student = self
+                    .students
+                    .student_map
+                    .get(&student_id)
+                    .expect("Student ID should be valid");
+                self.dialog
+                    .sender()
+                    .send(limits_dialog::DialogInput::Show(
+                        self.settings.global.clone(),
+                        Some(format!(
+                            "{} {}",
+                            student.desc.firstname, student.desc.surname
+                        )),
+                    ))
+                    .unwrap();
+            }
+            SettingsInput::DeleteStudentLimits(student_id) => {
+                sender
+                    .output(SettingsUpdateOp::RemoveStudentLimits(student_id))
+                    .unwrap();
+            }
+            SettingsInput::LimitsAccepted(limits) => match self.edit_reason.take() {
+                Some(student_id) => {
+                    sender
+                        .output(SettingsUpdateOp::UpdateStudentLimits(student_id, limits))
+                        .unwrap();
+                }
+                None => {
+                    sender
+                        .output(SettingsUpdateOp::UpdateGlobalLimits(limits))
+                        .unwrap();
+                }
+            },
         }
     }
 }
@@ -286,7 +346,7 @@ impl StudentEntry {
     fn generate_limits_text(&self) -> String {
         match &self.data.limits {
             Some(limits) => limits_to_string(limits),
-            None => String::new(),
+            None => "Paramètres globaux appliqués".into(),
         }
     }
 }
