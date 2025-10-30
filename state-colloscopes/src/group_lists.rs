@@ -8,17 +8,15 @@ use std::ops::RangeInclusive;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{
-    ColloscopeGroupListId, ColloscopePeriodId, ColloscopeStudentId, ColloscopeSubjectId, Id,
-};
+use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
 
 /// Description of the group lists
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GroupLists<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id> {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupLists {
     /// Group lists
     ///
     /// Each item associates a group list id to an actual group list
-    pub group_list_map: BTreeMap<GroupListId, GroupList<StudentId>>,
+    pub group_list_map: BTreeMap<GroupListId, GroupList>,
 
     /// Associations between subjects and group lists
     ///
@@ -26,42 +24,25 @@ pub struct GroupLists<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: I
     pub subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>>,
 }
 
-impl<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id> Default
-    for GroupLists<GroupListId, PeriodId, SubjectId, StudentId>
-{
-    fn default() -> Self {
-        GroupLists {
-            group_list_map: BTreeMap::new(),
-            subjects_associations: BTreeMap::new(),
-        }
-    }
-}
-
 /// Description of a single group list
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GroupList<StudentId: Id> {
+pub struct GroupList {
     /// parameters for the group list
-    pub params: GroupListParameters<StudentId>,
+    pub params: GroupListParameters,
     /// Prefilled groups
-    pub prefilled_groups: GroupListPrefilledGroups<StudentId>,
+    pub prefilled_groups: GroupListPrefilledGroups,
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GroupListPrefilledGroups<StudentId: Id> {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupListPrefilledGroups {
     /// group list
-    pub groups: Vec<PrefilledGroup<StudentId>>,
-}
-
-impl<StudentId: Id> Default for GroupListPrefilledGroups<StudentId> {
-    fn default() -> Self {
-        GroupListPrefilledGroups { groups: vec![] }
-    }
+    pub groups: Vec<PrefilledGroup>,
 }
 
 /// Prefilled groups for a single group list
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrefilledGroup<StudentId: Id> {
+pub struct PrefilledGroup {
     /// Optional name for the group
     pub name: Option<non_empty_string::NonEmptyString>,
     /// Students set
@@ -77,7 +58,7 @@ pub struct PrefilledGroup<StudentId: Id> {
     pub sealed: bool,
 }
 
-impl<StudentId: Id> Default for PrefilledGroup<StudentId> {
+impl Default for PrefilledGroup {
     fn default() -> Self {
         PrefilledGroup {
             name: None,
@@ -87,7 +68,7 @@ impl<StudentId: Id> Default for PrefilledGroup<StudentId> {
     }
 }
 
-impl<StudentId: Id> GroupListPrefilledGroups<StudentId> {
+impl GroupListPrefilledGroups {
     pub fn check_duplicated_student(&self) -> bool {
         let mut students_so_far = BTreeSet::new();
         for group in &self.groups {
@@ -127,45 +108,9 @@ impl<StudentId: Id> GroupListPrefilledGroups<StudentId> {
     }
 }
 
-impl<StudentId: Id> PrefilledGroup<StudentId> {
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
-    ) -> Option<PrefilledGroup<ColloscopeStudentId>> {
-        let mut students = BTreeSet::new();
-
-        for student_id in &self.students {
-            let new_id = students_map.get(student_id)?;
-            students.insert(*new_id);
-        }
-
-        Some(PrefilledGroup {
-            name: self.name.clone(),
-            students,
-            sealed: self.sealed,
-        })
-    }
-}
-
-impl<StudentId: Id> GroupListPrefilledGroups<StudentId> {
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
-    ) -> Option<GroupListPrefilledGroups<ColloscopeStudentId>> {
-        let mut groups = vec![];
-
-        for group in &self.groups {
-            let new_group = group.duplicate_with_id_maps(students_map)?;
-            groups.push(new_group);
-        }
-
-        Some(GroupListPrefilledGroups { groups })
-    }
-}
-
 /// Parameters for a single group list
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GroupListParameters<StudentId: Id> {
+pub struct GroupListParameters {
     /// Name for the list
     pub name: String,
     /// Range of possible count of students per group
@@ -176,7 +121,7 @@ pub struct GroupListParameters<StudentId: Id> {
     pub excluded_students: BTreeSet<StudentId>,
 }
 
-impl<StudentId: Id> Default for GroupListParameters<StudentId> {
+impl Default for GroupListParameters {
     fn default() -> Self {
         GroupListParameters {
             name: "Liste".into(),
@@ -187,28 +132,7 @@ impl<StudentId: Id> Default for GroupListParameters<StudentId> {
     }
 }
 
-impl<StudentId: Id> GroupListParameters<StudentId> {
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
-    ) -> Option<GroupListParameters<ColloscopeStudentId>> {
-        let mut excluded_students = BTreeSet::new();
-
-        for student_id in &self.excluded_students {
-            let new_id = students_map.get(student_id)?;
-            excluded_students.insert(*new_id);
-        }
-
-        Some(GroupListParameters {
-            name: self.name.clone(),
-            students_per_group: self.students_per_group.clone(),
-            group_count: self.group_count.clone(),
-            excluded_students,
-        })
-    }
-}
-
-impl<StudentId: Id> GroupList<StudentId> {
+impl GroupList {
     /// Checks whether the group list is sealed
     ///
     /// This means each prefilled group is sealed and there is no room for another
@@ -243,64 +167,5 @@ impl<StudentId: Id> GroupList<StudentId> {
         }
 
         output
-    }
-}
-
-impl<StudentId: Id> GroupList<StudentId> {
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
-    ) -> Option<GroupList<ColloscopeStudentId>> {
-        Some(GroupList {
-            params: self.params.duplicate_with_id_maps(students_map)?,
-            prefilled_groups: self.prefilled_groups.duplicate_with_id_maps(students_map)?,
-        })
-    }
-}
-
-impl<GroupListId: Id, PeriodId: Id, SubjectId: Id, StudentId: Id>
-    GroupLists<GroupListId, PeriodId, SubjectId, StudentId>
-{
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        group_lists_map: &BTreeMap<GroupListId, ColloscopeGroupListId>,
-        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
-        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
-        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
-    ) -> Option<
-        GroupLists<
-            ColloscopeGroupListId,
-            ColloscopePeriodId,
-            ColloscopeSubjectId,
-            ColloscopeStudentId,
-        >,
-    > {
-        let mut group_list_map = BTreeMap::new();
-
-        for (group_list_id, group_list) in &self.group_list_map {
-            let new_id = group_lists_map.get(group_list_id)?;
-            let new_group_list = group_list.duplicate_with_id_maps(students_map)?;
-            group_list_map.insert(*new_id, new_group_list);
-        }
-
-        let mut subjects_associations = BTreeMap::new();
-
-        for (period_id, subject_map) in &self.subjects_associations {
-            let new_period_id = periods_map.get(period_id)?;
-            let mut new_subject_map = BTreeMap::new();
-
-            for (subject_id, group_list_id) in subject_map {
-                let new_subject_id = subjects_map.get(subject_id)?;
-                let new_group_list_id = group_lists_map.get(group_list_id)?;
-                new_subject_map.insert(*new_subject_id, *new_group_list_id);
-            }
-
-            subjects_associations.insert(*new_period_id, new_subject_map);
-        }
-
-        Some(GroupLists {
-            group_list_map,
-            subjects_associations,
-        })
     }
 }

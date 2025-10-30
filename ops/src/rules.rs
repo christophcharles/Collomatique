@@ -31,7 +31,7 @@ impl RulesUpdateWarning {
                 let Some(rule) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .rules
                     .rule_map
                     .get(rule_id)
@@ -185,7 +185,7 @@ impl RulesUpdateOp {
                 let current_rule = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .rules
                     .rule_map
                     .get(rule_id)
@@ -256,7 +256,7 @@ impl RulesUpdateOp {
                 if data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .is_none()
@@ -267,7 +267,7 @@ impl RulesUpdateOp {
                 let mut rule = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .rules
                     .rule_map
                     .get(rule_id)

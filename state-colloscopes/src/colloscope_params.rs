@@ -3,9 +3,8 @@
 //! This module defines the relevant types to describes the full set of parameters for colloscopes
 
 use crate::ids::{
-    ColloscopeGroupListId, ColloscopeIncompatId, ColloscopePeriodId, ColloscopeRuleId,
-    ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId, ColloscopeTeacherId,
-    ColloscopeWeekPatternId,
+    GroupListId, IncompatId, PeriodId, RuleId, SlotId, StudentId, SubjectId, TeacherId,
+    WeekPatternId,
 };
 
 use super::*;
@@ -20,662 +19,22 @@ use serde::{Deserialize, Serialize};
 /// This structure is used in two ways:
 /// - a main version is used in [InnerData] to represent the currently edited parameters
 /// - another version is used for each colloscope to store the parameters used for its generation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Parameters<
-    PeriodId: Id,
-    SubjectId: Id,
-    TeacherId: Id,
-    StudentId: Id,
-    WeekPatternId: Id,
-    SlotId: Id,
-    IncompatId: Id,
-    GroupListId: Id,
-    RuleId: Id,
-> {
-    pub periods: periods::Periods<PeriodId>,
-    pub subjects: subjects::Subjects<SubjectId, PeriodId>,
-    pub teachers: teachers::Teachers<TeacherId, SubjectId>,
-    pub students: students::Students<StudentId, PeriodId>,
-    pub assignments: assignments::Assignments<PeriodId, SubjectId, StudentId>,
-    pub week_patterns: week_patterns::WeekPatterns<WeekPatternId>,
-    pub slots: slots::Slots<SubjectId, SlotId, TeacherId, WeekPatternId>,
-    pub incompats: incompats::Incompats<IncompatId, SubjectId, WeekPatternId>,
-    pub group_lists: group_lists::GroupLists<GroupListId, PeriodId, SubjectId, StudentId>,
-    pub rules: rules::Rules<RuleId, PeriodId, SlotId>,
-    pub settings: settings::Settings<StudentId>,
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Parameters {
+    pub periods: periods::Periods,
+    pub subjects: subjects::Subjects,
+    pub teachers: teachers::Teachers,
+    pub students: students::Students,
+    pub assignments: assignments::Assignments,
+    pub week_patterns: week_patterns::WeekPatterns,
+    pub slots: slots::Slots,
+    pub incompats: incompats::Incompats,
+    pub group_lists: group_lists::GroupLists,
+    pub rules: rules::Rules,
+    pub settings: settings::Settings,
 }
 
-impl<
-        PeriodId: Id,
-        SubjectId: Id,
-        TeacherId: Id,
-        StudentId: Id,
-        WeekPatternId: Id,
-        SlotId: Id,
-        IncompatId: Id,
-        GroupListId: Id,
-        RuleId: Id,
-    > Default
-    for Parameters<
-        PeriodId,
-        SubjectId,
-        TeacherId,
-        StudentId,
-        WeekPatternId,
-        SlotId,
-        IncompatId,
-        GroupListId,
-        RuleId,
-    >
-{
-    fn default() -> Self {
-        Parameters {
-            periods: periods::Periods::default(),
-            subjects: subjects::Subjects::default(),
-            teachers: teachers::Teachers::default(),
-            students: students::Students::default(),
-            assignments: assignments::Assignments::default(),
-            week_patterns: week_patterns::WeekPatterns::default(),
-            slots: slots::Slots::default(),
-            incompats: incompats::Incompats::default(),
-            group_lists: group_lists::GroupLists::default(),
-            rules: rules::Rules::default(),
-            settings: settings::Settings::default(),
-        }
-    }
-}
-
-pub type GeneralParameters = Parameters<
-    PeriodId,
-    SubjectId,
-    TeacherId,
-    StudentId,
-    WeekPatternId,
-    SlotId,
-    IncompatId,
-    GroupListId,
-    RuleId,
->;
-pub type ColloscopeParameters = Parameters<
-    ColloscopePeriodId,
-    ColloscopeSubjectId,
-    ColloscopeTeacherId,
-    ColloscopeStudentId,
-    ColloscopeWeekPatternId,
-    ColloscopeSlotId,
-    ColloscopeIncompatId,
-    ColloscopeGroupListId,
-    ColloscopeRuleId,
->;
-
-/// Maps between global ids and colloscope specific ids
-///
-/// Params for a specific colloscope are stored when the colloscope is produced (even if empty).
-/// To avoid issues with ids, the parameter set is given new ids (with new types to avoid some programming errors).
-/// But it is useful to know to what ids the new ids correspond. This stores the map between the old ids and the new ones.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ColloscopeIdMaps<
-    PeriodId: Id,
-    SubjectId: Id,
-    TeacherId: Id,
-    StudentId: Id,
-    WeekPatternId: Id,
-    SlotId: Id,
-    IncompatId: Id,
-    GroupListId: Id,
-    RuleId: Id,
-> {
-    pub periods: BTreeMap<PeriodId, ColloscopePeriodId>,
-    pub subjects: BTreeMap<SubjectId, ColloscopeSubjectId>,
-    pub teachers: BTreeMap<TeacherId, ColloscopeTeacherId>,
-    pub students: BTreeMap<StudentId, ColloscopeStudentId>,
-    pub week_patterns: BTreeMap<WeekPatternId, ColloscopeWeekPatternId>,
-    pub slots: BTreeMap<SlotId, ColloscopeSlotId>,
-    pub incompats: BTreeMap<IncompatId, ColloscopeIncompatId>,
-    pub group_lists: BTreeMap<GroupListId, ColloscopeGroupListId>,
-    pub rules: BTreeMap<RuleId, ColloscopeRuleId>,
-}
-
-impl<
-        PeriodId: Id,
-        SubjectId: Id,
-        TeacherId: Id,
-        StudentId: Id,
-        WeekPatternId: Id,
-        SlotId: Id,
-        IncompatId: Id,
-        GroupListId: Id,
-        RuleId: Id,
-    >
-    ColloscopeIdMaps<
-        PeriodId,
-        SubjectId,
-        TeacherId,
-        StudentId,
-        WeekPatternId,
-        SlotId,
-        IncompatId,
-        GroupListId,
-        RuleId,
-    >
-{
-    /// generate a complete set of new ids for some parameters
-    /// and returns the complete map for it
-    pub(crate) fn generate_for(
-        params: &Parameters<
-            PeriodId,
-            SubjectId,
-            TeacherId,
-            StudentId,
-            WeekPatternId,
-            SlotId,
-            IncompatId,
-            GroupListId,
-            RuleId,
-        >,
-        id_issuer: &mut ids::IdIssuer,
-    ) -> Self {
-        ColloscopeIdMaps {
-            periods: params
-                .periods
-                .ordered_period_list
-                .iter()
-                .map(|(period_id, _)| (*period_id, id_issuer.get_colloscope_period_id()))
-                .collect(),
-            subjects: params
-                .subjects
-                .ordered_subject_list
-                .iter()
-                .map(|(subject_id, _)| (*subject_id, id_issuer.get_colloscope_subject_id()))
-                .collect(),
-            teachers: params
-                .teachers
-                .teacher_map
-                .iter()
-                .map(|(teacher_id, _)| (*teacher_id, id_issuer.get_colloscope_teacher_id()))
-                .collect(),
-            students: params
-                .students
-                .student_map
-                .iter()
-                .map(|(student_id, _)| (*student_id, id_issuer.get_colloscope_student_id()))
-                .collect(),
-            week_patterns: params
-                .week_patterns
-                .week_pattern_map
-                .iter()
-                .map(|(week_pattern_id, _)| {
-                    (*week_pattern_id, id_issuer.get_colloscope_week_pattern_id())
-                })
-                .collect(),
-            slots: params
-                .slots
-                .subject_map
-                .iter()
-                .flat_map(|(_subject_id, subject_slots)| {
-                    subject_slots
-                        .ordered_slots
-                        .iter()
-                        .map(|(slot_id, _)| *slot_id)
-                })
-                .map(|id| (id, id_issuer.get_colloscope_slot_id()))
-                .collect(),
-            incompats: params
-                .incompats
-                .incompat_map
-                .iter()
-                .map(|(incompat_id, _)| (*incompat_id, id_issuer.get_colloscope_incompat_id()))
-                .collect(),
-            group_lists: params
-                .group_lists
-                .group_list_map
-                .iter()
-                .map(|(group_list_id, _)| {
-                    (*group_list_id, id_issuer.get_colloscope_group_list_id())
-                })
-                .collect(),
-            rules: params
-                .rules
-                .rule_map
-                .iter()
-                .map(|(rule_id, _)| (*rule_id, id_issuer.get_colloscope_rule_id()))
-                .collect(),
-        }
-    }
-
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        collo_id_maps: &ColloscopeIdMaps<
-            ColloscopePeriodId,
-            ColloscopeSubjectId,
-            ColloscopeTeacherId,
-            ColloscopeStudentId,
-            ColloscopeWeekPatternId,
-            ColloscopeSlotId,
-            ColloscopeIncompatId,
-            ColloscopeGroupListId,
-            ColloscopeRuleId,
-        >,
-    ) -> Option<Self> {
-        Some(ColloscopeIdMaps {
-            periods: self
-                .periods
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.periods.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-            subjects: self
-                .subjects
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.subjects.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-            teachers: self
-                .teachers
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.teachers.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-            students: self
-                .students
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.students.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-            week_patterns: self
-                .week_patterns
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((
-                        id.clone(),
-                        collo_id_maps.week_patterns.get(collo_id).cloned()?,
-                    ))
-                })
-                .collect::<Option<_>>()?,
-            slots: self
-                .slots
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.slots.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-            incompats: self
-                .incompats
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.incompats.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-            group_lists: self
-                .group_lists
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((
-                        id.clone(),
-                        collo_id_maps.group_lists.get(collo_id).cloned()?,
-                    ))
-                })
-                .collect::<Option<_>>()?,
-            rules: self
-                .rules
-                .iter()
-                .map(|(id, collo_id)| {
-                    Some((id.clone(), collo_id_maps.rules.get(collo_id).cloned()?))
-                })
-                .collect::<Option<_>>()?,
-        })
-    }
-}
-
-impl
-    ColloscopeIdMaps<
-        PeriodId,
-        SubjectId,
-        TeacherId,
-        StudentId,
-        WeekPatternId,
-        SlotId,
-        IncompatId,
-        GroupListId,
-        RuleId,
-    >
-{
-    /// Validate original ids against a parameter set
-    ///
-    /// This functions checks that all the original ids do indeed appear
-    pub(crate) fn validate_source_ids(
-        &self,
-        params: &Parameters<
-            PeriodId,
-            SubjectId,
-            TeacherId,
-            StudentId,
-            WeekPatternId,
-            SlotId,
-            IncompatId,
-            GroupListId,
-            RuleId,
-        >,
-    ) -> Result<(), ColloscopeError> {
-        for (period_id, _) in &self.periods {
-            if params.periods.find_period(*period_id).is_none() {
-                return Err(ColloscopeError::InvalidPeriodId(*period_id));
-            }
-        }
-
-        for (subject_id, _) in &self.subjects {
-            if params.subjects.find_subject(*subject_id).is_none() {
-                return Err(ColloscopeError::InvalidSubjectId(*subject_id));
-            }
-        }
-
-        for (teacher_id, _) in &self.teachers {
-            if !params.teachers.teacher_map.contains_key(teacher_id) {
-                return Err(ColloscopeError::InvalidTeacherId(*teacher_id));
-            }
-        }
-
-        for (student_id, _) in &self.students {
-            if !params.students.student_map.contains_key(student_id) {
-                return Err(ColloscopeError::InvalidStudentId(*student_id));
-            }
-        }
-
-        for (week_pattern_id, _) in &self.week_patterns {
-            if !params
-                .week_patterns
-                .week_pattern_map
-                .contains_key(week_pattern_id)
-            {
-                return Err(ColloscopeError::InvalidWeekPatternId(*week_pattern_id));
-            }
-        }
-
-        for (slot_id, _) in &self.slots {
-            if params.slots.find_slot(*slot_id).is_none() {
-                return Err(ColloscopeError::InvalidSlotId(*slot_id));
-            }
-        }
-
-        for (incompat_id, _) in &self.incompats {
-            if !params.incompats.incompat_map.contains_key(incompat_id) {
-                return Err(ColloscopeError::InvalidIncompatId(*incompat_id));
-            }
-        }
-
-        for (group_list_id, _) in &self.group_lists {
-            if !params
-                .group_lists
-                .group_list_map
-                .contains_key(group_list_id)
-            {
-                return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-            }
-        }
-
-        for (rule_id, _) in &self.rules {
-            if !params.rules.rule_map.contains_key(rule_id) {
-                return Err(ColloscopeError::InvalidRuleId(*rule_id));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Validate original ids against a parameter set
-    ///
-    /// This functions checks that all the original ids do indeed appear
-    pub(crate) fn validate_new_ids(
-        &self,
-        params: &Parameters<
-            ColloscopePeriodId,
-            ColloscopeSubjectId,
-            ColloscopeTeacherId,
-            ColloscopeStudentId,
-            ColloscopeWeekPatternId,
-            ColloscopeSlotId,
-            ColloscopeIncompatId,
-            ColloscopeGroupListId,
-            ColloscopeRuleId,
-        >,
-    ) -> Result<(), ColloscopeError> {
-        for (_, period_id) in &self.periods {
-            if params.periods.find_period(*period_id).is_none() {
-                return Err(ColloscopeError::InvalidColloscopePeriodId(*period_id));
-            }
-        }
-
-        for (_, subject_id) in &self.subjects {
-            if params.subjects.find_subject(*subject_id).is_none() {
-                return Err(ColloscopeError::InvalidColloscopeSubjectId(*subject_id));
-            }
-        }
-
-        for (_, teacher_id) in &self.teachers {
-            if !params.teachers.teacher_map.contains_key(teacher_id) {
-                return Err(ColloscopeError::InvalidColloscopeTeacherId(*teacher_id));
-            }
-        }
-
-        for (_, student_id) in &self.students {
-            if !params.students.student_map.contains_key(student_id) {
-                return Err(ColloscopeError::InvalidColloscopeStudentId(*student_id));
-            }
-        }
-
-        for (_, week_pattern_id) in &self.week_patterns {
-            if !params
-                .week_patterns
-                .week_pattern_map
-                .contains_key(week_pattern_id)
-            {
-                return Err(ColloscopeError::InvalidColloscopeWeekPatternId(
-                    *week_pattern_id,
-                ));
-            }
-        }
-
-        for (_, slot_id) in &self.slots {
-            if params.slots.find_slot(*slot_id).is_none() {
-                return Err(ColloscopeError::InvalidColloscopeSlotId(*slot_id));
-            }
-        }
-
-        for (_, incompat_id) in &self.incompats {
-            if !params.incompats.incompat_map.contains_key(incompat_id) {
-                return Err(ColloscopeError::InvalidColloscopeIncompatId(*incompat_id));
-            }
-        }
-
-        for (_, group_list_id) in &self.group_lists {
-            if !params
-                .group_lists
-                .group_list_map
-                .contains_key(group_list_id)
-            {
-                return Err(ColloscopeError::InvalidColloscopeGroupListId(
-                    *group_list_id,
-                ));
-            }
-        }
-
-        for (_, rule_id) in &self.rules {
-            if !params.rules.rule_map.contains_key(rule_id) {
-                return Err(ColloscopeError::InvalidColloscopeRuleId(*rule_id));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl<
-        PeriodId: Id,
-        SubjectId: Id,
-        TeacherId: Id,
-        StudentId: Id,
-        WeekPatternId: Id,
-        SlotId: Id,
-        IncompatId: Id,
-        GroupListId: Id,
-        RuleId: Id,
-    >
-    Parameters<
-        PeriodId,
-        SubjectId,
-        TeacherId,
-        StudentId,
-        WeekPatternId,
-        SlotId,
-        IncompatId,
-        GroupListId,
-        RuleId,
-    >
-{
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        id_maps: &ColloscopeIdMaps<
-            PeriodId,
-            SubjectId,
-            TeacherId,
-            StudentId,
-            WeekPatternId,
-            SlotId,
-            IncompatId,
-            GroupListId,
-            RuleId,
-        >,
-    ) -> Option<
-        Parameters<
-            ColloscopePeriodId,
-            ColloscopeSubjectId,
-            ColloscopeTeacherId,
-            ColloscopeStudentId,
-            ColloscopeWeekPatternId,
-            ColloscopeSlotId,
-            ColloscopeIncompatId,
-            ColloscopeGroupListId,
-            ColloscopeRuleId,
-        >,
-    > {
-        let periods = self.periods.duplicate_with_id_maps(&id_maps.periods)?;
-        let subjects = self
-            .subjects
-            .duplicate_with_id_maps(&id_maps.periods, &id_maps.subjects)?;
-        let teachers = self
-            .teachers
-            .duplicate_with_id_maps(&id_maps.teachers, &id_maps.subjects)?;
-        let students = self
-            .students
-            .duplicate_with_id_maps(&id_maps.students, &id_maps.periods)?;
-        let assignments = self.assignments.duplicate_with_id_maps(
-            &id_maps.periods,
-            &id_maps.subjects,
-            &id_maps.students,
-        )?;
-        let week_patterns = self
-            .week_patterns
-            .duplicate_with_id_maps(&id_maps.week_patterns)?;
-        let slots = self.slots.duplicate_with_id_maps(
-            &id_maps.subjects,
-            &id_maps.slots,
-            &id_maps.teachers,
-            &id_maps.week_patterns,
-        )?;
-        let incompats = self.incompats.duplicate_with_id_maps(
-            &id_maps.incompats,
-            &id_maps.subjects,
-            &id_maps.week_patterns,
-        )?;
-        let group_lists = self.group_lists.duplicate_with_id_maps(
-            &id_maps.group_lists,
-            &id_maps.periods,
-            &id_maps.subjects,
-            &id_maps.students,
-        )?;
-        let rules =
-            self.rules
-                .duplicate_with_id_maps(&id_maps.rules, &id_maps.periods, &id_maps.slots)?;
-        let settings = self.settings.duplicate_with_id_maps(&id_maps.students)?;
-
-        Some(Parameters {
-            periods,
-            subjects,
-            teachers,
-            students,
-            assignments,
-            week_patterns,
-            slots,
-            incompats,
-            group_lists,
-            rules,
-            settings,
-        })
-    }
-
-    pub(crate) fn duplicate(
-        &self,
-        id_issuer: &mut ids::IdIssuer,
-    ) -> (
-        Parameters<
-            ColloscopePeriodId,
-            ColloscopeSubjectId,
-            ColloscopeTeacherId,
-            ColloscopeStudentId,
-            ColloscopeWeekPatternId,
-            ColloscopeSlotId,
-            ColloscopeIncompatId,
-            ColloscopeGroupListId,
-            ColloscopeRuleId,
-        >,
-        ColloscopeIdMaps<
-            PeriodId,
-            SubjectId,
-            TeacherId,
-            StudentId,
-            WeekPatternId,
-            SlotId,
-            IncompatId,
-            GroupListId,
-            RuleId,
-        >,
-    ) {
-        let id_maps = ColloscopeIdMaps::generate_for(self, id_issuer);
-        let new_params = self
-            .duplicate_with_id_maps(&id_maps)
-            .expect("The id maps should be complete for this specific parameters set");
-
-        (new_params, id_maps)
-    }
-}
-
-impl<
-        PeriodId: Id,
-        SubjectId: Id,
-        TeacherId: Id,
-        StudentId: Id,
-        WeekPatternId: Id,
-        SlotId: Id,
-        IncompatId: Id,
-        GroupListId: Id,
-        RuleId: Id,
-    >
-    Parameters<
-        PeriodId,
-        SubjectId,
-        TeacherId,
-        StudentId,
-        WeekPatternId,
-        SlotId,
-        IncompatId,
-        GroupListId,
-        RuleId,
-    >
-{
+impl Parameters {
     /// Promotes an u64 to a [PeriodId] if it is valid
     pub fn validate_period_id(&self, id: u64) -> Option<PeriodId> {
         for (period_id, _) in &self.periods.ordered_period_list {
@@ -781,29 +140,7 @@ impl<
     }
 }
 
-impl<
-        PeriodId: Id,
-        SubjectId: Id,
-        TeacherId: Id,
-        StudentId: Id,
-        WeekPatternId: Id,
-        SlotId: Id,
-        IncompatId: Id,
-        GroupListId: Id,
-        RuleId: Id,
-    >
-    Parameters<
-        PeriodId,
-        SubjectId,
-        TeacherId,
-        StudentId,
-        WeekPatternId,
-        SlotId,
-        IncompatId,
-        GroupListId,
-        RuleId,
-    >
-{
+impl Parameters {
     /// USED INTERNALLY
     ///
     /// Returns an iterator on all ids that appear in the colloscope params
@@ -856,9 +193,9 @@ impl<
     ///
     /// Checks that a subject is valid
     fn validate_subject_internal(
-        subject: &subjects::Subject<PeriodId>,
+        subject: &subjects::Subject,
         period_ids: &BTreeSet<PeriodId>,
-    ) -> Result<(), SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>> {
+    ) -> Result<(), SubjectError> {
         for period_id in &subject.excluded_periods {
             if !period_ids.contains(period_id) {
                 return Err(SubjectError::InvalidPeriodId(*period_id));
@@ -904,10 +241,7 @@ impl<
     /// USED INTERNALLY
     ///
     /// used to check a subject before commiting a subject op
-    pub(crate) fn validate_subject(
-        &self,
-        subject: &subjects::Subject<PeriodId>,
-    ) -> Result<(), SubjectError<SubjectId, PeriodId, TeacherId, IncompatId, GroupListId>> {
+    pub(crate) fn validate_subject(&self, subject: &subjects::Subject) -> Result<(), SubjectError> {
         let period_ids = self.build_period_ids();
 
         Self::validate_subject_internal(subject, &period_ids)
@@ -933,9 +267,9 @@ impl<
     ///
     /// Checks that a subject is valid
     fn validate_teacher_internal(
-        teacher: &teachers::Teacher<SubjectId>,
-        subjects: &subjects::Subjects<SubjectId, PeriodId>,
-    ) -> Result<(), TeacherError<TeacherId, SubjectId, SlotId>> {
+        teacher: &teachers::Teacher,
+        subjects: &subjects::Subjects,
+    ) -> Result<(), TeacherError> {
         for subject_id in &teacher.subjects {
             let Some(subject) = subjects.find_subject(*subject_id) else {
                 return Err(TeacherError::InvalidSubjectId(*subject_id));
@@ -951,10 +285,7 @@ impl<
     /// USED INTERNALLY
     ///
     /// used to check a teacher before commiting a teacher op
-    pub(crate) fn validate_teacher(
-        &self,
-        teacher: &teachers::Teacher<SubjectId>,
-    ) -> Result<(), TeacherError<TeacherId, SubjectId, SlotId>> {
+    pub(crate) fn validate_teacher(&self, teacher: &teachers::Teacher) -> Result<(), TeacherError> {
         Self::validate_teacher_internal(teacher, &self.subjects)
     }
 
@@ -974,9 +305,9 @@ impl<
     ///
     /// Checks that a subject is valid
     fn validate_student_internal(
-        student: &students::Student<PeriodId>,
+        student: &students::Student,
         period_ids: &BTreeSet<PeriodId>,
-    ) -> Result<(), StudentError<StudentId, PeriodId, SubjectId, GroupListId>> {
+    ) -> Result<(), StudentError> {
         for period_id in &student.excluded_periods {
             if !period_ids.contains(period_id) {
                 return Err(StudentError::InvalidPeriodId(*period_id));
@@ -989,10 +320,7 @@ impl<
     /// USED INTERNALLY
     ///
     /// used to check a teacher before commiting a teacher op
-    pub(crate) fn validate_student(
-        &self,
-        student: &students::Student<PeriodId>,
-    ) -> Result<(), StudentError<StudentId, PeriodId, SubjectId, GroupListId>> {
+    pub(crate) fn validate_student(&self, student: &students::Student) -> Result<(), StudentError> {
         let period_ids = self.build_period_ids();
 
         Self::validate_student_internal(student, &period_ids)
@@ -1062,12 +390,12 @@ impl<
     ///
     /// Checks that a slot is valid
     fn validate_slot_internal(
-        slot: &slots::Slot<TeacherId, WeekPatternId>,
+        slot: &slots::Slot,
         subject_id: SubjectId,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
-        teachers: &teachers::Teachers<TeacherId, SubjectId>,
-        subjects: &subjects::Subjects<SubjectId, PeriodId>,
-    ) -> Result<(), SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>> {
+        teachers: &teachers::Teachers,
+        subjects: &subjects::Subjects,
+    ) -> Result<(), SlotError> {
         let Some(teacher) = teachers.teacher_map.get(&slot.teacher_id) else {
             return Err(SlotError::InvalidTeacherId(slot.teacher_id));
         };
@@ -1104,9 +432,9 @@ impl<
     /// used to check a teacher before commiting a teacher op
     pub(crate) fn validate_slot(
         &self,
-        slot: &slots::Slot<TeacherId, WeekPatternId>,
+        slot: &slots::Slot,
         subject_id: SubjectId,
-    ) -> Result<(), SlotError<SlotId, SubjectId, TeacherId, WeekPatternId, RuleId>> {
+    ) -> Result<(), SlotError> {
         let week_pattern_ids = self.build_week_pattern_ids();
 
         Self::validate_slot_internal(
@@ -1158,10 +486,10 @@ impl<
     ///
     /// Checks that an incompat is valid
     fn validate_incompat_internal(
-        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
+        incompat: &incompats::Incompatibility,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
         subject_ids: &BTreeSet<SubjectId>,
-    ) -> Result<(), IncompatError<IncompatId, SubjectId, WeekPatternId>> {
+    ) -> Result<(), IncompatError> {
         if !subject_ids.contains(&incompat.subject_id) {
             return Err(IncompatError::InvalidSubjectId(incompat.subject_id));
         }
@@ -1178,8 +506,8 @@ impl<
     /// used to check a teacher before commiting a teacher op
     pub(crate) fn validate_incompat(
         &self,
-        incompat: &incompats::Incompatibility<SubjectId, WeekPatternId>,
-    ) -> Result<(), IncompatError<IncompatId, SubjectId, WeekPatternId>> {
+        incompat: &incompats::Incompatibility,
+    ) -> Result<(), IncompatError> {
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
 
@@ -1207,9 +535,9 @@ impl<
     ///
     /// Checks that an incompat is valid
     fn validate_group_list_params_internal(
-        params: &group_lists::GroupListParameters<StudentId>,
-        students: &students::Students<StudentId, PeriodId>,
-    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        params: &group_lists::GroupListParameters,
+        students: &students::Students,
+    ) -> Result<(), GroupListError> {
         if params.group_count.is_empty() {
             return Err(GroupListError::GroupCountRangeIsEmpty);
         }
@@ -1228,10 +556,10 @@ impl<
     ///
     /// Checks that an incompat is valid
     fn validate_group_list_prefilled_groups_internal(
-        prefilled_groups: &group_lists::GroupListPrefilledGroups<StudentId>,
-        students: &students::Students<StudentId, PeriodId>,
+        prefilled_groups: &group_lists::GroupListPrefilledGroups,
+        students: &students::Students,
         excluded_students: &BTreeSet<StudentId>,
-    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+    ) -> Result<(), GroupListError> {
         if !prefilled_groups.check_duplicated_student() {
             return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
         }
@@ -1252,9 +580,9 @@ impl<
     ///
     /// Checks that an incompat is valid
     fn validate_group_list_internal(
-        group_list: &group_lists::GroupList<StudentId>,
-        students: &students::Students<StudentId, PeriodId>,
-    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        group_list: &group_lists::GroupList,
+        students: &students::Students,
+    ) -> Result<(), GroupListError> {
         Self::validate_group_list_params_internal(&group_list.params, students)?;
         Self::validate_group_list_prefilled_groups_internal(
             &group_list.prefilled_groups,
@@ -1269,8 +597,8 @@ impl<
     /// used to check a teacher before commiting a teacher op
     pub(crate) fn validate_group_list(
         &self,
-        group_list: &group_lists::GroupList<StudentId>,
-    ) -> Result<(), GroupListError<GroupListId, StudentId, SubjectId, PeriodId>> {
+        group_list: &group_lists::GroupList,
+    ) -> Result<(), GroupListError> {
         Self::validate_group_list_internal(group_list, &self.students)
     }
 
@@ -1312,9 +640,9 @@ impl<
     ///
     /// Checks that a rule is valid
     fn validate_logic_rule_internal(
-        logic_rule: &rules::LogicRule<SlotId>,
+        logic_rule: &rules::LogicRule,
         slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), RuleError<RuleId, PeriodId, SlotId>> {
+    ) -> Result<(), RuleError> {
         match logic_rule {
             rules::LogicRule::And(l1, l2) => {
                 Self::validate_logic_rule_internal(l1.as_ref(), slot_ids)?;
@@ -1340,10 +668,10 @@ impl<
     ///
     /// Checks that a rule is valid
     fn validate_rule_internal(
-        rule: &rules::Rule<PeriodId, SlotId>,
+        rule: &rules::Rule,
         period_ids: &BTreeSet<PeriodId>,
         slot_ids: &BTreeSet<SlotId>,
-    ) -> Result<(), RuleError<RuleId, PeriodId, SlotId>> {
+    ) -> Result<(), RuleError> {
         for period_id in &rule.excluded_periods {
             if !period_ids.contains(period_id) {
                 return Err(RuleError::InvalidPeriodId(*period_id));
@@ -1358,10 +686,7 @@ impl<
     /// USED INTERNALLY
     ///
     /// used to check a rule before commiting a rule op
-    pub(crate) fn validate_rule(
-        &self,
-        rule: &rules::Rule<PeriodId, SlotId>,
-    ) -> Result<(), RuleError<RuleId, PeriodId, SlotId>> {
+    pub(crate) fn validate_rule(&self, rule: &rules::Rule) -> Result<(), RuleError> {
         let period_ids = self.build_period_ids();
         let slot_ids = self.build_slot_ids();
         Self::validate_rule_internal(rule, &period_ids, &slot_ids)
@@ -1389,8 +714,8 @@ impl<
     /// used to check settings before commiting a settings op
     pub(crate) fn validate_settings(
         &self,
-        settings: &settings::Settings<StudentId>,
-    ) -> Result<(), SettingsError<StudentId>> {
+        settings: &settings::Settings,
+    ) -> Result<(), SettingsError> {
         for (student_id, _limits) in &settings.students {
             if !self.students.student_map.contains_key(student_id) {
                 return Err(SettingsError::InvalidStudentId(*student_id));

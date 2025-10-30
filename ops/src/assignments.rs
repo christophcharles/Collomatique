@@ -160,7 +160,7 @@ impl AssignmentsUpdateOp {
                 let Some(position) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -181,14 +181,14 @@ impl AssignmentsUpdateOp {
                 let previous_period_id = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[position - 1]
                     .0;
                 let current_period_assignments = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                     .get(period_id)
@@ -197,7 +197,7 @@ impl AssignmentsUpdateOp {
                 let previous_period_assignments = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                     .get(&previous_period_id)
@@ -207,7 +207,7 @@ impl AssignmentsUpdateOp {
                 let student_map = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .clone();
@@ -250,7 +250,7 @@ impl AssignmentsUpdateOp {
                 if data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .is_none()
@@ -261,7 +261,7 @@ impl AssignmentsUpdateOp {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -277,7 +277,7 @@ impl AssignmentsUpdateOp {
                 let student_map = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .clone();

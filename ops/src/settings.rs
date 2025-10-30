@@ -68,12 +68,7 @@ impl SettingsUpdateOp {
     ) -> Result<(), SettingsUpdateError> {
         match self {
             Self::UpdateGlobalLimits(limits) => {
-                let mut new_settings = data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .settings
-                    .clone();
+                let mut new_settings = data.get_data().get_inner_data().params.settings.clone();
                 new_settings.global = limits.clone();
 
                 let result = data
@@ -93,7 +88,7 @@ impl SettingsUpdateOp {
                 if !data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .contains_key(student_id)
@@ -101,12 +96,7 @@ impl SettingsUpdateOp {
                     return Err(UpdateStudentLimitsError::InvalidStudentId(*student_id).into());
                 }
 
-                let mut new_settings = data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .settings
-                    .clone();
+                let mut new_settings = data.get_data().get_inner_data().params.settings.clone();
                 new_settings.students.insert(*student_id, limits.clone());
 
                 let result = data
@@ -126,7 +116,7 @@ impl SettingsUpdateOp {
                 if !data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .contains_key(student_id)
@@ -134,12 +124,7 @@ impl SettingsUpdateOp {
                     return Err(RemoveStudentLimitsError::InvalidStudentId(*student_id).into());
                 }
 
-                let mut new_settings = data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .settings
-                    .clone();
+                let mut new_settings = data.get_data().get_inner_data().params.settings.clone();
                 if new_settings.students.remove(student_id).is_none() {
                     return Err(RemoveStudentLimitsError::NoLimitsForStudent(*student_id).into());
                 }

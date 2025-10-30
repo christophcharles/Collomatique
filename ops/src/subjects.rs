@@ -40,7 +40,7 @@ impl SubjectsUpdateWarning {
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .teachers
                     .teacher_map
                     .get(teacher_id)
@@ -50,7 +50,7 @@ impl SubjectsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -65,7 +65,7 @@ impl SubjectsUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -74,7 +74,7 @@ impl SubjectsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -90,7 +90,7 @@ impl SubjectsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -105,7 +105,7 @@ impl SubjectsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -114,7 +114,7 @@ impl SubjectsUpdateWarning {
                 let Some(incompat) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .incompats
                     .incompat_map
                     .get(incompat_id)
@@ -144,7 +144,7 @@ impl SubjectsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -153,7 +153,7 @@ impl SubjectsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -163,7 +163,7 @@ impl SubjectsUpdateWarning {
                 let Some(period_num) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -187,7 +187,7 @@ impl SubjectsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -303,7 +303,7 @@ impl SubjectsUpdateOp {
                 let Some(current_subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -317,12 +317,8 @@ impl SubjectsUpdateOp {
                 let no_more_interrogations = params.interrogation_parameters.is_none();
 
                 if previously_had_interrogations && no_more_interrogations {
-                    for (teacher_id, teacher) in &data
-                        .get_data()
-                        .get_inner_data()
-                        .main_params
-                        .teachers
-                        .teacher_map
+                    for (teacher_id, teacher) in
+                        &data.get_data().get_inner_data().params.teachers.teacher_map
                     {
                         if teacher.subjects.contains(subject_id) {
                             let mut new_teacher = teacher.clone();
@@ -343,7 +339,7 @@ impl SubjectsUpdateOp {
                     for (period_id, subject_map) in &data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .group_lists
                         .subjects_associations
                     {
@@ -368,7 +364,7 @@ impl SubjectsUpdateOp {
                     let subject_slots = data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .slots
                         .subject_map
                         .get(subject_id)
@@ -387,7 +383,7 @@ impl SubjectsUpdateOp {
                 let Some(current_subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -400,7 +396,7 @@ impl SubjectsUpdateOp {
                     if let Some(period_assignments) = data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .assignments
                         .period_map
                         .get(period_id)
@@ -429,7 +425,7 @@ impl SubjectsUpdateOp {
                     if let Some(subject_map) = data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .group_lists
                         .subjects_associations
                         .get(period_id)
@@ -476,12 +472,8 @@ impl SubjectsUpdateOp {
                     }
                 }
 
-                for (teacher_id, teacher) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .teachers
-                    .teacher_map
+                for (teacher_id, teacher) in
+                    &data.get_data().get_inner_data().params.teachers.teacher_map
                 {
                     if teacher.subjects.contains(subject_id) {
                         let mut new_teacher = teacher.clone();
@@ -502,7 +494,7 @@ impl SubjectsUpdateOp {
                 for (period_id, subject_map) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                 {
@@ -525,7 +517,7 @@ impl SubjectsUpdateOp {
                 for (incompat_id, incompat) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .incompats
                     .incompat_map
                 {
@@ -545,7 +537,7 @@ impl SubjectsUpdateOp {
                 if let Some(subject_slots) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .subject_map
                     .get(subject_id)
@@ -561,7 +553,7 @@ impl SubjectsUpdateOp {
                 let Some(subject) = &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -573,7 +565,7 @@ impl SubjectsUpdateOp {
                 for (period_id, period_assignments) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                 {
@@ -616,7 +608,7 @@ impl SubjectsUpdateOp {
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::AddAfter(
-                                data.get_data().get_inner_data().main_params.subjects.ordered_subject_list.last().map(|x| x.0),
+                                data.get_data().get_inner_data().params.subjects.ordered_subject_list.last().map(|x| x.0),
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods: BTreeSet::new(),
@@ -643,7 +635,7 @@ impl SubjectsUpdateOp {
                 let current_subject = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                     .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?;
@@ -710,7 +702,7 @@ impl SubjectsUpdateOp {
                 let current_position = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject_position(*subject_id)
                     .ok_or(MoveSubjectUpError::InvalidSubjectId(*subject_id))?;
@@ -739,7 +731,7 @@ impl SubjectsUpdateOp {
                 let current_position = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject_position(*subject_id)
                     .ok_or(MoveSubjectDownError::InvalidSubjectId(*subject_id))?;
@@ -748,7 +740,7 @@ impl SubjectsUpdateOp {
                     == data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .subjects
                         .ordered_subject_list
                         .len()
@@ -777,7 +769,7 @@ impl SubjectsUpdateOp {
                 if data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .is_none()
@@ -788,7 +780,7 @@ impl SubjectsUpdateOp {
                 let mut subject = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                     .ok_or(UpdatePeriodStatusError::InvalidSubjectId(*subject_id))?

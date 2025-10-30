@@ -7,60 +7,52 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_solver_colloscopes::base::{self, ColloscopeProblem};
 use collomatique_state_colloscopes::{
-    ColloscopeGroupListId, ColloscopeId, ColloscopeIncompatId, ColloscopePeriodId,
-    ColloscopeSlotId, ColloscopeStudentId, ColloscopeSubjectId,
+    GroupListId, IncompatId, PeriodId, SlotId, StudentId, SubjectId,
 };
 
-type ProblemDesc = ColloscopeProblem<
-    ColloscopeSubjectId,
-    ColloscopeSlotId,
-    ColloscopeGroupListId,
-    ColloscopeStudentId,
->;
+type ProblemDesc = ColloscopeProblem<SubjectId, SlotId, GroupListId, StudentId>;
 
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
 pub enum Error {
-    #[error("Invalid Colloscope Id")]
-    InvalidColloscopeId(ColloscopeId),
     #[error("There should be at least one subject (with interrogations)")]
     NoSubject,
     #[error("subject {0:?} does not have an associated group list for period {1:?}")]
-    MissingGroupList(ColloscopeSubjectId, ColloscopePeriodId),
+    MissingGroupList(SubjectId, PeriodId),
     #[error("Some students enrolled in subjects {0:?} do not appear in group list {1:?}")]
-    GroupListDoesNotContainAllStudents(ColloscopeSubjectId, ColloscopeGroupListId),
+    GroupListDoesNotContainAllStudents(SubjectId, GroupListId),
     #[error(
         "Prefilled group {1} exceeds the maximum number of students per group (group list {0:?})"
     )]
-    TooManyStudentsInPrefilledGroup(ColloscopeGroupListId, u32),
+    TooManyStudentsInPrefilledGroup(GroupListId, u32),
     #[error("Sealed group {1} does not have enough students (group list {0:?})")]
-    TooFewStudentsInSealedGroup(ColloscopeGroupListId, u32),
+    TooFewStudentsInSealedGroup(GroupListId, u32),
     #[error("Prefilled group {2} exceeds the maximum number of students per group when specialized for subject {0:?} on week {1}")]
-    TooManyStudentsInPrefilledGroupForSubject(ColloscopeSubjectId, usize, u32),
+    TooManyStudentsInPrefilledGroupForSubject(SubjectId, usize, u32),
     #[error("Sealed group {2} does not have enough students when specialized for subject {0:?} on week {1}")]
-    TooFewStudentsInSealedGroupForSubject(ColloscopeSubjectId, usize, u32),
+    TooFewStudentsInSealedGroupForSubject(SubjectId, usize, u32),
     #[error("Group list {0:?} has a maximum number of groups of {1} but has {2} prefilled groups")]
-    TooManyPrefilledGroups(ColloscopeGroupListId, u32, usize),
+    TooManyPrefilledGroups(GroupListId, u32, usize),
 }
 
 type MainVar = collomatique_solver_colloscopes::base::variables::MainVariable<
-    ColloscopeGroupListId,
-    ColloscopeStudentId,
-    ColloscopeSubjectId,
-    ColloscopeSlotId,
+    GroupListId,
+    StudentId,
+    SubjectId,
+    SlotId,
 >;
 type StructVar = collomatique_solver_colloscopes::base::variables::StructureVariable<
-    ColloscopeGroupListId,
-    ColloscopeStudentId,
-    ColloscopeSubjectId,
-    ColloscopeSlotId,
+    GroupListId,
+    StudentId,
+    SubjectId,
+    SlotId,
 >;
 type BaseProblem = collomatique_solver_colloscopes::base::ValidatedColloscopeProblem<
-    ColloscopeSubjectId,
-    ColloscopeSlotId,
-    ColloscopeGroupListId,
-    ColloscopeStudentId,
+    SubjectId,
+    SlotId,
+    GroupListId,
+    StudentId,
 >;
 type ProblemRepr = collomatique_ilp::DefaultRepr<
     collomatique_solver::ExtraVariable<MainVar, StructVar, collomatique_solver::solver::IdVariable>,
@@ -70,81 +62,81 @@ pub enum ColloscopeTranslator {
     GroupsPerSlot(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::groups_per_slots::GroupsPerSlots<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     StudentsPerGroups(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::students_per_groups::StudentsPerGroups<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     GroupCount(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::group_count::GroupCount<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     SealedGroups(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::sealed_groups::SealedGroups<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     StudentsPerGroupsForSubject(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::students_per_groups_for_subject::StudentsPerGroupsForSubject<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     StrictLimits(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::strict_limits::StrictLimits<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     OneInterrogationAtATime(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::one_interrogation_at_a_time::OneInterrogationAtATime<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
             >,
         >,
     ),
     IncompatForSingleWeek(
         collomatique_solver::Translator<
             collomatique_solver_colloscopes::constraints::incompat_for_single_week::IncompatForSingleWeek<
-                ColloscopeSubjectId,
-                ColloscopeSlotId,
-                ColloscopeGroupListId,
-                ColloscopeStudentId,
-                ColloscopeIncompatId,
+                SubjectId,
+                SlotId,
+                GroupListId,
+                StudentId,
+                IncompatId,
             >,
         >,
     ),
@@ -157,9 +149,9 @@ pub struct ColloscopeProblemWithTranslators {
 
 impl ColloscopeProblemWithTranslators {
     pub fn from_collo_params(
-        collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+        params: &collomatique_state_colloscopes::colloscope_params::Parameters,
     ) -> Result<Self, Error> {
-        let problem_desc = collo_params_to_colloscope_problem_desc(collo_params)?;
+        let problem_desc = params_to_colloscope_problem_desc(params)?;
 
         use collomatique_solver_colloscopes::base::ValidationError;
         let validated_problem_desc = match problem_desc.validate() {
@@ -187,34 +179,25 @@ impl ColloscopeProblemWithTranslators {
 
         let mut translators = vec![];
 
-        let weeks = generate_active_weeks_list(collo_params);
+        let weeks = generate_active_weeks_list(params);
 
-        add_groups_per_slots_constraints(
-            &mut problem_builder,
-            &mut translators,
-            collo_params,
-            &weeks,
-        );
-        add_students_per_groups_constraints(&mut problem_builder, &mut translators, collo_params);
-        add_group_count_constraints(&mut problem_builder, &mut translators, collo_params);
-        add_sealed_groups_constraints(&mut problem_builder, &mut translators, collo_params);
+        add_groups_per_slots_constraints(&mut problem_builder, &mut translators, params, &weeks);
+        add_students_per_groups_constraints(&mut problem_builder, &mut translators, params);
+        add_group_count_constraints(&mut problem_builder, &mut translators, params);
+        add_sealed_groups_constraints(&mut problem_builder, &mut translators, params);
         add_students_per_groups_for_subject_constraints(
             &mut problem_builder,
             &mut translators,
-            collo_params,
+            params,
         );
-        add_strict_limits_constraints(&mut problem_builder, &mut translators, collo_params, &weeks);
+        add_strict_limits_constraints(&mut problem_builder, &mut translators, params, &weeks);
         add_one_interrogation_at_a_time_constraints(
             &mut problem_builder,
             &mut translators,
-            collo_params,
+            params,
             &weeks,
         );
-        add_incompat_for_single_week_constraints(
-            &mut problem_builder,
-            &mut translators,
-            collo_params,
-        );
+        add_incompat_for_single_week_constraints(&mut problem_builder, &mut translators, params);
 
         let problem = problem_builder.build();
 
@@ -226,14 +209,14 @@ impl ColloscopeProblemWithTranslators {
 }
 
 fn generate_active_weeks_list(
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
     generate_active_weeks_list_with_excluded_periods(collo_params, &BTreeSet::new())
 }
 
 fn generate_active_weeks_list_with_excluded_periods(
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
-    excluded_periods: &BTreeSet<ColloscopePeriodId>,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    excluded_periods: &BTreeSet<PeriodId>,
 ) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
     let mut weeks = vec![];
     for (period_id, period) in &collo_params.periods.ordered_period_list {
@@ -250,8 +233,8 @@ fn generate_active_weeks_list_with_excluded_periods(
     weeks
 }
 
-fn collo_params_to_colloscope_problem_desc(
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+fn params_to_colloscope_problem_desc(
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) -> Result<ProblemDesc, Error> {
     let students: BTreeSet<_> = collo_params.students.student_map.keys().copied().collect();
 
@@ -414,7 +397,7 @@ fn collo_params_to_colloscope_problem_desc(
 fn add_groups_per_slots_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
     weeks: &Vec<collomatique_state_colloscopes::periods::WeekDesc>,
 ) {
     for (subject_id, subject) in &collo_params.subjects.ordered_subject_list {
@@ -437,7 +420,7 @@ fn add_groups_per_slots_constraints(
 fn add_students_per_groups_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) {
     for (group_list_id, _group_list) in &collo_params.group_lists.group_list_map {
         let students_per_groups_constraints =
@@ -455,7 +438,7 @@ fn add_students_per_groups_constraints(
 fn add_group_count_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) {
     for (group_list_id, _group_list) in &collo_params.group_lists.group_list_map {
         let group_count_constraints =
@@ -473,7 +456,7 @@ fn add_group_count_constraints(
 fn add_sealed_groups_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) {
     for (group_list_id, _group_list) in &collo_params.group_lists.group_list_map {
         let sealed_groups_constraints =
@@ -491,7 +474,7 @@ fn add_sealed_groups_constraints(
 fn add_students_per_groups_for_subject_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) {
     let mut params = BTreeSet::new();
     for (_period_id, subject_map) in &collo_params.group_lists.subjects_associations {
@@ -517,7 +500,7 @@ fn add_students_per_groups_for_subject_constraints(
 fn add_strict_limits_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
     weeks: &Vec<collomatique_state_colloscopes::periods::WeekDesc>,
 ) {
     let students = collo_params.students.student_map.keys().copied().collect();
@@ -553,7 +536,7 @@ fn add_strict_limits_constraints(
 fn add_one_interrogation_at_a_time_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
     weeks: &Vec<collomatique_state_colloscopes::periods::WeekDesc>,
 ) {
     let students = collo_params.students.student_map.keys().copied().collect();
@@ -573,7 +556,7 @@ fn add_one_interrogation_at_a_time_constraints(
 fn add_incompat_for_single_week_constraints(
     problem_builder: &mut collomatique_solver::ProblemBuilder<MainVar, StructVar, BaseProblem>,
     translators: &mut Vec<ColloscopeTranslator>,
-    collo_params: &collomatique_state_colloscopes::colloscope_params::ColloscopeParameters,
+    collo_params: &collomatique_state_colloscopes::colloscope_params::Parameters,
 ) {
     for (incompat_id, incompat) in &collo_params.incompats.incompat_map {
         let mut first_week = 0usize;

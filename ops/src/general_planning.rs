@@ -38,7 +38,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -48,7 +48,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -65,7 +65,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -80,7 +80,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -89,7 +89,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -109,7 +109,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -119,7 +119,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -128,7 +128,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(period_num) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -143,7 +143,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(rule) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .rules
                     .rule_map
                     .get(rule_id)
@@ -153,7 +153,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -181,7 +181,7 @@ impl GeneralPlanningUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -315,7 +315,7 @@ impl GeneralPlanningUpdateOp {
                 for (subject_id, subject) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .ordered_subject_list
                 {
@@ -334,8 +334,7 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_inner_data().main_params.rules.rule_map
-                {
+                for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
                     if rule.excluded_periods.contains(period_id) {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseRuleDataForPeriod(
@@ -348,12 +347,8 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .students
-                    .student_map
+                for (student_id, student) in
+                    &data.get_data().get_inner_data().params.students.student_map
                 {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
@@ -374,7 +369,7 @@ impl GeneralPlanningUpdateOp {
                 let Some(period_assignments) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                     .get(period_id)
@@ -401,7 +396,7 @@ impl GeneralPlanningUpdateOp {
                 if let Some(subject_map) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                     .get(period_id)
@@ -448,7 +443,7 @@ impl GeneralPlanningUpdateOp {
                 let Some(pos) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -460,7 +455,7 @@ impl GeneralPlanningUpdateOp {
                 let previous_id = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos - 1]
                     .0;
@@ -468,7 +463,7 @@ impl GeneralPlanningUpdateOp {
                 for (subject_id, subject) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .ordered_subject_list
                 {
@@ -489,8 +484,7 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_inner_data().main_params.rules.rule_map
-                {
+                for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
                     if rule.excluded_periods.contains(period_id)
                         != rule.excluded_periods.contains(&previous_id)
                     {
@@ -507,12 +501,8 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .students
-                    .student_map
+                for (student_id, student) in
+                    &data.get_data().get_inner_data().params.students.student_map
                 {
                     if student.excluded_periods.contains(period_id)
                         != student.excluded_periods.contains(&previous_id)
@@ -539,7 +529,7 @@ impl GeneralPlanningUpdateOp {
                 let Some(period_assignments) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                     .get(period_id)
@@ -551,7 +541,7 @@ impl GeneralPlanningUpdateOp {
                 let Some(previous_assignments) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                     .get(&previous_id)
@@ -572,12 +562,8 @@ impl GeneralPlanningUpdateOp {
                             }
                         }
                         Some(previous_students) => {
-                            for (student_id, _student) in &data
-                                .get_data()
-                                .get_inner_data()
-                                .main_params
-                                .students
-                                .student_map
+                            for (student_id, _student) in
+                                &data.get_data().get_inner_data().params.students.student_map
                             {
                                 if assigned_students.contains(student_id)
                                     != previous_students.contains(student_id)
@@ -597,7 +583,7 @@ impl GeneralPlanningUpdateOp {
                 if let Some(subject_map) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                     .get(period_id)
@@ -669,7 +655,7 @@ impl GeneralPlanningUpdateOp {
                             match data
                                 .get_data()
                                 .get_inner_data()
-                                .main_params
+                                .params
                                 .periods
                                 .ordered_period_list
                                 .last()
@@ -696,14 +682,14 @@ impl GeneralPlanningUpdateOp {
                 let pos = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .ok_or(UpdatePeriodWeekCountError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos]
                     .1
@@ -759,14 +745,14 @@ impl GeneralPlanningUpdateOp {
                 let pos = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .ok_or(CutPeriodError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos]
                     .1
@@ -799,7 +785,7 @@ impl GeneralPlanningUpdateOp {
                 let ordered_subject_list = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .ordered_subject_list
                     .clone();
@@ -827,7 +813,7 @@ impl GeneralPlanningUpdateOp {
                 let rule_map = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .rules
                     .rule_map
                     .clone();
@@ -854,7 +840,7 @@ impl GeneralPlanningUpdateOp {
                 let student_map = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .clone();
@@ -882,7 +868,7 @@ impl GeneralPlanningUpdateOp {
                 let period_assignments = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                     .get(period_id)
@@ -911,7 +897,7 @@ impl GeneralPlanningUpdateOp {
                 if let Some(subject_map) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                     .get(period_id)
@@ -954,7 +940,7 @@ impl GeneralPlanningUpdateOp {
                 let pos = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .ok_or(MergeWithPreviousPeriodError::InvalidPeriodId(*period_id))?;
@@ -964,7 +950,7 @@ impl GeneralPlanningUpdateOp {
                 let previous_id = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos - 1]
                     .0;
@@ -972,7 +958,7 @@ impl GeneralPlanningUpdateOp {
                 let mut prev_desc = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos - 1]
                     .1
@@ -980,7 +966,7 @@ impl GeneralPlanningUpdateOp {
                 let desc = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos]
                     .1
@@ -1023,14 +1009,14 @@ impl GeneralPlanningUpdateOp {
                 let pos = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos]
                     .1
@@ -1062,14 +1048,14 @@ impl GeneralPlanningUpdateOp {
                 let pos = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                     .ok_or(UpdateWeekAnnotationError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[pos]
                     .1

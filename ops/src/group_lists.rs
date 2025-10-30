@@ -32,7 +32,7 @@ impl GroupListsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -49,7 +49,7 @@ impl GroupListsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -61,7 +61,7 @@ impl GroupListsUpdateWarning {
                     let Some(student) = data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .students
                         .student_map
                         .get(student_id)
@@ -84,7 +84,7 @@ impl GroupListsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -94,7 +94,7 @@ impl GroupListsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -103,7 +103,7 @@ impl GroupListsUpdateWarning {
                 let Some(period_num) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -127,7 +127,7 @@ impl GroupListsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -269,7 +269,7 @@ impl GroupListsUpdateOp {
                 let Some(old_group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -324,7 +324,7 @@ impl GroupListsUpdateOp {
                 let Some(old_group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -347,7 +347,7 @@ impl GroupListsUpdateOp {
                 for (period_id, subject_map) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                 {
@@ -395,7 +395,7 @@ impl GroupListsUpdateOp {
                     if !data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .students
                         .student_map
                         .contains_key(student_id)
@@ -430,7 +430,7 @@ impl GroupListsUpdateOp {
                     if !data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .students
                         .student_map
                         .contains_key(student_id)
@@ -449,7 +449,7 @@ impl GroupListsUpdateOp {
                 if !data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .contains_key(group_list_id)
@@ -482,7 +482,7 @@ impl GroupListsUpdateOp {
                 if !data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .contains_key(group_list_id)
@@ -513,7 +513,7 @@ impl GroupListsUpdateOp {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -532,7 +532,7 @@ impl GroupListsUpdateOp {
                     if !data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .students
                         .student_map
                         .contains_key(&student_id)
@@ -560,7 +560,7 @@ impl GroupListsUpdateOp {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(*subject_id)
                 else {
@@ -585,7 +585,7 @@ impl GroupListsUpdateOp {
                 if !data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                     .contains_key(period_id)
@@ -597,7 +597,7 @@ impl GroupListsUpdateOp {
                     if !data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .group_lists
                         .group_list_map
                         .contains_key(group_list_id)
@@ -629,7 +629,7 @@ impl GroupListsUpdateOp {
                 let Some(position) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -651,14 +651,14 @@ impl GroupListsUpdateOp {
                 let previous_period_id = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .ordered_period_list[position - 1]
                     .0;
                 let previous_period_assignments = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .subjects_associations
                     .get(&previous_period_id)
@@ -668,7 +668,7 @@ impl GroupListsUpdateOp {
                 let subjects = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .ordered_subject_list
                     .clone();

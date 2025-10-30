@@ -169,7 +169,7 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
         app_state
             .get_data()
             .get_inner_data()
-            .main_params
+            .params
             .subjects
             .find_subject(subject_id)
             .unwrap()

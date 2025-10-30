@@ -223,27 +223,17 @@ impl EditorPanel {
         self.general_planning
             .sender()
             .send(general_planning::GeneralPlanningInput::Update(
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .periods
-                    .clone(),
+                self.data.get_data().get_inner_data().params.periods.clone(),
             ))
             .unwrap();
         self.subjects
             .sender()
             .send(subjects::SubjectsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
-                    .periods
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .clone(),
             ))
@@ -254,13 +244,13 @@ impl EditorPanel {
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .teachers
                     .clone(),
             ))
@@ -268,16 +258,11 @@ impl EditorPanel {
         self.students
             .sender()
             .send(students::StudentsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
-                    .periods
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .clone(),
             ))
@@ -285,28 +270,23 @@ impl EditorPanel {
         self.assignments
             .sender()
             .send(assignments::AssignmentsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
-                    .periods
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .clone(),
             ))
@@ -314,16 +294,11 @@ impl EditorPanel {
         self.week_patterns
             .sender()
             .send(week_patterns::WeekPatternsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
-                    .periods
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
+                    .params
                     .week_patterns
                     .clone(),
             ))
@@ -334,27 +309,22 @@ impl EditorPanel {
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .teachers
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .week_patterns
                     .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .slots
-                    .clone(),
+                self.data.get_data().get_inner_data().params.slots.clone(),
             ))
             .unwrap();
         self.incompats
@@ -363,19 +333,19 @@ impl EditorPanel {
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .week_patterns
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .incompats
                     .clone(),
             ))
@@ -383,28 +353,23 @@ impl EditorPanel {
         self.group_lists
             .sender()
             .send(group_lists::GroupListsInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
-                    .periods
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .clone(),
             ))
@@ -415,13 +380,13 @@ impl EditorPanel {
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .settings
                     .clone(),
             ))

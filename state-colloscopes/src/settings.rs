@@ -2,51 +2,23 @@
 //!
 //! This module defines the relevant types to describes general settings
 
-use crate::{ids::Id, ColloscopeStudentId};
+use crate::ids::StudentId;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
 
 /// Description of the general settings
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Settings<StudentId: Id> {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Settings {
     /// Global limits to impose during resolution
     pub global: Limits,
     /// Optional limits per students
     pub students: BTreeMap<StudentId, Limits>,
 }
 
-impl<StudentId: Id> Default for Settings<StudentId> {
-    fn default() -> Self {
-        Settings {
-            global: Limits::default(),
-            students: BTreeMap::new(),
-        }
-    }
-}
-
-impl<StudentId: Id> Settings<StudentId> {
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        students_map: &BTreeMap<StudentId, ColloscopeStudentId>,
-    ) -> Option<Settings<ColloscopeStudentId>> {
-        let mut students = BTreeMap::new();
-
-        for (student_id, limits) in &self.students {
-            let new_id = students_map.get(student_id)?;
-            students.insert(*new_id, limits.clone());
-        }
-
-        Some(Settings {
-            global: self.global.clone(),
-            students,
-        })
-    }
-}
-
 /// Strict limits in resolution
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Limits {
     /// Number of interrogations for each student per week
     pub interrogations_per_week_min: Option<SoftParam<u32>>,

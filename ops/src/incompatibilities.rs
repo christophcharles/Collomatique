@@ -29,7 +29,7 @@ impl IncompatibilitiesUpdateWarning {
                 let Some(incompat) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .incompats
                     .incompat_map
                     .get(incompat_id)

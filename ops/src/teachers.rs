@@ -21,7 +21,7 @@ impl TeachersUpdateWarning {
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .teachers
                     .teacher_map
                     .get(teacher_id)
@@ -46,7 +46,7 @@ impl TeachersUpdateWarning {
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .teachers
                     .teacher_map
                     .get(teacher_id)
@@ -120,12 +120,8 @@ impl TeachersUpdateOp {
         match self {
             Self::AddNewTeacher(_) => None,
             Self::UpdateTeacher(teacher_id, teacher) => {
-                for (subject_id, subject_slots) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .slots
-                    .subject_map
+                for (subject_id, subject_slots) in
+                    &data.get_data().get_inner_data().params.slots.subject_map
                 {
                     if teacher.subjects.contains(subject_id) {
                         continue;
@@ -165,12 +161,8 @@ impl TeachersUpdateOp {
                     }
                 }
 
-                for (_subject_id, subject_slots) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .slots
-                    .subject_map
+                for (_subject_id, subject_slots) in
+                    &data.get_data().get_inner_data().params.slots.subject_map
                 {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.teacher_id == *teacher_id {

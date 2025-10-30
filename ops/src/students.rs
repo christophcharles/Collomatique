@@ -33,7 +33,7 @@ impl StudentsUpdateWarning {
                 let Some(student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -43,7 +43,7 @@ impl StudentsUpdateWarning {
                 let Some(period_index) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .periods
                     .find_period_position(*period_id)
                 else {
@@ -60,7 +60,7 @@ impl StudentsUpdateWarning {
                 let Some(student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -70,7 +70,7 @@ impl StudentsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -86,7 +86,7 @@ impl StudentsUpdateWarning {
                 let Some(student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -96,7 +96,7 @@ impl StudentsUpdateWarning {
                 let Some(group_list) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
@@ -121,7 +121,7 @@ impl StudentsUpdateWarning {
                 let Some(student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -139,7 +139,7 @@ impl StudentsUpdateWarning {
                 let Some(student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -230,7 +230,7 @@ impl StudentsUpdateOp {
                 let Some(old_student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -241,7 +241,7 @@ impl StudentsUpdateOp {
                 for (group_list_id, group_list) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .group_lists
                     .group_list_map
                 {
@@ -285,7 +285,7 @@ impl StudentsUpdateOp {
                 for (period_id, period_assignments) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                 {
@@ -314,7 +314,7 @@ impl StudentsUpdateOp {
                 if data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .settings
                     .students
                     .contains_key(student_id)
@@ -331,7 +331,7 @@ impl StudentsUpdateOp {
                 let Some(old_student) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .students
                     .student_map
                     .get(student_id)
@@ -342,7 +342,7 @@ impl StudentsUpdateOp {
                 for (period_id, period_assignments) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .assignments
                     .period_map
                 {

@@ -22,7 +22,7 @@ impl WeekPatternsUpdateWarning {
                 let Some((subject_id, position)) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .find_slot_subject_and_position(*slot_id)
                 else {
@@ -31,7 +31,7 @@ impl WeekPatternsUpdateWarning {
                 let slot = &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .subject_map
                     .get(&subject_id)
@@ -41,7 +41,7 @@ impl WeekPatternsUpdateWarning {
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .teachers
                     .teacher_map
                     .get(&slot.teacher_id)
@@ -51,7 +51,7 @@ impl WeekPatternsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(subject_id)
                 else {
@@ -66,7 +66,7 @@ impl WeekPatternsUpdateWarning {
                 let Some(incompat) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .incompats
                     .incompat_map
                     .get(incompat_id)
@@ -76,7 +76,7 @@ impl WeekPatternsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(incompat.subject_id)
                 else {
@@ -117,7 +117,7 @@ impl WeekPatternsUpdateWarning {
                 let Some(week_pattern) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .week_patterns
                     .week_pattern_map
                     .get(week_pattern_id)
@@ -199,12 +199,8 @@ impl WeekPatternsUpdateOp {
                     }
                 }
 
-                for (_subject_id, subject_slots) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .main_params
-                    .slots
-                    .subject_map
+                for (_subject_id, subject_slots) in
+                    &data.get_data().get_inner_data().params.slots.subject_map
                 {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern == Some(*week_pattern_id) {
@@ -221,7 +217,7 @@ impl WeekPatternsUpdateOp {
                 for (incompat_id, incompat) in &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .incompats
                     .incompat_map
                 {

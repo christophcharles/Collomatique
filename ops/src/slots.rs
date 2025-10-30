@@ -24,7 +24,7 @@ impl SlotsUpdateWarning {
                 let Some(rule) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .rules
                     .rule_map
                     .get(rule_id)
@@ -49,7 +49,7 @@ impl SlotsUpdateWarning {
                 let Some((subject_id, pos)) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .find_slot_subject_and_position(*slot_id)
                 else {
@@ -58,7 +58,7 @@ impl SlotsUpdateWarning {
                 let slot = &data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .subject_map
                     .get(&subject_id)
@@ -68,7 +68,7 @@ impl SlotsUpdateWarning {
                 let Some(subject) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject(subject_id)
                 else {
@@ -216,8 +216,7 @@ impl SlotsUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data.get_data().get_inner_data().main_params.rules.rule_map
-                {
+                for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
                     if rule.desc.references_slot(*slot_id) {
                         return Some(CleaningOp {
                             warning: SlotsUpdateWarning::LooseRuleReferencingSlot(
@@ -246,7 +245,7 @@ impl SlotsUpdateOp {
                 if data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .subjects
                     .find_subject_position(*subject_id)
                     .is_none()
@@ -256,7 +255,7 @@ impl SlotsUpdateOp {
                 let Some(subject_slots) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .subject_map
                     .get(subject_id)
@@ -355,7 +354,7 @@ impl SlotsUpdateOp {
                 let (_subject_id, current_position) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .find_slot_subject_and_position(*slot_id)
                     .ok_or(MoveSlotUpError::InvalidSlotId(*slot_id))?;
@@ -384,7 +383,7 @@ impl SlotsUpdateOp {
                 let (subject_id, current_position) = data
                     .get_data()
                     .get_inner_data()
-                    .main_params
+                    .params
                     .slots
                     .find_slot_subject_and_position(*slot_id)
                     .ok_or(MoveSlotUpError::InvalidSlotId(*slot_id))?;
@@ -393,7 +392,7 @@ impl SlotsUpdateOp {
                     == data
                         .get_data()
                         .get_inner_data()
-                        .main_params
+                        .params
                         .slots
                         .subject_map
                         .get(&subject_id)

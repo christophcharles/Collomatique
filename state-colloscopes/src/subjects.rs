@@ -3,34 +3,23 @@
 //! This module defines the relevant types to describes the subjects
 
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    num::NonZeroU32,
-};
+use std::{collections::BTreeSet, num::NonZeroU32};
 
-use crate::ids::{ColloscopePeriodId, ColloscopeSubjectId, Id};
+use crate::ids::{PeriodId, SubjectId};
 
 /// Description of the subjects
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Subjects<SubjectId: Id, PeriodId: Id> {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subjects {
     /// Ordered list of subjects
     ///
     /// Each item represent a subject. It is described
     /// by a unique id and a description of type [Subject]
-    pub ordered_subject_list: Vec<(SubjectId, Subject<PeriodId>)>,
-}
-
-impl<SubjectId: Id, PeriodId: Id> Default for Subjects<SubjectId, PeriodId> {
-    fn default() -> Self {
-        Subjects {
-            ordered_subject_list: vec![],
-        }
-    }
+    pub ordered_subject_list: Vec<(SubjectId, Subject)>,
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Subject<PeriodId: Id> {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subject {
     /// Parameters for the subject
     ///
     /// This is separated because those parameters do
@@ -40,15 +29,6 @@ pub struct Subject<PeriodId: Id> {
     ///
     /// By default a subject is present for every period.
     pub excluded_periods: BTreeSet<PeriodId>,
-}
-
-impl<PeriodId: Id> Default for Subject<PeriodId> {
-    fn default() -> Self {
-        Subject {
-            parameters: SubjectParameters::default(),
-            excluded_periods: BTreeSet::new(),
-        }
-    }
 }
 
 /// Description of one subject
@@ -250,26 +230,7 @@ impl Default for SubjectInterrogationParameters {
     }
 }
 
-impl<PeriodId: Id> Subject<PeriodId> {
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
-    ) -> Option<Subject<ColloscopePeriodId>> {
-        let mut excluded_periods = BTreeSet::new();
-
-        for period_id in &self.excluded_periods {
-            let new_id = periods_map.get(period_id)?;
-            excluded_periods.insert(*new_id);
-        }
-
-        Some(Subject {
-            parameters: self.parameters.clone(),
-            excluded_periods,
-        })
-    }
-}
-
-impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
+impl Subjects {
     /// Finds the position of a subject by id
     pub fn find_subject_position(&self, id: SubjectId) -> Option<usize> {
         self.ordered_subject_list
@@ -278,27 +239,9 @@ impl<SubjectId: Id, PeriodId: Id> Subjects<SubjectId, PeriodId> {
     }
 
     /// Finds a subject by id
-    pub fn find_subject(&self, id: SubjectId) -> Option<&Subject<PeriodId>> {
+    pub fn find_subject(&self, id: SubjectId) -> Option<&Subject> {
         let pos = self.find_subject_position(id)?;
 
         Some(&self.ordered_subject_list[pos].1)
-    }
-
-    pub(crate) fn duplicate_with_id_maps(
-        &self,
-        periods_map: &BTreeMap<PeriodId, ColloscopePeriodId>,
-        subjects_map: &BTreeMap<SubjectId, ColloscopeSubjectId>,
-    ) -> Option<Subjects<ColloscopeSubjectId, ColloscopePeriodId>> {
-        let mut ordered_subject_list = vec![];
-
-        for (subject_id, subject) in &self.ordered_subject_list {
-            let new_id = subjects_map.get(subject_id)?;
-            let new_subject = subject.duplicate_with_id_maps(periods_map)?;
-            ordered_subject_list.push((*new_id, new_subject));
-        }
-
-        Some(Subjects {
-            ordered_subject_list,
-        })
     }
 }

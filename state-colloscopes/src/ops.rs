@@ -38,8 +38,8 @@ pub enum Op {
     Rule(RuleOp),
     /// Operation on settings
     Settings(SettingsOp),
-    /// Operation on colloscopes
-    Colloscopes(ColloscopeOp),
+    /* /// Operation on colloscopes
+    Colloscopes(ColloscopeOp),*/
 }
 
 impl Operation for Op {}
@@ -51,11 +51,11 @@ impl Operation for Op {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StudentOp {
     /// Add a new student
-    Add(students::Student<PeriodId>),
+    Add(students::Student),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, students::Student<PeriodId>),
+    Update(StudentId, students::Student),
 }
 
 /// Period operation enumeration
@@ -84,13 +84,13 @@ pub enum PeriodOp {
 pub enum SubjectOp {
     /// Add a subject after an existing subject
     /// If `None`, it is placed first
-    AddAfter(Option<SubjectId>, subjects::Subject<PeriodId>),
+    AddAfter(Option<SubjectId>, subjects::Subject),
     /// Remove an existing subject
     Remove(SubjectId),
     /// Move a subject to another position in the list
     ChangePosition(SubjectId, usize),
     /// Update the parameters of an existing subject
-    Update(SubjectId, subjects::Subject<PeriodId>),
+    Update(SubjectId, subjects::Subject),
 }
 
 /// Teacher operation enumeration
@@ -100,11 +100,11 @@ pub enum SubjectOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TeacherOp {
     /// Add a teacher
-    Add(teachers::Teacher<SubjectId>),
+    Add(teachers::Teacher),
     /// Remove an existing teacher
     Remove(TeacherId),
     /// Update the parameters of an existing teacher
-    Update(TeacherId, teachers::Teacher<SubjectId>),
+    Update(TeacherId, teachers::Teacher),
 }
 
 /// Assignment operation enumeration
@@ -139,17 +139,13 @@ pub enum WeekPatternOp {
 pub enum SlotOp {
     /// Add a slot after an existing slot
     /// If `None`, it is placed first
-    AddAfter(
-        SubjectId,
-        Option<SlotId>,
-        slots::Slot<TeacherId, WeekPatternId>,
-    ),
+    AddAfter(SubjectId, Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
     /// Move a subject to another position in the list
     ChangePosition(SlotId, usize),
     /// Update the parameters of an existing subject
-    Update(SlotId, slots::Slot<TeacherId, WeekPatternId>),
+    Update(SlotId, slots::Slot),
 }
 
 /// Incompat operation enumeration
@@ -159,14 +155,11 @@ pub enum SlotOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IncompatOp {
     /// Add an incompatibility
-    Add(incompats::Incompatibility<SubjectId, WeekPatternId>),
+    Add(incompats::Incompatibility),
     /// Remove an existing incompatibility
     Remove(IncompatId),
     /// Update an incompatibility
-    Update(
-        IncompatId,
-        incompats::Incompatibility<SubjectId, WeekPatternId>,
-    ),
+    Update(IncompatId, incompats::Incompatibility),
 }
 
 /// Group list operation enumeration
@@ -176,16 +169,13 @@ pub enum IncompatOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GroupListOp {
     /// Add a group list
-    Add(group_lists::GroupListParameters<StudentId>),
+    Add(group_lists::GroupListParameters),
     /// Remove an existing group list
     Remove(GroupListId),
     /// Update a group list
-    Update(GroupListId, group_lists::GroupListParameters<StudentId>),
+    Update(GroupListId, group_lists::GroupListParameters),
     /// Change pre-fill for a group list
-    PreFill(
-        GroupListId,
-        group_lists::GroupListPrefilledGroups<StudentId>,
-    ),
+    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -197,11 +187,11 @@ pub enum GroupListOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleOp {
     /// Add a rule
-    Add(rules::Rule<PeriodId, SlotId>),
+    Add(rules::Rule),
     /// Remove an existing rule
     Remove(RuleId),
     /// Update a rule
-    Update(RuleId, rules::Rule<PeriodId, SlotId>),
+    Update(RuleId, rules::Rule),
 }
 
 /// Settings operation enumeration
@@ -211,10 +201,10 @@ pub enum RuleOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsOp {
     /// Update the settings
-    Update(settings::Settings<StudentId>),
+    Update(settings::Settings),
 }
 
-/// Colloscope operation enumeration
+/* /// Colloscope operation enumeration
 ///
 /// This is the list of all possible operations related to the
 /// colloscopes we can do on a [Data]
@@ -226,7 +216,7 @@ pub enum ColloscopeOp {
     Update(ColloscopeId, colloscopes::Colloscope),
     /// Remove an existing colloscope
     Remove(ColloscopeId),
-}
+}*/
 
 /// Annotated operation
 ///
@@ -259,8 +249,8 @@ pub enum AnnotatedOp {
     Rule(AnnotatedRuleOp),
     /// Operation on settings
     Settings(AnnotatedSettingsOp),
-    /// Operation on colloscopes
-    Colloscopes(AnnotatedColloscopeOp),
+    /* /// Operation on colloscopes
+    Colloscopes(AnnotatedColloscopeOp),*/
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -329,12 +319,6 @@ impl From<AnnotatedSettingsOp> for AnnotatedOp {
     }
 }
 
-impl From<AnnotatedColloscopeOp> for AnnotatedOp {
-    fn from(value: AnnotatedColloscopeOp) -> Self {
-        AnnotatedOp::Colloscopes(value)
-    }
-}
-
 /// Student annotated operation enumeration
 ///
 /// Compared to [StudentOp], this is a annotated operation,
@@ -345,11 +329,11 @@ impl From<AnnotatedColloscopeOp> for AnnotatedOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedStudentOp {
     /// Add a new student (with fixed id)
-    Add(StudentId, students::Student<PeriodId>),
+    Add(StudentId, students::Student),
     /// Remove an existing student identified through its id
     Remove(StudentId),
     /// Update the data on an existing student
-    Update(StudentId, students::Student<PeriodId>),
+    Update(StudentId, students::Student),
 }
 
 /// Period annotated operation enumeration
@@ -386,13 +370,13 @@ pub enum AnnotatedSubjectOp {
     /// Add a period after an existing period
     /// First parameter is the period id for the new period
     /// If the second parameter is `None`, the subject is added at the first place
-    AddAfter(SubjectId, Option<SubjectId>, subjects::Subject<PeriodId>),
+    AddAfter(SubjectId, Option<SubjectId>, subjects::Subject),
     /// Remove an existing subject
     Remove(SubjectId),
     /// Move a subject to another position in the list
     ChangePosition(SubjectId, usize),
     /// Update the parameters of an existing subject
-    Update(SubjectId, subjects::Subject<PeriodId>),
+    Update(SubjectId, subjects::Subject),
 }
 
 /// Teacher annotated operation enumeration
@@ -406,11 +390,11 @@ pub enum AnnotatedSubjectOp {
 pub enum AnnotatedTeacherOp {
     /// Add a teacher
     /// First parameter is the teacher id for the new teacher
-    Add(TeacherId, teachers::Teacher<SubjectId>),
+    Add(TeacherId, teachers::Teacher),
     /// Remove an existing teacher
     Remove(TeacherId),
     /// Update the parameters of an existing teacher
-    Update(TeacherId, teachers::Teacher<SubjectId>),
+    Update(TeacherId, teachers::Teacher),
 }
 
 /// Assignment annotated operation enumeration
@@ -456,18 +440,13 @@ pub enum AnnotatedSlotOp {
     /// Add a slot after an existing slot
     /// If `None`, it is placed first
     /// First parameter is the slot id for the new slot
-    AddAfter(
-        SlotId,
-        SubjectId,
-        Option<SlotId>,
-        slots::Slot<TeacherId, WeekPatternId>,
-    ),
+    AddAfter(SlotId, SubjectId, Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
     /// Move a subject to another position in the list
     ChangePosition(SlotId, usize),
     /// Update the parameters of an existing subject
-    Update(SlotId, slots::Slot<TeacherId, WeekPatternId>),
+    Update(SlotId, slots::Slot),
 }
 
 /// Incompat operation enumeration
@@ -481,17 +460,11 @@ pub enum AnnotatedSlotOp {
 pub enum AnnotatedIncompatOp {
     /// Add an incompatibility
     /// First parameter is the incompat id for the new incompatibility
-    Add(
-        IncompatId,
-        incompats::Incompatibility<SubjectId, WeekPatternId>,
-    ),
+    Add(IncompatId, incompats::Incompatibility),
     /// Remove an existing incompat
     Remove(IncompatId),
     /// Update an existing incompat
-    Update(
-        IncompatId,
-        incompats::Incompatibility<SubjectId, WeekPatternId>,
-    ),
+    Update(IncompatId, incompats::Incompatibility),
 }
 
 /// Group list operation enumeration
@@ -505,16 +478,13 @@ pub enum AnnotatedIncompatOp {
 pub enum AnnotatedGroupListOp {
     /// Add a group list
     /// First parameter is the group list id for the new group list
-    Add(GroupListId, group_lists::GroupListParameters<StudentId>),
+    Add(GroupListId, group_lists::GroupListParameters),
     /// Remove an existing group list
     Remove(GroupListId),
     /// Update a group list
-    Update(GroupListId, group_lists::GroupListParameters<StudentId>),
+    Update(GroupListId, group_lists::GroupListParameters),
     /// Change pre-fill for a group list
-    PreFill(
-        GroupListId,
-        group_lists::GroupListPrefilledGroups<StudentId>,
-    ),
+    PreFill(GroupListId, group_lists::GroupListPrefilledGroups),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -530,11 +500,11 @@ pub enum AnnotatedGroupListOp {
 pub enum AnnotatedRuleOp {
     /// Add a rule
     /// First parameter is the rule id for the new rule
-    Add(RuleId, rules::Rule<PeriodId, SlotId>),
+    Add(RuleId, rules::Rule),
     /// Remove an existing rule
     Remove(RuleId),
     /// Update a rule
-    Update(RuleId, rules::Rule<PeriodId, SlotId>),
+    Update(RuleId, rules::Rule),
 }
 
 /// Settings operation enumeration
@@ -547,10 +517,10 @@ pub enum AnnotatedRuleOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedSettingsOp {
     /// Update the settings
-    Update(settings::Settings<StudentId>),
+    Update(settings::Settings),
 }
 
-/// Colloscope operation enumeration
+/* /// Colloscope operation enumeration
 ///
 /// Compared to [ColloscopeOp], this is a annotated operation,
 /// meaning the operation has been annotated to contain
@@ -566,7 +536,7 @@ pub enum AnnotatedColloscopeOp {
     Update(ColloscopeId, colloscopes::Colloscope),
     /// Remove an existing colloscope
     Remove(ColloscopeId),
-}
+}*/
 
 impl Operation for AnnotatedOp {}
 
@@ -625,10 +595,6 @@ impl AnnotatedOp {
             Op::Settings(settings_op) => {
                 let op = AnnotatedSettingsOp::annotate(settings_op);
                 (op.into(), None)
-            }
-            Op::Colloscopes(colloscopes_op) => {
-                let (op, id) = AnnotatedColloscopeOp::annotate(colloscopes_op, id_issuer);
-                (op.into(), id.map(|x| x.into()))
             }
         }
     }
@@ -865,7 +831,7 @@ impl AnnotatedSettingsOp {
     }
 }
 
-impl AnnotatedColloscopeOp {
+/* impl AnnotatedColloscopeOp {
     /// Used internally
     ///
     /// Annotates the subcategory of operations [ColloscopeOp].
@@ -887,4 +853,4 @@ impl AnnotatedColloscopeOp {
             }
         }
     }
-}
+} */
