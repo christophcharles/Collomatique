@@ -18,16 +18,6 @@ pub struct Colloscope {
 }
 
 impl Colloscope {
-    pub fn is_empty(&self) -> bool {
-        self.period_map
-            .iter()
-            .all(|(_period_id, period)| period.is_empty())
-            && self
-                .group_lists
-                .iter()
-                .all(|(_group_list_id, group_list)| group_list.is_empty())
-    }
-
     /// Builds an empty colloscope compatible with the given parameters
     ///
     /// The function might panic if the parameters do not satisfy parameters invariants
@@ -131,10 +121,10 @@ impl ColloscopePeriod {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
         self.subject_map
             .iter()
-            .all(|(_subject_id, subject)| subject.is_empty())
+            .all(|(_subject_id, subject)| subject.is_cuttable(weeks_to_cut))
     }
 
     pub(crate) fn new_empty_from_params(
@@ -247,8 +237,10 @@ impl ColloscopeSubject {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.slots.iter().all(|(_slot_id, slot)| slot.is_empty())
+    pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
+        self.slots
+            .iter()
+            .all(|(_slot_id, slot)| slot.is_cuttable(weeks_to_cut))
     }
 
     pub(crate) fn new_empty_from_params(
@@ -423,13 +415,24 @@ impl ColloscopeSlot {
         self.interrogations.resize(length, None);
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.interrogations
-            .iter()
-            .all(|interrogation_opt| match interrogation_opt {
-                Some(interrogation) => interrogation.is_empty(),
-                None => true,
-            })
+    pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
+        if weeks_to_cut == 0 {
+            return true;
+        }
+
+        let length = self.interrogations.len();
+        let first_week_to_cut = length - weeks_to_cut;
+
+        for i in first_week_to_cut..length {
+            let interrogation_opt = &self.interrogations[i];
+            if let Some(interrogation) = interrogation_opt {
+                if !interrogation.is_empty() {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     pub(crate) fn new_empty_from_params(
