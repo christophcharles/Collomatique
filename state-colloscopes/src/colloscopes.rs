@@ -383,13 +383,7 @@ impl ColloscopeSlot {
             let current_week = first_week + i;
             let is_week_active = match week_pattern_opt {
                 None => true,
-                Some(week_pattern) => {
-                    if current_week >= week_pattern.weeks.len() {
-                        true
-                    } else {
-                        week_pattern.weeks[current_week]
-                    }
-                }
+                Some(week_pattern) => week_pattern.weeks[current_week],
             };
             self.interrogations.push(if is_week_active {
                 Some(ColloscopeInterrogation::default())
@@ -493,13 +487,7 @@ impl ColloscopeSlot {
             let current_week = first_week + i;
             let is_week_active = match week_pattern_opt {
                 None => true,
-                Some(week_pattern) => {
-                    if current_week >= week_pattern.weeks.len() {
-                        true
-                    } else {
-                        week_pattern.weeks[current_week]
-                    }
-                }
+                Some(week_pattern) => week_pattern.weeks[current_week],
             };
             interrogations.push(if is_week_active {
                 Some(ColloscopeInterrogation::default())
@@ -561,13 +549,7 @@ impl ColloscopeSlot {
             let current_week = first_week_num + i;
             let is_week_active = match week_pattern {
                 None => true,
-                Some(week_pattern) => {
-                    if current_week >= week_pattern.weeks.len() {
-                        true
-                    } else {
-                        week_pattern.weeks[current_week]
-                    }
-                }
+                Some(week_pattern) => week_pattern.weeks[current_week],
             };
 
             if !is_week_active {
