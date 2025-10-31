@@ -1175,11 +1175,11 @@ impl Data {
                 Ok(())
             }
             AnnotatedPeriodOp::Remove(period_id) => {
-                let Some(position) = self
+                let Some((position, first_week)) = self
                     .inner_data
                     .params
                     .periods
-                    .find_period_position(*period_id)
+                    .find_period_position_and_first_week(*period_id)
                 else {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
@@ -1195,14 +1195,20 @@ impl Data {
                     return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
                 }
 
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.periods.contains_key(period_id) {
-                        return Err(PeriodError::PeriodIsReferencedInColloscopeIdMaps(
+                let week_count = self.inner_data.params.periods.ordered_period_list[position]
+                    .1
+                    .len();
+
+                for (week_pattern_id, week_pattern) in
+                    &self.inner_data.params.week_patterns.week_pattern_map
+                {
+                    if !week_pattern.can_remove_weeks(first_week, week_count) {
+                        return Err(PeriodError::NonTrivialWeekPattern(
                             *period_id,
-                            *colloscope_id,
+                            *week_pattern_id,
                         ));
                     }
-                }*/
+                }
 
                 for (subject_id, subject) in &self.inner_data.params.subjects.ordered_subject_list {
                     if subject.excluded_periods.contains(period_id) {
@@ -1256,12 +1262,6 @@ impl Data {
                         *period_id,
                     ));
                 }
-                let (first_week, week_count) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .get_first_week_and_length_for_period(*period_id)
-                    .expect("Period id should be valid at this point");
 
                 self.inner_data
                     .params
