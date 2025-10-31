@@ -59,6 +59,24 @@ impl Periods {
             .position(|(current_id, _desc)| *current_id == id)
     }
 
+    /// Finds the position of a period by id and gives the total number of weeks up to and including the
+    /// given period
+    pub fn find_period_position_and_total_number_of_weeks(
+        &self,
+        id: PeriodId,
+    ) -> Option<(usize, usize)> {
+        let mut total_weeks = 0usize;
+
+        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
+            total_weeks += desc.len();
+            if *period_id == id {
+                return Some((pos, total_weeks));
+            }
+        }
+
+        return None;
+    }
+
     /// Finds a period by id
     pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekDesc>> {
         let pos = self.find_period_position(id)?;
@@ -66,6 +84,7 @@ impl Periods {
         Some(&self.ordered_period_list[pos].1)
     }
 
+    /// Finds the first week number and the length of a period
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
