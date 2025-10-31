@@ -258,6 +258,10 @@ pub enum PeriodError {
     /// Period is not empty in colloscope
     #[error("period id ({0:?}) is not empty in colloscope")]
     NotEmptyPeriodInColloscope(PeriodId),
+
+    /// A week pattern is not trivial on the period to be cut
+    #[error("week pattern {1:?} is not trivial for the period {0:?}")]
+    NonTrivialWeekPattern(PeriodId, WeekPatternId),
 }
 
 /// Errors for subject operations
@@ -1304,6 +1308,17 @@ impl Data {
                         .expect("Period ID should be valid at this point");
                     if !colloscope_period.is_empty() {
                         return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
+                    }
+
+                    for (week_pattern_id, week_pattern) in
+                        &self.inner_data.params.week_patterns.week_pattern_map
+                    {
+                        if !week_pattern.can_remove_weeks(first_week, old_length - desc.len()) {
+                            return Err(PeriodError::NonTrivialWeekPattern(
+                                *period_id,
+                                *week_pattern_id,
+                            ));
+                        }
                     }
                 }
 

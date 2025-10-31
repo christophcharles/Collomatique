@@ -50,6 +50,26 @@ impl WeekPattern {
 
         let last_week = (first_week + week_count).min(self.weeks.len());
 
+        for week in &self.weeks[first_week..last_week] {
+            assert!(!*week);
+        }
+
         self.weeks.splice(first_week..last_week, vec![]);
+    }
+
+    pub fn can_remove_weeks(&self, first_week: usize, week_count: usize) -> bool {
+        if self.weeks.len() <= first_week {
+            return true;
+        }
+
+        let last_week = (first_week + week_count).min(self.weeks.len());
+
+        for week in &self.weeks[first_week..last_week] {
+            if !*week {
+                return false;
+            }
+        }
+
+        true
     }
 }
