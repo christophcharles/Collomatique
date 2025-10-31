@@ -693,6 +693,14 @@ impl GeneralPlanningUpdateOp {
                     ))?;
                 }
 
+                let saved_week_patterns = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .clone();
+
                 let new_desc = desc.split_off(*new_week_count);
 
                 let result = data
@@ -862,6 +870,23 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
+                for (week_pattern_id, week_pattern) in saved_week_patterns {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::WeekPattern(
+                                collomatique_state_colloscopes::WeekPatternOp::Update(
+                                    week_pattern_id,
+                                    week_pattern,
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("Week patterns should all be perfectly valid");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
+                    }
+                }
+
                 Ok(Some(new_id))
             }
             GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id) => {
@@ -875,6 +900,15 @@ impl GeneralPlanningUpdateOp {
                 if pos == 0 {
                     Err(MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith)?;
                 }
+
+                let saved_week_patterns = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .clone();
+
                 let previous_id = data
                     .get_data()
                     .get_inner_data()
@@ -929,6 +963,23 @@ impl GeneralPlanningUpdateOp {
 
                 if result.is_some() {
                     panic!("Unexpected result! {:?}", result);
+                }
+
+                for (week_pattern_id, week_pattern) in saved_week_patterns {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::WeekPattern(
+                                collomatique_state_colloscopes::WeekPatternOp::Update(
+                                    week_pattern_id,
+                                    week_pattern,
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("Week patterns should all be perfectly valid");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
+                    }
                 }
 
                 Ok(None)
