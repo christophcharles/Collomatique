@@ -61,66 +61,6 @@ impl Period {
     }
 }
 
-#[pyclass(eq, hash, frozen)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ColloscopePeriodId {
-    id: collomatique_state_colloscopes::ColloscopePeriodId,
-}
-
-#[pymethods]
-impl ColloscopePeriodId {
-    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{:?}", *self_);
-        PyString::new(self_.py(), output.as_str())
-    }
-}
-
-impl From<&collomatique_state_colloscopes::ColloscopePeriodId> for ColloscopePeriodId {
-    fn from(value: &collomatique_state_colloscopes::ColloscopePeriodId) -> Self {
-        ColloscopePeriodId { id: value.clone() }
-    }
-}
-
-impl From<collomatique_state_colloscopes::ColloscopePeriodId> for ColloscopePeriodId {
-    fn from(value: collomatique_state_colloscopes::ColloscopePeriodId) -> Self {
-        ColloscopePeriodId::from(&value)
-    }
-}
-
-impl From<&ColloscopePeriodId> for collomatique_state_colloscopes::ColloscopePeriodId {
-    fn from(value: &ColloscopePeriodId) -> Self {
-        value.id.clone()
-    }
-}
-
-impl From<ColloscopePeriodId> for collomatique_state_colloscopes::ColloscopePeriodId {
-    fn from(value: ColloscopePeriodId) -> Self {
-        collomatique_state_colloscopes::ColloscopePeriodId::from(&value)
-    }
-}
-
-#[pyclass]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ColloscopePeriod {
-    #[pyo3(set, get)]
-    pub id: ColloscopePeriodId,
-    #[pyo3(set, get)]
-    pub weeks_status: Vec<WeekDesc>,
-}
-
-#[pymethods]
-impl ColloscopePeriod {
-    #[new]
-    fn new(id: ColloscopePeriodId, weeks_status: Vec<WeekDesc>) -> Self {
-        ColloscopePeriod { id, weeks_status }
-    }
-
-    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{:?}", *self_);
-        PyString::new(self_.py(), output.as_str())
-    }
-}
-
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WeekDesc {

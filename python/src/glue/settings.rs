@@ -12,51 +12,9 @@ pub struct Settings {
     pub students: BTreeMap<StudentId, Limits>,
 }
 
-impl
-    From<
-        collomatique_state_colloscopes::settings::Settings<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    > for Settings
-{
-    fn from(
-        value: collomatique_state_colloscopes::settings::Settings<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ) -> Self {
+impl From<collomatique_state_colloscopes::settings::Settings> for Settings {
+    fn from(value: collomatique_state_colloscopes::settings::Settings) -> Self {
         Settings {
-            global: value.global.into(),
-            students: value
-                .students
-                .into_iter()
-                .map(|(id, limits)| (id.into(), limits.into()))
-                .collect(),
-        }
-    }
-}
-
-#[pyclass]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ColloscopeSettings {
-    #[pyo3(set, get)]
-    pub global: Limits,
-    #[pyo3(set, get)]
-    pub students: BTreeMap<ColloscopeStudentId, Limits>,
-}
-
-impl
-    From<
-        collomatique_state_colloscopes::settings::Settings<
-            collomatique_state_colloscopes::ColloscopeStudentId,
-        >,
-    > for ColloscopeSettings
-{
-    fn from(
-        value: collomatique_state_colloscopes::settings::Settings<
-            collomatique_state_colloscopes::ColloscopeStudentId,
-        >,
-    ) -> Self {
-        ColloscopeSettings {
             global: value.global.into(),
             students: value
                 .students

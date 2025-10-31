@@ -71,16 +71,8 @@ impl Student {
     }
 }
 
-impl
-    From<
-        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
-    > for Student
-{
-    fn from(
-        value: collomatique_state_colloscopes::students::Student<
-            collomatique_state_colloscopes::PeriodId,
-        >,
-    ) -> Self {
+impl From<collomatique_state_colloscopes::students::Student> for Student {
+    fn from(value: collomatique_state_colloscopes::students::Student) -> Self {
         Student {
             desc: value.desc.into(),
             excluded_periods: value
@@ -92,118 +84,8 @@ impl
     }
 }
 
-impl From<Student>
-    for collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>
-{
+impl From<Student> for collomatique_state_colloscopes::students::Student {
     fn from(value: Student) -> Self {
-        collomatique_state_colloscopes::students::Student {
-            desc: value.desc.into(),
-            excluded_periods: value
-                .excluded_periods
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
-        }
-    }
-}
-
-#[pyclass(eq, hash, frozen)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ColloscopeStudentId {
-    id: collomatique_state_colloscopes::ColloscopeStudentId,
-}
-
-#[pymethods]
-impl ColloscopeStudentId {
-    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{:?}", *self_);
-        PyString::new(self_.py(), output.as_str())
-    }
-}
-
-impl From<&collomatique_state_colloscopes::ColloscopeStudentId> for ColloscopeStudentId {
-    fn from(value: &collomatique_state_colloscopes::ColloscopeStudentId) -> Self {
-        ColloscopeStudentId { id: value.clone() }
-    }
-}
-
-impl From<collomatique_state_colloscopes::ColloscopeStudentId> for ColloscopeStudentId {
-    fn from(value: collomatique_state_colloscopes::ColloscopeStudentId) -> Self {
-        ColloscopeStudentId::from(&value)
-    }
-}
-
-impl From<&ColloscopeStudentId> for collomatique_state_colloscopes::ColloscopeStudentId {
-    fn from(value: &ColloscopeStudentId) -> Self {
-        value.id.clone().into()
-    }
-}
-
-impl From<ColloscopeStudentId> for collomatique_state_colloscopes::ColloscopeStudentId {
-    fn from(value: ColloscopeStudentId) -> Self {
-        collomatique_state_colloscopes::ColloscopeStudentId::from(&value)
-    }
-}
-
-#[pyclass]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ColloscopeStudent {
-    #[pyo3(set, get)]
-    pub desc: PersonWithContact,
-    #[pyo3(set, get)]
-    pub excluded_periods: BTreeSet<ColloscopePeriodId>,
-}
-
-#[pymethods]
-impl ColloscopeStudent {
-    #[new]
-    fn new(firstname: String, surname: String) -> Self {
-        ColloscopeStudent {
-            desc: PersonWithContact {
-                firstname,
-                surname,
-                tel: String::new(),
-                email: String::new(),
-            },
-            excluded_periods: BTreeSet::new(),
-        }
-    }
-
-    fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
-        let output = format!("{:?}", *self_);
-        PyString::new(self_.py(), output.as_str())
-    }
-}
-
-impl
-    From<
-        collomatique_state_colloscopes::students::Student<
-            collomatique_state_colloscopes::ColloscopePeriodId,
-        >,
-    > for ColloscopeStudent
-{
-    fn from(
-        value: collomatique_state_colloscopes::students::Student<
-            collomatique_state_colloscopes::ColloscopePeriodId,
-        >,
-    ) -> Self {
-        ColloscopeStudent {
-            desc: value.desc.into(),
-            excluded_periods: value
-                .excluded_periods
-                .into_iter()
-                .map(|x| x.into())
-                .collect(),
-        }
-    }
-}
-
-impl From<ColloscopeStudent>
-    for collomatique_state_colloscopes::students::Student<
-        collomatique_state_colloscopes::ColloscopePeriodId,
-    >
-{
-    fn from(value: ColloscopeStudent) -> Self {
         collomatique_state_colloscopes::students::Student {
             desc: value.desc.into(),
             excluded_periods: value

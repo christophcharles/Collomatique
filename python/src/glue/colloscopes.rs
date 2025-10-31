@@ -1,4 +1,4 @@
-use crate::glue::params::ColloscopeParameters;
+/*use crate::glue::params::ColloscopeParameters;
 
 use super::*;
 use pyo3::types::PyString;
@@ -481,3 +481,4 @@ impl From<ColloscopeGroupListDesc>
         }
     }
 }
+*/
