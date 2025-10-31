@@ -38,8 +38,8 @@ pub enum Op {
     Rule(RuleOp),
     /// Operation on settings
     Settings(SettingsOp),
-    /* /// Operation on colloscopes
-    Colloscopes(ColloscopeOp),*/
+    /// Operation on colloscopes
+    Colloscope(ColloscopeOp),
 }
 
 impl Operation for Op {}
@@ -204,19 +204,22 @@ pub enum SettingsOp {
     Update(settings::Settings),
 }
 
-/* /// Colloscope operation enumeration
+/// Colloscope operation enumeration
 ///
 /// This is the list of all possible operations related to the
 /// colloscopes we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColloscopeOp {
-    /// Add a colloscope
-    Add(colloscopes::Colloscope),
-    /// Update a colloscope
-    Update(ColloscopeId, colloscopes::Colloscope),
-    /// Remove an existing colloscope
-    Remove(ColloscopeId),
-}*/
+    /// Update a group list
+    UpdateGroupList(GroupListId, colloscopes::ColloscopeGroupList),
+    /// Update an interrogation
+    UpdateInterrogation(
+        PeriodId,
+        SlotId,
+        usize,
+        colloscopes::ColloscopeInterrogation,
+    ),
+}
 
 /// Annotated operation
 ///
@@ -249,8 +252,8 @@ pub enum AnnotatedOp {
     Rule(AnnotatedRuleOp),
     /// Operation on settings
     Settings(AnnotatedSettingsOp),
-    /* /// Operation on colloscopes
-    Colloscopes(AnnotatedColloscopeOp),*/
+    /// Operation on colloscopes
+    Colloscope(AnnotatedColloscopeOp),
 }
 
 impl From<AnnotatedStudentOp> for AnnotatedOp {
@@ -316,6 +319,12 @@ impl From<AnnotatedRuleOp> for AnnotatedOp {
 impl From<AnnotatedSettingsOp> for AnnotatedOp {
     fn from(value: AnnotatedSettingsOp) -> Self {
         AnnotatedOp::Settings(value)
+    }
+}
+
+impl From<AnnotatedColloscopeOp> for AnnotatedOp {
+    fn from(value: AnnotatedColloscopeOp) -> Self {
+        AnnotatedOp::Colloscope(value)
     }
 }
 
@@ -520,7 +529,7 @@ pub enum AnnotatedSettingsOp {
     Update(settings::Settings),
 }
 
-/* /// Colloscope operation enumeration
+/// Colloscope operation enumeration
 ///
 /// Compared to [ColloscopeOp], this is a annotated operation,
 /// meaning the operation has been annotated to contain
@@ -529,14 +538,16 @@ pub enum AnnotatedSettingsOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedColloscopeOp {
-    /// Add an empty colloscope
-    /// First parameter is the colloscope id for the new colloscope
-    Add(ColloscopeId, colloscopes::Colloscope),
-    /// Update a colloscope
-    Update(ColloscopeId, colloscopes::Colloscope),
-    /// Remove an existing colloscope
-    Remove(ColloscopeId),
-}*/
+    /// Update a group list
+    UpdateGroupList(GroupListId, colloscopes::ColloscopeGroupList),
+    /// Update an interrogation
+    UpdateInterrogation(
+        PeriodId,
+        SlotId,
+        usize,
+        colloscopes::ColloscopeInterrogation,
+    ),
+}
 
 impl Operation for AnnotatedOp {}
 
@@ -594,6 +605,10 @@ impl AnnotatedOp {
             }
             Op::Settings(settings_op) => {
                 let op = AnnotatedSettingsOp::annotate(settings_op);
+                (op.into(), None)
+            }
+            Op::Colloscope(colloscope_op) => {
+                let op = AnnotatedColloscopeOp::annotate(colloscope_op);
                 (op.into(), None)
             }
         }
@@ -831,26 +846,26 @@ impl AnnotatedSettingsOp {
     }
 }
 
-/* impl AnnotatedColloscopeOp {
+impl AnnotatedColloscopeOp {
     /// Used internally
     ///
     /// Annotates the subcategory of operations [ColloscopeOp].
-    fn annotate(
-        colloscope_op: ColloscopeOp,
-        id_issuer: &mut IdIssuer,
-    ) -> (AnnotatedColloscopeOp, Option<ColloscopeId>) {
+    fn annotate(colloscope_op: ColloscopeOp) -> AnnotatedColloscopeOp {
         match colloscope_op {
-            ColloscopeOp::Add(colloscope) => {
-                let new_id = id_issuer.get_colloscope_id();
-                (AnnotatedColloscopeOp::Add(new_id, colloscope), Some(new_id))
+            ColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
+                AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list)
             }
-            ColloscopeOp::Update(colloscope_id, colloscope) => (
-                AnnotatedColloscopeOp::Update(colloscope_id, colloscope),
-                None,
+            ColloscopeOp::UpdateInterrogation(
+                period_id,
+                slot_id,
+                week_in_period,
+                interrogation,
+            ) => AnnotatedColloscopeOp::UpdateInterrogation(
+                period_id,
+                slot_id,
+                week_in_period,
+                interrogation,
             ),
-            ColloscopeOp::Remove(colloscope_id) => {
-                (AnnotatedColloscopeOp::Remove(colloscope_id), None)
-            }
         }
     }
-} */
+}

@@ -5,6 +5,7 @@
 //!
 
 use colloscopes::ColloscopePeriod;
+use ops::AnnotatedColloscopeOp;
 use serde::{Deserialize, Serialize};
 
 use collomatique_state::{tools, InMemoryData, Operation};
@@ -637,6 +638,12 @@ pub enum ColloscopeError {
 
     #[error("Invalid group number for student")]
     InvalidGroupNumForStudentInGroupList(GroupListId, StudentId),
+
+    #[error("Invalid week number in period")]
+    InvalidWeekNumberInPeriod(PeriodId, usize),
+
+    #[error("No interrogation for the given week in period and slot")]
+    NoInterrogationOnWeek(PeriodId, SlotId, usize),
 }
 
 /// Errors for colloscopes modification
@@ -666,8 +673,8 @@ pub enum Error {
     Rule(#[from] RuleError),
     #[error(transparent)]
     Settings(#[from] SettingsError),
-    /*#[error(transparent)]
-    Colloscope(#[from] ColloscopeError),*/
+    #[error(transparent)]
+    Colloscope(#[from] ColloscopeError),
 }
 
 /// Errors for IDs
@@ -858,6 +865,9 @@ impl InMemoryData for Data {
             AnnotatedOp::Settings(settings_op) => {
                 Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
             }
+            AnnotatedOp::Colloscope(colloscope_op) => Ok(AnnotatedOp::Colloscope(
+                self.build_rev_colloscope(colloscope_op)?,
+            )),
         }
     }
 
@@ -876,6 +886,7 @@ impl InMemoryData for Data {
             AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
             AnnotatedOp::Rule(rule_op) => self.apply_rule(rule_op)?,
             AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
+            AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
         }
         self.check_invariants();
         Ok(())
@@ -2402,6 +2413,77 @@ impl Data {
 
     /// Used internally
     ///
+    /// Apply settings operations
+    fn apply_colloscope(
+        &mut self,
+        colloscope_op: &AnnotatedColloscopeOp,
+    ) -> std::result::Result<(), ColloscopeError> {
+        match colloscope_op {
+            AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
+                if !self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .contains_key(group_list_id)
+                {
+                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+                }
+
+                group_list.validate_against_params(*group_list_id, &self.inner_data.params)?;
+
+                self.inner_data
+                    .colloscope
+                    .group_lists
+                    .insert(*group_list_id, group_list.clone());
+
+                Ok(())
+            }
+            AnnotatedColloscopeOp::UpdateInterrogation(
+                period_id,
+                slot_id,
+                week_in_period,
+                new_interrogation,
+            ) => {
+                new_interrogation.validate_against_params(
+                    *period_id,
+                    *slot_id,
+                    *week_in_period,
+                    &self.inner_data.params,
+                )?;
+
+                let Some(period) = self.inner_data.colloscope.period_map.get_mut(period_id) else {
+                    return Err(ColloscopeError::InvalidPeriodId(*period_id));
+                };
+
+                let Some(slot) = period.slot_map.get_mut(slot_id) else {
+                    return Err(ColloscopeError::InvalidSlotId(*slot_id));
+                };
+
+                let Some(interrogation_opt) = slot.interrogations.get_mut(*week_in_period) else {
+                    return Err(ColloscopeError::InvalidWeekNumberInPeriod(
+                        *period_id,
+                        *week_in_period,
+                    ));
+                };
+
+                let Some(interrogation) = interrogation_opt else {
+                    return Err(ColloscopeError::NoInterrogationOnWeek(
+                        *period_id,
+                        *slot_id,
+                        *week_in_period,
+                    ));
+                };
+
+                *interrogation = new_interrogation.clone();
+
+                Ok(())
+            }
+        }
+    }
+
+    /// Used internally
+    ///
     /// Builds reverse of a student operation
     fn build_rev_student(
         &self,
@@ -3051,6 +3133,65 @@ impl Data {
             AnnotatedSettingsOp::Update(_new_settings) => {
                 let old_settings = self.inner_data.params.settings.clone();
                 AnnotatedSettingsOp::Update(old_settings)
+            }
+        }
+    }
+
+    /// Used internally
+    ///
+    /// Builds reverse of a settings operation
+    fn build_rev_colloscope(
+        &self,
+        colloscope_op: &AnnotatedColloscopeOp,
+    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
+        match colloscope_op {
+            AnnotatedColloscopeOp::UpdateGroupList(group_list_id, _group_list) => {
+                let Some(old_group_list) =
+                    self.inner_data.colloscope.group_lists.get(group_list_id)
+                else {
+                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+                };
+
+                Ok(AnnotatedColloscopeOp::UpdateGroupList(
+                    *group_list_id,
+                    old_group_list.clone(),
+                ))
+            }
+            AnnotatedColloscopeOp::UpdateInterrogation(
+                period_id,
+                slot_id,
+                week_in_period,
+                _interrogation,
+            ) => {
+                let Some(period) = self.inner_data.colloscope.period_map.get(period_id) else {
+                    return Err(ColloscopeError::InvalidPeriodId(*period_id));
+                };
+
+                let Some(slot) = period.slot_map.get(slot_id) else {
+                    return Err(ColloscopeError::InvalidSlotId(*slot_id));
+                };
+
+                let Some(interrogation_opt) = slot.interrogations.get(*week_in_period) else {
+                    return Err(ColloscopeError::InvalidWeekNumberInPeriod(
+                        *period_id,
+                        *week_in_period,
+                    ));
+                };
+
+                let Some(interrogation) = interrogation_opt else {
+                    return Err(ColloscopeError::NoInterrogationOnWeek(
+                        *period_id,
+                        *slot_id,
+                        *week_in_period,
+                    ));
+                };
+
+                Ok(AnnotatedColloscopeOp::UpdateInterrogation(
+                    *period_id,
+                    *slot_id,
+                    *week_in_period,
+                    interrogation.clone(),
+                ))
             }
         }
     }
