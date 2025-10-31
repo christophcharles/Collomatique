@@ -111,6 +111,26 @@ pub struct ColloscopePeriod {
 }
 
 impl ColloscopePeriod {
+    pub(crate) fn extend(
+        &mut self,
+        params: &super::colloscope_params::Parameters,
+        period_id: PeriodId,
+    ) {
+        for (subject_id, subject_map) in &mut self.subject_map {
+            subject_map.extend(params, period_id, *subject_id);
+        }
+    }
+
+    pub(crate) fn cut(
+        &mut self,
+        params: &super::colloscope_params::Parameters,
+        period_id: PeriodId,
+    ) {
+        for (subject_id, subject_map) in &mut self.subject_map {
+            subject_map.cut(params, period_id, *subject_id);
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.subject_map
             .iter()
@@ -205,6 +225,28 @@ pub struct ColloscopeSubject {
 }
 
 impl ColloscopeSubject {
+    pub(crate) fn extend(
+        &mut self,
+        params: &super::colloscope_params::Parameters,
+        period_id: PeriodId,
+        subject_id: SubjectId,
+    ) {
+        for (slot_id, slot) in &mut self.slots {
+            slot.extend(params, period_id, subject_id, *slot_id);
+        }
+    }
+
+    pub(crate) fn cut(
+        &mut self,
+        params: &super::colloscope_params::Parameters,
+        period_id: PeriodId,
+        subject_id: SubjectId,
+    ) {
+        for (slot_id, slot) in &mut self.slots {
+            slot.cut(params, period_id, subject_id, *slot_id);
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.slots.iter().all(|(_slot_id, slot)| slot.is_empty())
     }
@@ -296,6 +338,97 @@ pub struct ColloscopeSlot {
 }
 
 impl ColloscopeSlot {
+    pub(crate) fn extend(
+        &mut self,
+        params: &super::colloscope_params::Parameters,
+        period_id: PeriodId,
+        subject_id: SubjectId,
+        slot_id: SlotId,
+    ) {
+        let (first_week, length) = params
+            .periods
+            .get_first_week_and_length_for_period(period_id)
+            .expect("Period Id must be valid");
+        let current_length = self.interrogations.len();
+
+        assert!(length >= current_length);
+
+        if length == current_length {
+            return;
+        }
+
+        let orig_slots = params
+            .slots
+            .subject_map
+            .get(&subject_id)
+            .expect("Subject ID should be valid");
+
+        let slot = orig_slots
+            .find_slot(slot_id)
+            .expect("Slot ID should be valid");
+
+        let week_pattern_id_opt = &slot.week_pattern;
+        let week_pattern_opt = match week_pattern_id_opt {
+            None => None,
+            Some(id) => Some(
+                params
+                    .week_patterns
+                    .week_pattern_map
+                    .get(id)
+                    .expect("Week pattern id should be valid"),
+            ),
+        };
+
+        for i in current_length..length {
+            let current_week = first_week + i;
+            let is_week_active = match week_pattern_opt {
+                None => true,
+                Some(week_pattern) => {
+                    if current_week >= week_pattern.weeks.len() {
+                        true
+                    } else {
+                        week_pattern.weeks[current_week]
+                    }
+                }
+            };
+            self.interrogations.push(if is_week_active {
+                Some(ColloscopeInterrogation::default())
+            } else {
+                None
+            });
+        }
+    }
+
+    pub(crate) fn cut(
+        &mut self,
+        params: &super::colloscope_params::Parameters,
+        period_id: PeriodId,
+        _subject_id: SubjectId,
+        _slot_id: SlotId,
+    ) {
+        let (_first_week, length) = params
+            .periods
+            .get_first_week_and_length_for_period(period_id)
+            .expect("Period Id must be valid");
+        let current_length = self.interrogations.len();
+
+        assert!(length <= current_length);
+
+        if length == current_length {
+            return;
+        }
+
+        for i in length..current_length {
+            if let Some(interrogation) = &self.interrogations[i] {
+                if !interrogation.is_empty() {
+                    panic!("Interrogations should be empty to be cut");
+                }
+            }
+        }
+
+        self.interrogations.resize(length, None);
+    }
+
     pub fn is_empty(&self) -> bool {
         self.interrogations
             .iter()

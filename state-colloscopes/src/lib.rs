@@ -4,6 +4,7 @@
 //! and the various traits for the specific case of colloscope representation.
 //!
 
+use colloscopes::ColloscopePeriod;
 use serde::{Deserialize, Serialize};
 
 use collomatique_state::{tools, InMemoryData, Operation};
@@ -253,9 +254,10 @@ pub enum PeriodError {
     /// The period is referenced by a rule
     #[error("period id ({0:?}) is referenced by rule {1:?}")]
     PeriodIsReferencedByRule(PeriodId, RuleId),
-    /* /// Period is referenced in a colloscope id map
-    #[error("period id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed")]
-    PeriodIsReferencedInColloscopeIdMaps(PeriodId, ColloscopeId),*/
+
+    /// Period is not empty in colloscope
+    #[error("period id ({0:?}) is not empty in colloscope")]
+    NotEmptyPeriodInColloscope(PeriodId),
 }
 
 /// Errors for subject operations
@@ -1107,6 +1109,10 @@ impl Data {
                 {
                     week_pattern.add_weeks(0, desc.len());
                 }
+                self.inner_data.colloscope.period_map.insert(
+                    *period_id,
+                    ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
+                );
                 Ok(())
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
@@ -1157,6 +1163,10 @@ impl Data {
                 {
                     week_pattern.add_weeks(new_first_week, desc.len());
                 }
+                self.inner_data.colloscope.period_map.insert(
+                    *period_id,
+                    ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
+                );
                 Ok(())
             }
             AnnotatedPeriodOp::Remove(period_id) => {
@@ -1168,6 +1178,17 @@ impl Data {
                 else {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
+
+                let colloscope_period = self
+                    .inner_data
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+
+                if !colloscope_period.is_empty() {
+                    return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
+                }
 
                 /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
                     if colloscope.id_maps.periods.contains_key(period_id) {
@@ -1257,6 +1278,7 @@ impl Data {
                 {
                     week_pattern.remove_weeks(first_week, week_count);
                 }
+                self.inner_data.colloscope.period_map.remove(period_id);
 
                 Ok(())
             }
@@ -1273,6 +1295,17 @@ impl Data {
                 let old_length = self.inner_data.params.periods.ordered_period_list[position]
                     .1
                     .len();
+                if desc.len() < old_length {
+                    let colloscope_period = self
+                        .inner_data
+                        .colloscope
+                        .period_map
+                        .get(period_id)
+                        .expect("Period ID should be valid at this point");
+                    if !colloscope_period.is_empty() {
+                        return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
+                    }
+                }
 
                 self.inner_data.params.periods.ordered_period_list[position].1 = desc.clone();
 
@@ -1283,6 +1316,13 @@ impl Data {
                     {
                         week_pattern.add_weeks(first_week_to_add, desc.len() - old_length);
                     }
+                    let colloscope_period = self
+                        .inner_data
+                        .colloscope
+                        .period_map
+                        .get_mut(period_id)
+                        .expect("Period ID should be valid at this point");
+                    colloscope_period.extend(&self.inner_data.params, *period_id);
                 } else if desc.len() < old_length {
                     let first_week_to_remove = first_week + desc.len();
                     for (_week_pattern_id, week_pattern) in
@@ -1290,6 +1330,13 @@ impl Data {
                     {
                         week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
                     }
+                    let colloscope_period = self
+                        .inner_data
+                        .colloscope
+                        .period_map
+                        .get_mut(period_id)
+                        .expect("Period ID should be valid at this point");
+                    colloscope_period.cut(&self.inner_data.params, *period_id);
                 }
 
                 Ok(())
