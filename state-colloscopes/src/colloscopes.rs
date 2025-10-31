@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
+use crate::ids::{GroupListId, PeriodId, SlotId, StudentId};
 
 /// Description of a colloscope
 ///
@@ -94,10 +94,8 @@ impl Colloscope {
 /// Description of a single period in a colloscope
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopePeriod {
-    /// Map between subjects and interrogations for these subjects
-    ///
-    /// Only subjects with interrogations are represented here
-    pub subject_map: BTreeMap<SubjectId, ColloscopeSubject>,
+    /// Map between slots and interrogations for these slots
+    pub slot_map: BTreeMap<SlotId, ColloscopeSlot>,
 }
 
 impl ColloscopePeriod {
@@ -106,8 +104,8 @@ impl ColloscopePeriod {
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
     ) {
-        for (subject_id, subject_map) in &mut self.subject_map {
-            subject_map.extend(params, period_id, *subject_id);
+        for (slot_id, slot) in &mut self.slot_map {
+            slot.extend(params, period_id, *slot_id);
         }
     }
 
@@ -116,15 +114,15 @@ impl ColloscopePeriod {
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
     ) {
-        for (subject_id, subject_map) in &mut self.subject_map {
-            subject_map.cut(params, period_id, *subject_id);
+        for (slot_id, slot) in &mut self.slot_map {
+            slot.cut(params, period_id, *slot_id);
         }
     }
 
     pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
-        self.subject_map
+        self.slot_map
             .iter()
-            .all(|(_subject_id, subject)| subject.is_cuttable(weeks_to_cut))
+            .all(|(_slot_id, slot)| slot.is_cuttable(weeks_to_cut))
     }
 
     pub(crate) fn new_empty_from_params(
@@ -135,7 +133,7 @@ impl ColloscopePeriod {
             panic!("Period ID should be valid");
         }
 
-        let mut subject_map = BTreeMap::new();
+        let mut slot_map = BTreeMap::new();
 
         for (subject_id, subject) in &params.subjects.ordered_subject_list {
             if subject.excluded_periods.contains(&period_id) {
@@ -145,13 +143,21 @@ impl ColloscopePeriod {
                 continue;
             }
 
-            subject_map.insert(
-                *subject_id,
-                ColloscopeSubject::new_empty_from_params(params, period_id, *subject_id),
-            );
+            let subject_slots = params
+                .slots
+                .subject_map
+                .get(subject_id)
+                .expect("Subjects should have slots");
+
+            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                slot_map.insert(
+                    *slot_id,
+                    ColloscopeSlot::new_empty_from_params(params, period_id, *slot_id),
+                );
+            }
         }
 
-        ColloscopePeriod { subject_map }
+        ColloscopePeriod { slot_map }
     }
 
     pub(crate) fn validate_against_params(
@@ -161,153 +167,50 @@ impl ColloscopePeriod {
     ) -> Result<(), super::ColloscopeError> {
         use super::ColloscopeError;
 
-        let mut subject_with_interrogation_count = 0usize;
+        let mut slot_count = 0usize;
 
-        for (_subject_id, subject) in &params.subjects.ordered_subject_list {
+        for (subject_id, subject) in &params.subjects.ordered_subject_list {
             if subject.excluded_periods.contains(&period_id) {
                 continue;
             }
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
-            subject_with_interrogation_count += 1;
+
+            let subject_slots = params
+                .slots
+                .subject_map
+                .get(subject_id)
+                .expect("Subject should have slots at this point");
+            slot_count += subject_slots.ordered_slots.len();
         }
 
-        if self.subject_map.len() != subject_with_interrogation_count {
-            return Err(ColloscopeError::WrongSubjectCountInPeriodInColloscopeData(
+        if slot_count != self.slot_map.len() {
+            return Err(ColloscopeError::WrongSlotCountInPeriodInColloscopeData(
                 period_id,
             ));
         }
 
-        for (subject_id, subject) in &self.subject_map {
-            let Some(param_subject) = params.subjects.find_subject(*subject_id) else {
-                return Err(ColloscopeError::InvalidSubjectId(*subject_id));
+        for (slot_id, slot) in &self.slot_map {
+            let Some((subject_id, _pos)) = params.slots.find_slot_subject_and_position(*slot_id)
+            else {
+                return Err(ColloscopeError::InvalidSlotId(*slot_id));
             };
 
+            let param_subject = params
+                .subjects
+                .find_subject(subject_id)
+                .expect("Subject ID should be valid");
+
             if param_subject.excluded_periods.contains(&period_id) {
-                return Err(ColloscopeError::InvalidSubjectId(*subject_id));
+                return Err(ColloscopeError::InvalidSlotId(*slot_id));
             }
 
             if param_subject.parameters.interrogation_parameters.is_none() {
-                return Err(ColloscopeError::InvalidSubjectId(*subject_id));
+                panic!("Inconsistent data in params")
             }
 
-            subject.validate_against_params(period_id, *subject_id, params)?;
-        }
-
-        Ok(())
-    }
-}
-
-/// Description of a single subject in a period in a colloscope
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ColloscopeSubject {
-    /// Map between slots and list of interrogations
-    ///
-    /// Each relevant slot are mapped to vec containing a cell
-    /// for each week in the period. If there cannot be an interrogation
-    /// there is is still a cell, but the option is set to None.
-    ///
-    /// If however there is a possible interrogation, it will be a Some
-    /// value, even if no group is actually assigned. This will rather
-    /// be described within the [ColloscopeInterrogation] struct.
-    pub slots: BTreeMap<SlotId, ColloscopeSlot>,
-}
-
-impl ColloscopeSubject {
-    pub(crate) fn extend(
-        &mut self,
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-        subject_id: SubjectId,
-    ) {
-        for (slot_id, slot) in &mut self.slots {
-            slot.extend(params, period_id, subject_id, *slot_id);
-        }
-    }
-
-    pub(crate) fn cut(
-        &mut self,
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-        subject_id: SubjectId,
-    ) {
-        for (slot_id, slot) in &mut self.slots {
-            slot.cut(params, period_id, subject_id, *slot_id);
-        }
-    }
-
-    pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
-        self.slots
-            .iter()
-            .all(|(_slot_id, slot)| slot.is_cuttable(weeks_to_cut))
-    }
-
-    pub(crate) fn new_empty_from_params(
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-        subject_id: SubjectId,
-    ) -> Self {
-        if params.periods.find_period_position(period_id).is_none() {
-            panic!("Period ID should be valid");
-        }
-
-        let subject = params
-            .subjects
-            .find_subject(subject_id)
-            .expect("Subject ID should be valid");
-
-        if subject.excluded_periods.contains(&period_id) {
-            panic!("Subject should run on given period")
-        }
-        if subject.parameters.interrogation_parameters.is_none() {
-            panic!("Subject should have interrogations")
-        }
-
-        let orig_slots = params
-            .slots
-            .subject_map
-            .get(&subject_id)
-            .expect("Subject ID should be valid");
-
-        let mut slots = BTreeMap::new();
-
-        for (slot_id, _slot) in &orig_slots.ordered_slots {
-            slots.insert(
-                *slot_id,
-                ColloscopeSlot::new_empty_from_params(params, period_id, subject_id, *slot_id),
-            );
-        }
-
-        ColloscopeSubject { slots }
-    }
-
-    pub(crate) fn validate_against_params(
-        &self,
-        period_id: PeriodId,
-        subject_id: SubjectId,
-        params: &super::colloscope_params::Parameters,
-    ) -> Result<(), super::ColloscopeError> {
-        use super::ColloscopeError;
-
-        if params.periods.find_period_position(period_id).is_none() {
-            return Err(ColloscopeError::InvalidPeriodId(period_id));
-        }
-
-        let Some(subject_slots) = params.slots.subject_map.get(&subject_id) else {
-            return Err(ColloscopeError::InvalidSubjectId(subject_id));
-        };
-
-        if subject_slots.ordered_slots.len() != self.slots.len() {
-            return Err(
-                ColloscopeError::WrongSlotCountForSubjectInPeriodInColloscopeData(
-                    period_id, subject_id,
-                ),
-            );
-        }
-
-        for (slot_id, slot) in &self.slots {
-            slot.validate_against_params(period_id, subject_id, *slot_id, params)?;
+            slot.validate_against_params(period_id, *slot_id, params)?;
         }
 
         Ok(())
@@ -334,7 +237,6 @@ impl ColloscopeSlot {
         &mut self,
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
-        subject_id: SubjectId,
         slot_id: SlotId,
     ) {
         let (first_week, length) = params
@@ -349,13 +251,8 @@ impl ColloscopeSlot {
             return;
         }
 
-        let orig_slots = params
+        let slot = params
             .slots
-            .subject_map
-            .get(&subject_id)
-            .expect("Subject ID should be valid");
-
-        let slot = orig_slots
             .find_slot(slot_id)
             .expect("Slot ID should be valid");
 
@@ -389,7 +286,6 @@ impl ColloscopeSlot {
         &mut self,
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
-        _subject_id: SubjectId,
         _slot_id: SlotId,
     ) {
         let (_first_week, length) = params
@@ -438,7 +334,6 @@ impl ColloscopeSlot {
     pub(crate) fn new_empty_from_params(
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
-        subject_id: SubjectId,
         slot_id: SlotId,
     ) -> Self {
         let Some(period_pos) = params.periods.find_period_position(period_id) else {
@@ -450,6 +345,11 @@ impl ColloscopeSlot {
             .into_iter()
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
+
+        let (subject_id, pos) = params
+            .slots
+            .find_slot_subject_and_position(slot_id)
+            .expect("Slot ID should be valid");
 
         let subject = params
             .subjects
@@ -469,9 +369,7 @@ impl ColloscopeSlot {
             .get(&subject_id)
             .expect("Subject ID should be valid");
 
-        let slot = orig_slots
-            .find_slot(slot_id)
-            .expect("Slot ID should be valid");
+        let slot = &orig_slots.ordered_slots[pos].1;
 
         let mut interrogations = vec![];
 
@@ -505,7 +403,6 @@ impl ColloscopeSlot {
     pub(crate) fn validate_against_params(
         &self,
         period_id: PeriodId,
-        subject_id: SubjectId,
         slot_id: SlotId,
         params: &super::colloscope_params::Parameters,
     ) -> Result<(), super::ColloscopeError> {
@@ -521,11 +418,7 @@ impl ColloscopeSlot {
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
 
-        let Some(subject_slots) = params.slots.subject_map.get(&subject_id) else {
-            return Err(ColloscopeError::InvalidSubjectId(subject_id));
-        };
-
-        let Some(orig_slot) = subject_slots.find_slot(slot_id) else {
+        let Some(orig_slot) = params.slots.find_slot(slot_id) else {
             return Err(ColloscopeError::InvalidSlotId(slot_id));
         };
 
@@ -574,13 +467,7 @@ impl ColloscopeSlot {
                 ));
             };
 
-            interrogation.validate_against_params(
-                period_id,
-                subject_id,
-                slot_id,
-                current_week,
-                params,
-            )?;
+            interrogation.validate_against_params(period_id, slot_id, current_week, params)?;
         }
 
         Ok(())
@@ -601,7 +488,6 @@ impl ColloscopeInterrogation {
     pub(crate) fn validate_against_params(
         &self,
         period_id: PeriodId,
-        subject_id: SubjectId,
         slot_id: SlotId,
         week: usize,
         params: &super::colloscope_params::Parameters,
@@ -611,6 +497,10 @@ impl ColloscopeInterrogation {
         let Some(subject_association) = params.group_lists.subjects_associations.get(&period_id)
         else {
             return Err(ColloscopeError::InvalidPeriodId(period_id));
+        };
+
+        let Some((subject_id, _pos)) = params.slots.find_slot_subject_and_position(slot_id) else {
+            return Err(ColloscopeError::InvalidSlotId(slot_id));
         };
 
         let group_list_id_opt = subject_association.get(&subject_id);
@@ -655,32 +545,22 @@ impl ColloscopeGroupList {
     }
 
     pub fn is_compatible_with_prefill(&self, group_list: &crate::group_lists::GroupList) -> bool {
-        let mut student_group_map = BTreeMap::new();
-        let mut sealed_groups = BTreeSet::new();
-
         for (group_num, group) in group_list.prefilled_groups.groups.iter().enumerate() {
-            if group.sealed {
-                sealed_groups.insert(group_num as u32);
-            }
             for student_id in &group.students {
-                assert!(student_group_map
-                    .insert(*student_id, group_num as u32)
-                    .is_none());
-                if !self.groups_for_students.contains_key(student_id) {
+                let Some(stored_num) = self.groups_for_students.get(student_id) else {
+                    return false;
+                };
+                if *stored_num != group_num as u32 {
                     return false;
                 }
             }
         }
 
         for (student_id, group) in &self.groups_for_students {
-            match student_group_map.get(student_id) {
-                Some(stored_num) => {
-                    if *group != *stored_num {
-                        return false;
-                    }
-                }
-                None => {
-                    if sealed_groups.contains(group) {
+            let group_index = *group as usize;
+            if let Some(group) = group_list.prefilled_groups.groups.get(group_index) {
+                if group.sealed {
+                    if !group.students.contains(student_id) {
                         return false;
                     }
                 }

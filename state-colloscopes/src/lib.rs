@@ -603,10 +603,6 @@ pub enum ColloscopeError {
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
 
-    /// Subject original id is invalid
-    #[error("invalid subject id ({0:?})")]
-    InvalidSubjectId(SubjectId),
-
     /// Slot original id is invalid
     #[error("invalid slot id ({0:?})")]
     InvalidSlotId(SlotId),
@@ -621,11 +617,8 @@ pub enum ColloscopeError {
     #[error("Wrong group list count")]
     WrongGroupListCountInColloscopeData,
 
-    #[error("Wrong subject count in period")]
-    WrongSubjectCountInPeriodInColloscopeData(PeriodId),
-
-    #[error("Wrong slot count for subject in period")]
-    WrongSlotCountForSubjectInPeriodInColloscopeData(PeriodId, SubjectId),
+    #[error("Wrong slot count in period")]
+    WrongSlotCountInPeriodInColloscopeData(PeriodId),
 
     #[error("Wrong interrogation count for slot in period")]
     WrongInterrogationCountForSlotInPeriodInColloscopeData(PeriodId, SlotId),
