@@ -18,6 +18,120 @@ pub struct Colloscope {
 }
 
 impl Colloscope {
+    /// Builds an empty colloscope compatible with the given parameters
+    ///
+    /// The function might panic if the parameters do not satisfy parameters invariants
+    /// You should check this before hand with [super::colloscope_params::Parameters::check_invariants].
+    pub fn new_empty_from_params(params: &super::colloscope_params::Parameters) -> Self {
+        let group_lists = params
+            .group_lists
+            .group_list_map
+            .iter()
+            .map(|(group_list_id, group_list)| {
+                let collo_group_list = ColloscopeGroupList {
+                    groups_for_students: params
+                        .students
+                        .student_map
+                        .iter()
+                        .filter_map(|(student_id, _student)| {
+                            if group_list.params.excluded_students.contains(student_id) {
+                                return None;
+                            }
+
+                            for (i, group) in group_list.prefilled_groups.groups.iter().enumerate()
+                            {
+                                if group.students.contains(student_id) {
+                                    return Some((*student_id, Some(i as u32)));
+                                }
+                            }
+
+                            Some((*student_id, None))
+                        })
+                        .collect(),
+                };
+
+                (*group_list_id, collo_group_list)
+            })
+            .collect();
+
+        let mut period_map = BTreeMap::new();
+        let mut first_week = 0usize;
+        for (period_id, period) in &params.periods.ordered_period_list {
+            let mut subject_map = BTreeMap::new();
+
+            for (subject_id, subject) in &params.subjects.ordered_subject_list {
+                if subject.excluded_periods.contains(period_id) {
+                    continue;
+                }
+                if subject.parameters.interrogation_parameters.is_none() {
+                    continue;
+                }
+
+                let orig_slots = params
+                    .slots
+                    .subject_map
+                    .get(subject_id)
+                    .expect("Subject ID should be valid");
+
+                let mut slots = BTreeMap::new();
+
+                for (slot_id, slot) in &orig_slots.ordered_slots {
+                    let mut collo_slot = vec![];
+
+                    let week_pattern_id_opt = &slot.week_pattern;
+                    let week_pattern_opt = match week_pattern_id_opt {
+                        None => None,
+                        Some(id) => Some(
+                            params
+                                .week_patterns
+                                .week_pattern_map
+                                .get(id)
+                                .expect("Week pattern id should be valid"),
+                        ),
+                    };
+                    for i in 0..period.len() {
+                        let current_week = first_week + i;
+                        let is_week_active = match week_pattern_opt {
+                            None => true,
+                            Some(week_pattern) => {
+                                if current_week >= week_pattern.weeks.len() {
+                                    true
+                                } else {
+                                    week_pattern.weeks[current_week]
+                                }
+                            }
+                        };
+                        collo_slot.push(if is_week_active {
+                            Some(ColloscopeInterrogation {
+                                assigned_groups: BTreeSet::new(),
+                            })
+                        } else {
+                            None
+                        });
+                    }
+
+                    slots.insert(*slot_id, collo_slot);
+                }
+
+                let collo_subject = ColloscopeSubject { slots };
+
+                subject_map.insert(*subject_id, collo_subject);
+            }
+
+            let collo_period = ColloscopePeriod { subject_map };
+
+            period_map.insert(*period_id, collo_period);
+            first_week += period.len();
+        }
+
+        Colloscope {
+            period_map,
+            group_lists,
+        }
+    }
+}
+
+impl Colloscope {
     pub(crate) fn validate_against_params(
         &self,
         params: &super::colloscope_params::Parameters,
