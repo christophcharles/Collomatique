@@ -14,7 +14,7 @@ pub struct PeriodEntryData {
     pub period_text: String,
     pub subjects: Vec<(
         collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::Subject<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::Subject,
     )>,
     pub group_list_associations: BTreeMap<
         collomatique_state_colloscopes::SubjectId,
@@ -22,9 +22,7 @@ pub struct PeriodEntryData {
     >,
     pub group_lists: BTreeMap<
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupList<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::group_lists::GroupList,
     >,
 }
 
@@ -176,13 +174,10 @@ impl PeriodEntry {
 struct SubjectEntryData {
     subject_id: collomatique_state_colloscopes::SubjectId,
     group_list_id: Option<collomatique_state_colloscopes::GroupListId>,
-    subject:
-        collomatique_state_colloscopes::subjects::Subject<collomatique_state_colloscopes::PeriodId>,
+    subject: collomatique_state_colloscopes::subjects::Subject,
     group_lists: BTreeMap<
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupList<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::group_lists::GroupList,
     >,
 }
 

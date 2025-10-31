@@ -13,31 +13,13 @@ mod slots_display;
 #[derive(Debug)]
 pub enum SlotsInput {
     Update(
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::teachers::Teachers<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::SubjectId,
-        >,
-        collomatique_state_colloscopes::week_patterns::WeekPatterns<
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-        collomatique_state_colloscopes::slots::Slots<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::SlotId,
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::subjects::Subjects,
+        collomatique_state_colloscopes::teachers::Teachers,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns,
+        collomatique_state_colloscopes::slots::Slots,
     ),
 
-    SlotParamsSelected(
-        collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-    ),
+    SlotParamsSelected(collomatique_state_colloscopes::slots::Slot),
     MoveSlotUp(collomatique_state_colloscopes::SlotId),
     MoveSlotDown(collomatique_state_colloscopes::SlotId),
     DeleteSlot(collomatique_state_colloscopes::SlotId),
@@ -52,23 +34,10 @@ enum SlotParamsSelectionReason {
 }
 
 pub struct Slots {
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    teachers: collomatique_state_colloscopes::teachers::Teachers<
-        collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::SubjectId,
-    >,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
-    slots: collomatique_state_colloscopes::slots::Slots<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
+    teachers: collomatique_state_colloscopes::teachers::Teachers,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    slots: collomatique_state_colloscopes::slots::Slots,
     subjects_list: FactoryVecDeque<slots_display::Entry>,
 
     slot_params_dialog: Controller<slot_params::Dialog>,
@@ -303,9 +272,7 @@ impl Slots {
         subject_id: collomatique_state_colloscopes::SubjectId,
     ) -> BTreeMap<
         collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::teachers::Teacher<
-            collomatique_state_colloscopes::SubjectId,
-        >,
+        collomatique_state_colloscopes::teachers::Teacher,
     > {
         self.teachers
             .teacher_map

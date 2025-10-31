@@ -13,26 +13,12 @@ mod incompats_display;
 #[derive(Debug)]
 pub enum IncompatsInput {
     Update(
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::week_patterns::WeekPatterns<
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-        collomatique_state_colloscopes::incompats::Incompats<
-            collomatique_state_colloscopes::IncompatId,
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::subjects::Subjects,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns,
+        collomatique_state_colloscopes::incompats::Incompats,
     ),
 
-    IncompatParamsSelected(
-        collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-    ),
+    IncompatParamsSelected(collomatique_state_colloscopes::incompats::Incompatibility),
     DeleteIncompat(collomatique_state_colloscopes::IncompatId),
     EditIncompat(collomatique_state_colloscopes::IncompatId),
     AddIncompat(collomatique_state_colloscopes::SubjectId),
@@ -45,18 +31,9 @@ enum IncompatParamsSelectionReason {
 }
 
 pub struct Incompats {
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
-    incompats: collomatique_state_colloscopes::incompats::Incompats<
-        collomatique_state_colloscopes::IncompatId,
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    incompats: collomatique_state_colloscopes::incompats::Incompats,
     incompats_list: FactoryVecDeque<incompats_display::Entry>,
 
     incompat_params_dialog: Controller<incompat_params::Dialog>,

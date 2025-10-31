@@ -11,19 +11,14 @@ mod dialog;
 #[derive(Debug)]
 pub enum StudentsInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-        collomatique_state_colloscopes::students::Students<
-            collomatique_state_colloscopes::StudentId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
+        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::students::Students,
     ),
     EditStudentClicked(collomatique_state_colloscopes::StudentId),
     DeleteStudentClicked(collomatique_state_colloscopes::StudentId),
     AddStudentClicked,
     FilterChanged(Option<usize>),
-    StudentEditResult(
-        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
-    ),
+    StudentEditResult(collomatique_state_colloscopes::students::Student),
 }
 
 #[derive(Debug)]
@@ -42,12 +37,8 @@ enum StudentFilter {
 use crate::widgets::contact_list::ContactInfo;
 
 pub struct Students {
-    periods:
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-    students: collomatique_state_colloscopes::students::Students<
-        collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
+    periods: collomatique_state_colloscopes::periods::Periods,
+    students: collomatique_state_colloscopes::students::Students,
 
     student_modification_reason: StudentModificationReason,
     current_filter: StudentFilter,

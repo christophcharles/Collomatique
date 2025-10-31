@@ -16,7 +16,7 @@ pub struct Dialog {
     list_name: String,
     filtered_students: BTreeMap<
         collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::students::Student,
     >,
     available_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
 
@@ -28,14 +28,10 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        collomatique_state_colloscopes::group_lists::GroupList<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::group_lists::GroupList,
         BTreeMap<
             collomatique_state_colloscopes::StudentId,
-            collomatique_state_colloscopes::students::Student<
-                collomatique_state_colloscopes::PeriodId,
-            >,
+            collomatique_state_colloscopes::students::Student,
         >,
     ),
     Cancel,
@@ -47,11 +43,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(
-        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ),
+    Accepted(collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups),
 }
 
 impl Dialog {
@@ -231,12 +223,7 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn update_from_data(
-        &mut self,
-        data: collomatique_state_colloscopes::group_lists::GroupList<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ) {
+    fn update_from_data(&mut self, data: collomatique_state_colloscopes::group_lists::GroupList) {
         let selected_students: BTreeSet<_> = data.prefilled_groups.iter_students().collect();
         self.list_name = data.params.name.clone();
         self.available_students = self
@@ -337,9 +324,7 @@ impl Dialog {
 
     fn generate_data(
         &self,
-    ) -> collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
-        collomatique_state_colloscopes::StudentId,
-    > {
+    ) -> collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
         let entries_count = self.selected_group_count as usize;
         collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups {
             groups: self
@@ -373,7 +358,7 @@ pub struct GroupEntryData {
     available_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
     filtered_students: BTreeMap<
         collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::students::Student,
     >,
 }
 
@@ -612,7 +597,7 @@ pub struct StudentEntryData {
     available_students: BTreeSet<collomatique_state_colloscopes::StudentId>,
     filtered_students: BTreeMap<
         collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::students::Student,
     >,
 }
 

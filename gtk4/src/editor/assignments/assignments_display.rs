@@ -16,16 +16,13 @@ pub struct PeriodEntryData {
     pub week_count: usize,
     pub filtered_subjects: Vec<(
         collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::subjects::Subject<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::subjects::Subject,
     )>,
     pub filtered_students: Vec<(
         collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::students::Student<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::students::Student,
     )>,
-    pub period_assignments: collomatique_state_colloscopes::assignments::PeriodAssignments<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::StudentId,
-    >,
+    pub period_assignments: collomatique_state_colloscopes::assignments::PeriodAssignments,
 }
 
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};

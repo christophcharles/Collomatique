@@ -14,13 +14,8 @@ use collomatique_ops::SettingsUpdateOp;
 #[derive(Debug)]
 pub enum SettingsInput {
     Update(
-        collomatique_state_colloscopes::students::Students<
-            collomatique_state_colloscopes::StudentId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::settings::Settings<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::students::Students,
+        collomatique_state_colloscopes::settings::Settings,
     ),
 
     EditGlobalLimits,
@@ -30,13 +25,8 @@ pub enum SettingsInput {
 }
 
 pub struct Settings {
-    students: collomatique_state_colloscopes::students::Students<
-        collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    settings: collomatique_state_colloscopes::settings::Settings<
-        collomatique_state_colloscopes::StudentId,
-    >,
+    students: collomatique_state_colloscopes::students::Students,
+    settings: collomatique_state_colloscopes::settings::Settings,
 
     student_entries: FactoryVecDeque<StudentEntry>,
     edit_reason: Option<collomatique_state_colloscopes::StudentId>,

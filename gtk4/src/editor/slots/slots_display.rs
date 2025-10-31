@@ -13,18 +13,10 @@ pub struct EntryData {
     pub subject_id: collomatique_state_colloscopes::SubjectId,
     pub teachers: BTreeMap<
         collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::teachers::Teacher<
-            collomatique_state_colloscopes::SubjectId,
-        >,
+        collomatique_state_colloscopes::teachers::Teacher,
     >,
-    pub week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
-    pub subject_slots: collomatique_state_colloscopes::slots::SubjectSlots<
-        collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    pub week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    pub subject_slots: collomatique_state_colloscopes::slots::SubjectSlots,
 }
 
 #[derive(Debug)]
@@ -33,18 +25,10 @@ pub struct Entry {
     subject_id: collomatique_state_colloscopes::SubjectId,
     teachers: BTreeMap<
         collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::teachers::Teacher<
-            collomatique_state_colloscopes::SubjectId,
-        >,
+        collomatique_state_colloscopes::teachers::Teacher,
     >,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
-    subject_slots: collomatique_state_colloscopes::slots::SubjectSlots<
-        collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    subject_slots: collomatique_state_colloscopes::slots::SubjectSlots,
     slots: FactoryVecDeque<Slot>,
 }
 
@@ -68,10 +52,7 @@ impl Entry {
     fn slot_data_from_slot(
         &self,
         slot_id: collomatique_state_colloscopes::SlotId,
-        slot: &collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        slot: &collomatique_state_colloscopes::slots::Slot,
     ) -> SlotData {
         let teacher = self
             .teachers
@@ -245,9 +226,7 @@ impl FactoryComponent for Entry {
 #[derive(Debug, Clone)]
 pub struct SlotData {
     pub slot_id: collomatique_state_colloscopes::SlotId,
-    pub teacher: collomatique_state_colloscopes::teachers::Teacher<
-        collomatique_state_colloscopes::SubjectId,
-    >,
+    pub teacher: collomatique_state_colloscopes::teachers::Teacher,
     pub slot_start: collomatique_time::SlotStart,
     pub week_pattern_name: String,
     pub slot_count: usize,

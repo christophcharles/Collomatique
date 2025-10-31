@@ -13,13 +13,8 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
     ordered_subjects: Vec<(collomatique_state_colloscopes::SubjectId, String)>,
     ordered_week_patterns: Vec<(collomatique_state_colloscopes::WeekPatternId, String)>,
 
@@ -34,17 +29,9 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::week_patterns::WeekPatterns<
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-        collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::subjects::Subjects,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns,
+        collomatique_state_colloscopes::incompats::Incompatibility,
     ),
     Cancel,
     Accept,
@@ -60,12 +47,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(
-        collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-    ),
+    Accepted(collomatique_state_colloscopes::incompats::Incompatibility),
 }
 
 impl Dialog {
@@ -375,10 +357,7 @@ impl Dialog {
 
     fn update_data_from_params(
         &mut self,
-        params: &collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        params: &collomatique_state_colloscopes::incompats::Incompatibility,
     ) {
         self.subject_selected = self.subject_id_to_selected(params.subject_id);
         self.week_pattern_selected = self.week_pattern_id_to_selected(params.week_pattern_id);
@@ -411,12 +390,7 @@ impl Dialog {
         self.ordered_week_patterns = week_patterns;
     }
 
-    fn build_params_from_data(
-        &self,
-    ) -> collomatique_state_colloscopes::incompats::Incompatibility<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::WeekPatternId,
-    > {
+    fn build_params_from_data(&self) -> collomatique_state_colloscopes::incompats::Incompatibility {
         collomatique_state_colloscopes::incompats::Incompatibility {
             name: self.incompat_name.clone(),
             subject_id: self.subject_selected_to_id(self.subject_selected),

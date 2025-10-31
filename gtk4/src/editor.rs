@@ -407,7 +407,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Rules => None,
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
-            collomatique_ops::OpCategory::Colloscopes => None,
+            //collomatique_ops::OpCategory::Colloscopes => None,
         }
     }
 

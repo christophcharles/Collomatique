@@ -11,13 +11,9 @@ pub struct Dialog {
     subject_name: String,
     teachers: BTreeMap<
         collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::teachers::Teacher<
-            collomatique_state_colloscopes::SubjectId,
-        >,
+        collomatique_state_colloscopes::teachers::Teacher,
     >,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
     ordered_teachers: Vec<(collomatique_state_colloscopes::TeacherId, String, String)>,
     ordered_week_patterns: Vec<(collomatique_state_colloscopes::WeekPatternId, String)>,
 
@@ -36,17 +32,10 @@ pub enum DialogInput {
         String,
         BTreeMap<
             collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::teachers::Teacher<
-                collomatique_state_colloscopes::SubjectId,
-            >,
+            collomatique_state_colloscopes::teachers::Teacher,
         >,
-        collomatique_state_colloscopes::week_patterns::WeekPatterns<
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-        collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns,
+        collomatique_state_colloscopes::slots::Slot,
     ),
     Cancel,
     Accept,
@@ -62,12 +51,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(
-        collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-    ),
+    Accepted(collomatique_state_colloscopes::slots::Slot),
 }
 
 impl Dialog {
@@ -413,13 +397,7 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn update_data_from_params(
-        &mut self,
-        params: &collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
-    ) {
+    fn update_data_from_params(&mut self, params: &collomatique_state_colloscopes::slots::Slot) {
         use chrono::Timelike;
         self.teacher_selected = self.teacher_id_to_selected(params.teacher_id);
         self.day_selected = Self::day_enum_to_selected(params.start_time.weekday);
@@ -461,12 +439,7 @@ impl Dialog {
         self.ordered_week_patterns = week_patterns;
     }
 
-    fn build_params_from_data(
-        &self,
-    ) -> collomatique_state_colloscopes::slots::Slot<
-        collomatique_state_colloscopes::TeacherId,
-        collomatique_state_colloscopes::WeekPatternId,
-    > {
+    fn build_params_from_data(&self) -> collomatique_state_colloscopes::slots::Slot {
         let teacher_id = self.teacher_selected_to_id(self.teacher_selected);
         collomatique_state_colloscopes::slots::Slot {
             teacher_id,

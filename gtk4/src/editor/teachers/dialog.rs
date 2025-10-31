@@ -9,16 +9,11 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    teacher_data: collomatique_state_colloscopes::teachers::Teacher<
-        collomatique_state_colloscopes::SubjectId,
-    >,
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
+    teacher_data: collomatique_state_colloscopes::teachers::Teacher,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
     filtered_subjects: Vec<(
         collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::Subject<collomatique_state_colloscopes::PeriodId>,
+        collomatique_state_colloscopes::Subject,
     )>,
     subject_entries: FactoryVecDeque<SubjectEntry>,
 }
@@ -26,13 +21,8 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::teachers::Teacher<
-            collomatique_state_colloscopes::SubjectId,
-        >,
+        collomatique_state_colloscopes::subjects::Subjects,
+        collomatique_state_colloscopes::teachers::Teacher,
     ),
     Cancel,
     Accept,
@@ -46,11 +36,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(
-        collomatique_state_colloscopes::teachers::Teacher<
-            collomatique_state_colloscopes::SubjectId,
-        >,
-    ),
+    Accepted(collomatique_state_colloscopes::teachers::Teacher),
 }
 
 impl Dialog {

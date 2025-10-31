@@ -10,20 +10,10 @@ mod assignments_display;
 #[derive(Debug)]
 pub enum AssignmentsInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::students::Students<
-            collomatique_state_colloscopes::StudentId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::assignments::Assignments<
-            collomatique_state_colloscopes::PeriodId,
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::subjects::Subjects,
+        collomatique_state_colloscopes::students::Students,
+        collomatique_state_colloscopes::assignments::Assignments,
     ),
     UpdateStatus(
         collomatique_state_colloscopes::PeriodId,
@@ -40,21 +30,10 @@ pub enum AssignmentsInput {
 }
 
 pub struct Assignments {
-    periods:
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    students: collomatique_state_colloscopes::students::Students<
-        collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    assignments: collomatique_state_colloscopes::assignments::Assignments<
-        collomatique_state_colloscopes::PeriodId,
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::StudentId,
-    >,
+    periods: collomatique_state_colloscopes::periods::Periods,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
+    students: collomatique_state_colloscopes::students::Students,
+    assignments: collomatique_state_colloscopes::assignments::Assignments,
 
     period_factory: FactoryVecDeque<assignments_display::PeriodEntry>,
 }

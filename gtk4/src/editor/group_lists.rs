@@ -15,37 +15,18 @@ mod prefill_dialog;
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::students::Students<
-            collomatique_state_colloscopes::StudentId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
-        collomatique_state_colloscopes::group_lists::GroupLists<
-            collomatique_state_colloscopes::GroupListId,
-            collomatique_state_colloscopes::PeriodId,
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::subjects::Subjects,
+        collomatique_state_colloscopes::students::Students,
+        collomatique_state_colloscopes::group_lists::GroupLists,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     PrefillGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
-    GroupListParamsSelected(
-        collomatique_state_colloscopes::group_lists::GroupListParameters<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ),
-    GroupListPrefillSelected(
-        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ),
+    GroupListParamsSelected(collomatique_state_colloscopes::group_lists::GroupListParameters),
+    GroupListPrefillSelected(collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups),
 }
 
 #[derive(Debug)]
@@ -55,22 +36,10 @@ enum GroupListParamsSelectionReason {
 }
 
 pub struct GroupLists {
-    periods:
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    students: collomatique_state_colloscopes::students::Students<
-        collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
-    group_lists: collomatique_state_colloscopes::group_lists::GroupLists<
-        collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::PeriodId,
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::StudentId,
-    >,
+    periods: collomatique_state_colloscopes::periods::Periods,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
+    students: collomatique_state_colloscopes::students::Students,
+    group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,

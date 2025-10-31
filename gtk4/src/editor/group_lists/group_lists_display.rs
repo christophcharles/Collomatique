@@ -8,9 +8,7 @@ use relm4::RelmWidgetExt;
 #[derive(Debug)]
 pub struct EntryData {
     pub id: collomatique_state_colloscopes::GroupListId,
-    pub group_list: collomatique_state_colloscopes::group_lists::GroupList<
-        collomatique_state_colloscopes::StudentId,
-    >,
+    pub group_list: collomatique_state_colloscopes::group_lists::GroupList,
 }
 
 pub struct Entry {

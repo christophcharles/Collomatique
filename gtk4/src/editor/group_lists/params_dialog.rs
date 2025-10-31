@@ -12,10 +12,7 @@ use std::num::NonZeroU32;
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    students: collomatique_state_colloscopes::students::Students<
-        collomatique_state_colloscopes::StudentId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
+    students: collomatique_state_colloscopes::students::Students,
 
     ordered_students: Vec<(collomatique_state_colloscopes::StudentId, String, String)>,
 
@@ -32,13 +29,8 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     Show(
-        collomatique_state_colloscopes::group_lists::GroupListParameters<
-            collomatique_state_colloscopes::StudentId,
-        >,
-        collomatique_state_colloscopes::students::Students<
-            collomatique_state_colloscopes::StudentId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
+        collomatique_state_colloscopes::group_lists::GroupListParameters,
+        collomatique_state_colloscopes::students::Students,
     ),
     Cancel,
     Accept,
@@ -54,11 +46,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(
-        collomatique_state_colloscopes::group_lists::GroupListParameters<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ),
+    Accepted(collomatique_state_colloscopes::group_lists::GroupListParameters),
 }
 
 impl Dialog {}
@@ -367,9 +355,7 @@ impl Dialog {
 
     fn update_from_data(
         &mut self,
-        data: collomatique_state_colloscopes::group_lists::GroupListParameters<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        data: collomatique_state_colloscopes::group_lists::GroupListParameters,
     ) {
         self.selected_name = data.name;
         self.selected_students_per_group_minimum = data.students_per_group.start().get();
@@ -379,11 +365,7 @@ impl Dialog {
         self.excluded_students = data.excluded_students;
     }
 
-    fn generate_data(
-        &self,
-    ) -> collomatique_state_colloscopes::group_lists::GroupListParameters<
-        collomatique_state_colloscopes::StudentId,
-    > {
+    fn generate_data(&self) -> collomatique_state_colloscopes::group_lists::GroupListParameters {
         collomatique_state_colloscopes::group_lists::GroupListParameters {
             name: self.selected_name.clone(),
             students_per_group: NonZeroU32::new(self.selected_students_per_group_minimum).unwrap()

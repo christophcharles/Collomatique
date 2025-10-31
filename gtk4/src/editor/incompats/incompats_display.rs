@@ -11,15 +11,10 @@ use relm4::{adw, gtk};
 pub struct EntryData {
     pub subject_params: collomatique_state_colloscopes::SubjectParameters,
     pub subject_id: collomatique_state_colloscopes::SubjectId,
-    pub week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    pub week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
     pub subject_incompats: BTreeMap<
         collomatique_state_colloscopes::IncompatId,
-        collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::incompats::Incompatibility,
     >,
 }
 
@@ -27,15 +22,10 @@ pub struct EntryData {
 pub struct Entry {
     subject_params: collomatique_state_colloscopes::SubjectParameters,
     subject_id: collomatique_state_colloscopes::SubjectId,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns<
-        collomatique_state_colloscopes::WeekPatternId,
-    >,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
     subject_incompats: BTreeMap<
         collomatique_state_colloscopes::IncompatId,
-        collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::incompats::Incompatibility,
     >,
     incompats: FactoryVecDeque<Incompat>,
 }
@@ -58,10 +48,7 @@ impl Entry {
     fn incompat_data_from_slot(
         &self,
         incompat_id: collomatique_state_colloscopes::IncompatId,
-        incompat: &collomatique_state_colloscopes::incompats::Incompatibility<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        incompat: &collomatique_state_colloscopes::incompats::Incompatibility,
     ) -> IncompatData {
         let week_pattern = if let Some(id) = incompat.week_pattern_id {
             Some(

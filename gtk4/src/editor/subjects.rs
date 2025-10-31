@@ -13,11 +13,8 @@ mod subjects_display;
 #[derive(Debug)]
 pub enum SubjectsInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-        collomatique_state_colloscopes::subjects::Subjects<
-            collomatique_state_colloscopes::SubjectId,
-            collomatique_state_colloscopes::PeriodId,
-        >,
+        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::subjects::Subjects,
     ),
     AddSubjectClicked,
 
@@ -37,12 +34,8 @@ enum SubjectParamsSelectionReason {
 }
 
 pub struct Subjects {
-    periods:
-        collomatique_state_colloscopes::periods::Periods<collomatique_state_colloscopes::PeriodId>,
-    subjects: collomatique_state_colloscopes::subjects::Subjects<
-        collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::PeriodId,
-    >,
+    periods: collomatique_state_colloscopes::periods::Periods,
+    subjects: collomatique_state_colloscopes::subjects::Subjects,
     subjects_list: FactoryVecDeque<subjects_display::Entry>,
 
     subject_params_selection_reason: SubjectParamsSelectionReason,
