@@ -643,14 +643,12 @@ impl ColloscopeInterrogation {
 /// and actual group numbers
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColloscopeGroupList {
-    pub groups_for_students: BTreeMap<StudentId, Option<u32>>,
+    pub groups_for_students: BTreeMap<StudentId, u32>,
 }
 
 impl ColloscopeGroupList {
     pub fn is_empty(&self) -> bool {
-        self.groups_for_students
-            .iter()
-            .all(|(_id, group_opt)| group_opt.is_none())
+        self.groups_for_students.is_empty()
     }
 
     pub fn is_compatible_with_prefill(&self, group_list: &crate::group_lists::GroupList) -> bool {
@@ -665,24 +663,22 @@ impl ColloscopeGroupList {
                 assert!(student_group_map
                     .insert(*student_id, group_num as u32)
                     .is_none());
+                if !self.groups_for_students.contains_key(student_id) {
+                    return false;
+                }
             }
         }
 
-        for (student_id, group_opt) in &self.groups_for_students {
-            if group_list.params.excluded_students.contains(student_id) {
-                return false;
-            }
+        for (student_id, group) in &self.groups_for_students {
             match student_group_map.get(student_id) {
                 Some(stored_num) => {
-                    if *group_opt != Some(*stored_num) {
+                    if *group != *stored_num {
                         return false;
                     }
                 }
                 None => {
-                    if let Some(group_num) = group_opt {
-                        if sealed_groups.contains(group_num) {
-                            return false;
-                        }
+                    if sealed_groups.contains(group) {
+                        return false;
                     }
                 }
             }
@@ -699,28 +695,11 @@ impl ColloscopeGroupList {
     /// The function might panic if the parameters do not satisfy parameters invariants
     /// You should check this before hand with [super::colloscope_params::Parameters::check_invariants].
     pub(crate) fn new_empty_from_params(
-        params: &super::colloscope_params::Parameters,
-        group_list_id: GroupListId,
+        _params: &super::colloscope_params::Parameters,
+        _group_list_id: GroupListId,
     ) -> Self {
-        let group_list = params
-            .group_lists
-            .group_list_map
-            .get(&group_list_id)
-            .expect("Group list id should be in params");
-
         ColloscopeGroupList {
-            groups_for_students: params
-                .students
-                .student_map
-                .iter()
-                .filter_map(|(student_id, _student)| {
-                    if group_list.params.excluded_students.contains(student_id) {
-                        return None;
-                    }
-
-                    Some((*student_id, None))
-                })
-                .collect(),
+            groups_for_students: BTreeMap::new(),
         }
     }
 }
@@ -739,24 +718,7 @@ impl ColloscopeGroupList {
 
         let first_forbidden_value = group_list.params.group_count.end() + 1;
 
-        let expected_student_count = params
-            .students
-            .student_map
-            .iter()
-            .filter_map(|(student_id, _student)| {
-                if group_list.params.excluded_students.contains(student_id) {
-                    return None;
-                }
-
-                Some(student_id)
-            })
-            .count();
-
-        if expected_student_count != self.groups_for_students.len() {
-            return Err(ColloscopeError::WrongStudentCountInGroupList(group_list_id));
-        }
-
-        for (student_id, group_num_opt) in &self.groups_for_students {
+        for (student_id, group_num) in &self.groups_for_students {
             if group_list.params.excluded_students.contains(student_id) {
                 return Err(ColloscopeError::ExcludedStudentInGroupList(
                     group_list_id,
@@ -768,13 +730,11 @@ impl ColloscopeGroupList {
                 return Err(ColloscopeError::InvalidStudentId(*student_id));
             }
 
-            if let Some(group_num) = group_num_opt {
-                if *group_num >= first_forbidden_value {
-                    return Err(ColloscopeError::InvalidGroupNumForStudentInGroupList(
-                        group_list_id,
-                        *student_id,
-                    ));
-                }
+            if *group_num >= first_forbidden_value {
+                return Err(ColloscopeError::InvalidGroupNumForStudentInGroupList(
+                    group_list_id,
+                    *student_id,
+                ));
             }
         }
 

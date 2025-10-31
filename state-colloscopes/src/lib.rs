@@ -642,9 +642,6 @@ pub enum ColloscopeError {
     #[error("excluded student in group list")]
     ExcludedStudentInGroupList(GroupListId, StudentId),
 
-    #[error("wrong student count in group list")]
-    WrongStudentCountInGroupList(GroupListId),
-
     #[error("Invalid group number for student")]
     InvalidGroupNumForStudentInGroupList(GroupListId, StudentId),
 }
