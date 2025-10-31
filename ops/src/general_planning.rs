@@ -20,6 +20,10 @@ pub enum GeneralPlanningUpdateWarning {
         collomatique_state_colloscopes::RuleId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseWeekPatternDataForPeriod(
+        collomatique_state_colloscopes::WeekPatternId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GeneralPlanningUpdateWarning {
@@ -161,6 +165,35 @@ impl GeneralPlanningUpdateWarning {
                     period_index + 1
                 ))
             }
+            GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(
+                week_pattern_id,
+                period_id,
+            ) => {
+                let Some(week_pattern) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .get(week_pattern_id)
+                else {
+                    return None;
+                };
+                let Some(period_index) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des informations de modèle de périodicité \"{}\" sur la période {}",
+                    week_pattern.name,
+                    period_index + 1
+                ))
+            }
         }
     }
 }
@@ -255,11 +288,104 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::DeleteFirstWeek => None,
             GeneralPlanningUpdateOp::UpdateFirstWeek(_) => None,
             GeneralPlanningUpdateOp::AddNewPeriod(_) => None,
-            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_, _) => None,
+            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
+                let Some((pos, first_week)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position_and_first_week(*period_id)
+                else {
+                    return None;
+                };
+                let period = &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .ordered_period_list[pos]
+                    .1;
+                let old_week_count = period.len();
+
+                if *week_count >= old_week_count {
+                    return None;
+                }
+
+                let first_week_to_remove = first_week + *week_count;
+                let weeks_to_remove = old_week_count - *week_count;
+
+                for (week_pattern_id, week_pattern) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                {
+                    if !week_pattern.can_remove_weeks(first_week_to_remove, weeks_to_remove) {
+                        let mut new_week_patten = week_pattern.clone();
+                        new_week_patten.clean_weeks(first_week_to_remove, weeks_to_remove);
+
+                        return Some(CleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(
+                                *week_pattern_id,
+                                *period_id,
+                            ),
+                            op: UpdateOp::WeekPatterns(WeekPatternsUpdateOp::UpdateWeekPattern(
+                                *week_pattern_id,
+                                new_week_patten,
+                            )),
+                        });
+                    }
+                }
+
+                None
+            }
             GeneralPlanningUpdateOp::CutPeriod(_, _) => None,
             GeneralPlanningUpdateOp::UpdateWeekStatus(_, _, _) => None,
             GeneralPlanningUpdateOp::UpdateWeekAnnotation(_, _, _) => None,
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                let Some((pos, first_week)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position_and_first_week(*period_id)
+                else {
+                    return None;
+                };
+                let period = &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .ordered_period_list[pos]
+                    .1;
+                let week_count = period.len();
+
+                for (week_pattern_id, week_pattern) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                {
+                    if !week_pattern.can_remove_weeks(first_week, week_count) {
+                        let mut new_week_patten = week_pattern.clone();
+                        new_week_patten.clean_weeks(first_week, week_count);
+
+                        return Some(CleaningOp {
+                            warning: GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(
+                                *week_pattern_id,
+                                *period_id,
+                            ),
+                            op: UpdateOp::WeekPatterns(WeekPatternsUpdateOp::UpdateWeekPattern(
+                                *week_pattern_id,
+                                new_week_patten,
+                            )),
+                        });
+                    }
+                }
+
                 for (subject_id, subject) in &data
                     .get_data()
                     .get_inner_data()

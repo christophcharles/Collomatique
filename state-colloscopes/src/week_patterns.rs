@@ -35,34 +35,41 @@ pub struct WeekPattern {
 
 impl WeekPattern {
     pub fn add_weeks(&mut self, first_week: usize, week_count: usize) {
-        if self.weeks.len() <= first_week {
-            return;
-        }
+        assert!(self.weeks.len() >= first_week);
 
         self.weeks
             .splice(first_week..first_week, vec![true; week_count]);
     }
 
-    pub fn remove_weeks(&mut self, first_week: usize, week_count: usize) {
-        if self.weeks.len() <= first_week {
-            return;
-        }
+    pub fn clean_weeks(&mut self, first_week: usize, week_count: usize) {
+        assert!(self.weeks.len() > first_week);
 
-        let last_week = (first_week + week_count).min(self.weeks.len());
+        let last_week = first_week + week_count;
+        assert!(self.weeks.len() >= last_week);
+
+        for week in &mut self.weeks[first_week..last_week] {
+            *week = true;
+        }
+    }
+
+    pub fn remove_weeks(&mut self, first_week: usize, week_count: usize) {
+        assert!(self.weeks.len() > first_week);
+
+        let last_week = first_week + week_count;
+        assert!(self.weeks.len() >= last_week);
 
         for week in &self.weeks[first_week..last_week] {
-            assert!(!*week);
+            assert!(*week);
         }
 
         self.weeks.splice(first_week..last_week, vec![]);
     }
 
     pub fn can_remove_weeks(&self, first_week: usize, week_count: usize) -> bool {
-        if self.weeks.len() <= first_week {
-            return true;
-        }
+        assert!(self.weeks.len() > first_week);
 
-        let last_week = (first_week + week_count).min(self.weeks.len());
+        let last_week = first_week + week_count;
+        assert!(self.weeks.len() >= last_week);
 
         for week in &self.weeks[first_week..last_week] {
             if !*week {
