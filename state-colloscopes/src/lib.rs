@@ -406,11 +406,10 @@ pub enum WeekPatternError {
     /// The week pattern is referenced by a schedule incompatibility
     #[error("week pattern id ({0:?}) is referenced by an incompat ({1:?})")]
     WeekPatternStillHasAssociatedIncompat(WeekPatternId, IncompatId),
-    /* /// Week pattern is referenced in a colloscope id map
-    #[error(
-        "week pattern id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
-    )]
-    WeekPatternIsReferencedInColloscopeIdMaps(WeekPatternId, ColloscopeId),*/
+
+    /// The week pattern does not have the right length
+    #[error("week pattern does not have the right length")]
+    BadWeekPatternLength,
 }
 
 /// Errors for interrogation slot operations
@@ -820,6 +819,8 @@ pub enum InvariantError {
     InvalidRule,
     #[error("invalid student id in settings")]
     InvalidStudentIdInSettings,
+    #[error("week pattern is invalid")]
+    InvalidWeekPattern,
 }
 
 impl InMemoryData for Data {
@@ -1868,6 +1869,8 @@ impl Data {
                     return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
                 }
 
+                self.inner_data.params.validate_week_pattern(week_pattern)?;
+
                 self.inner_data
                     .params
                     .week_patterns
@@ -1928,6 +1931,10 @@ impl Data {
                 Ok(())
             }
             AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
+                self.inner_data
+                    .params
+                    .validate_week_pattern(new_week_pattern)?;
+
                 let Some(current_week_pattern) = self
                     .inner_data
                     .params

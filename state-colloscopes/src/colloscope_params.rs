@@ -738,6 +738,52 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
+    /// used to check week patterns
+    fn validate_week_pattern_internal(
+        week_pattern: &week_patterns::WeekPattern,
+        total_week_count: usize,
+    ) -> Result<(), WeekPatternError> {
+        if week_pattern.weeks.len() != total_week_count {
+            return Err(WeekPatternError::BadWeekPatternLength);
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// used to check settings before commiting a settings op
+    pub(crate) fn validate_week_pattern(
+        &self,
+        week_pattern: &week_patterns::WeekPattern,
+    ) -> Result<(), WeekPatternError> {
+        let total_week_count: usize = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .map(|(_period_id, desc)| desc.len())
+            .sum();
+
+        Self::validate_week_pattern_internal(week_pattern, total_week_count)
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// checks all the invariants in rules data
+    fn check_week_pattern_data_consistency(
+        &self,
+        total_week_count: usize,
+    ) -> Result<(), InvariantError> {
+        for (_week_pattern_id, week_pattern) in &self.week_patterns.week_pattern_map {
+            if Self::validate_week_pattern_internal(week_pattern, total_week_count).is_err() {
+                return Err(InvariantError::InvalidWeekPattern);
+            }
+        }
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Build the set of PeriodIds
     ///
     /// This is useful to check that references are valid
@@ -817,6 +863,12 @@ impl Parameters {
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
         let slot_ids = self.build_slot_ids();
+        let total_week_count = self
+            .periods
+            .ordered_period_list
+            .iter()
+            .map(|(_period_id, desc)| desc.len())
+            .sum();
 
         self.check_subjects_data_consistency(&period_ids)?;
         self.check_teachers_data_consistency()?;
@@ -827,6 +879,7 @@ impl Parameters {
         self.check_group_lists_data_consistency()?;
         self.check_rules_data_consistency(&period_ids, &slot_ids)?;
         self.check_settings_data_consistency()?;
+        self.check_week_pattern_data_consistency(total_week_count)?;
 
         Ok(())
     }
