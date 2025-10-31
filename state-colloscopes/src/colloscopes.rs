@@ -18,6 +18,16 @@ pub struct Colloscope {
 }
 
 impl Colloscope {
+    pub fn is_empty(&self) -> bool {
+        self.period_map
+            .iter()
+            .all(|(_period_id, period)| period.is_empty())
+            && self
+                .group_lists
+                .iter()
+                .all(|(_group_list_id, group_list)| group_list.is_empty())
+    }
+
     /// Builds an empty colloscope compatible with the given parameters
     ///
     /// The function might panic if the parameters do not satisfy parameters invariants
@@ -101,6 +111,12 @@ pub struct ColloscopePeriod {
 }
 
 impl ColloscopePeriod {
+    pub fn is_empty(&self) -> bool {
+        self.subject_map
+            .iter()
+            .all(|(_subject_id, subject)| subject.is_empty())
+    }
+
     pub(crate) fn new_empty_from_params(
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
@@ -189,6 +205,10 @@ pub struct ColloscopeSubject {
 }
 
 impl ColloscopeSubject {
+    pub fn is_empty(&self) -> bool {
+        self.slots.iter().all(|(_slot_id, slot)| slot.is_empty())
+    }
+
     pub(crate) fn new_empty_from_params(
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
@@ -276,6 +296,15 @@ pub struct ColloscopeSlot {
 }
 
 impl ColloscopeSlot {
+    pub fn is_empty(&self) -> bool {
+        self.interrogations
+            .iter()
+            .all(|interrogation_opt| match interrogation_opt {
+                Some(interrogation) => interrogation.is_empty(),
+                None => true,
+            })
+    }
+
     pub(crate) fn new_empty_from_params(
         params: &super::colloscope_params::Parameters,
         period_id: PeriodId,
@@ -447,6 +476,10 @@ pub struct ColloscopeInterrogation {
 }
 
 impl ColloscopeInterrogation {
+    pub fn is_empty(&self) -> bool {
+        self.assigned_groups.is_empty()
+    }
+
     pub(crate) fn validate_against_params(
         &self,
         period_id: PeriodId,
@@ -499,6 +532,12 @@ pub struct ColloscopeGroupList {
 }
 
 impl ColloscopeGroupList {
+    pub fn is_empty(&self) -> bool {
+        self.groups_for_students
+            .iter()
+            .all(|(_id, group_opt)| group_opt.is_none())
+    }
+
     pub fn is_compatible_with_prefill(&self, group_list: &crate::group_lists::GroupList) -> bool {
         let mut student_group_map = BTreeMap::new();
         let mut sealed_groups = BTreeSet::new();
