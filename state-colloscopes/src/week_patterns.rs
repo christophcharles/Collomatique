@@ -32,3 +32,24 @@ pub struct WeekPattern {
     /// They are kept in case some one expands again the number of weeks.
     pub weeks: Vec<bool>,
 }
+
+impl WeekPattern {
+    pub fn add_weeks(&mut self, first_week: usize, week_count: usize) {
+        if self.weeks.len() <= first_week {
+            return;
+        }
+
+        self.weeks
+            .splice(first_week..first_week, vec![true; week_count]);
+    }
+
+    pub fn remove_weeks(&mut self, first_week: usize, week_count: usize) {
+        if self.weeks.len() <= first_week {
+            return;
+        }
+
+        let last_week = (first_week + week_count).min(self.weeks.len());
+
+        self.weeks.splice(first_week..last_week, vec![]);
+    }
+}
