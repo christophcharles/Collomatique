@@ -1102,6 +1102,11 @@ impl Data {
                     .group_lists
                     .subjects_associations
                     .insert(*period_id, BTreeMap::new());
+                for (_week_pattern_id, week_pattern) in
+                    &mut self.inner_data.params.week_patterns.week_pattern_map
+                {
+                    week_pattern.add_weeks(0, desc.len());
+                }
                 Ok(())
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
@@ -1115,11 +1120,11 @@ impl Data {
                     return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
                 }
 
-                let Some(position) = self
+                let Some((position, new_first_week)) = self
                     .inner_data
                     .params
                     .periods
-                    .find_period_position(*after_id)
+                    .find_period_position_and_total_number_of_weeks(*after_id)
                 else {
                     return Err(PeriodError::InvalidPeriodId(*after_id));
                 };
@@ -1147,6 +1152,11 @@ impl Data {
                     .group_lists
                     .subjects_associations
                     .insert(*period_id, BTreeMap::new());
+                for (_week_pattern_id, week_pattern) in
+                    &mut self.inner_data.params.week_patterns.week_pattern_map
+                {
+                    week_pattern.add_weeks(new_first_week, desc.len());
+                }
                 Ok(())
             }
             AnnotatedPeriodOp::Remove(period_id) => {
@@ -1220,6 +1230,12 @@ impl Data {
                         *period_id,
                     ));
                 }
+                let (first_week, week_count) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .get_first_week_and_length_for_period(*period_id)
+                    .expect("Period id should be valid at this point");
 
                 self.inner_data
                     .params
@@ -1236,20 +1252,45 @@ impl Data {
                     .group_lists
                     .subjects_associations
                     .remove(period_id);
+                for (_week_pattern_id, week_pattern) in
+                    &mut self.inner_data.params.week_patterns.week_pattern_map
+                {
+                    week_pattern.remove_weeks(first_week, week_count);
+                }
 
                 Ok(())
             }
             AnnotatedPeriodOp::Update(period_id, desc) => {
-                let Some(position) = self
+                let Some((position, first_week)) = self
                     .inner_data
                     .params
                     .periods
-                    .find_period_position(*period_id)
+                    .find_period_position_and_first_week(*period_id)
                 else {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
+                let old_length = self.inner_data.params.periods.ordered_period_list[position]
+                    .1
+                    .len();
+
                 self.inner_data.params.periods.ordered_period_list[position].1 = desc.clone();
+
+                if desc.len() > old_length {
+                    let first_week_to_add = first_week + old_length;
+                    for (_week_pattern_id, week_pattern) in
+                        &mut self.inner_data.params.week_patterns.week_pattern_map
+                    {
+                        week_pattern.add_weeks(first_week_to_add, desc.len() - old_length);
+                    }
+                } else if desc.len() < old_length {
+                    let first_week_to_remove = first_week + desc.len();
+                    for (_week_pattern_id, week_pattern) in
+                        &mut self.inner_data.params.week_patterns.week_pattern_map
+                    {
+                        week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
+                    }
+                }
 
                 Ok(())
             }
