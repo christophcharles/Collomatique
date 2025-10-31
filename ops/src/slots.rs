@@ -6,10 +6,6 @@ pub enum SlotsUpdateWarning {
         collomatique_state_colloscopes::SlotId,
         collomatique_state_colloscopes::RuleId,
     ),
-    LooseColloscopeLinkWithSlots(
-        collomatique_state_colloscopes::ColloscopeId,
-        collomatique_state_colloscopes::SlotId,
-    ),
 }
 
 impl SlotsUpdateWarning {
@@ -36,54 +32,6 @@ impl SlotsUpdateWarning {
                     rule.name,
                 ))
             }
-            SlotsUpdateWarning::LooseColloscopeLinkWithSlots(colloscope_id, slot_id) => {
-                let Some(colloscope) = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscopes
-                    .colloscope_map
-                    .get(colloscope_id)
-                else {
-                    return None;
-                };
-                let Some((subject_id, pos)) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*slot_id)
-                else {
-                    return None;
-                };
-                let slot = &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .get(&subject_id)
-                    .expect("Subject ID for slot should be valid at this point")
-                    .ordered_slots[pos]
-                    .1;
-                let Some(subject) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .find_subject(subject_id)
-                else {
-                    panic!("Subject ID for slot should be valid at this point");
-                };
-                use chrono::Timelike;
-                Some(format!(
-                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" sur les paramètres d'un créneau ({} - {} {:02}h{:02})",
-                    colloscope.name,
-                    subject.parameters.name,
-                    slot.start_time.weekday,
-                    slot.start_time.start_time.inner().hour(),
-                    slot.start_time.start_time.inner().minute(),
-                ))
-            }
         }
     }
 }
@@ -92,17 +40,11 @@ impl SlotsUpdateWarning {
 pub enum SlotsUpdateOp {
     AddNewSlot(
         collomatique_state_colloscopes::SubjectId,
-        collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::slots::Slot,
     ),
     UpdateSlot(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::slots::Slot<
-            collomatique_state_colloscopes::TeacherId,
-            collomatique_state_colloscopes::WeekPatternId,
-        >,
+        collomatique_state_colloscopes::slots::Slot,
     ),
     DeleteSlot(collomatique_state_colloscopes::SlotId),
     MoveSlotUp(collomatique_state_colloscopes::SlotId),
@@ -196,26 +138,6 @@ impl SlotsUpdateOp {
             SlotsUpdateOp::AddNewSlot(_desc, _slot) => None,
             SlotsUpdateOp::UpdateSlot(_id, _slot) => None,
             SlotsUpdateOp::DeleteSlot(slot_id) => {
-                for (colloscope_id, colloscope) in
-                    &data.get_data().get_inner_data().colloscopes.colloscope_map
-                {
-                    if colloscope.id_maps.slots.contains_key(slot_id) {
-                        let mut new_colloscope = colloscope.clone();
-                        new_colloscope.id_maps.slots.remove(slot_id);
-
-                        return Some(CleaningOp {
-                            warning: SlotsUpdateWarning::LooseColloscopeLinkWithSlots(
-                                *colloscope_id,
-                                *slot_id,
-                            ),
-                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
-                                *colloscope_id,
-                                new_colloscope,
-                            )),
-                        });
-                    }
-                }
-
                 for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
                     if rule.desc.references_slot(*slot_id) {
                         return Some(CleaningOp {

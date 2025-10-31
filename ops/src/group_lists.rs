@@ -14,10 +14,6 @@ pub enum GroupListsUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
-    LooseColloscopeLinkWithGroupList(
-        collomatique_state_colloscopes::ColloscopeId,
-        collomatique_state_colloscopes::GroupListId,
-    ),
 }
 
 impl GroupListsUpdateWarning {
@@ -114,55 +110,21 @@ impl GroupListsUpdateWarning {
                     subject.parameters.name, group_list.params.name, period_num+1
                 ))
             }
-            Self::LooseColloscopeLinkWithGroupList(colloscope_id, group_list_id) => {
-                let Some(colloscope) = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscopes
-                    .colloscope_map
-                    .get(colloscope_id)
-                else {
-                    return None;
-                };
-                let Some(group_list) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return None;
-                };
-                Some(format!(
-                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" pour la liste de groupe \"{}\"",
-                    colloscope.name,
-                    group_list.params.name,
-                ))
-            }
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GroupListsUpdateOp {
-    AddNewGroupList(
-        collomatique_state_colloscopes::group_lists::GroupListParameters<
-            collomatique_state_colloscopes::StudentId,
-        >,
-    ),
+    AddNewGroupList(collomatique_state_colloscopes::group_lists::GroupListParameters),
     UpdateGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupListParameters<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::group_lists::GroupListParameters,
     ),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     PrefillGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups<
-            collomatique_state_colloscopes::StudentId,
-        >,
+        collomatique_state_colloscopes::group_lists::GroupListPrefilledGroups,
     ),
     AssignGroupListToSubject(
         collomatique_state_colloscopes::PeriodId,
@@ -301,26 +263,6 @@ impl GroupListsUpdateOp {
                 None
             }
             GroupListsUpdateOp::DeleteGroupList(group_list_id) => {
-                for (colloscope_id, colloscope) in
-                    &data.get_data().get_inner_data().colloscopes.colloscope_map
-                {
-                    if colloscope.id_maps.group_lists.contains_key(group_list_id) {
-                        let mut new_colloscope = colloscope.clone();
-                        new_colloscope.id_maps.group_lists.remove(group_list_id);
-
-                        return Some(CleaningOp {
-                            warning: GroupListsUpdateWarning::LooseColloscopeLinkWithGroupList(
-                                *colloscope_id,
-                                *group_list_id,
-                            ),
-                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
-                                *colloscope_id,
-                                new_colloscope,
-                            )),
-                        });
-                    }
-                }
-
                 let Some(old_group_list) = data
                     .get_data()
                     .get_inner_data()

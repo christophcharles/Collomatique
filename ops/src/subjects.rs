@@ -22,10 +22,6 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::GroupListId,
         collomatique_state_colloscopes::PeriodId,
     ),
-    LooseColloscopeLinkWithSubject(
-        collomatique_state_colloscopes::ColloscopeId,
-        collomatique_state_colloscopes::SubjectId,
-    ),
 }
 
 impl SubjectsUpdateWarning {
@@ -172,31 +168,6 @@ impl SubjectsUpdateWarning {
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\" pour la période {}",
                     subject.parameters.name, group_list.params.name, period_num+1
-                ))
-            }
-            Self::LooseColloscopeLinkWithSubject(colloscope_id, subject_id) => {
-                let Some(colloscope) = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscopes
-                    .colloscope_map
-                    .get(colloscope_id)
-                else {
-                    return None;
-                };
-                let Some(subject) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .find_subject(*subject_id)
-                else {
-                    return None;
-                };
-                Some(format!(
-                    "Perte de la possibilité de mettre à jour le colloscope \"{}\" sur les paramètres de la matière {}",
-                    colloscope.name,
-                    subject.parameters.name,
                 ))
             }
         }
@@ -452,26 +423,6 @@ impl SubjectsUpdateOp {
                 None
             }
             Self::DeleteSubject(subject_id) => {
-                for (colloscope_id, colloscope) in
-                    &data.get_data().get_inner_data().colloscopes.colloscope_map
-                {
-                    if colloscope.id_maps.subjects.contains_key(subject_id) {
-                        let mut new_colloscope = colloscope.clone();
-                        new_colloscope.id_maps.subjects.remove(subject_id);
-
-                        return Some(CleaningOp {
-                            warning: SubjectsUpdateWarning::LooseColloscopeLinkWithSubject(
-                                *colloscope_id,
-                                *subject_id,
-                            ),
-                            op: UpdateOp::Colloscopes(ColloscopesUpdateOp::UpdateColloscope(
-                                *colloscope_id,
-                                new_colloscope,
-                            )),
-                        });
-                    }
-                }
-
                 for (teacher_id, teacher) in
                     &data.get_data().get_inner_data().params.teachers.teacher_map
                 {
