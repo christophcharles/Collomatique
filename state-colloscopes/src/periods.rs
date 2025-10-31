@@ -65,4 +65,17 @@ impl Periods {
 
         Some(&self.ordered_period_list[pos].1)
     }
+
+    pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
+        let mut first_week = 0usize;
+
+        for (period_id, desc) in &self.ordered_period_list {
+            if *period_id == id {
+                return Some((first_week, desc.len()));
+            }
+            first_week += desc.len();
+        }
+
+        return None;
+    }
 }
