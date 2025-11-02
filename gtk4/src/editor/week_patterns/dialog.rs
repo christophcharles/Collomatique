@@ -212,7 +212,6 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.periods = periods;
                 self.week_pattern = week_pattern;
-                self.extend_pattern_if_needed();
 
                 self.update_factory();
             }
@@ -337,17 +336,6 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn extend_pattern_if_needed(&mut self) {
-        let week_count_in_periods = self
-            .periods
-            .ordered_period_list
-            .iter()
-            .fold(0usize, |acc, (_id, desc)| acc + desc.len());
-        if week_count_in_periods > self.week_pattern.weeks.len() {
-            self.week_pattern.weeks.resize(week_count_in_periods, true);
-        }
-    }
-
     fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
         let mut output = vec![];
         for (_id, period) in &self.periods.ordered_period_list {
