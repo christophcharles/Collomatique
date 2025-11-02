@@ -51,10 +51,10 @@ pub struct WeekPattern {
 #[pymethods]
 impl WeekPattern {
     #[new]
-    fn new(name: String) -> Self {
+    fn new(name: String, week_count: usize) -> Self {
         WeekPattern {
             name,
-            weeks: vec![],
+            weeks: vec![true; week_count],
         }
     }
 

@@ -33,6 +33,13 @@ pub struct Parameters {
     pub settings: settings::Settings,
 }
 
+#[pymethods]
+impl Parameters {
+    fn get_week_count(self_: PyRef<'_, Self>) -> usize {
+        self_.periods.iter().map(|x| x.weeks_status.len()).sum()
+    }
+}
+
 impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for Parameters {
     type Error = PyErr;
     fn try_from(

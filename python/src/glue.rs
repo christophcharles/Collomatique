@@ -9,15 +9,16 @@ use collomatique_rpc::{
 
 use collomatique_ops::{
     AddNewGroupListError, AddNewIncompatError, AddNewRuleError, AddNewSlotError,
-    AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AssignAllError, AssignError,
-    AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
-    DeleteIncompatError, DeletePeriodError, DeleteRuleError, DeleteSlotError, DeleteStudentError,
-    DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
-    GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
-    MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, PrefillGroupListError, RemoveStudentLimitsError, RulesUpdateError,
-    SettingsUpdateError, SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError,
-    TeachersUpdateError, UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
+    AddNewStudentError, AddNewSubjectError, AddNewTeacherError, AddNewWeekPatternError,
+    AssignAllError, AssignError, AssignGroupListToSubjectError, AssignmentsUpdateError,
+    CutPeriodError, DeleteGroupListError, DeleteIncompatError, DeletePeriodError, DeleteRuleError,
+    DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
+    DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningUpdateError,
+    GroupListsUpdateError, IncompatibilitiesUpdateError, MergeWithPreviousPeriodError,
+    MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError, MoveSubjectUpError,
+    PrefillGroupListError, RemoveStudentLimitsError, RulesUpdateError, SettingsUpdateError,
+    SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
+    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
     UpdatePeriodStatusForRuleError, UpdatePeriodWeekCountError, UpdateRuleError, UpdateSlotError,
     UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
     UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
@@ -800,7 +801,7 @@ impl CollomatiqueFile {
     fn week_patterns_add(
         self_: PyRef<'_, Self>,
         week_pattern: week_patterns::WeekPattern,
-    ) -> WeekPatternId {
+    ) -> PyResult<WeekPatternId> {
         let result = self_.token.send_msg(collomatique_rpc::CmdMsg::Update(
             collomatique_ops::UpdateOp::WeekPatterns(
                 collomatique_ops::WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern.into()),
@@ -809,8 +810,15 @@ impl CollomatiqueFile {
 
         match result {
             ResultMsg::Ack(Some(collomatique_state_colloscopes::NewId::WeekPatternId(id))) => {
-                id.into()
+                Ok(id.into())
             }
+            ResultMsg::Error(UpdateError::WeekPatterns(
+                WeekPatternsUpdateError::AddNewWeekPattern(e),
+            )) => match e {
+                AddNewWeekPatternError::BadWeekCountInWeekPattern => {
+                    Err(PyValueError::new_err("Bad week count in week pattern"))
+                }
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -837,6 +845,9 @@ impl CollomatiqueFile {
                 UpdateWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
                     format!("Invalid week pattern id {:?}", id),
                 )),
+                UpdateWeekPatternError::BadWeekCountInWeekPattern => {
+                    Err(PyValueError::new_err("Bad week count in week pattern"))
+                }
             },
             _ => panic!("Unexpected result: {:?}", result),
         }

@@ -114,15 +114,25 @@ pub enum WeekPatternsUpdateOp {
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WeekPatternsUpdateError {
     #[error(transparent)]
+    AddNewWeekPattern(#[from] AddNewWeekPatternError),
+    #[error(transparent)]
     UpdateWeekPattern(#[from] UpdateWeekPatternError),
     #[error(transparent)]
     DeleteWeekPattern(#[from] DeleteWeekPatternError),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddNewWeekPatternError {
+    #[error("Week pattern has the wrong number of weeks")]
+    BadWeekCountInWeekPattern,
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateWeekPatternError {
     #[error("Week pattern ID {0:?} is invalid")]
     InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
+    #[error("Week pattern has the wrong number of weeks")]
+    BadWeekCountInWeekPattern,
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -197,7 +207,22 @@ impl WeekPatternsUpdateOp {
                         ),
                         self.get_desc(),
                     )
-                    .expect("Unexpected error during AddNewWeekPattern");
+                    .map_err(
+                        |e| match e {
+                            collomatique_state_colloscopes::Error::WeekPattern(
+                                wpe
+                            ) => match wpe {
+                                collomatique_state_colloscopes::WeekPatternError::BadWeekPatternLength => {
+                                    AddNewWeekPatternError::BadWeekCountInWeekPattern
+                                }
+                                _ => panic!(
+                                    "Unexpected week pattern error during AddNewWeekPattern: {:?}",
+                                    wpe
+                                ),
+                            }
+                            _ => panic!("Unexpected error during AddNewWeekPattern"),
+                        }
+                    )?;
                 let Some(collomatique_state_colloscopes::NewId::WeekPatternId(new_id)) = result
                 else {
                     panic!("Unexpected result from WeekPatternOp::Add");
@@ -220,6 +245,9 @@ impl WeekPatternsUpdateOp {
                             match wpe {
                                 collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
                                     UpdateWeekPatternError::InvalidWeekPatternId(id),
+                                collomatique_state_colloscopes::WeekPatternError::BadWeekPatternLength => {
+                                    UpdateWeekPatternError::BadWeekCountInWeekPattern
+                                }
                                 _ => panic!(
                                     "Unexpected week pattern error during UpdateWeekPattern: {:?}",
                                     wpe
