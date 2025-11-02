@@ -2123,7 +2123,10 @@ impl Data {
                 };
 
                 self.inner_data.params.validate_slot(new_slot, subject_id)?;
-                let pattern = self.inner_data.params.get_pattern(new_slot.week_pattern);
+                let pattern = self
+                    .inner_data
+                    .params
+                    .get_merged_pattern(new_slot.week_pattern);
                 if !self.inner_data.colloscope.check_empty_on_removed_weeks(
                     *slot_id,
                     &self.inner_data.params.periods,

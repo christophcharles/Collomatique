@@ -434,23 +434,10 @@ impl ColloscopeSlot {
 
         let mut interrogations = vec![];
 
-        let week_pattern_id_opt = &slot.week_pattern;
-        let week_pattern_opt = match week_pattern_id_opt {
-            None => None,
-            Some(id) => Some(
-                params
-                    .week_patterns
-                    .week_pattern_map
-                    .get(id)
-                    .expect("Week pattern id should be valid"),
-            ),
-        };
+        let week_pattern = params.get_merged_pattern(slot.week_pattern);
         for i in 0..period.len() {
             let current_week = first_week + i;
-            let is_week_active = match week_pattern_opt {
-                None => true,
-                Some(week_pattern) => week_pattern.weeks[current_week],
-            };
+            let is_week_active = week_pattern[current_week];
             interrogations.push(if is_week_active {
                 Some(ColloscopeInterrogation::default())
             } else {
@@ -491,23 +478,11 @@ impl ColloscopeSlot {
             );
         }
 
-        let week_pattern = match &orig_slot.week_pattern {
-            Some(id) => Some(
-                params
-                    .week_patterns
-                    .week_pattern_map
-                    .get(id)
-                    .expect("Week pattern id should be valid"),
-            ),
-            None => None,
-        };
+        let week_pattern = params.get_merged_pattern(orig_slot.week_pattern);
 
         for (i, interrogation_opt) in self.interrogations.iter().enumerate() {
             let current_week = first_week_num + i;
-            let is_week_active = match week_pattern {
-                None => true,
-                Some(week_pattern) => week_pattern.weeks[current_week],
-            };
+            let is_week_active = week_pattern[current_week];
 
             if !is_week_active {
                 if interrogation_opt.is_some() {

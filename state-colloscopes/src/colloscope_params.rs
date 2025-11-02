@@ -35,13 +35,28 @@ pub struct Parameters {
 }
 
 impl Parameters {
-    pub(crate) fn get_pattern(&self, week_pattern_id_opt: Option<WeekPatternId>) -> Vec<bool> {
-        match week_pattern_id_opt {
+    pub(crate) fn get_merged_pattern(
+        &self,
+        week_pattern_id_opt: Option<WeekPatternId>,
+    ) -> Vec<bool> {
+        let mut pattern = match week_pattern_id_opt {
             Some(week_pattern_id) => self.week_patterns.get_pattern(week_pattern_id),
             None => {
                 vec![true; self.periods.count_weeks()]
             }
+        };
+
+        let mut current_week = 0usize;
+        for (_period_id, period_desc) in &self.periods.ordered_period_list {
+            for week_desk in period_desc {
+                if !week_desk.interrogations {
+                    pattern[current_week] = false;
+                }
+                current_week += 1;
+            }
         }
+
+        pattern
     }
 }
 
