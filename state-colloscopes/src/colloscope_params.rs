@@ -35,6 +35,17 @@ pub struct Parameters {
 }
 
 impl Parameters {
+    pub(crate) fn get_pattern(&self, week_pattern_id_opt: Option<WeekPatternId>) -> Vec<bool> {
+        match week_pattern_id_opt {
+            Some(week_pattern_id) => self.week_patterns.get_pattern(week_pattern_id),
+            None => {
+                vec![true; self.periods.count_weeks()]
+            }
+        }
+    }
+}
+
+impl Parameters {
     /// Promotes an u64 to a [PeriodId] if it is valid
     pub fn validate_period_id(&self, id: u64) -> Option<PeriodId> {
         for (period_id, _) in &self.periods.ordered_period_list {

@@ -17,6 +17,16 @@ pub struct WeekPatterns {
     pub week_pattern_map: BTreeMap<WeekPatternId, WeekPattern>,
 }
 
+impl WeekPatterns {
+    pub(crate) fn get_pattern(&self, week_pattern_id: WeekPatternId) -> Vec<bool> {
+        self.week_pattern_map
+            .get(&week_pattern_id)
+            .expect("Week pattern id must be valid for get_pattern")
+            .weeks
+            .clone()
+    }
+}
+
 /// Description of a week pattern
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekPattern {

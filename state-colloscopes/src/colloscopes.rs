@@ -27,12 +27,7 @@ impl Colloscope {
             .group_lists
             .group_list_map
             .iter()
-            .map(|(group_list_id, _group_list)| {
-                (
-                    *group_list_id,
-                    ColloscopeGroupList::new_empty_from_params(params, *group_list_id),
-                )
-            })
+            .map(|(group_list_id, _group_list)| (*group_list_id, ColloscopeGroupList::new_empty()))
             .collect();
 
         let period_map = params
@@ -77,17 +72,74 @@ impl Colloscope {
         }
 
         for (group_list_id, group_list) in &self.group_lists {
-            if !params
-                .group_lists
-                .group_list_map
-                .contains_key(group_list_id)
-            {
+            let Some(params_group_list) = params.group_lists.group_list_map.get(group_list_id)
+            else {
                 return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-            }
-            group_list.validate_against_params(*group_list_id, params)?;
+            };
+            group_list.validate_against_params(
+                *group_list_id,
+                &params_group_list.params,
+                &params.students,
+            )?;
         }
 
         Ok(())
+    }
+
+    pub(crate) fn check_empty_on_removed_weeks(
+        &self,
+        slot_id: SlotId,
+        periods: &super::periods::Periods,
+        pattern: &[bool],
+    ) -> bool {
+        let mut current_first_week = 0usize;
+        for (period_id, period_desc) in &periods.ordered_period_list {
+            let last_week = current_first_week + period_desc.len();
+            if pattern.len() < last_week {
+                return false;
+            }
+
+            let collo_period = self
+                .period_map
+                .get(period_id)
+                .expect("Period Id should be valid");
+            if let Some(collo_slot) = collo_period.slot_map.get(&slot_id) {
+                if !collo_slot.check_empty_on_removed_weeks(&pattern[current_first_week..last_week])
+                {
+                    return false;
+                }
+            }
+
+            current_first_week += period_desc.len();
+        }
+        if current_first_week != pattern.len() {
+            return false;
+        }
+        true
+    }
+
+    pub(crate) fn update_slot_for_week_pattern(
+        &mut self,
+        slot_id: SlotId,
+        periods: &super::periods::Periods,
+        pattern: &[bool],
+    ) {
+        let mut current_first_week = 0usize;
+        for (period_id, period_desc) in &periods.ordered_period_list {
+            let last_week = current_first_week + period_desc.len();
+            assert!(pattern.len() >= last_week);
+
+            let collo_period = self
+                .period_map
+                .get_mut(period_id)
+                .expect("Period Id should be valid");
+            if let Some(collo_slot) = collo_period.slot_map.get_mut(&slot_id) {
+                collo_slot.update_slot_for_week_pattern(&pattern[current_first_week..last_week]);
+            }
+
+            current_first_week += period_desc.len();
+        }
+        assert!(current_first_week == pattern.len());
     }
 }
 
@@ -311,6 +363,15 @@ impl ColloscopeSlot {
         self.interrogations.resize(length, None);
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.interrogations
+            .iter()
+            .all(|interrogation_opt| match interrogation_opt {
+                Some(interrogation) => interrogation.is_empty(),
+                None => true,
+            })
+    }
+
     pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
         if weeks_to_cut == 0 {
             return true;
@@ -472,6 +533,40 @@ impl ColloscopeSlot {
 
         Ok(())
     }
+
+    pub(crate) fn check_empty_on_removed_weeks(&self, pattern: &[bool]) -> bool {
+        if self.interrogations.len() != pattern.len() {
+            return false;
+        }
+
+        for (interrogation_opt, week_active) in self.interrogations.iter().zip(pattern.iter()) {
+            if *week_active {
+                continue;
+            }
+
+            if let Some(interrogation) = interrogation_opt {
+                if !interrogation.is_empty() {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    pub(crate) fn update_slot_for_week_pattern(&mut self, pattern: &[bool]) {
+        assert!(self.interrogations.len() == pattern.len());
+
+        for (interrogation_opt, week_active) in self.interrogations.iter_mut().zip(pattern.iter()) {
+            if *week_active {
+                if interrogation_opt.is_none() {
+                    *interrogation_opt = Some(ColloscopeInterrogation::default());
+                }
+            } else {
+                *interrogation_opt = None;
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -577,10 +672,7 @@ impl ColloscopeGroupList {
     ///
     /// The function might panic if the parameters do not satisfy parameters invariants
     /// You should check this before hand with [super::colloscope_params::Parameters::check_invariants].
-    pub(crate) fn new_empty_from_params(
-        _params: &super::colloscope_params::Parameters,
-        _group_list_id: GroupListId,
-    ) -> Self {
+    pub(crate) fn new_empty() -> Self {
         ColloscopeGroupList {
             groups_for_students: BTreeMap::new(),
         }
@@ -591,25 +683,22 @@ impl ColloscopeGroupList {
     pub(crate) fn validate_against_params(
         &self,
         group_list_id: GroupListId,
-        params: &super::colloscope_params::Parameters,
+        group_list_params: &super::group_lists::GroupListParameters,
+        students: &super::students::Students,
     ) -> Result<(), super::ColloscopeError> {
         use super::ColloscopeError;
 
-        let Some(group_list) = params.group_lists.group_list_map.get(&group_list_id) else {
-            return Err(ColloscopeError::InvalidGroupListId(group_list_id));
-        };
-
-        let first_forbidden_value = group_list.params.group_count.end() + 1;
+        let first_forbidden_value = group_list_params.group_count.end() + 1;
 
         for (student_id, group_num) in &self.groups_for_students {
-            if group_list.params.excluded_students.contains(student_id) {
+            if group_list_params.excluded_students.contains(student_id) {
                 return Err(ColloscopeError::ExcludedStudentInGroupList(
                     group_list_id,
                     *student_id,
                 ));
             }
 
-            if !params.students.student_map.contains_key(student_id) {
+            if !students.student_map.contains_key(student_id) {
                 return Err(ColloscopeError::InvalidStudentId(*student_id));
             }
 

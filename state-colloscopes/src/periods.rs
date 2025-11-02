@@ -52,6 +52,10 @@ impl WeekDesc {
 }
 
 impl Periods {
+    pub fn count_weeks(&self) -> usize {
+        self.ordered_period_list.iter().map(|x| x.1.len()).sum()
+    }
+
     /// Finds the position of a period by id
     pub fn find_period_position(&self, id: PeriodId) -> Option<usize> {
         self.ordered_period_list

@@ -214,11 +214,10 @@ pub enum StudentError {
     /// Student is still referenced by a pre-filled group list
     #[error("student id {0:?} is still referenced by a pre-filled group list {1:?}")]
     StudentIsStillReferencedByPrefilledGroupList(StudentId, GroupListId),
-    /* /// Student is referenced in a colloscope id map
-    #[error(
-        "student id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
-    )]
-    StudentIsReferencedInColloscopeIdMaps(StudentId, ColloscopeId),*/
+
+    /// Student is referenced in a colloscope group list
+    #[error("student id {0:?} is referenced in a colloscope group list ({1:?})")]
+    StudentIsReferencedInColloscopeGroupList(StudentId, GroupListId),
 }
 
 /// Errors for periods operations
@@ -354,11 +353,6 @@ pub enum TeacherError {
     /// The teacher is referenced by slots for a bad subject
     #[error("teacher id ({0:?}) gives interrogation in a now forbidden subject ({1:?})")]
     TeacherStillHasAssociatedSlotsInSubject(TeacherId, SubjectId),
-    /* /// Teacher is referenced in a colloscope id map
-    #[error(
-        "teacher id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
-    )]
-    TeacherIsReferencedInColloscopeIdMaps(TeacherId, ColloscopeId), */
 }
 
 /// Errors for assignment operations
@@ -411,6 +405,10 @@ pub enum WeekPatternError {
     /// The week pattern does not have the right length
     #[error("week pattern does not have the right length")]
     BadWeekPatternLength,
+
+    /// The slot in colloscope is incompatible with the new week pattern
+    #[error("slot {0:?} in colloscope is not compatible with the new week pattern")]
+    NotCompatibleSlotInColloscope(SlotId),
 }
 
 /// Errors for interrogation slot operations
@@ -461,9 +459,14 @@ pub enum SlotError {
     /// The slot is referenced by a rule
     #[error("Slot id ({0:?}) is referenced by rule {1:?}")]
     SlotIsReferencedByRule(SlotId, RuleId),
-    /* /// Slot is referenced in a colloscope id map
-    #[error("slot id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed")]
-    SlotIsReferencedInColloscopeIdMaps(SlotId, ColloscopeId),*/
+
+    /// The slot is not empty in colloscope
+    #[error("slot {0:?} in colloscope is not empty for period {1:?}")]
+    NotEmptySlotInColloscope(SlotId, PeriodId),
+
+    /// The slot in colloscope is incomaptible with the new week pattern
+    #[error("slot {0:?} in colloscope is not compatible with the new week pattern {1:?}")]
+    NotCompatibleSlotInColloscope(SlotId, Option<WeekPatternId>),
 }
 
 /// Errors for schedule incompatibility operations
@@ -486,11 +489,6 @@ pub enum IncompatError {
     /// week pattern id is invalid
     #[error("invalid week pattern id ({0:?})")]
     InvalidWeekPatternId(WeekPatternId),
-    /* /// Incompat is referenced in a colloscope id map
-    #[error(
-        "incompat id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
-    )]
-    IncompatIsReferencedInColloscopeIdMaps(IncompatId, ColloscopeId),*/
 }
 
 /// Errors for group list operations
@@ -549,11 +547,18 @@ pub enum GroupListError {
     /// cannot remove group list as there are still associated subjects
     #[error("Group list still is associated to subjects and cannot be removed")]
     RemainingAssociatedSubjects,
-    /* /// GroupList is referenced in a colloscope id map
-    #[error(
-        "group list id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
-    )]
-    GroupListIsReferencedInColloscopeIdMaps(GroupListId, ColloscopeId),*/
+
+    /// Group list is not empty in colloscope
+    #[error("group list id {0:?} in colloscope is not empty")]
+    NotEmptyGroupListInColloscope(GroupListId),
+
+    /// Group list in colloscope not compatible with new parameters
+    #[error("group list id {0:?} in colloscope is not compatible with the given parameters")]
+    NotCompatibleGroupListInColloscope(GroupListId),
+
+    /// The subject has non-empty slots associated to the old group list
+    #[error("subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?}")]
+    NotEmptySubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
 }
 
 /// Errors for rules operations
@@ -984,14 +989,14 @@ impl Data {
                     return Err(StudentError::InvalidStudentId(*id));
                 };
 
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.students.contains_key(id) {
-                        return Err(StudentError::StudentIsReferencedInColloscopeIdMaps(
+                for (group_list_id, group_list) in &self.inner_data.colloscope.group_lists {
+                    if group_list.groups_for_students.contains_key(id) {
+                        return Err(StudentError::StudentIsReferencedInColloscopeGroupList(
                             *id,
-                            *colloscope_id,
+                            *group_list_id,
                         ));
                     }
-                }*/
+                }
 
                 for (group_list_id, group_list) in
                     &self.inner_data.params.group_lists.group_list_map
@@ -1738,15 +1743,6 @@ impl Data {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 }
 
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.teachers.contains_key(id) {
-                        return Err(TeacherError::TeacherIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
-
                 for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if *id == slot.teacher_id {
@@ -1791,7 +1787,7 @@ impl Data {
 
     /// Used internally
     ///
-    /// Apply teacher operations
+    /// Apply assignment operations
     fn apply_assignment(
         &mut self,
         assignment_op: &AnnotatedAssignmentOp,
@@ -1852,7 +1848,7 @@ impl Data {
 
     /// Used internally
     ///
-    /// Apply teacher operations
+    /// Apply week pattern operations
     fn apply_week_pattern(
         &mut self,
         week_pattern_op: &AnnotatedWeekPatternOp,
@@ -1890,15 +1886,6 @@ impl Data {
                 {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 }
-
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.week_patterns.contains_key(id) {
-                        return Err(WeekPatternError::WeekPatternIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
 
                 for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
@@ -1946,7 +1933,36 @@ impl Data {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 };
 
+                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern != Some(*id) {
+                            continue;
+                        }
+
+                        if !self.inner_data.colloscope.check_empty_on_removed_weeks(
+                            *slot_id,
+                            &self.inner_data.params.periods,
+                            &new_week_pattern.weeks[..],
+                        ) {
+                            return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
+                        }
+                    }
+                }
+
                 *current_week_pattern = new_week_pattern.clone();
+                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern != Some(*id) {
+                            continue;
+                        }
+
+                        self.inner_data.colloscope.update_slot_for_week_pattern(
+                            *slot_id,
+                            &self.inner_data.params.periods,
+                            &new_week_pattern.weeks[..],
+                        );
+                    }
+                }
 
                 Ok(())
             }
@@ -2002,6 +2018,27 @@ impl Data {
                     .ordered_slots
                     .insert(position, (*new_id, slot.clone()));
 
+                let subject = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                    .expect("Subject ID should be valid at this point");
+                for (period_id, period) in &mut self.inner_data.colloscope.period_map {
+                    if subject.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    period.slot_map.insert(
+                        *new_id,
+                        colloscopes::ColloscopeSlot::new_empty_from_params(
+                            &self.inner_data.params,
+                            *period_id,
+                            *new_id,
+                        ),
+                    );
+                }
+
                 Ok(())
             }
             AnnotatedSlotOp::ChangePosition(id, new_pos) => {
@@ -2044,18 +2081,19 @@ impl Data {
                     return Err(SlotError::InvalidSlotId(*id));
                 };
 
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.slots.contains_key(id) {
-                        return Err(SlotError::SlotIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
-
                 for (rule_id, rule) in &self.inner_data.params.rules.rule_map {
                     if rule.desc.references_slot(*id) {
                         return Err(SlotError::SlotIsReferencedByRule(*id, *rule_id));
+                    }
+                }
+
+                for (period_id, collo_period) in &self.inner_data.colloscope.period_map {
+                    let Some(collo_slot) = collo_period.slot_map.get(id) else {
+                        continue;
+                    };
+
+                    if !collo_slot.is_empty() {
+                        return Err(SlotError::NotEmptySlotInColloscope(*id, *period_id));
                     }
                 }
 
@@ -2066,8 +2104,11 @@ impl Data {
                     .subject_map
                     .get_mut(&subject_id)
                     .expect("Subject id should be valid at this point");
-
                 subject_slots.ordered_slots.remove(old_pos);
+                for (_period_id, collo_period) in &mut self.inner_data.colloscope.period_map {
+                    // The slot might not be in period but this won't raise an error
+                    collo_period.slot_map.remove(id);
+                }
 
                 Ok(())
             }
@@ -2082,6 +2123,17 @@ impl Data {
                 };
 
                 self.inner_data.params.validate_slot(new_slot, subject_id)?;
+                let pattern = self.inner_data.params.get_pattern(new_slot.week_pattern);
+                if !self.inner_data.colloscope.check_empty_on_removed_weeks(
+                    *slot_id,
+                    &self.inner_data.params.periods,
+                    &pattern[..],
+                ) {
+                    return Err(SlotError::NotCompatibleSlotInColloscope(
+                        *slot_id,
+                        new_slot.week_pattern,
+                    ));
+                }
 
                 let subject_slots = self
                     .inner_data
@@ -2092,6 +2144,11 @@ impl Data {
                     .expect("Subject id should be valid at this point");
 
                 subject_slots.ordered_slots[position].1 = new_slot.clone();
+                self.inner_data.colloscope.update_slot_for_week_pattern(
+                    *slot_id,
+                    &self.inner_data.params.periods,
+                    &pattern[..],
+                );
 
                 Ok(())
             }
@@ -2136,15 +2193,6 @@ impl Data {
                 {
                     return Err(IncompatError::InvalidIncompatId(*id));
                 }
-
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.incompats.contains_key(id) {
-                        return Err(IncompatError::IncompatIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
 
                 self.inner_data.params.incompats.incompat_map.remove(id);
 
@@ -2203,18 +2251,14 @@ impl Data {
                     .group_list_map
                     .insert(*new_id, new_group_list);
 
+                self.inner_data
+                    .colloscope
+                    .group_lists
+                    .insert(*new_id, colloscopes::ColloscopeGroupList::new_empty());
+
                 Ok(())
             }
             AnnotatedGroupListOp::Remove(id) => {
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.group_lists.contains_key(id) {
-                        return Err(GroupListError::GroupListIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
-
                 let Some(old_group_list) =
                     self.inner_data.params.group_lists.group_list_map.get(id)
                 else {
@@ -2222,6 +2266,15 @@ impl Data {
                 };
                 if !old_group_list.prefilled_groups.is_empty() {
                     return Err(GroupListError::RemainingPrefilledGroups);
+                }
+                let collo_group_list = self
+                    .inner_data
+                    .colloscope
+                    .group_lists
+                    .get(id)
+                    .expect("Group list ID should be valid at this point");
+                if !collo_group_list.is_empty() {
+                    return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
                 }
 
                 for (_period_id, subject_map) in
@@ -2235,6 +2288,7 @@ impl Data {
                 }
 
                 self.inner_data.params.group_lists.group_list_map.remove(id);
+                self.inner_data.colloscope.group_lists.remove(id);
 
                 Ok(())
             }
@@ -2248,6 +2302,25 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
+                let collo_group_list = self
+                    .inner_data
+                    .colloscope
+                    .group_lists
+                    .get(group_list_id)
+                    .expect("Group list ID should be valid at this point");
+                if collo_group_list
+                    .validate_against_params(
+                        *group_list_id,
+                        new_params,
+                        &self.inner_data.params.students,
+                    )
+                    .is_err()
+                {
+                    return Err(GroupListError::NotCompatibleGroupListInColloscope(
+                        *group_list_id,
+                    ));
+                }
+
                 let new_group_list = group_lists::GroupList {
                     params: new_params.clone(),
                     prefilled_groups: old_group_list.prefilled_groups.clone(),
@@ -2315,6 +2388,33 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidPeriodId(*period_id));
                 };
+                let collo_period = self
+                    .inner_data
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+                let subject_slots = self
+                    .inner_data
+                    .params
+                    .slots
+                    .subject_map
+                    .get(subject_id)
+                    .expect("Subject should have slots at this point");
+                for (slot_id, _slot) in &subject_slots.ordered_slots {
+                    let collo_slot = collo_period
+                        .slot_map
+                        .get(slot_id)
+                        .expect("Subject should run on given period");
+
+                    if !collo_slot.is_empty() {
+                        return Err(GroupListError::NotEmptySubjectSlotInColloscope(
+                            *subject_id,
+                            *period_id,
+                            *slot_id,
+                        ));
+                    }
+                }
 
                 match group_list_id {
                     Some(id) => {
@@ -2364,15 +2464,6 @@ impl Data {
                     return Err(RuleError::InvalidRuleId(*id));
                 }
 
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.rules.contains_key(id) {
-                        return Err(RuleError::RuleIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
-
                 self.inner_data.params.rules.rule_map.remove(id);
 
                 Ok(())
@@ -2420,17 +2511,21 @@ impl Data {
     ) -> std::result::Result<(), ColloscopeError> {
         match colloscope_op {
             AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
-                if !self
+                let Some(params_group_list) = self
                     .inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .contains_key(group_list_id)
-                {
+                    .get(group_list_id)
+                else {
                     return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-                }
+                };
 
-                group_list.validate_against_params(*group_list_id, &self.inner_data.params)?;
+                group_list.validate_against_params(
+                    *group_list_id,
+                    &params_group_list.params,
+                    &self.inner_data.params.students,
+                )?;
 
                 self.inner_data
                     .colloscope
