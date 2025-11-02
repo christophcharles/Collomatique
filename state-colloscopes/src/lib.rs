@@ -1930,6 +1930,10 @@ impl Data {
                 self.inner_data
                     .params
                     .validate_week_pattern(new_week_pattern)?;
+                let new_merged_pattern = self
+                    .inner_data
+                    .params
+                    .merge_pattern(&new_week_pattern.weeks);
 
                 let Some(current_week_pattern) = self
                     .inner_data
@@ -1950,7 +1954,7 @@ impl Data {
                         if !self.inner_data.colloscope.check_empty_on_removed_weeks(
                             *slot_id,
                             &self.inner_data.params.periods,
-                            &new_week_pattern.weeks[..],
+                            &new_merged_pattern,
                         ) {
                             return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
                         }
@@ -1967,7 +1971,7 @@ impl Data {
                         self.inner_data.colloscope.update_slot_for_week_pattern(
                             *slot_id,
                             &self.inner_data.params.periods,
-                            &new_week_pattern.weeks[..],
+                            &new_merged_pattern,
                         );
                     }
                 }
