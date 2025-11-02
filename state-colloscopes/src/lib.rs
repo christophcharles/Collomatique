@@ -262,6 +262,10 @@ pub enum PeriodError {
     /// A week pattern is not trivial on the period to be cut
     #[error("week pattern {1:?} is not trivial for the period {0:?}")]
     NonTrivialWeekPattern(PeriodId, WeekPatternId),
+
+    /// The slot in colloscope is incompatible with the new period
+    #[error("slot {0:?} in colloscope is not compatible with the new period")]
+    NotCompatibleSlotInColloscope(SlotId),
 }
 
 /// Errors for subject operations
@@ -1303,20 +1307,9 @@ impl Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
-                let old_length = self.inner_data.params.periods.ordered_period_list[position]
-                    .1
-                    .len();
+                let period = &self.inner_data.params.periods.ordered_period_list[position].1;
+                let old_length = period.len();
                 if desc.len() < old_length {
-                    let colloscope_period = self
-                        .inner_data
-                        .colloscope
-                        .period_map
-                        .get(period_id)
-                        .expect("Period ID should be valid at this point");
-                    if !colloscope_period.is_cuttable(old_length - desc.len()) {
-                        return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
-                    }
-
                     for (week_pattern_id, week_pattern) in
                         &self.inner_data.params.week_patterns.week_pattern_map
                     {
@@ -1328,9 +1321,31 @@ impl Data {
                         }
                     }
                 }
+                let colloscope_period = self
+                    .inner_data
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+                for (slot_id, collo_slot) in &colloscope_period.slot_map {
+                    let slot = self
+                        .inner_data
+                        .params
+                        .slots
+                        .find_slot(*slot_id)
+                        .expect("Slot ID should be valid");
+                    let new_pattern = slot.build_pattern_for_new_period(
+                        desc,
+                        first_week,
+                        &self.inner_data.params.week_patterns,
+                    );
+
+                    if !collo_slot.check_empty_on_removed_weeks(&new_pattern) {
+                        return Err(PeriodError::NotCompatibleSlotInColloscope(*slot_id));
+                    }
+                }
 
                 self.inner_data.params.periods.ordered_period_list[position].1 = desc.clone();
-
                 if desc.len() > old_length {
                     let first_week_to_add = first_week + old_length;
                     for (_week_pattern_id, week_pattern) in
@@ -1338,13 +1353,6 @@ impl Data {
                     {
                         week_pattern.add_weeks(first_week_to_add, desc.len() - old_length);
                     }
-                    let colloscope_period = self
-                        .inner_data
-                        .colloscope
-                        .period_map
-                        .get_mut(period_id)
-                        .expect("Period ID should be valid at this point");
-                    colloscope_period.extend(&self.inner_data.params, *period_id);
                 } else if desc.len() < old_length {
                     let first_week_to_remove = first_week + desc.len();
                     for (_week_pattern_id, week_pattern) in
@@ -1352,13 +1360,13 @@ impl Data {
                     {
                         week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
                     }
-                    let colloscope_period = self
-                        .inner_data
-                        .colloscope
-                        .period_map
-                        .get_mut(period_id)
-                        .expect("Period ID should be valid at this point");
-                    colloscope_period.cut(&self.inner_data.params, *period_id);
+                }
+                for (_subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        self.inner_data
+                            .colloscope
+                            .update_slot_to_match_week_pattern(*slot_id, &self.inner_data.params);
+                    }
                 }
 
                 Ok(())

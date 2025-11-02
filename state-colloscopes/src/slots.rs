@@ -47,6 +47,33 @@ pub struct Slot {
     pub cost: i32,
 }
 
+impl Slot {
+    pub(crate) fn build_pattern_for_new_period(
+        &self,
+        new_period_desc: &[super::periods::WeekDesc],
+        first_week: usize,
+        week_patterns: &super::week_patterns::WeekPatterns,
+    ) -> Vec<bool> {
+        let mut base_pattern: Vec<_> = new_period_desc.iter().map(|x| x.interrogations).collect();
+
+        if let Some(week_pattern_id) = self.week_pattern {
+            let pattern = week_patterns.get_pattern(week_pattern_id);
+            for i in 0..base_pattern.len() {
+                let base_status = &mut base_pattern[i];
+                let week_pattern_status = match pattern.get(first_week + i) {
+                    Some(val) => *val,
+                    None => true,
+                };
+                if !week_pattern_status {
+                    *base_status = false;
+                }
+            }
+        }
+
+        base_pattern
+    }
+}
+
 impl SubjectSlots {
     pub fn find_slot_position(&self, slot_id: SlotId) -> Option<usize> {
         for (pos, (id, _slot)) in self.ordered_slots.iter().enumerate() {

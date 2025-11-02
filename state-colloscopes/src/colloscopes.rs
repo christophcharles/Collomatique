@@ -118,6 +118,20 @@ impl Colloscope {
         true
     }
 
+    pub(crate) fn update_slot_to_match_week_pattern(
+        &mut self,
+        slot_id: SlotId,
+        params: &super::colloscope_params::Parameters,
+    ) {
+        let slot = params
+            .slots
+            .find_slot(slot_id)
+            .expect("Slot ID should be valid");
+        let pattern = params.get_merged_pattern(slot.week_pattern);
+
+        self.update_slot_for_week_pattern(slot_id, &params.periods, &pattern);
+    }
+
     pub(crate) fn update_slot_for_week_pattern(
         &mut self,
         slot_id: SlotId,
@@ -151,34 +165,8 @@ pub struct ColloscopePeriod {
 }
 
 impl ColloscopePeriod {
-    pub(crate) fn extend(
-        &mut self,
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-    ) {
-        for (slot_id, slot) in &mut self.slot_map {
-            slot.extend(params, period_id, *slot_id);
-        }
-    }
-
-    pub(crate) fn cut(
-        &mut self,
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-    ) {
-        for (slot_id, slot) in &mut self.slot_map {
-            slot.cut(params, period_id, *slot_id);
-        }
-    }
-
     pub fn is_empty(&self) -> bool {
         self.slot_map.iter().all(|(_slot_id, slot)| slot.is_empty())
-    }
-
-    pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
-        self.slot_map
-            .iter()
-            .all(|(_slot_id, slot)| slot.is_cuttable(weeks_to_cut))
     }
 
     pub(crate) fn new_empty_from_params(
@@ -289,84 +277,6 @@ pub struct ColloscopeSlot {
 }
 
 impl ColloscopeSlot {
-    pub(crate) fn extend(
-        &mut self,
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-        slot_id: SlotId,
-    ) {
-        let (first_week, length) = params
-            .periods
-            .get_first_week_and_length_for_period(period_id)
-            .expect("Period Id must be valid");
-        let current_length = self.interrogations.len();
-
-        assert!(length >= current_length);
-
-        if length == current_length {
-            return;
-        }
-
-        let slot = params
-            .slots
-            .find_slot(slot_id)
-            .expect("Slot ID should be valid");
-
-        let week_pattern_id_opt = &slot.week_pattern;
-        let week_pattern_opt = match week_pattern_id_opt {
-            None => None,
-            Some(id) => Some(
-                params
-                    .week_patterns
-                    .week_pattern_map
-                    .get(id)
-                    .expect("Week pattern id should be valid"),
-            ),
-        };
-
-        for i in current_length..length {
-            let current_week = first_week + i;
-            let is_week_active = match week_pattern_opt {
-                None => true,
-                Some(week_pattern) => week_pattern.weeks[current_week],
-            };
-            self.interrogations.push(if is_week_active {
-                Some(ColloscopeInterrogation::default())
-            } else {
-                None
-            });
-        }
-    }
-
-    pub(crate) fn cut(
-        &mut self,
-        params: &super::colloscope_params::Parameters,
-        period_id: PeriodId,
-        _slot_id: SlotId,
-    ) {
-        let (_first_week, length) = params
-            .periods
-            .get_first_week_and_length_for_period(period_id)
-            .expect("Period Id must be valid");
-        let current_length = self.interrogations.len();
-
-        assert!(length <= current_length);
-
-        if length == current_length {
-            return;
-        }
-
-        for i in length..current_length {
-            if let Some(interrogation) = &self.interrogations[i] {
-                if !interrogation.is_empty() {
-                    panic!("Interrogations should be empty to be cut");
-                }
-            }
-        }
-
-        self.interrogations.resize(length, None);
-    }
-
     pub fn is_empty(&self) -> bool {
         self.interrogations
             .iter()
@@ -374,26 +284,6 @@ impl ColloscopeSlot {
                 Some(interrogation) => interrogation.is_empty(),
                 None => true,
             })
-    }
-
-    pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
-        if weeks_to_cut == 0 {
-            return true;
-        }
-
-        let length = self.interrogations.len();
-        let first_week_to_cut = length - weeks_to_cut;
-
-        for i in first_week_to_cut..length {
-            let interrogation_opt = &self.interrogations[i];
-            if let Some(interrogation) = interrogation_opt {
-                if !interrogation.is_empty() {
-                    return false;
-                }
-            }
-        }
-
-        true
     }
 
     pub(crate) fn new_empty_from_params(
@@ -514,12 +404,14 @@ impl ColloscopeSlot {
     }
 
     pub(crate) fn check_empty_on_removed_weeks(&self, pattern: &[bool]) -> bool {
-        if self.interrogations.len() != pattern.len() {
-            return false;
-        }
+        for i in 0..self.interrogations.len() {
+            let interrogation_opt = &self.interrogations[i];
+            let week_active = match pattern.get(i) {
+                Some(val) => *val,
+                None => false,
+            };
 
-        for (interrogation_opt, week_active) in self.interrogations.iter().zip(pattern.iter()) {
-            if *week_active {
+            if week_active {
                 continue;
             }
 
@@ -534,7 +426,7 @@ impl ColloscopeSlot {
     }
 
     pub(crate) fn update_slot_for_week_pattern(&mut self, pattern: &[bool]) {
-        assert!(self.interrogations.len() == pattern.len());
+        self.interrogations.resize(pattern.len(), None);
 
         for (interrogation_opt, week_active) in self.interrogations.iter_mut().zip(pattern.iter()) {
             if *week_active {
