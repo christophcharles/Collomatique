@@ -171,6 +171,10 @@ impl ColloscopePeriod {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.slot_map.iter().all(|(_slot_id, slot)| slot.is_empty())
+    }
+
     pub fn is_cuttable(&self, weeks_to_cut: usize) -> bool {
         self.slot_map
             .iter()

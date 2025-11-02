@@ -1197,13 +1197,13 @@ impl Data {
                     .get(period_id)
                     .expect("Period ID should be valid at this point");
 
+                if !colloscope_period.is_empty() {
+                    return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
+                }
+
                 let week_count = self.inner_data.params.periods.ordered_period_list[position]
                     .1
                     .len();
-
-                if !colloscope_period.is_cuttable(week_count) {
-                    return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
-                }
 
                 for (week_pattern_id, week_pattern) in
                     &self.inner_data.params.week_patterns.week_pattern_map
