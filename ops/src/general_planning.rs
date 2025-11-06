@@ -327,6 +327,30 @@ impl GeneralPlanningUpdateOp {
                     return None;
                 }
 
+                let colloscope_period = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+
+                if !colloscope_period.is_empty() {
+                    for (slot_id, _collo_slot) in &colloscope_period.slot_map {
+                        for week in old_week_count..*week_count {
+                            return Some(CleaningOp {
+                                warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
+                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                    *period_id,
+                                    *slot_id,
+                                    week,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                )),
+                            });
+                        }
+                    }
+                }
+
                 let first_week_to_remove = first_week + *week_count;
                 let weeks_to_remove = old_week_count - *week_count;
 
@@ -377,6 +401,30 @@ impl GeneralPlanningUpdateOp {
                     .ordered_period_list[pos]
                     .1;
                 let week_count = period.len();
+
+                let colloscope_period = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+
+                if !colloscope_period.is_empty() {
+                    for (slot_id, collo_slot) in &colloscope_period.slot_map {
+                        for week in 0..collo_slot.interrogations.len() {
+                            return Some(CleaningOp {
+                                warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
+                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                    *period_id,
+                                    *slot_id,
+                                    week,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                )),
+                            });
+                        }
+                    }
+                }
 
                 for (week_pattern_id, week_pattern) in &data
                     .get_data()
@@ -504,30 +552,6 @@ impl GeneralPlanningUpdateOp {
                                 None,
                             )),
                         });
-                    }
-                }
-
-                let colloscope_period = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid at this point");
-
-                if !colloscope_period.is_empty() {
-                    for (slot_id, collo_slot) in &colloscope_period.slot_map {
-                        for week in 0..collo_slot.interrogations.len() {
-                            return Some(CleaningOp {
-                                warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
-                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                    *period_id,
-                                    *slot_id,
-                                    week,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                )),
-                            });
-                        }
                     }
                 }
 
