@@ -24,6 +24,7 @@ pub enum GeneralPlanningUpdateWarning {
         collomatique_state_colloscopes::WeekPatternId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LoosePeriodDataInColloscope(collomatique_state_colloscopes::PeriodId),
 }
 
 impl GeneralPlanningUpdateWarning {
@@ -191,6 +192,21 @@ impl GeneralPlanningUpdateWarning {
                 Some(format!(
                     "Perte des informations de modèle de périodicité \"{}\" sur la période {}",
                     week_pattern.name,
+                    period_index + 1
+                ))
+            }
+            GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(period_id) => {
+                let Some(period_index) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des données du colloscope sur la période {}",
                     period_index + 1
                 ))
             }
@@ -488,6 +504,30 @@ impl GeneralPlanningUpdateOp {
                                 None,
                             )),
                         });
+                    }
+                }
+
+                let colloscope_period = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+
+                if !colloscope_period.is_empty() {
+                    for (slot_id, collo_slot) in &colloscope_period.slot_map {
+                        for week in 0..collo_slot.interrogations.len() {
+                            return Some(CleaningOp {
+                                warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
+                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                    *period_id,
+                                    *slot_id,
+                                    week,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                )),
+                            });
+                        }
                     }
                 }
 

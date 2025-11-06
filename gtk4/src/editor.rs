@@ -100,6 +100,7 @@ enum PanelNumbers {
     Assignments = 7,
     GroupLists = 8,
     ExtraSettings = 9,
+    Colloscope = 10,
 }
 
 impl PanelNumbers {
@@ -115,6 +116,7 @@ impl PanelNumbers {
             PanelNumbers::Assignments,
             PanelNumbers::GroupLists,
             PanelNumbers::ExtraSettings,
+            PanelNumbers::Colloscope,
         ]
         .into_iter()
     }
@@ -131,6 +133,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "incompats",
             PanelNumbers::GroupLists => "group_lists",
             PanelNumbers::ExtraSettings => "extra_settings",
+            PanelNumbers::Colloscope => "colloscope",
         }
     }
 
@@ -146,6 +149,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
             PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
+            PanelNumbers::Colloscope => "Colloscope",
         }
     }
 }
@@ -407,7 +411,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::GroupLists => Some(PanelNumbers::GroupLists),
             collomatique_ops::OpCategory::Rules => None,
             collomatique_ops::OpCategory::Settings => Some(PanelNumbers::ExtraSettings),
-            //collomatique_ops::OpCategory::Colloscopes => None,
+            collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
         }
     }
 
@@ -719,6 +723,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
+                PanelNumbers::Colloscope => gtk::Label::new(Some("En construction...")).upcast(),
             };
             widgets
                 .main_stack
