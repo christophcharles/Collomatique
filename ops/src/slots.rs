@@ -6,6 +6,7 @@ pub enum SlotsUpdateWarning {
         collomatique_state_colloscopes::SlotId,
         collomatique_state_colloscopes::RuleId,
     ),
+    LooseColloscopeDataForSlot(collomatique_state_colloscopes::SlotId),
 }
 
 impl SlotsUpdateWarning {
@@ -30,6 +31,50 @@ impl SlotsUpdateWarning {
                 Some(format!(
                     "Perte de la règle \"{}\" qui utilise le créneau",
                     rule.name,
+                ))
+            }
+            Self::LooseColloscopeDataForSlot(slot_id) => {
+                let Some((subject_id, position)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return None;
+                };
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(subject_id)
+                else {
+                    return None;
+                };
+                let slot = &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid at this point")
+                    .ordered_slots[position]
+                    .1;
+                let Some(teacher) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .teacher_map
+                    .get(&slot.teacher_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte du remplissage du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {} dans le colloscope",
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
                 ))
             }
         }
@@ -136,8 +181,139 @@ impl SlotsUpdateOp {
     ) -> Option<CleaningOp<SlotsUpdateWarning>> {
         match self {
             SlotsUpdateOp::AddNewSlot(_desc, _slot) => None,
-            SlotsUpdateOp::UpdateSlot(_id, _slot) => None,
+            SlotsUpdateOp::UpdateSlot(slot_id, slot) => {
+                let Some(old_slot) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .find_slot(*slot_id)
+                else {
+                    return None;
+                };
+                let old_week_pattern_id = old_slot.week_pattern;
+                let new_week_pattern_id = slot.week_pattern;
+
+                let week_count = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .count_weeks();
+                let old_week_pattern = match old_week_pattern_id {
+                    Some(id) => data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .get(&id)
+                        .expect("Week pattern ID should be valid")
+                        .weeks
+                        .clone(),
+                    None => vec![true; week_count],
+                };
+                let new_week_pattern = match new_week_pattern_id {
+                    Some(id) => {
+                        let Some(wp) = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .week_patterns
+                            .week_pattern_map
+                            .get(&id)
+                        else {
+                            return None;
+                        };
+                        wp.weeks.clone()
+                    }
+                    None => vec![true; week_count],
+                };
+
+                let mut first_week_in_period = 0usize;
+                for (period_id, period) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .ordered_period_list
+                {
+                    let collo_period = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .period_map
+                        .get(period_id)
+                        .expect("Period ID should appear in colloscope");
+                    let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                        continue;
+                    };
+                    for week_in_period in 0..period.len() {
+                        // If the week is disabled at the period level then it is already disabled in colloscope
+                        if !period[week_in_period].interrogations {
+                            continue;
+                        }
+
+                        let current_week = first_week_in_period + week_in_period;
+                        let old_status = old_week_pattern[current_week];
+                        let new_status = new_week_pattern[current_week];
+                        if old_status && !new_status {
+                            let interrogation = collo_slot.interrogations[week_in_period]
+                                .as_ref()
+                                .expect(
+                                "There should be an interrogation as the week used to be enabled",
+                            );
+
+                            if !interrogation.is_empty() {
+                                return Some(CleaningOp {
+                                    warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(
+                                        *slot_id,
+                                    ),
+                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        *period_id,
+                                        *slot_id,
+                                        week_in_period,
+                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                    )),
+                                });
+                            }
+                        }
+                    }
+
+                    first_week_in_period += period.len();
+                }
+
+                None
+            }
             SlotsUpdateOp::DeleteSlot(slot_id) => {
+                for (period_id, collo_period) in
+                    &data.get_data().get_inner_data().colloscope.period_map
+                {
+                    let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                        continue;
+                    };
+
+                    for week in 0..collo_slot.interrogations.len() {
+                        let Some(interrogation) = &collo_slot.interrogations[week] else {
+                            continue;
+                        };
+
+                        if !interrogation.is_empty() {
+                            return Some(CleaningOp {
+                                warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(
+                                    *slot_id,
+                                ),
+                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                    *period_id,
+                                    *slot_id,
+                                    week,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                )),
+                            });
+                        }
+                    }
+                }
+
                 for (rule_id, rule) in &data.get_data().get_inner_data().params.rules.rule_map {
                     if rule.desc.references_slot(*slot_id) {
                         return Some(CleaningOp {
