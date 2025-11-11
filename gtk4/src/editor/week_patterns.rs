@@ -146,7 +146,7 @@ impl Component for WeekPatterns {
                         self.periods.clone(),
                         collomatique_state_colloscopes::week_patterns::WeekPattern {
                             name: "Nouveau modèle".into(),
-                            weeks: vec![],
+                            weeks: vec![true; self.periods.count_weeks()],
                         },
                     ))
                     .unwrap();

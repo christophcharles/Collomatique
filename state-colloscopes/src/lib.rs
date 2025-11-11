@@ -1313,7 +1313,9 @@ impl Data {
                     for (week_pattern_id, week_pattern) in
                         &self.inner_data.params.week_patterns.week_pattern_map
                     {
-                        if !week_pattern.can_remove_weeks(first_week, old_length - desc.len()) {
+                        if !week_pattern
+                            .can_remove_weeks(first_week + old_length, old_length - desc.len())
+                        {
                             return Err(PeriodError::NonTrivialWeekPattern(
                                 *period_id,
                                 *week_pattern_id,
