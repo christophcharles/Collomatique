@@ -322,11 +322,10 @@ pub enum SubjectError {
     /// The subject is associated to a group list
     #[error("subject id ({0:?}) is associated to group list id {1:?} for period {2:?}")]
     SubjectStillHasAssociatedGroupList(SubjectId, GroupListId, PeriodId),
-    /* /// Subject is referenced in a colloscope id map
-    #[error(
-        "subject id {0:?} is referenced in a colloscope ({1:?}) id maps and cannot be removed"
-    )]
-    SubjectIsReferencedInColloscopeIdMaps(SubjectId, ColloscopeId),*/
+
+    /// The subject has filled slots in colloscope
+    #[error("subject id {0:?} has a least one non-empty slot {1:?} in colloscope")]
+    SubjectStillHasNonEmptySlotInColloscope(SubjectId, SlotId),
 }
 
 /// Errors for teacher operations
@@ -1472,15 +1471,6 @@ impl Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
-                /*for (colloscope_id, colloscope) in &self.inner_data.colloscopes.colloscope_map {
-                    if colloscope.id_maps.subjects.contains_key(id) {
-                        return Err(SubjectError::SubjectIsReferencedInColloscopeIdMaps(
-                            *id,
-                            *colloscope_id,
-                        ));
-                    }
-                }*/
-
                 for (period_id, subject_map) in
                     &self.inner_data.params.group_lists.subjects_associations
                 {
@@ -1662,6 +1652,27 @@ impl Data {
                             *period_id,
                         ));
                     }
+
+                    // Check if there are non-empty slots in colloscope for the subject
+                    if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id) {
+                        let colloscope_period = self
+                            .inner_data
+                            .colloscope
+                            .period_map
+                            .get(period_id)
+                            .expect("Period ID should be valid at this point");
+
+                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            let Some(collo_slot) = colloscope_period.slot_map.get(slot_id) else {
+                                continue;
+                            };
+                            if !collo_slot.is_empty() {
+                                return Err(SubjectError::SubjectStillHasNonEmptySlotInColloscope(
+                                    *id, *slot_id,
+                                ));
+                            }
+                        }
+                    }
                 }
 
                 self.inner_data.params.subjects.ordered_subject_list[position].1 =
@@ -1670,6 +1681,7 @@ impl Data {
                     != old_params.parameters.interrogation_parameters.is_some()
                 {
                     if new_params.parameters.interrogation_parameters.is_some() {
+                        // We don't need to update the colloscope in this case: no slots have been added so far
                         self.inner_data.params.slots.subject_map.insert(
                             *id,
                             slots::SubjectSlots {
@@ -1677,7 +1689,48 @@ impl Data {
                             },
                         );
                     } else {
+                        // We don't need to update the colloscope in this case: all slots have already been removed
                         self.inner_data.params.slots.subject_map.remove(id);
+                    }
+                }
+
+                // Let's update the colloscope.
+                // However, if there are no interrogations, then we don't have slots to update
+                if new_params.parameters.interrogation_parameters.is_some() {
+                    let subject_slots = self
+                        .inner_data
+                        .params
+                        .slots
+                        .subject_map
+                        .get(id)
+                        .expect("Subject should have a slot list at this point");
+
+                    for (period_id, collo_period) in &mut self.inner_data.colloscope.period_map {
+                        // Only change in period status should be considered
+                        if old_params.excluded_periods.contains(period_id)
+                            == new_params.excluded_periods.contains(period_id)
+                        {
+                            continue;
+                        }
+
+                        if old_params.excluded_periods.contains(period_id) {
+                            // The period was excluded but is not anymore
+                            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                                collo_period.slot_map.insert(
+                                    *slot_id,
+                                    colloscopes::ColloscopeSlot::new_empty_from_params(
+                                        &self.inner_data.params,
+                                        *period_id,
+                                        *slot_id,
+                                    ),
+                                );
+                            }
+                        } else {
+                            // The period was included but will now be excluded
+                            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                                collo_period.slot_map.remove(slot_id);
+                            }
+                        }
                     }
                 }
 
