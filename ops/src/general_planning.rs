@@ -206,7 +206,7 @@ impl GeneralPlanningUpdateWarning {
                     return None;
                 };
                 Some(format!(
-                    "Perte des données du colloscope sur la période {}",
+                    "Perte d'une partie du colloscope sur la période {}",
                     period_index + 1
                 ))
             }
