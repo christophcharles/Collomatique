@@ -22,6 +22,10 @@ pub enum SubjectsUpdateWarning {
         collomatique_state_colloscopes::GroupListId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseColloscopeSlotsForPeriod(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl SubjectsUpdateWarning {
@@ -168,6 +172,31 @@ impl SubjectsUpdateWarning {
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupes \"{}\" pour la période {}",
                     subject.parameters.name, group_list.params.name, period_num+1
+                ))
+            }
+            Self::LooseColloscopeSlotsForPeriod(subject_id, period_id) => {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
+                    return None;
+                };
+                let Some(period_num) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des colles de \"{}\" sur le colloscope pour la période {}",
+                    subject.parameters.name,
+                    period_num + 1
                 ))
             }
         }
@@ -390,6 +419,63 @@ impl SubjectsUpdateOp {
                                     false,
                                 )),
                             });
+                        }
+                    }
+
+                    if current_subject
+                        .parameters
+                        .interrogation_parameters
+                        .is_some()
+                    {
+                        let Some(colloscope_period) = data
+                            .get_data()
+                            .get_inner_data()
+                            .colloscope
+                            .period_map
+                            .get(period_id)
+                        else {
+                            return None;
+                        };
+
+                        let subject_slots = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .slots
+                            .subject_map
+                            .get(subject_id)
+                            .expect("Subject should have slots at this point");
+
+                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            let collo_slot = colloscope_period
+                                .slot_map
+                                .get(slot_id)
+                                .expect("Slot should appear in colloscope at this point");
+
+                            if !collo_slot.is_empty() {
+                                for week in 0..collo_slot.interrogations.len() {
+                                    let Some(interrogation) = &collo_slot.interrogations[week]
+                                    else {
+                                        continue;
+                                    };
+                                    if !interrogation.is_empty() {
+                                        return Some(CleaningOp {
+                                            warning: SubjectsUpdateWarning::LooseColloscopeSlotsForPeriod(
+                                                *subject_id,
+                                                *period_id,
+                                            ),
+                                            op: UpdateOp::Colloscope(
+                                                ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                                    *period_id,
+                                                    *slot_id,
+                                                    week,
+                                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                                ),
+                                            ),
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
 
