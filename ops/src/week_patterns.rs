@@ -4,6 +4,7 @@ use super::*;
 pub enum WeekPatternsUpdateWarning {
     LooseInterrogationSlot(collomatique_state_colloscopes::SlotId),
     LooseScheduleIncompat(collomatique_state_colloscopes::IncompatId),
+    LooseColloscopeDataForSlot(collomatique_state_colloscopes::SlotId),
 }
 
 impl WeekPatternsUpdateWarning {
@@ -97,6 +98,50 @@ impl WeekPatternsUpdateWarning {
                     slot_desc.join(", "),
                 ))
             }
+            Self::LooseColloscopeDataForSlot(slot_id) => {
+                let Some((subject_id, position)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return None;
+                };
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(subject_id)
+                else {
+                    return None;
+                };
+                let slot = &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subject_map
+                    .get(&subject_id)
+                    .expect("Subject id should be valid at this point")
+                    .ordered_slots[position]
+                    .1;
+                let Some(teacher) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .teacher_map
+                    .get(&slot.teacher_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de remplissage du créneaux de colle du colleur {} {} pour la matière \"{}\" le {} à {} dans le colloscope",
+                    teacher.desc.firstname, teacher.desc.surname, subject.parameters.name, slot.start_time.weekday, slot.start_time.start_time.into_inner(),
+                ))
+            }
         }
     }
 }
@@ -150,7 +195,82 @@ impl WeekPatternsUpdateOp {
     ) -> Option<CleaningOp<WeekPatternsUpdateWarning>> {
         match self {
             Self::AddNewWeekPattern(_) => None,
-            Self::UpdateWeekPattern(_, _) => None,
+            Self::UpdateWeekPattern(week_pattern_id, new_week_pattern) => {
+                let Some(old_week_pattern) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .get(week_pattern_id)
+                else {
+                    return None;
+                };
+                if old_week_pattern.weeks.len() != new_week_pattern.weeks.len() {
+                    return None;
+                }
+
+                for (_subject_id, subject_slots) in
+                    &data.get_data().get_inner_data().params.slots.subject_map
+                {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern != Some(*week_pattern_id) {
+                            continue;
+                        }
+
+                        let mut first_week_in_period = 0usize;
+                        for (period_id, period) in &data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .ordered_period_list
+                        {
+                            let collo_period = data
+                                .get_data()
+                                .get_inner_data()
+                                .colloscope
+                                .period_map
+                                .get(period_id)
+                                .expect("Period ID should appear in colloscope");
+                            let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                                continue;
+                            };
+                            for week_in_period in 0..period.len() {
+                                // If the week is disabled at the period level then it is already disabled in colloscope
+                                if !period[week_in_period].interrogations {
+                                    continue;
+                                }
+
+                                let current_week = first_week_in_period + week_in_period;
+                                let old_status = old_week_pattern.weeks[current_week];
+                                let new_status = new_week_pattern.weeks[current_week];
+                                if old_status && !new_status {
+                                    let interrogation = collo_slot.interrogations[week_in_period].as_ref().expect("There should be an interrogation as the week used to be enabled");
+
+                                    if !interrogation.is_empty() {
+                                        return Some(CleaningOp {
+                                            warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(
+                                                *slot_id,
+                                            ),
+                                            op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                                *period_id,
+                                                *slot_id,
+                                                week_in_period,
+                                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                            )),
+                                        });
+                                    }
+                                }
+                            }
+
+                            first_week_in_period += period.len();
+                        }
+                    }
+                }
+
+                None
+            }
             Self::DeleteWeekPattern(week_pattern_id) => {
                 for (_subject_id, subject_slots) in
                     &data.get_data().get_inner_data().params.slots.subject_map
