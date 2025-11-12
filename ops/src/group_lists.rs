@@ -658,7 +658,135 @@ impl GroupListsUpdateOp {
 
                 None
             }
-            GroupListsUpdateOp::DuplicatePreviousPeriod(_period_id) => None,
+            GroupListsUpdateOp::DuplicatePreviousPeriod(period_id) => {
+                let Some(position) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+
+                if position == 0 {
+                    return None;
+                }
+
+                let previous_period_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .ordered_period_list[position - 1]
+                    .0;
+                let previous_period_assignments = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .get(&previous_period_id)
+                    .expect("Previous period id should be valid at this point")
+                    .clone();
+
+                let Some(collo_period) = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                else {
+                    return None;
+                };
+
+                for (subject_id, subject) in &data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                {
+                    if subject.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    if subject.excluded_periods.contains(&previous_period_id) {
+                        continue;
+                    }
+                    if subject.parameters.interrogation_parameters.is_none() {
+                        continue;
+                    }
+
+                    let group_list_id = previous_period_assignments.get(subject_id);
+                    let new_group_list = match group_list_id {
+                        Some(id) => match data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .group_lists
+                            .group_list_map
+                            .get(id)
+                        {
+                            Some(group_list) => Some(group_list),
+                            None => return None,
+                        },
+                        None => None,
+                    };
+                    let first_forbidden_group_number = match new_group_list {
+                        Some(group_list) => *group_list.params.group_count.end(),
+                        None => 0,
+                    };
+
+                    let Some(subject_slots) = data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .slots
+                        .subject_map
+                        .get(subject_id)
+                    else {
+                        return None;
+                    };
+
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                            return None;
+                        };
+                        for week in 0..collo_slot.interrogations.len() {
+                            let interrogation_opt = &collo_slot.interrogations[week];
+                            let Some(interrogation) = interrogation_opt else {
+                                continue;
+                            };
+                            if interrogation.is_empty() {
+                                continue;
+                            }
+
+                            let mut new_assigned_groups = interrogation.assigned_groups.clone();
+                            for group in &interrogation.assigned_groups {
+                                if *group < first_forbidden_group_number {
+                                    continue;
+                                }
+                                new_assigned_groups.remove(group);
+                            }
+                            if new_assigned_groups.len() != interrogation.assigned_groups.len() {
+                                return Some(CleaningOp {
+                                    warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(*subject_id, *period_id),
+                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        *period_id,
+                                        *slot_id,
+                                        week,
+                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
+                                            assigned_groups: new_assigned_groups,
+                                        },
+                                    )),
+                                });
+                            }
+                        }
+                    }
+                }
+
+                None
+            }
         }
     }
 
