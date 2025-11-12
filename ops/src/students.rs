@@ -15,6 +15,10 @@ pub enum StudentsUpdateWarning {
         collomatique_state_colloscopes::GroupListId,
     ),
     LooseLimitsForStudent(collomatique_state_colloscopes::StudentId),
+    LooseStudentInColloscopeGroup(
+        collomatique_state_colloscopes::StudentId,
+        collomatique_state_colloscopes::GroupListId,
+    ),
 }
 
 impl StudentsUpdateWarning {
@@ -120,6 +124,32 @@ impl StudentsUpdateWarning {
                     student.desc.firstname, student.desc.surname,
                 ))
             }
+            Self::LooseStudentInColloscopeGroup(student_id, group_list_id) => {
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .student_map
+                    .get(student_id)
+                else {
+                    return None;
+                };
+                let Some(group_list) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de l'attribution de {} {} dans la liste de groupes \"{}\" dans le colloscope",
+                    student.desc.firstname, student.desc.surname, group_list.params.name,
+                ))
+            }
         }
     }
 }
@@ -184,6 +214,30 @@ impl StudentsUpdateOp {
                 else {
                     return None;
                 };
+
+                for (group_list_id, collo_group_list) in
+                    &data.get_data().get_inner_data().colloscope.group_lists
+                {
+                    if collo_group_list
+                        .groups_for_students
+                        .contains_key(student_id)
+                    {
+                        let mut new_collo_group_list = collo_group_list.clone();
+                        new_collo_group_list.groups_for_students.remove(student_id);
+                        return Some(CleaningOp {
+                            warning: StudentsUpdateWarning::LooseStudentInColloscopeGroup(
+                                *student_id,
+                                *group_list_id,
+                            ),
+                            op: UpdateOp::Colloscope(
+                                ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                    *group_list_id,
+                                    new_collo_group_list,
+                                ),
+                            ),
+                        });
+                    }
+                }
 
                 for (group_list_id, group_list) in &data
                     .get_data()
