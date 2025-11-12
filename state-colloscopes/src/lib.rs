@@ -559,9 +559,9 @@ pub enum GroupListError {
     #[error("group list id {0:?} in colloscope is not compatible with the given parameters")]
     NotCompatibleGroupListInColloscope(GroupListId),
 
-    /// The subject has non-empty slots associated to the old group list
-    #[error("subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?}")]
-    NotEmptySubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
+    /// The subject has non-empty slots associated to the old group list with invalid numbers
+    #[error("subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number")]
+    InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
 }
 
 /// Errors for rules operations
@@ -2458,6 +2458,23 @@ impl Data {
                 else {
                     return Err(GroupListError::InvalidPeriodId(*period_id));
                 };
+
+                let new_group_list = match group_list_id {
+                    Some(id) => Some(
+                        self.inner_data
+                            .params
+                            .group_lists
+                            .group_list_map
+                            .get(id)
+                            .expect("Group list ID should be valid"),
+                    ),
+                    None => None,
+                };
+                let first_forbidden_group_number = match new_group_list {
+                    Some(group_list) => *group_list.params.group_count.end(),
+                    None => 0,
+                };
+
                 let collo_period = self
                     .inner_data
                     .colloscope
@@ -2477,12 +2494,21 @@ impl Data {
                         .get(slot_id)
                         .expect("Subject should run on given period");
 
-                    if !collo_slot.is_empty() {
-                        return Err(GroupListError::NotEmptySubjectSlotInColloscope(
-                            *subject_id,
-                            *period_id,
-                            *slot_id,
-                        ));
+                    for week in 0..collo_slot.interrogations.len() {
+                        let interrogation_opt = &collo_slot.interrogations[week];
+                        let Some(interrogation) = interrogation_opt else {
+                            continue;
+                        };
+                        for group in &interrogation.assigned_groups {
+                            if *group < first_forbidden_group_number {
+                                continue;
+                            }
+                            return Err(GroupListError::InvalidGroupInSubjectSlotInColloscope(
+                                *subject_id,
+                                *period_id,
+                                *slot_id,
+                            ));
+                        }
                     }
                 }
 
