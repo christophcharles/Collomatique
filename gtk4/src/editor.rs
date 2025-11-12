@@ -19,6 +19,7 @@ mod error_dialog;
 
 mod assignments;
 mod check_script;
+mod colloscope;
 mod general_planning;
 mod group_lists;
 mod incompats;
@@ -179,6 +180,7 @@ pub struct EditorPanel {
     incompats: Controller<incompats::Incompats>,
     group_lists: Controller<group_lists::GroupLists>,
     settings: Controller<settings::Settings>,
+    colloscope: Controller<colloscope::Colloscope>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_script_dialog: Controller<run_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
@@ -393,6 +395,32 @@ impl EditorPanel {
                     .params
                     .settings
                     .clone(),
+            ))
+            .unwrap();
+        self.colloscope
+            .sender()
+            .send(colloscope::ColloscopeInput::Update(
+                self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .clone(),
+                self.data.get_data().get_inner_data().params.slots.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .clone(),
+                self.data.get_data().get_inner_data().colloscope.clone(),
             ))
             .unwrap();
     }
@@ -650,6 +678,12 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
             });
 
+        let colloscope = colloscope::Colloscope::builder()
+            .launch(())
+            .forward(sender.input_sender(), |op| {
+                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
+            });
+
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -705,6 +739,7 @@ impl Component for EditorPanel {
             incompats,
             group_lists,
             settings,
+            colloscope,
             check_script_dialog,
             run_script_dialog,
             warning_op_dialog,
@@ -723,7 +758,7 @@ impl Component for EditorPanel {
                 PanelNumbers::Incompats => model.incompats.widget().clone().upcast(),
                 PanelNumbers::GroupLists => model.group_lists.widget().clone().upcast(),
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
-                PanelNumbers::Colloscope => gtk::Label::new(Some("En construction...")).upcast(),
+                PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
             };
             widgets
                 .main_stack
