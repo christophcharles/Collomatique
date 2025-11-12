@@ -19,6 +19,14 @@ pub enum GroupListsUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseStudentGroupInColloscope(
+        collomatique_state_colloscopes::GroupListId,
+        collomatique_state_colloscopes::StudentId,
+    ),
+    LooseGroupsInInterrogationsInColloscope(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GroupListsUpdateWarning {
@@ -156,6 +164,57 @@ impl GroupListsUpdateWarning {
                     period_num + 1
                 ))
             }
+            Self::LooseStudentGroupInColloscope(group_list_id, student_id) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+                let Some(student) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .student_map
+                    .get(student_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte de l'affectation du l'élève {} {} dans la liste de groupe \"{}\" du le colloscope",
+                    student.desc.firstname, student.desc.surname, group_list.params.name
+                ))
+            }
+            Self::LooseGroupsInInterrogationsInColloscope(subject_id, period_id) => {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
+                    return None;
+                };
+                let Some(period_num) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des groupes devenus invalides sur les colles de la matière \"{}\" pour la période {}",
+                    subject.parameters.name,
+                    period_num + 1
+                ))
+            }
         }
     }
 }
@@ -284,6 +343,96 @@ impl GroupListsUpdateOp {
                 else {
                     return None;
                 };
+
+                let collo_group_list = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .group_lists
+                    .get(group_list_id)
+                    .expect("Group list ID should be valid");
+                for (student_id, _group) in &collo_group_list.groups_for_students {
+                    if params.excluded_students.contains(student_id) {
+                        let mut new_collo_group_list = collo_group_list.clone();
+                        new_collo_group_list.groups_for_students.remove(student_id);
+                        return Some(CleaningOp {
+                            warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                                *group_list_id,
+                                *student_id,
+                            ),
+                            op: UpdateOp::Colloscope(
+                                ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                    *group_list_id,
+                                    new_collo_group_list,
+                                ),
+                            ),
+                        });
+                    }
+                }
+
+                for (period_id, collo_period) in
+                    &data.get_data().get_inner_data().colloscope.period_map
+                {
+                    let subject_associations = data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .group_lists
+                        .subjects_associations
+                        .get(period_id)
+                        .expect("Period ID should be valid");
+                    for (subject_id, associated_group_list) in subject_associations {
+                        if *associated_group_list != *group_list_id {
+                            continue;
+                        }
+
+                        let subject_slots = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .slots
+                            .subject_map
+                            .get(subject_id)
+                            .expect("Subject ID should be valid");
+                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            let collo_slot = collo_period
+                                .slot_map
+                                .get(slot_id)
+                                .expect("Slot ID should be valid");
+                            for week in 0..collo_slot.interrogations.len() {
+                                let interrogation_opt = &collo_slot.interrogations[week];
+                                let Some(interrogation) = interrogation_opt else {
+                                    continue;
+                                };
+                                if interrogation.is_empty() {
+                                    continue;
+                                }
+
+                                let mut new_assigned_groups = interrogation.assigned_groups.clone();
+                                for group in &interrogation.assigned_groups {
+                                    if *group <= *params.group_count.end() {
+                                        continue;
+                                    }
+                                    new_assigned_groups.remove(group);
+                                }
+                                if new_assigned_groups.len() != interrogation.assigned_groups.len()
+                                {
+                                    return Some(CleaningOp {
+                                        warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(*subject_id, *period_id),
+                                        op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                            *period_id,
+                                            *slot_id,
+                                            week,
+                                            collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
+                                                assigned_groups: new_assigned_groups,
+                                            },
+                                        )),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
 
                 let mut students_to_exclude = vec![];
                 let mut new_prefilled_groups = old_group_list.prefilled_groups.clone();
