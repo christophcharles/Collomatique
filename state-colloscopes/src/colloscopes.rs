@@ -559,7 +559,7 @@ impl ColloscopeGroupList {
     ) -> Result<(), super::ColloscopeError> {
         use super::ColloscopeError;
 
-        let first_forbidden_value = group_list_params.group_count.end() + 1;
+        let first_forbidden_value = *group_list_params.group_count.end();
 
         for (student_id, group_num) in &self.groups_for_students {
             if group_list_params.excluded_students.contains(student_id) {

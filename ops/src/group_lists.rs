@@ -410,7 +410,7 @@ impl GroupListsUpdateOp {
 
                                 let mut new_assigned_groups = interrogation.assigned_groups.clone();
                                 for group in &interrogation.assigned_groups {
-                                    if *group <= *params.group_count.end() {
+                                    if *group < *params.group_count.end() {
                                         continue;
                                     }
                                     new_assigned_groups.remove(group);
