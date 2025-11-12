@@ -14,6 +14,11 @@ pub enum GroupListsUpdateWarning {
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::PeriodId,
     ),
+    LooseGroupListInColloscope(collomatique_state_colloscopes::GroupListId),
+    LooseInterrogationsInColloscope(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 impl GroupListsUpdateWarning {
@@ -108,6 +113,47 @@ impl GroupListsUpdateWarning {
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
                     subject.parameters.name, group_list.params.name, period_num+1
+                ))
+            }
+            Self::LooseGroupListInColloscope(group_list_id) => {
+                let Some(group_list) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte du remplissage de la liste de groupe \"{}\" dans le colloscope",
+                    group_list.params.name
+                ))
+            }
+            Self::LooseInterrogationsInColloscope(subject_id, period_id) => {
+                let Some(subject) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                else {
+                    return None;
+                };
+                let Some(period_num) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return None;
+                };
+                Some(format!(
+                    "Perte des colles de la matière \"{}\" pour la période {}",
+                    subject.parameters.name,
+                    period_num + 1
                 ))
             }
         }
@@ -273,6 +319,75 @@ impl GroupListsUpdateOp {
                 else {
                     return None;
                 };
+
+                for (period_id, collo_period) in
+                    &data.get_data().get_inner_data().colloscope.period_map
+                {
+                    let subject_associations = data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .group_lists
+                        .subjects_associations
+                        .get(period_id)
+                        .expect("Period ID should be valid");
+                    for (subject_id, associated_group_list) in subject_associations {
+                        if *associated_group_list != *group_list_id {
+                            continue;
+                        }
+
+                        let subject_slots = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .slots
+                            .subject_map
+                            .get(subject_id)
+                            .expect("Subject ID should be valid");
+                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            let collo_slot = collo_period
+                                .slot_map
+                                .get(slot_id)
+                                .expect("Slot ID should be valid");
+                            for week in 0..collo_slot.interrogations.len() {
+                                let interrogation_opt = &collo_slot.interrogations[week];
+                                let Some(interrogation) = interrogation_opt else {
+                                    continue;
+                                };
+                                if interrogation.is_empty() {
+                                    continue;
+                                }
+
+                                return Some(CleaningOp {
+                                    warning: GroupListsUpdateWarning::LooseInterrogationsInColloscope(*subject_id, *period_id),
+                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        *period_id,
+                                        *slot_id,
+                                        week,
+                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                    )),
+                                });
+                            }
+                        }
+                    }
+                }
+
+                let collo_group_list = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .group_lists
+                    .get(group_list_id)
+                    .expect("Group list ID should be valid at this point");
+                if !collo_group_list.is_empty() {
+                    return Some(CleaningOp {
+                        warning: GroupListsUpdateWarning::LooseGroupListInColloscope(*group_list_id),
+                        op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                            *group_list_id,
+                            collomatique_state_colloscopes::colloscopes::ColloscopeGroupList::default(),
+                        )),
+                    });
+                }
 
                 if !old_group_list.prefilled_groups.is_empty() {
                     return Some(CleaningOp {

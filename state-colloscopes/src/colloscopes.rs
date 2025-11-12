@@ -500,7 +500,7 @@ impl ColloscopeInterrogation {
 ///
 /// This is basically map between students that are in the group lists
 /// and actual group numbers
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ColloscopeGroupList {
     pub groups_for_students: BTreeMap<StudentId, u32>,
 }
