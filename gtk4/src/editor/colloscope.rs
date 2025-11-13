@@ -7,6 +7,7 @@ use relm4::{
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
 
@@ -35,6 +36,7 @@ pub struct Colloscope {
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     group_list_dialog: Controller<group_list_dialog::Dialog>,
+    colloscope_display: Controller<colloscope_display::Display>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
 }
@@ -84,15 +86,9 @@ impl Component for Colloscope {
                             },
                         },
                     },
-                    gtk::Box {
+                    #[local_ref]
+                    colloscope_display_box -> gtk::Box {
                         set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        add_css_class: "frame",
-                        gtk::Label {
-                            set_hexpand: true,
-                            set_size_request: (-1,200),
-                            set_label: "Interface en construction",
-                        },
                     },
                 },
                 gtk::Box {
@@ -150,6 +146,8 @@ impl Component for Colloscope {
                 }
             });
 
+        let colloscope_display = colloscope_display::Display::builder().launch(()).detach();
+
         let model = Colloscope {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
@@ -160,9 +158,11 @@ impl Component for Colloscope {
             group_list_entries,
             group_list_dialog,
             edited_group_list: None,
+            colloscope_display,
         };
 
         let list_box = model.group_list_entries.widget();
+        let colloscope_display_box = model.colloscope_display.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -186,6 +186,7 @@ impl Component for Colloscope {
                 self.colloscope = colloscope;
 
                 self.update_group_list_entries();
+                self.update_colloscope_display();
             }
             ColloscopeInput::EditGroupList(group_list_id) => {
                 self.edited_group_list = Some(group_list_id);
@@ -248,5 +249,19 @@ impl Colloscope {
             group_lists_vec.into_iter(),
             |data| group_lists_display::EntryInput::UpdateData(data),
         );
+    }
+
+    fn update_colloscope_display(&self) {
+        self.colloscope_display
+            .sender()
+            .send(colloscope_display::DisplayInput::Update(
+                self.periods.clone(),
+                self.subjects.clone(),
+                self.slots.clone(),
+                self.students.clone(),
+                self.group_lists.clone(),
+                self.colloscope.clone(),
+            ))
+            .unwrap();
     }
 }
