@@ -25,7 +25,7 @@ pub struct GroupLists {
 }
 
 /// Description of a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct GroupList {
     /// parameters for the group list
     pub params: GroupListParameters,

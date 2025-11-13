@@ -1,10 +1,13 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{adw, gtk};
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+mod group_list_dialog;
 mod group_lists_display;
 
 #[derive(Debug)]
@@ -19,6 +22,7 @@ pub enum ColloscopeInput {
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
+    GroupListAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeGroupList),
 }
 
 pub struct Colloscope {
@@ -30,6 +34,9 @@ pub struct Colloscope {
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
+    group_list_dialog: Controller<group_list_dialog::Dialog>,
+
+    edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
 }
 
 #[relm4::component(pub)]
@@ -134,6 +141,15 @@ impl Component for Colloscope {
                 }
             });
 
+        let group_list_dialog = group_list_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                group_list_dialog::DialogOutput::Accepted(collo_group_list) => {
+                    ColloscopeInput::GroupListAccepted(collo_group_list)
+                }
+            });
+
         let model = Colloscope {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
@@ -142,6 +158,8 @@ impl Component for Colloscope {
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
             group_list_entries,
+            group_list_dialog,
+            edited_group_list: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -150,7 +168,7 @@ impl Component for Colloscope {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             ColloscopeInput::Update(
                 periods,
@@ -169,8 +187,36 @@ impl Component for Colloscope {
 
                 self.update_group_list_entries();
             }
-            ColloscopeInput::EditGroupList(_id) => {
-                // Ignore for now
+            ColloscopeInput::EditGroupList(group_list_id) => {
+                self.edited_group_list = Some(group_list_id);
+                self.group_list_dialog
+                    .sender()
+                    .send(group_list_dialog::DialogInput::Show(
+                        self.students.clone(),
+                        self.group_lists
+                            .group_list_map
+                            .get(&group_list_id)
+                            .cloned()
+                            .expect("Group list ID should be valid"),
+                        self.colloscope
+                            .group_lists
+                            .get(&group_list_id)
+                            .cloned()
+                            .expect("Group list ID should be valid"),
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::GroupListAccepted(collo_group_list) => {
+                let group_list_id = self
+                    .edited_group_list
+                    .take()
+                    .expect("A group list id should have been stored for edition");
+                sender
+                    .output(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                        group_list_id,
+                        collo_group_list,
+                    ))
+                    .unwrap();
             }
         }
     }
