@@ -37,10 +37,10 @@ impl Entry {
     }
 
     fn generate_remaining_student_text(&self) -> String {
-        if self.remaining_student_count <= 1 {
-            format!("{} élève sans groupe", self.remaining_student_count)
-        } else {
-            format!("{} élèves sans groupe", self.remaining_student_count)
+        match self.remaining_student_count {
+            0 => "liste complète".into(),
+            1 => "1 élève sans groupe".into(),
+            _ => format!("{} élèves sans groupe", self.remaining_student_count),
         }
     }
 }
@@ -87,8 +87,6 @@ impl FactoryComponent for Entry {
                 #[watch]
                 set_label: &self.generate_remaining_student_text(),
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
-                #[watch]
-                set_visible: self.remaining_student_count != 0,
             },
             gtk::Box {
                 set_hexpand: true,
