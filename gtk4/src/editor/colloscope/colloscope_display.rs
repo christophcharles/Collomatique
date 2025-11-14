@@ -1,6 +1,7 @@
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
 use gtk::prelude::{OrientableExt, WidgetExt};
 use relm4::gtk;
+use relm4::gtk::prelude::BoxExt;
 use relm4::{Component, ComponentParts, ComponentSender};
 
 use std::collections::BTreeMap;
@@ -397,8 +398,8 @@ struct WeekColumn {
 }
 
 impl RelmColumn for WeekColumn {
-    type Root = gtk::Label;
-    type Widgets = ();
+    type Root = gtk::Box;
+    type Widgets = (gtk::MenuButton, gtk::Label);
     type Item = SlotItem;
 
     fn column_name(&self) -> String {
@@ -406,13 +407,29 @@ impl RelmColumn for WeekColumn {
     }
 
     fn setup(&self, _item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
-        let root = gtk::Label::new(None);
-        root.set_halign(gtk::Align::Center);
+        let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        root.set_size_request(30, 30);
 
-        (root, ())
+        let scrolled_window = gtk::ScrolledWindow::new();
+        root.append(&scrolled_window);
+        scrolled_window.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Never);
+
+        let menu_button = gtk::MenuButton::new();
+        scrolled_window.set_child(Some(&menu_button));
+
+        let label = gtk::Label::new(None);
+        menu_button.set_child(Some(&label));
+        label.set_halign(gtk::Align::Center);
+
+        (root, (menu_button, label))
     }
 
-    fn bind(&self, item: &mut Self::Item, _: &mut Self::Widgets, root: &mut Self::Root) {
+    fn bind(
+        &self,
+        item: &mut Self::Item,
+        (menu_button, label): &mut Self::Widgets,
+        _root: &mut Self::Root,
+    ) {
         let period_slots = item
             .data
             .period_map
@@ -432,12 +449,12 @@ impl RelmColumn for WeekColumn {
                         None => (*num + 1).to_string(),
                     })
                     .collect();
-                root.set_label(&group_str.join(","));
-                root.remove_css_class("background");
+                label.set_label(&group_str.join(","));
+                menu_button.set_visible(true);
             }
             None => {
-                root.set_label("");
-                root.add_css_class("background");
+                label.set_label("");
+                menu_button.set_visible(false);
             }
         }
     }
