@@ -32,6 +32,7 @@ pub enum ColloscopeInput {
         collomatique_state_colloscopes::PeriodId,
         usize,
     ),
+    InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 }
 
 pub struct Colloscope {
@@ -179,7 +180,11 @@ impl Component for Colloscope {
         let interrogation_dialog = interrogation_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                interrogation_dialog::DialogOutput::Accepted(interrogation) => {
+                    ColloscopeInput::InterrogationAccepted(interrogation)
+                }
+            });
 
         let model = Colloscope {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -259,9 +264,63 @@ impl Component for Colloscope {
             }
             ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period) => {
                 self.edited_interrogation = Some((slot_id, period_id, week_in_period));
+
+                let (subject_id, _pos) = self
+                    .slots
+                    .find_slot_subject_and_position(slot_id)
+                    .expect("Slot ID should be valid");
+                let period_associations = self
+                    .group_lists
+                    .subjects_associations
+                    .get(&period_id)
+                    .expect("Period ID should be valid");
+                let group_list_id = period_associations
+                    .get(&subject_id)
+                    .expect("A group list is needed to be able to edit a slot");
+                let group_list = self
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                    .expect("Group list ID should be valid")
+                    .clone();
+
+                let collo_period = self
+                    .colloscope
+                    .period_map
+                    .get(&period_id)
+                    .expect("Period ID should be valid");
+                let collo_slot = collo_period
+                    .slot_map
+                    .get(&slot_id)
+                    .expect("Slot ID should be valid for this period");
+                let interrogation_opt = collo_slot
+                    .interrogations
+                    .get(week_in_period)
+                    .expect("Week number should be valid");
+                let interrogation = interrogation_opt
+                    .clone()
+                    .expect("There should be an interrogation to edit!");
+
                 self.interrogation_dialog
                     .sender()
-                    .send(interrogation_dialog::DialogInput::Show)
+                    .send(interrogation_dialog::DialogInput::Show(
+                        group_list,
+                        interrogation,
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::InterrogationAccepted(interrogation) => {
+                let (slot_id, period_id, week_in_period) = self
+                    .edited_interrogation
+                    .take()
+                    .expect("Interrogation information should have been stored for edition");
+                sender
+                    .output(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                        period_id,
+                        slot_id,
+                        week_in_period,
+                        interrogation,
+                    ))
                     .unwrap();
             }
         }

@@ -13,17 +13,24 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
+    interrogation: collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
+    group_list: collomatique_state_colloscopes::group_lists::GroupList,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show,
+    Show(
+        collomatique_state_colloscopes::group_lists::GroupList,
+        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
+    ),
     Cancel,
     Accept,
 }
 
 #[derive(Debug)]
-pub enum DialogOutput {}
+pub enum DialogOutput {
+    Accepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+}
 
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
@@ -81,6 +88,9 @@ impl SimpleComponent for Dialog {
         let model = Dialog {
             hidden: true,
             should_redraw: false,
+            interrogation:
+                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+            group_list: collomatique_state_colloscopes::group_lists::GroupList::default(),
         };
 
         let widgets = view_output!();
@@ -88,21 +98,23 @@ impl SimpleComponent for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show => {
+            DialogInput::Show(group_list, interrogation) => {
                 self.hidden = false;
                 self.should_redraw = true;
+                self.group_list = group_list;
+                self.interrogation = interrogation;
             }
             DialogInput::Cancel => {
                 self.hidden = true;
             }
             DialogInput::Accept => {
                 self.hidden = true;
-                /*sender
-                .output(DialogOutput::Accepted(self.collo_group_list.clone()))
-                .unwrap();*/
+                sender
+                    .output(DialogOutput::Accepted(self.interrogation.clone()))
+                    .unwrap();
             }
         }
     }

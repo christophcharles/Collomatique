@@ -146,6 +146,7 @@ impl Component for Display {
                 group_lists,
                 colloscope,
             ) => {
+                let should_rebuild_columns = self.periods != periods;
                 self.periods = periods;
                 self.subjects = subjects;
                 self.slots = slots;
@@ -154,8 +155,10 @@ impl Component for Display {
                 self.group_lists = group_lists;
                 self.colloscope = colloscope;
 
+                if should_rebuild_columns {
+                    self.rebuild_columns();
+                }
                 self.update_display_issue();
-                self.rebuild_columns();
                 self.update_view_wrapper(sender);
             }
             DisplayInput::InterrogationClicked(slot_id, period_id, week_in_period) => {
@@ -234,6 +237,7 @@ impl Display {
                         period_map.insert(
                             *period_id,
                             SlotPeriodData {
+                                has_group_list: false,
                                 slots: vec![None; period.len()],
                             },
                         );
@@ -254,6 +258,7 @@ impl Display {
                     period_map.insert(
                         *period_id,
                         SlotPeriodData {
+                            has_group_list: group_list.is_some(),
                             slots: collo_slot
                                 .interrogations
                                 .iter()
@@ -327,6 +332,7 @@ impl Display {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SlotPeriodData {
+    has_group_list: bool,
     slots: Vec<Option<BTreeMap<u32, Option<non_empty_string::NonEmptyString>>>>,
 }
 
@@ -431,7 +437,6 @@ impl RelmColumn for WeekColumn {
         relm4::view! {
             root = gtk::Button {
                 set_size_request: (50,30),
-                set_tooltip_text: Some("Modifier la colle"),
             },
         }
 
@@ -460,6 +465,12 @@ impl RelmColumn for WeekColumn {
                     .collect();
                 root.set_label(&group_str.join(","));
                 root.set_visible(true);
+                root.set_sensitive(period_slots.has_group_list);
+                if period_slots.has_group_list {
+                    root.set_tooltip_text(Some("Modifier la colle"));
+                } else {
+                    root.set_tooltip_text(Some("Aucune liste de groupes définie pour cette colle"));
+                }
 
                 let sender = item.sender.clone();
                 let slot_id = item.data.slot_id;
