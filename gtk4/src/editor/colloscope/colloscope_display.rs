@@ -3,7 +3,7 @@ use gtk::prelude::{OrientableExt, WidgetExt};
 use relm4::gtk;
 use relm4::{Component, ComponentParts, ComponentSender};
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub enum DisplayInput {
@@ -202,6 +202,7 @@ impl Display {
             let Some(subject_slots) = self.slots.subject_map.get(subject_id) else {
                 continue;
             };
+
             for (slot_id, slot) in &subject_slots.ordered_slots {
                 let mut period_map = BTreeMap::new();
 
@@ -222,6 +223,17 @@ impl Display {
                         continue;
                     };
 
+                    let group_list_id = match self.group_lists.subjects_associations.get(period_id)
+                    {
+                        Some(period_associations) => period_associations.get(subject_id),
+                        None => None,
+                    };
+
+                    let group_list = match group_list_id {
+                        Some(id) => self.group_lists.group_list_map.get(id),
+                        None => None,
+                    };
+
                     period_map.insert(
                         *period_id,
                         SlotPeriodData {
@@ -229,9 +241,26 @@ impl Display {
                                 .interrogations
                                 .iter()
                                 .map(|interrogation_opt| match interrogation_opt {
-                                    Some(interrogation) => {
-                                        Some(interrogation.assigned_groups.clone())
-                                    }
+                                    Some(interrogation) => Some(
+                                        interrogation
+                                            .assigned_groups
+                                            .iter()
+                                            .map(|num| {
+                                                (
+                                                    *num,
+                                                    match group_list {
+                                                        Some(list) => list
+                                                            .prefilled_groups
+                                                            .groups
+                                                            .get(*num as usize)
+                                                            .map(|group| group.name.clone())
+                                                            .flatten(),
+                                                        None => None,
+                                                    },
+                                                )
+                                            })
+                                            .collect(),
+                                    ),
                                     None => None,
                                 })
                                 .collect(),
@@ -277,7 +306,7 @@ impl Display {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SlotPeriodData {
-    slots: Vec<Option<BTreeSet<u32>>>,
+    slots: Vec<Option<BTreeMap<u32, Option<non_empty_string::NonEmptyString>>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -396,7 +425,13 @@ impl RelmColumn for WeekColumn {
 
         match groups_opt {
             Some(groups) => {
-                let group_str: Vec<_> = groups.iter().map(|x| x.to_string()).collect();
+                let group_str: Vec<_> = groups
+                    .iter()
+                    .map(|(num, name_opt)| match name_opt {
+                        Some(name) => name.clone().into_inner(),
+                        None => (*num + 1).to_string(),
+                    })
+                    .collect();
                 root.set_label(&group_str.join(","));
                 root.remove_css_class("background");
             }
