@@ -17,6 +17,7 @@ pub enum ColloscopeInput {
         collomatique_state_colloscopes::periods::Periods,
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::slots::Slots,
+        collomatique_state_colloscopes::teachers::Teachers,
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::group_lists::GroupLists,
         collomatique_state_colloscopes::colloscopes::Colloscope,
@@ -30,6 +31,7 @@ pub struct Colloscope {
     periods: collomatique_state_colloscopes::periods::Periods,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     slots: collomatique_state_colloscopes::slots::Slots,
+    teachers: collomatique_state_colloscopes::teachers::Teachers,
     students: collomatique_state_colloscopes::students::Students,
     group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
@@ -152,6 +154,7 @@ impl Component for Colloscope {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             slots: collomatique_state_colloscopes::slots::Slots::default(),
+            teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
@@ -174,6 +177,7 @@ impl Component for Colloscope {
                 periods,
                 subjects,
                 slots,
+                teachers,
                 students,
                 group_lists,
                 colloscope,
@@ -181,6 +185,7 @@ impl Component for Colloscope {
                 self.periods = periods;
                 self.subjects = subjects;
                 self.slots = slots;
+                self.teachers = teachers;
                 self.students = students;
                 self.group_lists = group_lists;
                 self.colloscope = colloscope;
@@ -258,6 +263,7 @@ impl Colloscope {
                 self.periods.clone(),
                 self.subjects.clone(),
                 self.slots.clone(),
+                self.teachers.clone(),
                 self.students.clone(),
                 self.group_lists.clone(),
                 self.colloscope.clone(),

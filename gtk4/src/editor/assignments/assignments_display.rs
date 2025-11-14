@@ -385,7 +385,7 @@ impl PeriodEntry {
             .collect();
 
         let Some((first_modified, to_remove_count, to_add_count)) =
-            compute_update_data(&self.current_items, &new_items)
+            crate::tools::dynamic_column_view::compute_update_data(&self.current_items, &new_items)
         else {
             return;
         };
@@ -406,55 +406,6 @@ impl PeriodEntry {
         );
         self.current_items = new_items;
     }
-}
-
-fn compute_update_data<T: Eq>(
-    old_list: &Vec<T>,
-    new_list: &Vec<T>,
-) -> Option<(usize, usize, usize)> {
-    let mut first_modified = 0usize;
-    let mut count_to_remove = 0usize;
-    let mut count_to_add = 0usize;
-    if old_list.len() != new_list.len() {
-        let min_len = old_list.len().min(new_list.len());
-        first_modified = min_len;
-        for i in 0..min_len {
-            if new_list[i] != old_list[i] {
-                first_modified = i;
-                break;
-            }
-        }
-
-        count_to_remove = old_list.len() - first_modified;
-        count_to_add = new_list.len() - first_modified;
-    } else if old_list.len() == new_list.len() {
-        first_modified = old_list.len();
-        let mut last_modified = None;
-        for i in 0..old_list.len() {
-            if new_list[i] != old_list[i] {
-                if i < first_modified {
-                    first_modified = i;
-                }
-                match last_modified {
-                    Some(val) => {
-                        if i > val {
-                            last_modified = Some(i);
-                        }
-                    }
-                    None => last_modified = Some(i),
-                }
-            }
-        }
-
-        let Some(last_modified) = last_modified else {
-            return None;
-        };
-
-        count_to_remove = last_modified - first_modified + 1;
-        count_to_add = count_to_remove;
-    }
-
-    Some((first_modified, count_to_remove, count_to_add))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

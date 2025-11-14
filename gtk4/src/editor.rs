@@ -412,6 +412,12 @@ impl EditorPanel {
                     .get_data()
                     .get_inner_data()
                     .params
+                    .teachers
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
                     .students
                     .clone(),
                 self.data
