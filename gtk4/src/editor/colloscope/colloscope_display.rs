@@ -1,5 +1,5 @@
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
-use gtk::prelude::{OrientableExt, WidgetExt};
+use gtk::prelude::{ButtonExt, OrientableExt, WidgetExt};
 use relm4::gtk;
 use relm4::{Component, ComponentParts, ComponentSender};
 
@@ -392,8 +392,8 @@ struct WeekColumn {
 }
 
 impl RelmColumn for WeekColumn {
-    type Root = gtk::MenuButton;
-    type Widgets = gtk::Label;
+    type Root = gtk::Button;
+    type Widgets = ();
     type Item = SlotItem;
 
     fn column_name(&self) -> String {
@@ -401,16 +401,17 @@ impl RelmColumn for WeekColumn {
     }
 
     fn setup(&self, _item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
-        let root = gtk::MenuButton::new();
-        root.set_size_request(30, 30);
-        let label = gtk::Label::new(None);
-        root.set_child(Some(&label));
-        label.set_halign(gtk::Align::Center);
+        relm4::view! {
+            root = gtk::Button {
+                set_size_request: (50,30),
+                set_tooltip_text: Some("Modifier la colle"),
+            },
+        }
 
-        (root, label)
+        (root, ())
     }
 
-    fn bind(&self, item: &mut Self::Item, label: &mut Self::Widgets, menu_button: &mut Self::Root) {
+    fn bind(&self, item: &mut Self::Item, _widgets: &mut Self::Widgets, root: &mut Self::Root) {
         let period_slots = item
             .data
             .period_map
@@ -430,12 +431,12 @@ impl RelmColumn for WeekColumn {
                         None => (*num + 1).to_string(),
                     })
                     .collect();
-                label.set_label(&group_str.join(","));
-                menu_button.set_visible(true);
+                root.set_label(&group_str.join(","));
+                root.set_visible(true);
             }
             None => {
-                label.set_label("");
-                menu_button.set_visible(false);
+                root.set_label("");
+                root.set_visible(false);
             }
         }
     }
