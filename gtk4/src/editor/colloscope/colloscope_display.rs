@@ -1,7 +1,6 @@
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
 use gtk::prelude::{OrientableExt, WidgetExt};
 use relm4::gtk;
-use relm4::gtk::prelude::BoxExt;
 use relm4::{Component, ComponentParts, ComponentSender};
 
 use std::collections::BTreeMap;
@@ -55,21 +54,16 @@ impl Component for Display {
         #[root]
         gtk::Box {
             set_orientation: gtk::Orientation::Horizontal,
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
+            gtk::ScrolledWindow {
                 set_hexpand: true,
-                add_css_class: "view",
+                set_vexpand: true,
+                set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
                 #[watch]
                 set_visible: model.issue.is_none(),
-                gtk::ScrolledWindow {
-                    set_hexpand: true,
-                    set_size_request: (-1,200),
-                    set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-                    #[local_ref]
-                    column_view_widget -> gtk::ColumnView {
-                        add_css_class: "frame",
-                    },
-                }
+                #[local_ref]
+                column_view_widget -> gtk::ColumnView {
+                    add_css_class: "frame",
+                },
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
@@ -398,8 +392,8 @@ struct WeekColumn {
 }
 
 impl RelmColumn for WeekColumn {
-    type Root = gtk::Box;
-    type Widgets = (gtk::MenuButton, gtk::Label);
+    type Root = gtk::MenuButton;
+    type Widgets = gtk::Label;
     type Item = SlotItem;
 
     fn column_name(&self) -> String {
@@ -407,29 +401,16 @@ impl RelmColumn for WeekColumn {
     }
 
     fn setup(&self, _item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
-        let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        let root = gtk::MenuButton::new();
         root.set_size_request(30, 30);
-
-        let scrolled_window = gtk::ScrolledWindow::new();
-        root.append(&scrolled_window);
-        scrolled_window.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Never);
-
-        let menu_button = gtk::MenuButton::new();
-        scrolled_window.set_child(Some(&menu_button));
-
         let label = gtk::Label::new(None);
-        menu_button.set_child(Some(&label));
+        root.set_child(Some(&label));
         label.set_halign(gtk::Align::Center);
 
-        (root, (menu_button, label))
+        (root, label)
     }
 
-    fn bind(
-        &self,
-        item: &mut Self::Item,
-        (menu_button, label): &mut Self::Widgets,
-        _root: &mut Self::Root,
-    ) {
+    fn bind(&self, item: &mut Self::Item, label: &mut Self::Widgets, menu_button: &mut Self::Root) {
         let period_slots = item
             .data
             .period_map

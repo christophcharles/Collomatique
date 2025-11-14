@@ -52,67 +52,71 @@ impl Component for Colloscope {
 
     view! {
         #[root]
-        gtk::ScrolledWindow {
+        gtk::Paned {
             set_hexpand: true,
             set_margin_all: 5,
-            set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-            gtk::Box {
+            set_orientation: gtk::Orientation::Vertical,
+            #[wrap(Some)]
+            set_start_child = &gtk::Box {
+                set_hexpand: true,
+                set_orientation: gtk::Orientation::Vertical,
+                set_spacing: 10,
+                gtk::Box {
+                    set_hexpand: true,
+                    set_orientation: gtk::Orientation::Horizontal,
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        set_label: "Colloscope",
+                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                    },
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_orientation: gtk::Orientation::Horizontal,
+                    },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "accent",
+                        set_sensitive: false,
+                        set_margin_all: 5,
+                        adw::ButtonContent {
+                            set_icon_name: "run-build-configure",
+                            set_label: "Générer le colloscope automatiquement",
+                        },
+                    },
+                },
+                #[local_ref]
+                colloscope_display_box -> gtk::Box {
+                    set_hexpand: true,
+                    set_vexpand: true,
+                },
+            },
+            #[wrap(Some)]
+            set_end_child = &gtk::Box {
                 set_hexpand: true,
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
-                set_spacing: 30,
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_spacing: 10,
-                    gtk::Box {
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        set_margin_top: 10,
+                        set_label: "Listes de groupes",
+                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                    },
+                    gtk::ScrolledWindow {
                         set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_label: "Colloscope",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                        },
-                        gtk::Box {
+                        set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                        #[local_ref]
+                        list_box -> gtk::ListBox {
                             set_hexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
+                            add_css_class: "boxed-list",
+                            set_selection_mode: gtk::SelectionMode::None,
+                            #[watch]
+                            set_visible: !model.colloscope.group_lists.is_empty(),
                         },
-                        gtk::Button {
-                            add_css_class: "frame",
-                            add_css_class: "accent",
-                            set_sensitive: false,
-                            set_margin_all: 5,
-                            adw::ButtonContent {
-                                set_icon_name: "run-build-configure",
-                                set_label: "Générer le colloscope automatiquement",
-                            },
-                        },
-                    },
-                    #[local_ref]
-                    colloscope_display_box -> gtk::Box {
-                        set_hexpand: true,
-                    },
-                },
-                gtk::Box {
-                    set_hexpand: true,
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_spacing: 10,
-                    gtk::Box {
-                        set_hexpand: true,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_label: "Listes de groupes",
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                        },
-                    },
-                    #[local_ref]
-                    list_box -> gtk::ListBox {
-                        set_hexpand: true,
-                        add_css_class: "boxed-list",
-                        set_selection_mode: gtk::SelectionMode::None,
-                        #[watch]
-                        set_visible: !model.colloscope.group_lists.is_empty(),
                     },
                     gtk::Label {
                         set_halign: gtk::Align::Start,
@@ -122,7 +126,7 @@ impl Component for Colloscope {
                         set_visible: model.colloscope.group_lists.is_empty(),
                     },
                 },
-            }
+            },
         }
     }
 
