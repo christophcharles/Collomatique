@@ -1,9 +1,5 @@
-use std::collections::BTreeSet;
-
-use adw::prelude::{ComboRowExt, PreferencesGroupExt, PreferencesRowExt};
-use gtk::prelude::{
-    AdjustmentExt, BoxExt, ButtonExt, GridExt, GtkWindowExt, OrientableExt, WidgetExt,
-};
+use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
+use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::FactorySender;
@@ -15,6 +11,8 @@ pub struct Dialog {
     should_redraw: bool,
     interrogation: collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
     group_list: collomatique_state_colloscopes::group_lists::GroupList,
+
+    group_entries: FactoryVecDeque<GroupEntry>,
 }
 
 #[derive(Debug)]
@@ -25,6 +23,8 @@ pub enum DialogInput {
     ),
     Cancel,
     Accept,
+
+    UpdateGroupStatus(u32, bool),
 }
 
 #[derive(Debug)]
@@ -74,6 +74,19 @@ impl SimpleComponent for Dialog {
                         set_margin_all: 5,
                         set_spacing: 10,
                         set_orientation: gtk::Orientation::Vertical,
+                        #[local_ref]
+                        group_entries_widget -> adw::PreferencesGroup {
+                            set_title: "",
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: *model.group_list.params.group_count.end() > 0,
+                        },
+                        gtk::Label {
+                            set_label: "Aucun groupe disponible pour cette colle",
+                            #[watch]
+                            set_visible: *model.group_list.params.group_count.end() == 0,
+                        }
                     },
                 },
             }
@@ -85,14 +98,24 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let group_entries = FactoryVecDeque::builder()
+            .launch(adw::PreferencesGroup::default())
+            .forward(sender.input_sender(), |msg| match msg {
+                GroupOutput::UpdateStatus(num, status) => {
+                    DialogInput::UpdateGroupStatus(num, status)
+                }
+            });
+
         let model = Dialog {
             hidden: true,
             should_redraw: false,
             interrogation:
                 collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
             group_list: collomatique_state_colloscopes::group_lists::GroupList::default(),
+            group_entries,
         };
 
+        let group_entries_widget = model.group_entries.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -106,6 +129,24 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.group_list = group_list;
                 self.interrogation = interrogation;
+
+                crate::tools::factories::update_vec_deque(
+                    &mut self.group_entries,
+                    (0..*self.group_list.params.group_count.end())
+                        .into_iter()
+                        .map(|num| GroupData {
+                            num,
+                            name: self
+                                .group_list
+                                .prefilled_groups
+                                .groups
+                                .get(num as usize)
+                                .map(|x| x.name.clone())
+                                .flatten(),
+                            status: self.interrogation.assigned_groups.contains(&num),
+                        }),
+                    |x| GroupInput::UpdateData(x),
+                );
             }
             DialogInput::Cancel => {
                 self.hidden = true;
@@ -116,6 +157,13 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Accepted(self.interrogation.clone()))
                     .unwrap();
             }
+            DialogInput::UpdateGroupStatus(group_num, new_status) => {
+                if new_status {
+                    self.interrogation.assigned_groups.insert(group_num);
+                } else {
+                    self.interrogation.assigned_groups.remove(&group_num);
+                }
+            }
         }
     }
 
@@ -123,6 +171,109 @@ impl SimpleComponent for Dialog {
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GroupData {
+    num: u32,
+    name: Option<non_empty_string::NonEmptyString>,
+    status: bool,
+}
+
+#[derive(Debug)]
+struct GroupEntry {
+    data: GroupData,
+    should_redraw: bool,
+}
+
+#[derive(Debug, Clone)]
+enum GroupInput {
+    UpdateData(GroupData),
+
+    UpdateStatus(bool),
+}
+
+#[derive(Debug)]
+enum GroupOutput {
+    UpdateStatus(u32, bool),
+}
+
+impl GroupEntry {
+    fn generate_group_name(&self) -> String {
+        match &self.data.name {
+            Some(name) => {
+                format!("Groupe {} : {}", self.data.num + 1, name)
+            }
+            None => {
+                format!("Groupe {}", self.data.num + 1)
+            }
+        }
+    }
+}
+
+#[relm4::factory]
+impl FactoryComponent for GroupEntry {
+    type Init = GroupData;
+    type Input = GroupInput;
+    type Output = GroupOutput;
+    type CommandOutput = ();
+    type ParentWidget = adw::PreferencesGroup;
+
+    view! {
+        #[root]
+        adw::SwitchRow {
+            set_hexpand: true,
+            set_use_markup: false,
+            #[watch]
+            set_title: &self.generate_group_name(),
+            #[track(self.should_redraw)]
+            set_active: self.data.status,
+            connect_active_notify[sender] => move |widget| {
+                let status = widget.is_active();
+                sender.input(
+                    GroupInput::UpdateStatus(status)
+                );
+            },
+        }
+    }
+
+    fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self {
+            data,
+            should_redraw: false,
+        }
+    }
+
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        self.should_redraw = false;
+        match msg {
+            GroupInput::UpdateData(new_data) => {
+                self.data = new_data;
+                self.should_redraw = true;
+            }
+            GroupInput::UpdateStatus(new_status) => {
+                if self.data.status == new_status {
+                    return;
+                }
+                self.data.status = new_status;
+                sender
+                    .output(GroupOutput::UpdateStatus(self.data.num, new_status))
+                    .unwrap();
+            }
         }
     }
 }

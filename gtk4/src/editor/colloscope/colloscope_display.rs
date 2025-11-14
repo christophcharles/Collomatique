@@ -157,7 +157,6 @@ impl Component for Display {
                 group_lists,
                 colloscope,
             ) => {
-                let should_rebuild_columns = self.periods != periods;
                 self.periods = periods;
                 self.subjects = subjects;
                 self.slots = slots;
@@ -166,10 +165,8 @@ impl Component for Display {
                 self.group_lists = group_lists;
                 self.colloscope = colloscope;
 
-                if should_rebuild_columns {
-                    self.rebuild_columns();
-                }
                 self.update_display_issue();
+                self.rebuild_columns();
                 self.update_view_wrapper(sender);
             }
             DisplayInput::InterrogationClicked(slot_id, period_id, week_in_period) => {
