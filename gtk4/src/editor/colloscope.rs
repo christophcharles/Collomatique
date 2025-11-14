@@ -123,21 +123,29 @@ impl Component for Colloscope {
                         set_hexpand: true,
                         set_vexpand: true,
                         set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                        #[local_ref]
-                        list_box -> gtk::ListBox {
+                        gtk::Box {
                             set_hexpand: true,
-                            add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
-                            #[watch]
-                            set_visible: !model.colloscope.group_lists.is_empty(),
+                            set_orientation: gtk::Orientation::Vertical,
+                            #[local_ref]
+                            list_box -> gtk::ListBox {
+                                set_hexpand: true,
+                                add_css_class: "boxed-list",
+                                set_selection_mode: gtk::SelectionMode::None,
+                                #[watch]
+                                set_visible: !model.colloscope.group_lists.is_empty(),
+                            },
+                            gtk::Label {
+                                set_halign: gtk::Align::Start,
+                                set_label: "<i>Aucune liste à afficher</i>",
+                                set_use_markup: true,
+                                #[watch]
+                                set_visible: model.colloscope.group_lists.is_empty(),
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                            },
                         },
-                    },
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_label: "<i>Aucune liste à afficher</i>",
-                        set_use_markup: true,
-                        #[watch]
-                        set_visible: model.colloscope.group_lists.is_empty(),
                     },
                 },
             },

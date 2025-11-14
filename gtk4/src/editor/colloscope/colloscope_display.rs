@@ -78,33 +78,44 @@ impl Component for Display {
                     add_css_class: "frame",
                 },
             },
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                set_label: "<i>Aucune période à afficher</i>",
-                set_use_markup: true,
+            gtk::Box {
+                set_hexpand: true,
+                set_vexpand: true,
+                set_orientation: gtk::Orientation::Vertical,
                 #[watch]
-                set_visible: model.issue == Some(DisplayIssue::NoPeriods),
-            },
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                set_label: "<i>Aucune semaine de colle à afficher</i>",
-                set_use_markup: true,
-                #[watch]
-                set_visible: model.issue == Some(DisplayIssue::NoWeeks),
-            },
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                set_label: "<i>Aucune matière à afficher</i>",
-                set_use_markup: true,
-                #[watch]
-                set_visible: model.issue == Some(DisplayIssue::NoSubjects),
-            },
-            gtk::Label {
-                set_halign: gtk::Align::Start,
-                set_label: "<i>Aucun créneau de colles à afficher</i>",
-                set_use_markup: true,
-                #[watch]
-                set_visible: model.issue == Some(DisplayIssue::NoSlots),
+                set_visible: model.issue.is_some(),
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    set_label: "<i>Aucune période à afficher</i>",
+                    set_use_markup: true,
+                    #[watch]
+                    set_visible: model.issue == Some(DisplayIssue::NoPeriods),
+                },
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    set_label: "<i>Aucune semaine de colle à afficher</i>",
+                    set_use_markup: true,
+                    #[watch]
+                    set_visible: model.issue == Some(DisplayIssue::NoWeeks),
+                },
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    set_label: "<i>Aucune matière à afficher</i>",
+                    set_use_markup: true,
+                    #[watch]
+                    set_visible: model.issue == Some(DisplayIssue::NoSubjects),
+                },
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    set_label: "<i>Aucun créneau de colles à afficher</i>",
+                    set_use_markup: true,
+                    #[watch]
+                    set_visible: model.issue == Some(DisplayIssue::NoSlots),
+                },
+                gtk::Box {
+                    set_hexpand: true,
+                    set_vexpand: true,
+                },
             },
         },
     }
