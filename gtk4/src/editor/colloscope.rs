@@ -10,6 +10,7 @@ use collomatique_ops::ColloscopeUpdateOp;
 mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
+mod interrogation_dialog;
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -25,6 +26,12 @@ pub enum ColloscopeInput {
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     GroupListAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeGroupList),
+
+    EditInterrogation(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::PeriodId,
+        usize,
+    ),
 }
 
 pub struct Colloscope {
@@ -39,8 +46,14 @@ pub struct Colloscope {
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     group_list_dialog: Controller<group_list_dialog::Dialog>,
     colloscope_display: Controller<colloscope_display::Display>,
+    interrogation_dialog: Controller<interrogation_dialog::Dialog>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
+    edited_interrogation: Option<(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::PeriodId,
+        usize,
+    )>,
 }
 
 #[relm4::component(pub)]
@@ -152,7 +165,21 @@ impl Component for Colloscope {
                 }
             });
 
-        let colloscope_display = colloscope_display::Display::builder().launch(()).detach();
+        let colloscope_display = colloscope_display::Display::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                colloscope_display::DisplayOutput::InterrogationClicked(
+                    slot_id,
+                    period_id,
+                    week_in_period,
+                ) => ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period),
+            },
+        );
+
+        let interrogation_dialog = interrogation_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
 
         let model = Colloscope {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -166,6 +193,8 @@ impl Component for Colloscope {
             group_list_dialog,
             edited_group_list: None,
             colloscope_display,
+            interrogation_dialog,
+            edited_interrogation: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -226,6 +255,13 @@ impl Component for Colloscope {
                         group_list_id,
                         collo_group_list,
                     ))
+                    .unwrap();
+            }
+            ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period) => {
+                self.edited_interrogation = Some((slot_id, period_id, week_in_period));
+                self.interrogation_dialog
+                    .sender()
+                    .send(interrogation_dialog::DialogInput::Show)
                     .unwrap();
             }
         }

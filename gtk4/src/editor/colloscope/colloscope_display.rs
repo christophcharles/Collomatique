@@ -1,5 +1,6 @@
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
-use gtk::prelude::{ButtonExt, OrientableExt, WidgetExt};
+use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
+use libadwaita::glib::SignalHandlerId;
 use relm4::gtk;
 use relm4::{Component, ComponentParts, ComponentSender};
 
@@ -16,10 +17,22 @@ pub enum DisplayInput {
         collomatique_state_colloscopes::group_lists::GroupLists,
         collomatique_state_colloscopes::colloscopes::Colloscope,
     ),
+
+    InterrogationClicked(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::PeriodId,
+        usize,
+    ),
 }
 
 #[derive(Debug)]
-pub enum DisplayOutput {}
+pub enum DisplayOutput {
+    InterrogationClicked(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::PeriodId,
+        usize,
+    ),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum DisplayIssue {
@@ -122,7 +135,7 @@ impl Component for Display {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             DisplayInput::Update(
                 periods,
@@ -143,7 +156,16 @@ impl Component for Display {
 
                 self.update_display_issue();
                 self.rebuild_columns();
-                self.update_view_wrapper();
+                self.update_view_wrapper(sender);
+            }
+            DisplayInput::InterrogationClicked(slot_id, period_id, week_in_period) => {
+                sender
+                    .output(DisplayOutput::InterrogationClicked(
+                        slot_id,
+                        period_id,
+                        week_in_period,
+                    ))
+                    .unwrap();
             }
         }
     }
@@ -190,7 +212,7 @@ impl Display {
         }
     }
 
-    fn update_view_wrapper(&mut self) {
+    fn update_view_wrapper(&mut self, sender: ComponentSender<Self>) {
         let mut new_items = vec![];
 
         for (subject_id, subject) in &self.subjects.ordered_subject_list {
@@ -293,7 +315,11 @@ impl Display {
                 .into_iter()
                 .skip(first_modified)
                 .take(to_add_count)
-                .map(|data| SlotItem { data }),
+                .map(|data| SlotItem {
+                    data,
+                    sender: sender.clone(),
+                    handler_ids: BTreeMap::new(),
+                }),
         );
         self.current_items = new_items;
     }
@@ -313,9 +339,10 @@ struct SlotItemData {
     period_map: BTreeMap<collomatique_state_colloscopes::PeriodId, SlotPeriodData>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct SlotItem {
     data: SlotItemData,
+    sender: ComponentSender<Display>,
+    handler_ids: BTreeMap<(collomatique_state_colloscopes::PeriodId, usize), SignalHandlerId>,
 }
 
 #[derive(Debug, Clone)]
@@ -433,6 +460,21 @@ impl RelmColumn for WeekColumn {
                     .collect();
                 root.set_label(&group_str.join(","));
                 root.set_visible(true);
+
+                let sender = item.sender.clone();
+                let slot_id = item.data.slot_id;
+                let period_id = self.period_id;
+                let week_in_period = self.week_in_period;
+                item.handler_ids.insert(
+                    (period_id, week_in_period),
+                    root.connect_clicked(move |_widget| {
+                        sender.input(DisplayInput::InterrogationClicked(
+                            slot_id,
+                            period_id,
+                            week_in_period,
+                        ));
+                    }),
+                );
             }
             None => {
                 root.set_label("");
@@ -441,6 +483,12 @@ impl RelmColumn for WeekColumn {
         }
     }
 
-    fn unbind(&self, _item: &mut Self::Item, _widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+    fn unbind(&self, item: &mut Self::Item, _widgets: &mut Self::Widgets, root: &mut Self::Root) {
+        if let Some(id) = item
+            .handler_ids
+            .remove(&(self.period_id, self.week_in_period))
+        {
+            root.disconnect(id);
+        }
     }
 }
