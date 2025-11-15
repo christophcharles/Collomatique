@@ -73,7 +73,7 @@ pub enum OutputType {
 pub enum InputType {
     Int,
     Bool,
-    Primitive(String),    // Student, Week, etc
+    Object(String),       // Student, Week, etc
     List(Box<InputType>), // [Student], [[Int]], etc.
 }
 
@@ -444,7 +444,7 @@ impl InputType {
                 match type_name {
                     "Int" => Ok(InputType::Int),
                     "Bool" => Ok(InputType::Bool),
-                    _ => Ok(InputType::Primitive(type_name.to_string())),
+                    _ => Ok(InputType::Object(type_name.to_string())),
                 }
             }
             Rule::input_type_name => {
