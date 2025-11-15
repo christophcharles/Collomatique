@@ -43,7 +43,7 @@ pub enum Statement {
     Let {
         docstring: Vec<String>,
         public: bool,
-        name: String,
+        name: Spanned<String>,
         params: Vec<Spanned<Param>>,
         output_type: OutputType, // Declared type
         body: Spanned<Expr>,     // Body (can be LinExpr or Constraint)
@@ -310,7 +310,10 @@ impl Statement {
                 }
                 Rule::ident => {
                     if name.is_none() {
-                        name = Some(inner_pair.as_str().to_string());
+                        name = Some(Spanned::new(
+                            inner_pair.as_str().to_string(),
+                            Span::from_pest(&inner_pair),
+                        ));
                     }
                 }
                 Rule::params => {

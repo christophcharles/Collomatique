@@ -17,7 +17,7 @@ fn visitor_handles_let_statement() {
             body,
             ..
         } => {
-            assert_eq!(name, "f");
+            assert_eq!(name.node, "f");
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].node.name, "x");
             assert!(matches!(params[0].node.typ, InputType::Int));

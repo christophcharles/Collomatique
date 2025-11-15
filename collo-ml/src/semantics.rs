@@ -1,3 +1,4 @@
+use crate::ast::{Expr, Param, Span, Spanned};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6,6 +7,18 @@ pub enum InputType {
     Bool,
     Object(String),
     List(Box<InputType>),
+}
+
+impl From<crate::ast::InputType> for InputType {
+    fn from(value: crate::ast::InputType) -> Self {
+        use crate::ast::InputType as IT;
+        match value {
+            IT::Bool => InputType::Bool,
+            IT::Int => InputType::Int,
+            IT::Object(name) => InputType::Object(name),
+            IT::List(sub_typ) => InputType::List(Box::new((*sub_typ).into())),
+        }
+    }
 }
 
 impl std::fmt::Display for InputType {
@@ -39,6 +52,16 @@ pub type ArgsType = Vec<InputType>;
 pub enum OutputType {
     LinExpr,
     Constraint,
+}
+
+impl From<crate::ast::OutputType> for OutputType {
+    fn from(value: crate::ast::OutputType) -> Self {
+        use crate::ast::OutputType as OT;
+        match value {
+            OT::Constraint => OutputType::Constraint,
+            OT::LinExpr => OutputType::LinExpr,
+        }
+    }
 }
 
 impl std::fmt::Display for OutputType {
@@ -174,6 +197,21 @@ impl GlobalEnv {
         self.functions.get(name).cloned()
     }
 
+    fn register_fn(
+        &mut self,
+        name: &str,
+        fn_typ: FunctionType,
+        span: Span,
+        type_info: &mut TypeInfo,
+    ) {
+        assert!(!self.functions.contains_key(name));
+
+        self.functions
+            .insert(name.to_string(), (fn_typ.clone(), span.clone()));
+
+        type_info.types.insert(span, fn_typ.into());
+    }
+
     pub fn lookup_var(&self, name: &str) -> Option<(ArgsType, Option<Span>)> {
         self.variables.get(name).cloned()
     }
@@ -194,35 +232,116 @@ impl GlobalEnv {
     }
 }
 
-use crate::ast::Span;
-
 #[derive(Debug, Error)]
 pub enum SemError {
     #[error("Unknown identifier \"{identifier}\" at {span:?}")]
     UnknownIdentifer { identifier: String, span: Span },
-    #[error("Identifier type mismatch: \"{identifier}\" at {span:?} has type {found} but type {expected} expected.")]
-    IdentifierTypeMismatch {
+    #[error("Function type mismatch: \"{identifier}\" at {span:?} has type {found} but type {expected} expected.")]
+    FunctionTypeMismatch {
         identifier: String,
         span: Span,
-        expected: GenericType,
-        found: GenericType,
+        expected: FunctionType,
+        found: FunctionType,
     },
-    #[error("Variable {identifier} at {span:?} is already defined ({here:?})")]
+    #[error("Variable \"{identifier}\" at {span:?} is already defined ({here:?})")]
     VariableAlreadyDefined {
         identifier: String,
         span: Span,
         here: Option<Span>,
     },
+    #[error("Function \"{identifier}\" at {span:?} is already defined ({here:?})")]
+    FunctionAlreadyDefined {
+        identifier: String,
+        span: Span,
+        here: Span,
+    },
+    #[error("Input type {typ} at {span:?} is unknown")]
+    UnknownInputType { typ: String, span: Span },
+    #[error("Parameter \"{identifier}\" is already defined ({here:?}).")]
+    ParameterAlreadyDefined {
+        identifier: String,
+        span: Span,
+        here: Span,
+    },
+    #[error("Body type mismatch: body for function {func} at {span:?} has type {found} but type {expected} expected.")]
+    BodyTypeMismatch {
+        func: String,
+        span: Span,
+        expected: OutputType,
+        found: OutputType,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct LocalEnv {
-    scopes: Vec<HashMap<String, InputType>>,
+    scopes: Vec<HashMap<String, (InputType, Span)>>,
+    current_scope: HashMap<String, (InputType, Span)>,
 }
 
 impl LocalEnv {
     fn new() -> Self {
         LocalEnv::default()
+    }
+
+    fn lookup_in_current_scope(&self, ident: &str) -> Option<(InputType, Span)> {
+        self.current_scope.get(ident).cloned()
+    }
+
+    fn lookup_ident(&self, ident: &str) -> Option<(InputType, Span)> {
+        // We don't look in current scope as these variables are not yet accessible
+        for scope in self.scopes.iter().rev() {
+            let Some(val) = scope.get(ident) else {
+                continue;
+            };
+            return Some(val.clone());
+        }
+        None
+    }
+
+    fn push_scope(&mut self) {
+        let mut old_scope = HashMap::new();
+        std::mem::swap(&mut old_scope, &mut self.current_scope);
+
+        self.scopes.push(old_scope);
+    }
+
+    fn pop_scope(&mut self) {
+        assert!(!self.scopes.is_empty());
+        self.current_scope = self.scopes.pop().unwrap();
+    }
+
+    fn register_identifier(
+        &mut self,
+        ident: &str,
+        span: Span,
+        typ: InputType,
+        type_info: &mut TypeInfo,
+    ) {
+        assert!(!self.current_scope.contains_key(ident));
+
+        self.current_scope
+            .insert(ident.to_string(), (typ.clone(), span.clone()));
+        type_info.types.insert(span, typ.into());
+    }
+
+    fn check_lin_expr(
+        &mut self,
+        global_env: &GlobalEnv,
+        lin_expr: &crate::ast::LinExpr,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+    ) {
+        todo!()
+    }
+
+    fn check_constraint(
+        &mut self,
+        global_env: &GlobalEnv,
+        constraint_expr: &crate::ast::Constraint,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+    ) {
+        todo!()
     }
 }
 
@@ -252,53 +371,165 @@ impl GlobalEnv {
     ) {
         match statement {
             crate::ast::Statement::Let {
-                docstring,
+                docstring: _,
                 public,
                 name,
                 params,
                 output_type,
                 body,
-            } => {
-                todo!()
-            }
-
+            } => self.expand_with_let_statement(
+                *public,
+                name,
+                params,
+                output_type,
+                body,
+                type_info,
+                errors,
+            ),
             crate::ast::Statement::Reify {
                 docstring: _,
                 constraint_name,
                 var_name,
-            } => match self.lookup_fn(&constraint_name.node) {
-                None => errors.push(SemError::UnknownIdentifer {
-                    identifier: constraint_name.node.clone(),
-                    span: constraint_name.span.clone(),
-                }),
-                Some(fn_type) => match fn_type.0.output {
-                    OutputType::LinExpr => {
-                        let expected_type = FunctionType {
-                            output: OutputType::Constraint,
-                            ..fn_type.0.clone()
-                        };
-                        errors.push(SemError::IdentifierTypeMismatch {
-                            identifier: constraint_name.node.clone(),
-                            span: constraint_name.span.clone(),
-                            expected: expected_type.into(),
-                            found: fn_type.0.into(),
+            } => self.expand_with_reify_statement(constraint_name, var_name, type_info, errors),
+        }
+    }
+
+    fn expand_with_let_statement(
+        &mut self,
+        public: bool,
+        name: &Spanned<String>,
+        params: &Vec<Spanned<Param>>,
+        output_type: &crate::ast::OutputType,
+        body: &Spanned<Expr>,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+    ) {
+        match self.lookup_fn(&name.node) {
+            Some((_fn_type, span)) => {
+                errors.push(SemError::FunctionAlreadyDefined {
+                    identifier: name.node.clone(),
+                    span: name.span.clone(),
+                    here: span.clone(),
+                });
+            }
+            None => {
+                let mut local_env = LocalEnv::new();
+                let mut error_in_param_typs = false;
+                for param in params {
+                    let param_typ = param.node.typ.clone().into();
+                    if !self.validate_type(&param_typ) {
+                        errors.push(SemError::UnknownInputType {
+                            typ: param_typ.to_string(),
+                            span: param.span.clone(),
                         });
+                        error_in_param_typs = true;
+                    } else if let Some((_typ, span)) =
+                        local_env.lookup_in_current_scope(&param.node.name)
+                    {
+                        errors.push(SemError::ParameterAlreadyDefined {
+                            identifier: param.node.name.clone(),
+                            span: param.span.clone(),
+                            here: span,
+                        });
+                    } else {
+                        local_env.register_identifier(
+                            &param.node.name,
+                            param.span.clone(),
+                            param_typ,
+                            type_info,
+                        );
                     }
-                    OutputType::Constraint => match self.lookup_var(&var_name.node) {
-                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
-                            identifier: var_name.node.clone(),
-                            span: var_name.span.clone(),
-                            here: span_opt,
-                        }),
-                        None => {
-                            self.register_var(
-                                &var_name.node,
-                                fn_type.0.args.clone(),
-                                var_name.span.clone(),
-                                type_info,
-                            );
+                }
+
+                match &body.node {
+                    Expr::LinExpr(_) => {
+                        if *output_type != crate::ast::OutputType::LinExpr {
+                            errors.push(SemError::BodyTypeMismatch {
+                                func: name.node.clone(),
+                                span: body.span.clone(),
+                                expected: OutputType::Constraint,
+                                found: OutputType::LinExpr,
+                            });
                         }
-                    },
+                    }
+                    Expr::Constraint(_) => {
+                        if *output_type != crate::ast::OutputType::Constraint {
+                            errors.push(SemError::BodyTypeMismatch {
+                                func: name.node.clone(),
+                                span: body.span.clone(),
+                                expected: OutputType::LinExpr,
+                                found: OutputType::Constraint,
+                            });
+                        }
+                    }
+                }
+
+                local_env.push_scope();
+
+                match &body.node {
+                    Expr::LinExpr(lin_expr) => {
+                        local_env.check_lin_expr(self, lin_expr, type_info, errors)
+                    }
+                    Expr::Constraint(constraint) => {
+                        local_env.check_constraint(self, constraint, type_info, errors)
+                    }
+                }
+
+                if !error_in_param_typs {
+                    let args = params
+                        .iter()
+                        .map(|param| param.node.typ.clone().into())
+                        .collect();
+                    let fn_typ = FunctionType {
+                        public,
+                        args,
+                        output: output_type.clone().into(),
+                    };
+                    self.register_fn(&name.node, fn_typ, name.span.clone(), type_info);
+                }
+            }
+        }
+    }
+
+    fn expand_with_reify_statement(
+        &mut self,
+        constraint_name: &Spanned<String>,
+        var_name: &Spanned<String>,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+    ) {
+        match self.lookup_fn(&constraint_name.node) {
+            None => errors.push(SemError::UnknownIdentifer {
+                identifier: constraint_name.node.clone(),
+                span: constraint_name.span.clone(),
+            }),
+            Some(fn_type) => match fn_type.0.output {
+                OutputType::LinExpr => {
+                    let expected_type = FunctionType {
+                        output: OutputType::Constraint,
+                        ..fn_type.0.clone()
+                    };
+                    errors.push(SemError::FunctionTypeMismatch {
+                        identifier: constraint_name.node.clone(),
+                        span: constraint_name.span.clone(),
+                        expected: expected_type.into(),
+                        found: fn_type.0.into(),
+                    });
+                }
+                OutputType::Constraint => match self.lookup_var(&var_name.node) {
+                    Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                        identifier: var_name.node.clone(),
+                        span: var_name.span.clone(),
+                        here: span_opt,
+                    }),
+                    None => {
+                        self.register_var(
+                            &var_name.node,
+                            fn_type.0.args.clone(),
+                            var_name.span.clone(),
+                            type_info,
+                        );
+                    }
                 },
             },
         }
