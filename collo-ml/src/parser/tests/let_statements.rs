@@ -10,7 +10,7 @@ fn let_accepts_lin_expr_output() {
         "let total() -> LinExpr = sum x in @[Student]: $V(x);",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -25,7 +25,7 @@ fn let_accepts_constraint_output() {
         "let combined() -> Constraint = $V1(x) <= 10 and $V2(y) >= 0;",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -37,7 +37,7 @@ fn let_accepts_pub_modifier() {
         "pub let rule() -> Constraint = $V(x) <= 10;",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -50,7 +50,7 @@ fn let_accepts_multiple_parameters() {
         "let compute(a: Int, b: Int, c: Bool) -> LinExpr = a * $V(b);",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -63,7 +63,7 @@ fn let_accepts_list_type_parameters() {
         "let nested(grid: [[Int]]) -> LinExpr = $V(x);",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -75,7 +75,7 @@ fn let_accepts_no_parameters() {
         "let global_rule() -> Constraint = $GlobalVar(x) <= 100;",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -90,7 +90,7 @@ fn let_accepts_complex_lin_expr() {
         "let j(x: Student) -> LinExpr = $V(x) + compute_other(x);",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -104,7 +104,7 @@ fn let_accepts_complex_constraint() {
         "let capacity() -> Constraint = (sum x in @[X]: $V(x)) <= 100;",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -117,7 +117,7 @@ fn let_accepts_docstrings() {
         "## Comment\npub let g(x: Student) -> LinExpr = $V(x);",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -131,7 +131,7 @@ fn let_rejects_invalid_output_types() {
         "let i() -> [Subject] = pairing;",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(
             result.is_err(),
             "Should not parse '{}' (invalid output type): {:?}",
@@ -145,7 +145,7 @@ fn let_rejects_invalid_output_types() {
 fn let_rejects_missing_output_type() {
     let cases = vec!["let f() = 5;", "let g(x: Student) = $V(x);"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(
             result.is_err(),
             "Should not parse '{}' (missing output type): {:?}",
@@ -163,7 +163,7 @@ fn let_rejects_missing_body() {
         "let h() -> LinExpr =;",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(
             result.is_err(),
             "Should not parse '{}' (missing body): {:?}",
@@ -184,7 +184,21 @@ fn let_rejects_invalid_syntax() {
         "let f() -> LinExpr == 5;",            // wrong assignment operator
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn statement_accepts_varied_whitespace() {
+    let cases = vec![
+        "let f()->LinExpr=5;",                 // no spaces
+        "let   f  (  )  ->  LinExpr  =  5  ;", // lots of spaces
+        "let f(\n) -> LinExpr\n= 5\n;",        // newlines
+        "let f() -> LinExpr = 5; # comment",   // trailing comment
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::let_statement_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
