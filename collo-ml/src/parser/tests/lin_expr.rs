@@ -367,3 +367,91 @@ fn lin_expr_complex_nested_scenarios() {
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
+
+#[test]
+fn lin_expr_accepts_pure_arithmetic() {
+    let cases = vec![
+        "2 * 3",
+        "2 * 3 + 4",
+        "10 // 2 + 5",
+        "x * y", // paths
+        "x * y + z",
+        "(a + b) * (c - d)",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::lin_expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn lin_expr_arithmetic_vs_coefficient() {
+    let cases = vec![
+        "2 * $V(x)",       // coefficient * variable
+        "2 * 3",           // pure arithmetic (computable)
+        "$V(x) + 5",       // variable + constant
+        "2 + 3",           // constants (parsed as lin_expr add)
+        "(2 + 3) * $V(x)", // computable coeff * variable
+        "2 * 3 + $V(x)",   // arithmetic + variable
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::lin_expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn lin_expr_mixed_operations() {
+    let cases = vec![
+        "x + y + z",     // all paths
+        "2 * x + 3 * y", // paths (not variables)
+        "a * b + c * d", // all arithmetic on paths
+        "$V(x) + y * z", // variable + arithmetic
+        "x * y + $V(z)", // arithmetic + variable
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::lin_expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn lin_expr_precedence() {
+    let cases = vec![
+        "2 + 3 * 4",     // should be 2 + (3 * 4)
+        "10 - 2 * 3",    // should be 10 - (2 * 3)
+        "a + b * c",     // should be a + (b * c)
+        "$V(x) + 2 * 3", // variable + (mul)
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::lin_expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn lin_expr_computable_in_atom() {
+    let cases = vec![
+        "2 * 3 * 4",         // chained multiplication (computable)
+        "x * y * z",         // chained multiplication on paths
+        "10 // 2 % 3",       // div and mod (computable)
+        "(2 + 3) * (4 + 5)", // parenthesized computables
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::lin_expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn lin_expr_still_rejects_invalid() {
+    let cases = vec![
+        "2 *",           // incomplete
+        "+ 3",           // missing left operand
+        "$V(x) * $V(y)", // can't multiply two variables
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::lin_expr_complete, case);
+        assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
+    }
+}

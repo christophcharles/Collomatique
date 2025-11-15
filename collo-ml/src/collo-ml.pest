@@ -83,16 +83,15 @@ lin_add_sub_expr = { lin_term ~ ((add_op | sub_op) ~ lin_term)* }
 lin_term = { 
     computable_primary ~ "*" ~ lin_atom |           // coefficient * variable
     "(" ~ computable ~ ")" ~ "*" ~ lin_atom |  // (expr) * variable
-    lin_atom |                                // just a variable (implicit coefficient 1)
-    computable_primary |                             // just a number
-    "(" ~ computable ~ ")"                      // (expr) as constant
+    lin_atom                                // just a variable (implicit coefficient 1)
 }
 lin_atom = {
     sum_expr |
     if_lin_expr |
     var_call |
     fn_call |
-    "(" ~ lin_expr ~ ")"
+    "(" ~ lin_expr ~ ")" |
+    computable_mul_div_mod
 }
 sum_expr = { "sum" ~ ident ~ "in" ~ collection_expr ~ ("where" ~ computable)? ~ ":" ~ lin_expr }
 if_lin_expr = { "if" ~ computable ~ "{" ~ lin_expr ~ "}" ~ "else" ~ "{" ~ lin_expr ~ "}" }
