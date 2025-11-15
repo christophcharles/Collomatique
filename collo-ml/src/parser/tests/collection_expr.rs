@@ -185,3 +185,16 @@ fn collection_rejects_multiple_differences() {
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
+
+#[test]
+fn collection_accepts_deeply_nested_operations() {
+    let cases = vec![
+        "((a union b) \\ c) inter d",
+        "(a union (b union c))",
+        "@[Student] \\ (excluded union suspended)",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::collection_expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
