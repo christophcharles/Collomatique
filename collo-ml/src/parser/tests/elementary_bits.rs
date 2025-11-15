@@ -199,3 +199,12 @@ fn input_type_rejects_invalid_syntax() {
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
+
+#[test]
+fn input_type_accepts_deeply_nested_lists() {
+    let cases = vec!["[[[[Int]]]]", "[[[Student]]]"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::input_type_name_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
