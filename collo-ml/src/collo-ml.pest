@@ -40,8 +40,8 @@ reify_statement = { docstring* ~ "reify" ~ ident ~ "as" ~ var_name ~ ";" }
 var_name = ${ "$" ~ ident }
 
 // ========== Let statements ==========
-let_statement = { docstring* ~ pub? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ output_type ~ "=" ~ output ~ ";" }
-pub = { "pub" }
+let_statement = { docstring* ~ pub_modifier? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ output_type ~ "=" ~ output ~ ";" }
+pub_modifier = { "pub" }
 params = { param ~ ("," ~ param)* }
 param = { ident ~ ":" ~ input_type_name }
 
