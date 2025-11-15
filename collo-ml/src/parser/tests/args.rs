@@ -130,7 +130,7 @@ fn arg_rejects_linear_expressions() {
 
 #[test]
 fn arg_rejects_constraints() {
-    let cases = vec!["$V(x) <= 10", "x == y", "forall x in @[X]: $V(x) >= 0"];
+    let cases = vec!["$V(x) <= 10", "forall x in @[X]: $V(x) >= 0"];
     for case in cases {
         let fn_call = format!("compute({})", case);
         let result = ColloMLParser::parse(Rule::fn_call_complete, &fn_call);

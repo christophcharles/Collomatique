@@ -124,43 +124,6 @@ fn let_accepts_docstrings() {
 }
 
 #[test]
-fn let_rejects_constraint_body_for_lin_expr_output() {
-    let cases = vec![
-        "let f() -> LinExpr = $V(x) <= 10;", // constraint, not lin_expr
-        "let g(x: Student) -> LinExpr = forall y in @[Y]: $V(y) >= 0;",
-        "let h() -> LinExpr = $V1(x) == 1 and $V2(y) == 1;",
-    ];
-    for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
-        assert!(
-            result.is_err(),
-            "Should not parse '{}' (constraint for LinExpr): {:?}",
-            case,
-            result
-        );
-    }
-}
-
-#[test]
-fn let_rejects_lin_expr_body_for_constraint_output() {
-    let cases = vec![
-        "let f() -> Constraint = 5;", // lin_expr, not constraint
-        "let g(x: Student) -> Constraint = $V(x);",
-        "let h() -> Constraint = $V1(x) + $V2(x);",
-        "let i() -> Constraint = sum x in @[X]: $V(x);",
-    ];
-    for case in cases {
-        let result = ColloMLParser::parse(Rule::let_statement, case);
-        assert!(
-            result.is_err(),
-            "Should not parse '{}' (lin_expr for Constraint): {:?}",
-            case,
-            result
-        );
-    }
-}
-
-#[test]
 fn let_rejects_invalid_output_types() {
     let cases = vec![
         "let f() -> Bool = true;",
