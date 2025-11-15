@@ -1370,3 +1370,6 @@ impl Path {
         Ok(Path { segments })
     }
 }
+
+#[cfg(test)]
+mod tests;
