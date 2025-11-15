@@ -171,16 +171,29 @@ fn visitor_handles_computable_operations() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
             match &body.node {
-                Expr::LinExpr(LinExpr::Constant(comp)) => {
-                    // Should be Add(Mul(2, 3), 4) due to precedence
-                    match &comp.node {
-                        Computable::Add(left, _right) => {
-                            assert!(matches!(left.node, Computable::Mul(_, _)));
+                Expr::LinExpr(LinExpr::Add(left, right)) => {
+                    // Left should be Mul(Number(2), Constant(Number(3)))
+                    match &left.node {
+                        LinExpr::Mul { coeff, expr } => {
+                            assert!(matches!(coeff.node, Computable::Number(2)));
+                            match &expr.node {
+                                LinExpr::Constant(comp) => {
+                                    assert!(matches!(comp.node, Computable::Number(3)));
+                                }
+                                _ => panic!("Expected second to be Constant(3)"),
+                            }
                         }
-                        _ => panic!("Expected Add with Mul"),
+                        _ => panic!("Expected left to be Constant(Mul)"),
+                    }
+                    // Right should be Constant(4)
+                    match &right.node {
+                        LinExpr::Constant(comp) => {
+                            assert!(matches!(comp.node, Computable::Number(4)));
+                        }
+                        _ => panic!("Expected right to be Constant(4)"),
                     }
                 }
-                _ => panic!("Expected constant"),
+                _ => panic!("Expected Add, got {:?}", body.node),
             }
         }
         _ => panic!(),

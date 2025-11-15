@@ -81,8 +81,8 @@ and_op = _{ "&&" | "and" }
 lin_expr = { lin_add_sub_expr }
 lin_add_sub_expr = { lin_term ~ ((add_op | sub_op) ~ lin_term)* }
 lin_term = { 
-    computable_primary ~ "*" ~ lin_atom |           // coefficient * variable
-    "(" ~ computable ~ ")" ~ "*" ~ lin_atom |  // (expr) * variable
+    computable_primary ~ mul_op ~ lin_atom |           // coefficient * variable
+    "(" ~ computable ~ ")" ~ mul_op ~ lin_atom |  // (expr) * variable
     lin_atom                                // just a variable (implicit coefficient 1)
 }
 lin_atom = {

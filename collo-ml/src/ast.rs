@@ -748,25 +748,19 @@ impl LinExpr {
 
         let first = inner.next().unwrap();
 
-        // Check if there's a multiplication pattern
+        // Check if there's a multiplication pattern (coeff * variable)
         if let Some(second) = inner.peek() {
             if second.as_rule() == Rule::mul_op {
-                // It's coeff * lin_atom
+                // ... existing multiplication handling ...
                 inner.next(); // consume mul_op
                 let atom = inner.next().unwrap();
 
-                // First could be computable_primary or (computable)
                 let coeff_span = Span::from_pest(&first);
                 let coeff = if first.as_rule() == Rule::computable_primary {
                     Spanned::new(Computable::from_primary(first)?, coeff_span)
-                } else if first.as_rule() == Rule::computable {
-                    Spanned::new(Computable::from_pest(first)?, coeff_span)
                 } else {
-                    return Err(AstError::UnexpectedRule {
-                        expected: "computable_primary or computable",
-                        found: first.as_rule(),
-                        span: Span::from_pest(&first),
-                    });
+                    let comp_inner = first.into_inner().next().unwrap();
+                    Spanned::new(Computable::from_pest(comp_inner)?, coeff_span)
                 };
 
                 let expr_span = Span::from_pest(&atom);
@@ -776,25 +770,11 @@ impl LinExpr {
             }
         }
 
-        // Otherwise, it's just an atom or constant
+        // Otherwise, it's just a lin_atom
         match first.as_rule() {
             Rule::lin_atom => Self::from_atom(first),
-            Rule::computable_primary => {
-                let comp_span = Span::from_pest(&first);
-                Ok(LinExpr::Constant(Spanned::new(
-                    Computable::from_primary(first)?,
-                    comp_span,
-                )))
-            }
-            Rule::computable => {
-                let comp_span = Span::from_pest(&first);
-                Ok(LinExpr::Constant(Spanned::new(
-                    Computable::from_pest(first)?,
-                    comp_span,
-                )))
-            }
             _ => Err(AstError::UnexpectedRule {
-                expected: "lin_atom, computable_primary, or computable",
+                expected: "lin_atom",
                 found: first.as_rule(),
                 span: Span::from_pest(&first),
             }),
@@ -814,8 +794,16 @@ impl LinExpr {
             Rule::var_call => Self::from_var_call(inner),
             Rule::fn_call => Self::from_fn_call(inner),
             Rule::lin_expr => Self::from_pest(inner),
+            Rule::computable_mul_div_mod => {
+                let comp_span = Span::from_pest(&inner);
+                Ok(LinExpr::Constant(Spanned::new(
+                    Computable::from_mul_div_mod(inner)?,
+                    comp_span,
+                )))
+            }
             _ => Err(AstError::UnexpectedRule {
-                expected: "sum_expr, if_lin_expr, var_call, fn_call, or lin_expr",
+                expected:
+                    "sum_expr, if_lin_expr, var_call, fn_call, lin_expr, or computable_mul_div_mod",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
             }),
