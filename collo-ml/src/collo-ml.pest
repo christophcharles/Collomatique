@@ -1,0 +1,175 @@
+// ========== General structure ==========
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+COMMENT = _{ (!"##" ~ "#") ~ (!EOL ~ ANY)* }
+file = { SOI ~ statement* ~ EOI }
+string_literal = @{
+    (
+        "\\\\" | "\\\"" | ( !("\"" | "\\") ~ ANY )
+    )*
+}
+statement = { let_statement | reify_statement }
+
+docstring = ${
+    "##" ~ docstring_content ~ EOL
+}
+docstring_content = { (!EOL ~ ANY)* }
+EOL = _{ "\r\n" | "\n" | "\r" }
+
+ident_char = _{ ASCII_ALPHANUMERIC | "_" }
+ident = @{ !(reserved_keyword ~ !ident_char) ~ ASCII_ALPHA ~ ident_char* }
+reserved_keyword = { 
+    "forall" |  // before "for"
+    "inter" |   // before "in"
+    "union" |
+    "reify" |
+    "where" |
+    "else" |
+    "sum" |
+    "let" |
+    "pub" |
+    "not" |
+    "and" |
+    "or" |
+    "as" |
+    "if" |
+    "in"        // shortest, comes last
+}
+
+// ========== Reify statements ==========
+reify_statement = { docstring* ~ "reify" ~ ident ~ "as" ~ var_name ~ ";" }
+var_name = ${ "$" ~ ident }
+
+// ========== Let statements ==========
+let_statement = { docstring* ~ pub? ~ "let" ~ ident ~ "(" ~ params? ~ ")" ~ "->" ~ output ~ ";" }
+pub = { "pub" }
+params = { param ~ ("," ~ param)* }
+param = { ident ~ ":" ~ input_type_name }
+
+// Reserved primitive types
+primitive_input_type = { "Int" | "Bool" | ident }
+input_type_name = { 
+    "[" ~ input_type_name ~ "]" |
+    primitive_input_type
+}
+
+// Only LinExpr and Constraint outputs
+output = {
+    ( "LinExpr" ~ "=" ~ lin_expr) |
+    ( "Constraint" ~ "=" ~ constraint_expr)
+}
+
+// ========== Constraint Expressions ==========
+constraint_expr = { and_expr }
+and_expr = { quantified_expr ~ (and_op ~ quantified_expr)* }
+quantified_expr = { forall | primary_constraint_expr }
+forall = { "forall" ~ ident ~ "in" ~ collection_expr ~ ("where" ~ cond)? ~ ":" ~ constraint_expr }
+primary_constraint_expr = {
+    if_constraint_expr |
+    from_lin_expr |
+    fn_call |
+    "(" ~ constraint_expr ~ ")"
+}
+if_constraint_expr = { "if" ~ cond ~ "{" ~ constraint_expr ~ "}" ~ "else" ~ "{" ~ constraint_expr ~ "}" }
+from_lin_expr = {
+    lin_expr ~ lin_op ~ lin_expr
+}
+lin_op = { "<=" | ">=" | "==" }
+and_op = _{ "&&" | "and" }
+
+// ========== Linear Expressions (affine combinations of variables) ==========
+lin_expr = { lin_add_sub_expr }
+lin_add_sub_expr = { lin_term ~ ((add_op | sub_op) ~ lin_term)* }
+lin_term = { 
+    int_primary ~ "*" ~ lin_atom |           // coefficient * variable
+    "(" ~ int_expr ~ ")" ~ "*" ~ lin_atom |  // (expr) * variable
+    lin_atom |                                // just a variable (implicit coefficient 1)
+    int_primary |                             // just a number
+    "(" ~ int_expr ~ ")"                      // (expr) as constant
+}
+lin_atom = {
+    sum_expr |
+    if_lin_expr |
+    var_call |
+    fn_call |
+    "(" ~ lin_expr ~ ")"
+}
+sum_expr = { "sum" ~ ident ~ "in" ~ collection_expr ~ ("where" ~ cond)? ~ ":" ~ lin_expr }
+if_lin_expr = { "if" ~ cond ~ "{" ~ lin_expr ~ "}" ~ "else" ~ "{" ~ lin_expr ~ "}" }
+var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
+
+// ========== Integer Expressions (pure arithmetic, no variables) ==========
+int_expr = { int_add_sub_expr }
+int_add_sub_expr = { int_mul_div_mod_expr ~ ((add_op | sub_op) ~ int_mul_div_mod_expr)* }
+int_mul_div_mod_expr = { int_primary ~ ((mul_op | div_op | mod_op) ~ int_primary)* }
+int_primary = {
+    if_int_expr |
+    cardinality |
+    number |
+    path |
+    "(" ~ int_expr ~ ")"
+}
+if_int_expr = { "if" ~ cond ~ "{" ~ int_expr ~ "}" ~ "else" ~ "{" ~ int_expr ~ "}" }
+cardinality = { "|" ~ collection_expr ~ "|" }
+
+add_op = { "+" }
+sub_op = { "-" }
+mul_op = { "*" }
+div_op = { "//" }
+mod_op = { "%" }
+number = @{ "-"? ~ ASCII_DIGIT+ }
+
+// ========== Conditions ==========
+cond = { cond_or }
+cond_or = { cond_and ~ (cond_or_op ~ cond_and)* }
+cond_and = { cond_not ~ (cond_and_op ~ cond_not)* }
+cond_not = { cond_not_op ~ cond_not | cond_primary }
+cond_primary = {
+    comparison |
+    in_test |
+    path |  // Allows both simple idents and field accesses (for bool values)
+    "(" ~ cond ~ ")"
+}
+comparison = { computable ~ comp_op ~ computable }
+computable = { int_expr }
+comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
+in_test = { computable ~ "in" ~ collection_expr }
+cond_or_op = _{ "||" | "or" }
+cond_and_op = _{ "&&" | "and" }
+cond_not_op = _{ "!" | "not" }
+
+// Unified path for identifiers and field access
+path = { ident ~ ("." ~ ident)* }
+
+// ========== Function/Method Calls ==========
+fn_call = { ident ~ "(" ~ args? ~ ")" }
+args = { arg ~ ("," ~ arg)* }
+arg = { path }  // Can pass identifiers or field accesses as arguments
+
+// ========== Collections ==========
+collection_expr = { union_expr }
+union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
+inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
+diff_expr = { collection ~ (diff_op ~ collection)? }
+union_op = _{ "union" }
+inter_op = _{ "inter" }
+diff_op = _{ "\\" }
+collection = { 
+    "@" ~ "[" ~ primitive_input_type ~ "]" |
+    path |
+    "(" ~ collection_expr ~ ")"
+}
+
+// ========== Test helpers (enforce complete match) ==========
+int_expr_complete = { SOI ~ int_expr ~ EOI }
+lin_expr_complete = { SOI ~ lin_expr ~ EOI }
+constraint_expr_complete = { SOI ~ constraint_expr ~ EOI }
+collection_expr_complete = { SOI ~ collection_expr ~ EOI }
+cond_complete = { SOI ~ cond ~ EOI }
+path_complete = { SOI ~ path ~ EOI }
+computable_complete = { SOI ~ computable ~ EOI }
+var_call_complete = { SOI ~ var_call ~ EOI }
+fn_call_complete = { SOI ~ fn_call ~ EOI }
+input_type_name_complete = { SOI ~ input_type_name ~ EOI }
+let_statement_complete = { SOI ~ let_statement ~ EOI }
+reify_statement_complete = { SOI ~ reify_statement ~ EOI }
+ident_complete = { SOI ~ ident ~ EOI }
