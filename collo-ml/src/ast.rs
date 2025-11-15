@@ -50,8 +50,8 @@ pub enum Statement {
     },
     Reify {
         docstring: Vec<String>,
-        constraint_name: String,
-        var_name: String,
+        constraint_name: Spanned<String>,
+        var_name: Spanned<String>,
     },
 }
 
@@ -355,12 +355,18 @@ impl Statement {
                 }
                 Rule::ident => {
                     if constraint_name.is_none() {
-                        constraint_name = Some(inner_pair.as_str().to_string());
+                        constraint_name = Some(Spanned::new(
+                            inner_pair.as_str().to_string(),
+                            Span::from_pest(&inner_pair),
+                        ));
                     }
                 }
                 Rule::var_name => {
                     // var_name is "$" ~ ident, so we need to strip the $
-                    var_name = Some(inner_pair.as_str().trim_start_matches('$').to_string());
+                    var_name = Some(Spanned::new(
+                        inner_pair.as_str().trim_start_matches('$').to_string(),
+                        Span::from_pest(&inner_pair),
+                    ));
                 }
                 _ => {}
             }

@@ -57,8 +57,8 @@ fn visitor_handles_reify() {
             var_name,
             ..
         } => {
-            assert_eq!(constraint_name, "my_constraint");
-            assert_eq!(var_name, "MyVar");
+            assert_eq!(constraint_name.node, "my_constraint");
+            assert_eq!(var_name.node, "MyVar");
         }
         _ => panic!("Expected Reify statement"),
     }
