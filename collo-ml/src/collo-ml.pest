@@ -150,9 +150,9 @@ collection_expr = { union_expr }
 union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
 inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
 diff_expr = { collection ~ (diff_op ~ collection)? }
-union_op = _{ "union" }
-inter_op = _{ "inter" }
-diff_op = _{ "\\" }
+union_op = { "union" }
+inter_op = { "inter" }
+diff_op = { "\\" }
 collection = { 
     "@" ~ "[" ~ primitive_input_type ~ "]" |
     path |
