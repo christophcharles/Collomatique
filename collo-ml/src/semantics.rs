@@ -233,21 +233,23 @@ impl TypeInfo {
 }
 
 impl GlobalEnv {
-    pub fn expand(&mut self, file: &crate::ast::File) -> Result<TypeInfo, SemError> {
+    pub fn expand(&mut self, file: &crate::ast::File) -> (TypeInfo, Vec<SemError>) {
         let mut type_info = TypeInfo::new();
+        let mut errors = vec![];
 
         for statement in &file.statements {
-            self.expand_with_statement(&statement.node, &mut type_info)?;
+            self.expand_with_statement(&statement.node, &mut type_info, &mut errors);
         }
 
-        Ok(type_info)
+        (type_info, errors)
     }
 
     fn expand_with_statement(
         &mut self,
         statement: &crate::ast::Statement,
         type_info: &mut TypeInfo,
-    ) -> Result<(), SemError> {
+        errors: &mut Vec<SemError>,
+    ) {
         match statement {
             crate::ast::Statement::Let {
                 docstring,
@@ -265,19 +267,17 @@ impl GlobalEnv {
                 constraint_name,
                 var_name,
             } => match self.lookup_fn(&constraint_name.node) {
-                None => {
-                    return Err(SemError::UnknownIdentifer {
-                        identifier: constraint_name.node.clone(),
-                        span: constraint_name.span.clone(),
-                    })
-                }
+                None => errors.push(SemError::UnknownIdentifer {
+                    identifier: constraint_name.node.clone(),
+                    span: constraint_name.span.clone(),
+                }),
                 Some(fn_type) => match fn_type.0.output {
                     OutputType::LinExpr => {
                         let expected_type = FunctionType {
                             output: OutputType::Constraint,
                             ..fn_type.0.clone()
                         };
-                        return Err(SemError::IdentifierTypeMismatch {
+                        errors.push(SemError::IdentifierTypeMismatch {
                             identifier: constraint_name.node.clone(),
                             span: constraint_name.span.clone(),
                             expected: expected_type.into(),
@@ -285,13 +285,11 @@ impl GlobalEnv {
                         });
                     }
                     OutputType::Constraint => match self.lookup_var(&var_name.node) {
-                        Some((_args, span_opt)) => {
-                            return Err(SemError::VariableAlreadyDefined {
-                                identifier: var_name.node.clone(),
-                                span: var_name.span.clone(),
-                                here: span_opt,
-                            })
-                        }
+                        Some((_args, span_opt)) => errors.push(SemError::VariableAlreadyDefined {
+                            identifier: var_name.node.clone(),
+                            span: var_name.span.clone(),
+                            here: span_opt,
+                        }),
                         None => {
                             self.register_var(
                                 &var_name.node,
@@ -304,6 +302,5 @@ impl GlobalEnv {
                 },
             },
         }
-        Ok(())
     }
 }
