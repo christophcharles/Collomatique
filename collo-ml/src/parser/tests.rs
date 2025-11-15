@@ -36,3 +36,32 @@ pub let final_rule() -> Constraint =
         result
     );
 }
+
+#[test]
+fn file_accepts_empty_file() {
+    let result = ColloMLParser::parse(Rule::file, "");
+    assert!(result.is_ok(), "Should parse empty file");
+}
+
+#[test]
+fn file_accepts_only_comments() {
+    let result = ColloMLParser::parse(Rule::file, "# comment\n# another comment");
+    assert!(result.is_ok(), "Should parse file with only comments");
+}
+
+#[test]
+fn file_accepts_multiple_statements() {
+    let program = r#"
+let a() -> LinExpr = 5;
+let b() -> LinExpr = 10;
+reify some_constraint as $Var1;
+reify another_constraint as $Var2;
+pub let c() -> Constraint = $Var1() == 1 and $Var2() == 1;
+"#;
+    let result = ColloMLParser::parse(Rule::file, program);
+    assert!(
+        result.is_ok(),
+        "Should parse multiple statements: {:?}",
+        result
+    );
+}
