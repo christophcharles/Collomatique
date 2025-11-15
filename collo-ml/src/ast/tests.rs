@@ -36,10 +36,10 @@ fn visitor_handles_arithmetic() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::LinExpr(LinExpr::Constant(comp)) => {
-                assert!(matches!(comp.node, Computable::Add(_, _)));
+            Expr::LinExpr(LinExpr::Add(_, _)) => {
+                // Correct!
             }
-            _ => panic!("Expected constant with Add"),
+            _ => panic!("Expected Add, got {:?}", body.node),
         },
         _ => panic!(),
     }
