@@ -249,9 +249,11 @@ impl File {
         let mut statements = Vec::new();
         for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
-                Rule::let_statement | Rule::reify_statement => {
+                Rule::statement => {
+                    // statement is a wrapper containing let_statement or reify_statement
                     let span = Span::from_pest(&inner_pair);
-                    let stmt = Statement::from_pest(inner_pair)?;
+                    let actual_stmt = inner_pair.into_inner().next().unwrap();
+                    let stmt = Statement::from_pest(actual_stmt)?;
                     statements.push(Spanned::new(stmt, span));
                 }
                 Rule::EOI => {}
