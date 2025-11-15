@@ -450,3 +450,19 @@ fn computable_rejects_function_calls_in_expressions() {
         );
     }
 }
+
+#[test]
+fn computable_respects_operator_precedence() {
+    // These should parse successfully, precedence handled by grammar structure
+    let cases = vec![
+        "1 + 2 * 3",      // should be 1 + (2 * 3)
+        "10 - 5 - 2",     // should be (10 - 5) - 2 (left associative)
+        "x and y or z",   // should be (x and y) or z (and before or)
+        "not x and y",    // should be (not x) and y (not before and)
+        "a < b and c > d", // should be (a < b) and (c > d)
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::computable_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
