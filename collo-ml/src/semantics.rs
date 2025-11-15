@@ -512,8 +512,8 @@ impl GlobalEnv {
                     errors.push(SemError::FunctionTypeMismatch {
                         identifier: constraint_name.node.clone(),
                         span: constraint_name.span.clone(),
-                        expected: expected_type.into(),
-                        found: fn_type.0.into(),
+                        expected: expected_type,
+                        found: fn_type.0,
                     });
                 }
                 OutputType::Constraint => match self.lookup_var(&var_name.node) {
