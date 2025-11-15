@@ -3,7 +3,7 @@ use pest::iterators::Pair;
 
 // ============= Span and Spanned =============
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -30,6 +30,7 @@ impl<T> Spanned<T> {
         Spanned { node, span }
     }
 }
+
 // ============= Top Level =============
 
 #[derive(Debug, Clone, PartialEq, Eq)]
