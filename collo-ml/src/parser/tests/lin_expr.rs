@@ -1,5 +1,4 @@
 use super::*;
-use pest::Parser;
 
 #[test]
 fn lin_expr_accepts_simple_variables() {

@@ -1,5 +1,4 @@
 use super::*;
-use pest::Parser;
 
 #[test]
 fn constraint_accepts_simple_comparisons() {

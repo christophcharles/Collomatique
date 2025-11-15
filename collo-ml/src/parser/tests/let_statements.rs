@@ -1,5 +1,4 @@
 use super::*;
-use pest::Parser;
 
 #[test]
 fn let_accepts_lin_expr_output() {

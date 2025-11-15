@@ -1,5 +1,4 @@
 use super::*;
-use pest::Parser;
 
 #[test]
 fn collection_accepts_global_sets() {

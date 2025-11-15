@@ -1,5 +1,4 @@
 use super::*;
-use pest::Parser;
 
 #[test]
 fn reify_accepts_simple_reification() {
