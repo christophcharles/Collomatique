@@ -1,6 +1,8 @@
 use crate::ast::{Expr, Param, Span, Spanned};
 use std::collections::HashMap;
 
+mod string_case;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputType {
     Int,
