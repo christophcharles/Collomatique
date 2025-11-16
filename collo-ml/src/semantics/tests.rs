@@ -483,3 +483,124 @@ fn test_function_shadowing_after_use_should_fail() {
         errors
     );
 }
+
+#[test]
+fn test_variable_naming_convention_warning() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $my_var; # variable name in snake_case instead of PascalCase
+        pub let g() -> Constraint = $my_var(42) <= 2;
+    "#;
+
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::VariableNamingConvention { .. }
+    ));
+    if let SemWarning::VariableNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "my_var");
+        assert_eq!(suggestion, "MyVar");
+    }
+}
+
+#[test]
+fn test_parameter_naming_convention_warning_in_function() {
+    let input = r#"
+        pub let f(MyParam: Int) -> Constraint = MyParam <= 10; # parameter should be snake_case
+    "#;
+
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::ParameterNamingConvention { .. }
+    ));
+    if let SemWarning::ParameterNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "MyParam");
+        assert_eq!(suggestion, "my_param");
+    }
+}
+
+#[test]
+fn test_parameter_naming_convention_warning_in_forall() {
+    let input = r#"
+        pub let f(xs: [Int]) -> Constraint =
+            forall MyElem in xs: MyElem <= 10; # parameter should be snake_case
+    "#;
+
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::ParameterNamingConvention { .. }
+    ));
+    if let SemWarning::ParameterNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "MyElem");
+        assert_eq!(suggestion, "my_elem");
+    }
+}
+
+#[test]
+fn test_parameter_naming_convention_warning_in_sum() {
+    let input = r#"
+        pub let f(xs: [Int]) -> LinExpr =
+            sum MyElem in xs: MyElem; # parameter should be snake_case
+    "#;
+
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::ParameterNamingConvention { .. }
+    ));
+    if let SemWarning::ParameterNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "MyElem");
+        assert_eq!(suggestion, "my_elem");
+    }
+}
+
+#[test]
+fn test_naming_convention_positive_no_warnings() {
+    let input = r#"
+        # Function name in snake_case; parameter is a list of Int
+        let my_function(xs: [Int]) -> Constraint =
+            # forall parameter in snake_case, iterating over a collection
+            forall my_elem in xs: my_elem <= 10;
+
+        # Variable name in PascalCase
+        reify my_function as $MyVar;
+
+        # Public function using the variable
+        pub let another_function(xs: [Int]) -> Constraint = $MyVar(xs) == 1;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
