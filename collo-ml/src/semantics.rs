@@ -148,46 +148,6 @@ pub enum GlobalEnvError {
 }
 
 impl GlobalEnv {
-    pub fn new(
-        defined_types: HashMap<String, ObjectFields>,
-        variables: HashMap<String, ArgsType>,
-    ) -> Result<Self, GlobalEnvError> {
-        let temp_env = GlobalEnv {
-            defined_types,
-            functions: HashMap::new(),
-            variables: variables
-                .into_iter()
-                .map(|(var_name, args_type)| (var_name, (args_type, None)))
-                .collect(),
-        };
-
-        for (object_type, field_desc) in &temp_env.defined_types {
-            for (field, typ) in field_desc {
-                if !temp_env.validate_type(typ) {
-                    return Err(GlobalEnvError::UnknownTypeInField {
-                        object_type: object_type.clone(),
-                        field: field.clone(),
-                        unknown_type: typ.to_string(),
-                    });
-                }
-            }
-        }
-
-        for (var, args) in &temp_env.variables {
-            for (param, typ) in args.0.iter().enumerate() {
-                if !temp_env.validate_type(typ) {
-                    return Err(GlobalEnvError::UnknownTypeForVariableArg {
-                        var: var.clone(),
-                        param,
-                        unknown_type: typ.to_string(),
-                    });
-                }
-            }
-        }
-
-        Ok(temp_env)
-    }
-
     fn validate_type(&self, typ: &InputType) -> bool {
         match typ {
             InputType::Bool => true,
@@ -197,7 +157,7 @@ impl GlobalEnv {
         }
     }
 
-    pub fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
+    fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
         let (fn_typ, span, used) = self.functions.get_mut(name)?;
         *used = true;
         Some((fn_typ.clone(), span.clone()))
@@ -224,7 +184,7 @@ impl GlobalEnv {
         type_info.types.insert(span, fn_typ.into());
     }
 
-    pub fn lookup_var(&mut self, name: &str) -> Option<(ArgsType, Option<Span>)> {
+    fn lookup_var(&mut self, name: &str) -> Option<(ArgsType, Option<Span>)> {
         let (args_typ, span_and_used_opt) = self.variables.get_mut(name)?;
 
         if let Some((_span, used)) = span_and_used_opt {
@@ -1474,22 +1434,61 @@ impl TypeInfo {
 }
 
 impl GlobalEnv {
-    pub fn expand(
-        &mut self,
+    pub fn new(
+        defined_types: HashMap<String, ObjectFields>,
+        variables: HashMap<String, ArgsType>,
         file: &crate::ast::File,
-    ) -> (TypeInfo, Vec<SemError>, Vec<SemWarning>) {
+    ) -> Result<(Self, TypeInfo, Vec<SemError>, Vec<SemWarning>), GlobalEnvError> {
+        let mut temp_env = GlobalEnv {
+            defined_types,
+            functions: HashMap::new(),
+            variables: variables
+                .into_iter()
+                .map(|(var_name, args_type)| (var_name, (args_type, None)))
+                .collect(),
+        };
+
+        for (object_type, field_desc) in &temp_env.defined_types {
+            for (field, typ) in field_desc {
+                if !temp_env.validate_type(typ) {
+                    return Err(GlobalEnvError::UnknownTypeInField {
+                        object_type: object_type.clone(),
+                        field: field.clone(),
+                        unknown_type: typ.to_string(),
+                    });
+                }
+            }
+        }
+
+        for (var, args) in &temp_env.variables {
+            for (param, typ) in args.0.iter().enumerate() {
+                if !temp_env.validate_type(typ) {
+                    return Err(GlobalEnvError::UnknownTypeForVariableArg {
+                        var: var.clone(),
+                        param,
+                        unknown_type: typ.to_string(),
+                    });
+                }
+            }
+        }
+
         let mut type_info = TypeInfo::new();
         let mut errors = vec![];
         let mut warnings = vec![];
 
         for statement in &file.statements {
-            self.expand_with_statement(&statement.node, &mut type_info, &mut errors, &mut warnings);
+            temp_env.expand_with_statement(
+                &statement.node,
+                &mut type_info,
+                &mut errors,
+                &mut warnings,
+            );
         }
 
-        self.check_unused_fn(&mut warnings);
-        self.check_unused_var(&mut warnings);
+        temp_env.check_unused_fn(&mut warnings);
+        temp_env.check_unused_var(&mut warnings);
 
-        (type_info, errors, warnings)
+        Ok((temp_env, type_info, errors, warnings))
     }
 
     fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {

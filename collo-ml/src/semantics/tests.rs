@@ -11,9 +11,10 @@ fn analyze(
     let file = crate::ast::File::from_pest(pairs.into_iter().next().unwrap())
         .expect("AST conversion failed");
 
-    let mut global_env = GlobalEnv::new(types, vars).expect("GlobalEnv creation failed");
+    let (_global_env, type_info, errors, warnings) =
+        GlobalEnv::new(types, vars, &file).expect("GlobalEnv creation failed");
 
-    global_env.expand(&file)
+    (type_info, errors, warnings)
 }
 
 #[test]
