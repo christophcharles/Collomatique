@@ -310,3 +310,95 @@ fn test_function_used_in_constraint_no_warning() {
 
     assert_eq!(warnings.len(), 0);
 }
+
+#[test]
+fn test_reify_without_function_should_fail() {
+    let input = "reify f as $MyVar;"; // f is not defined
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(errors.len(), 1);
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::UnknownIdentifer { .. })));
+}
+
+#[test]
+fn test_reify_with_wrong_function_type_should_fail() {
+    let input = r#"
+        let f(x: Int) -> LinExpr = x;
+        reify f as $MyVar;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. })));
+}
+
+#[test]
+fn test_reify_with_unused_variable_warning() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $MyVar;
+    "#;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings
+        .iter()
+        .any(|w| matches!(w, SemWarning::UnusedVariable { .. })));
+}
+
+#[test]
+fn test_reify_then_use_variable_should_work_no_warning() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $MyVar;
+        pub let g(y: Int) -> Constraint = $MyVar(y) == 1;
+    "#;
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_reify_variable_shadowing_should_fail() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $MyVar;
+        let g(y: Int) -> Constraint = y >= 5;
+        reify g as $MyVar; # shadowing: $MyVar already defined
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::VariableAlreadyDefined { .. })),
+        "Expected VariableAlreadyDefined error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_variable_then_reify_shadowing_should_fail() {
+    let mut vars = HashMap::new();
+    vars.insert("MyVar".to_string(), vec![InputType::Int]); // already defined externally
+
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $MyVar; # conflicts with external definition
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::VariableAlreadyDefined { .. })),
+        "Expected VariableAlreadyDefined error, got: {:?}",
+        errors
+    );
+}
