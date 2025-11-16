@@ -82,8 +82,8 @@ pub type ObjectFields = HashMap<String, InputType>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GlobalEnv {
     defined_types: HashMap<String, ObjectFields>,
-    functions: HashMap<String, (FunctionType, Span)>,
-    variables: HashMap<String, (ArgsType, Option<Span>)>,
+    functions: HashMap<String, (FunctionType, Span, bool)>,
+    variables: HashMap<String, (ArgsType, Option<(Span, bool)>)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -197,8 +197,10 @@ impl GlobalEnv {
         }
     }
 
-    pub fn lookup_fn(&self, name: &str) -> Option<(FunctionType, Span)> {
-        self.functions.get(name).cloned()
+    pub fn lookup_fn(&mut self, name: &str) -> Option<(FunctionType, Span)> {
+        let (fn_typ, span, used) = self.functions.get_mut(name)?;
+        *used = true;
+        Some((fn_typ.clone(), span.clone()))
     }
 
     fn register_fn(
@@ -211,13 +213,22 @@ impl GlobalEnv {
         assert!(!self.functions.contains_key(name));
 
         self.functions
-            .insert(name.to_string(), (fn_typ.clone(), span.clone()));
+            .insert(name.to_string(), (fn_typ.clone(), span.clone(), false)); // Initially not used
 
         type_info.types.insert(span, fn_typ.into());
     }
 
-    pub fn lookup_var(&self, name: &str) -> Option<(ArgsType, Option<Span>)> {
-        self.variables.get(name).cloned()
+    pub fn lookup_var(&mut self, name: &str) -> Option<(ArgsType, Option<Span>)> {
+        let (args_typ, span_and_used_opt) = self.variables.get_mut(name)?;
+
+        if let Some((_span, used)) = span_and_used_opt {
+            *used = true;
+        }
+
+        Some((
+            args_typ.clone(),
+            span_and_used_opt.as_ref().map(|x| x.0.clone()),
+        ))
     }
 
     fn register_var(
@@ -229,8 +240,10 @@ impl GlobalEnv {
     ) {
         assert!(!self.variables.contains_key(name));
 
-        self.variables
-            .insert(name.to_string(), (args_typ.clone(), Some(span.clone())));
+        self.variables.insert(
+            name.to_string(),
+            (args_typ.clone(), Some((span.clone(), false))),
+        ); // Initially not used
 
         type_info.types.insert(span, args_typ.into());
     }
@@ -345,6 +358,10 @@ pub enum SemWarning {
     },
     #[error("Unused identifier \"{identifier}\" at {span:?}")]
     UnusedIdentifier { identifier: String, span: Span },
+    #[error("Unused function \"{identifier}\" at {span:?}")]
+    UnusedFunction { identifier: String, span: Span },
+    #[error("Unused variable \"{identifier}\" at {span:?}")]
+    UnusedVariable { identifier: String, span: Span },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -423,7 +440,7 @@ impl LocalEnv {
 
     fn check_lin_expr(
         &mut self,
-        global_env: &GlobalEnv,
+        global_env: &mut GlobalEnv,
         lin_expr: &crate::ast::LinExpr,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
@@ -700,7 +717,7 @@ impl LocalEnv {
 
     fn check_constraint(
         &mut self,
-        global_env: &GlobalEnv,
+        global_env: &mut GlobalEnv,
         constraint_expr: &crate::ast::Constraint,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
@@ -1452,7 +1469,35 @@ impl GlobalEnv {
             self.expand_with_statement(&statement.node, &mut type_info, &mut errors, &mut warnings);
         }
 
+        self.check_unused_fn(&mut warnings);
+        self.check_unused_var(&mut warnings);
+
         (type_info, errors, warnings)
+    }
+
+    fn check_unused_fn(&self, warnings: &mut Vec<SemWarning>) {
+        for (name, (fn_typ, span, used)) in &self.functions {
+            if !fn_typ.public && !used {
+                warnings.push(SemWarning::UnusedFunction {
+                    identifier: name.clone(),
+                    span: span.clone(),
+                });
+            }
+        }
+    }
+
+    fn check_unused_var(&self, warnings: &mut Vec<SemWarning>) {
+        for (name, (_args_typ, span_and_used_opt)) in &self.variables {
+            let Some(span_and_used) = span_and_used_opt else {
+                continue;
+            };
+            if !span_and_used.1 {
+                warnings.push(SemWarning::UnusedVariable {
+                    identifier: name.clone(),
+                    span: span_and_used.0.clone(),
+                });
+            }
+        }
     }
 
     fn expand_with_statement(
