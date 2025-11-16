@@ -25,20 +25,33 @@ pub fn generate_suggestion_for_naming_convention(
 }
 
 fn is_snake_case(s: &str) -> bool {
-    s.chars()
+    // Strip leading underscores
+    let trimmed = s.trim_start_matches('_');
+
+    // Empty after trimming means the identifier was only underscores -> reject
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    trimmed
+        .chars()
         .all(|c| c.is_lowercase() || c.is_numeric() || c == '_')
-        && !s.starts_with('_')
-        && !s.ends_with('_')
-        && !s.contains("__")
+        && !trimmed.ends_with('_')
+        && !trimmed.contains("__")
 }
 
 fn is_pascal_case(s: &str) -> bool {
-    if s.is_empty() {
+    // Strip leading underscores
+    let trimmed = s.trim_start_matches('_');
+
+    // Empty after trimming means the identifier was only underscores -> reject
+    if trimmed.is_empty() {
         return false;
     }
-    s.chars().next().unwrap().is_uppercase()
-        && s.chars().all(|c| c.is_alphanumeric())
-        && !s.contains('_')
+
+    trimmed.chars().next().unwrap().is_uppercase()
+        && trimmed.chars().all(|c| c.is_alphanumeric())
+        && !trimmed.contains('_')
 }
 
 fn to_snake_case(s: &str) -> String {
@@ -125,9 +138,15 @@ mod tests {
     }
 
     #[test]
-    fn is_snake_case_rejects_leading_underscore() {
-        assert!(!is_snake_case("_hello"));
-        assert!(!is_snake_case("_world"));
+    fn is_snake_case_accepts_leading_underscore() {
+        assert!(is_snake_case("_hello"));
+        assert!(is_snake_case("_world"));
+    }
+
+    #[test]
+    fn is_snake_case_rejects_only_underscores() {
+        assert!(!is_snake_case("_"));
+        assert!(!is_snake_case("__"));
     }
 
     #[test]
@@ -189,6 +208,24 @@ mod tests {
     #[test]
     fn is_pascal_case_rejects_empty() {
         assert!(!is_pascal_case(""));
+    }
+
+    #[test]
+    fn is_pascal_case_accepts_leading_underscores() {
+        assert!(is_pascal_case("_Hello"));
+        assert!(is_pascal_case("__World"));
+    }
+
+    #[test]
+    fn is_pascal_case_rejects_only_underscores() {
+        assert!(!is_pascal_case("_"));
+        assert!(!is_pascal_case("__"));
+    }
+
+    #[test]
+    fn is_pascal_case_rejects_trailing_underscore() {
+        assert!(!is_pascal_case("Hello_"));
+        assert!(!is_pascal_case("World_"));
     }
 
     // ========== to_snake_case tests ==========
