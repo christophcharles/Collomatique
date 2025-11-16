@@ -19,8 +19,8 @@ fn visitor_handles_let_statement() {
         } => {
             assert_eq!(name.node, "f");
             assert_eq!(params.len(), 1);
-            assert_eq!(params[0].node.name, "x");
-            assert!(matches!(params[0].node.typ, InputType::Int));
+            assert_eq!(params[0].name.node, "x");
+            assert!(matches!(params[0].typ.node, InputType::Int));
             assert_eq!(*output_type, OutputType::LinExpr);
             assert!(matches!(body.node, Expr::LinExpr(LinExpr::Constant(_))));
         }
@@ -71,7 +71,7 @@ fn visitor_handles_nested_types() {
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
     match &file.statements[0].node {
-        Statement::Let { params, .. } => match &params[0].node.typ {
+        Statement::Let { params, .. } => match &params[0].typ.node {
             InputType::List(inner1) => match &**inner1 {
                 InputType::List(inner2) => {
                     assert!(matches!(**inner2, InputType::Int));

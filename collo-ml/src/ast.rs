@@ -44,7 +44,7 @@ pub enum Statement {
         docstring: Vec<String>,
         public: bool,
         name: Spanned<String>,
-        params: Vec<Spanned<Param>>,
+        params: Vec<Param>,
         output_type: OutputType, // Declared type
         body: Spanned<Expr>,     // Body (can be LinExpr or Constraint)
     },
@@ -57,8 +57,8 @@ pub enum Statement {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Param {
-    pub name: String,
-    pub typ: InputType,
+    pub name: Spanned<String>,
+    pub typ: Spanned<InputType>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -383,21 +383,23 @@ impl Statement {
     }
 }
 
-fn parse_params(pair: Pair<Rule>) -> Result<Vec<Spanned<Param>>, AstError> {
+fn parse_params(pair: Pair<Rule>) -> Result<Vec<Param>, AstError> {
     let mut params = Vec::new();
     for param_pair in pair.into_inner() {
+        let span = Span::from_pest(&param_pair);
         if param_pair.as_rule() == Rule::param {
-            let span = Span::from_pest(&param_pair);
             let mut name = None;
             let mut typ = None;
 
             for inner in param_pair.into_inner() {
                 match inner.as_rule() {
                     Rule::ident => {
-                        name = Some(inner.as_str().to_string());
+                        let inner_span = Span::from_pest(&inner);
+                        name = Some(Spanned::new(inner.as_str().to_string(), inner_span));
                     }
                     Rule::input_type_name => {
-                        typ = Some(InputType::from_pest(inner)?);
+                        let inner_span = Span::from_pest(&inner);
+                        typ = Some(Spanned::new(InputType::from_pest(inner)?, inner_span));
                     }
                     _ => {}
                 }
@@ -407,7 +409,7 @@ fn parse_params(pair: Pair<Rule>) -> Result<Vec<Spanned<Param>>, AstError> {
                 name: name.ok_or(AstError::MissingName(span.clone()))?,
                 typ: typ.ok_or(AstError::MissingOutputType(span.clone()))?,
             };
-            params.push(Spanned::new(param, span));
+            params.push(param);
         }
     }
     Ok(params)

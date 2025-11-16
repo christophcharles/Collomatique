@@ -460,7 +460,7 @@ impl GlobalEnv {
         &mut self,
         public: bool,
         name: &Spanned<String>,
-        params: &Vec<Spanned<Param>>,
+        params: &Vec<Param>,
         output_type: &crate::ast::OutputType,
         body: &Spanned<Expr>,
         type_info: &mut TypeInfo,
@@ -490,37 +490,37 @@ impl GlobalEnv {
                 let mut local_env = LocalEnv::new();
                 let mut error_in_param_typs = false;
                 for param in params {
-                    let param_typ = param.node.typ.clone().into();
+                    let param_typ = param.typ.node.clone().into();
                     if !self.validate_type(&param_typ) {
                         errors.push(SemError::UnknownInputType {
                             typ: param_typ.to_string(),
-                            span: param.span.clone(),
+                            span: param.typ.span.clone(),
                         });
                         error_in_param_typs = true;
                     } else if let Some((_typ, span)) =
-                        local_env.lookup_in_current_scope(&param.node.name)
+                        local_env.lookup_in_current_scope(&param.name.node)
                     {
                         errors.push(SemError::ParameterAlreadyDefined {
-                            identifier: param.node.name.clone(),
-                            span: param.span.clone(),
+                            identifier: param.name.node.clone(),
+                            span: param.name.span.clone(),
                             here: span,
                         });
                     } else {
                         if let Some(suggestion) =
                             string_case::generate_suggestion_for_naming_convention(
-                                &param.node.name,
+                                &param.name.node,
                                 string_case::NamingConvention::SnakeCase,
                             )
                         {
                             warnings.push(SemWarning::ParameterNamingConvention {
-                                identifier: param.node.name.clone(),
-                                span: param.span.clone(),
+                                identifier: param.name.node.clone(),
+                                span: param.name.span.clone(),
                                 suggestion,
                             });
                         }
                         local_env.register_identifier(
-                            &param.node.name,
-                            param.span.clone(),
+                            &param.name.node,
+                            param.name.span.clone(),
                             param_typ,
                             type_info,
                             warnings,
@@ -565,7 +565,7 @@ impl GlobalEnv {
                 if !error_in_param_typs {
                     let args = params
                         .iter()
-                        .map(|param| param.node.typ.clone().into())
+                        .map(|param| param.typ.node.clone().into())
                         .collect();
                     let fn_typ = FunctionType {
                         public,
