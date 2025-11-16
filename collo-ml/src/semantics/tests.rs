@@ -798,7 +798,7 @@ fn test_variable_name_starting_with_underscore_should_work() {
     let input = r#"
         let f(x: Int) -> Constraint = x <= 10;
         reify f as $_Var;
-        pub let g(xs: [Int]) -> Constraint = $_Var(xs) == 1;
+        pub let g(x: Int) -> Constraint = $_Var(x) == 1;
     "#;
 
     let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
