@@ -92,7 +92,7 @@ fn visitor_handles_comparison_constraint() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Le ( _, _ ) => {
+            Expr::Le(_, _) => {
                 // OK
             }
             _ => panic!("Expected Comparison constraint"),
@@ -103,7 +103,7 @@ fn visitor_handles_comparison_constraint() {
 
 #[test]
 fn visitor_handles_forall() {
-    let input = "let f() -> Constraint = forall x in @[Student]: $V(x) >= 0;";
+    let input = "let f() -> Constraint = forall x in @[Student] { $V(x) >= 0 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -127,7 +127,7 @@ fn visitor_handles_forall() {
 
 #[test]
 fn visitor_handles_forall_with_filter() {
-    let input = "let f() -> Constraint = forall x in @[Student] where x > 5: $V(x) >= 0;";
+    let input = "let f() -> Constraint = forall x in @[Student] where x > 5 { $V(x) >= 0 };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -144,7 +144,7 @@ fn visitor_handles_forall_with_filter() {
 
 #[test]
 fn visitor_handles_sum() {
-    let input = "let f() -> LinExpr = sum x in @[Student]: $V(x);";
+    let input = "let f() -> LinExpr = sum x in @[Student] { $V(x) };";
     let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
     let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
 
@@ -174,7 +174,7 @@ fn visitor_handles_computable_operations() {
                 Expr::Add(left, right) => {
                     // Left should be Mul(Number(2), Number(3))
                     match &left.node {
-                        Expr::Mul ( expr1, expr2 ) => {
+                        Expr::Mul(expr1, expr2) => {
                             assert!(matches!(expr1.node, Expr::Number(2)));
                             match &expr2.node {
                                 Expr::Number(3) => {
