@@ -272,6 +272,20 @@ pub enum SemError {
         expected: OutputType,
         found: OutputType,
     },
+    #[error("Type mismatch at {span:?}: expected {expected} but found {found} ({context})")]
+    TypeMismatch {
+        span: Span,
+        expected: InputType,
+        found: InputType,
+        context: String,
+    },
+    #[error("Argument count mismatch for \"{identifier}\" at {span:?}: expected {expected} arguments but found {found}")]
+    ArgumentCountMismatch {
+        identifier: String,
+        span: Span,
+        expected: usize,
+        found: usize,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -391,6 +405,209 @@ impl LocalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
+        use crate::ast::Constraint;
+
+        match constraint_expr {
+            Constraint::Comparison { left, op, right } => {
+                // Check both sides are valid LinExpr
+                self.check_lin_expr(global_env, &left.node, type_info, errors, warnings);
+                self.check_lin_expr(global_env, &right.node, type_info, errors, warnings);
+                // op doesn't need checking - it's just a comparison operator
+            }
+
+            Constraint::And(left, right) => {
+                // Check both constraints recursively
+                self.check_constraint(global_env, &left.node, type_info, errors, warnings);
+                self.check_constraint(global_env, &right.node, type_info, errors, warnings);
+            }
+
+            Constraint::Forall {
+                var,
+                collection,
+                filter,
+                body,
+            } => {
+                // Check the collection is valid
+                let element_type = self.check_collection(
+                    global_env,
+                    &collection.node,
+                    &collection.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Check naming convention for loop variable
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &var.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        identifier: var.node.clone(),
+                        span: var.span.clone(),
+                        suggestion,
+                    });
+                }
+
+                // Register loop variable in a new scope
+                if let Some(elem_type) = element_type {
+                    self.register_identifier(
+                        &var.node,
+                        var.span.clone(),
+                        elem_type,
+                        type_info,
+                        warnings,
+                    );
+                }
+
+                self.push_scope();
+
+                // Check filter if present (must be Bool)
+                if let Some(filter_expr) = filter {
+                    let filter_type = self.check_computable(
+                        global_env,
+                        &filter_expr.node,
+                        &filter_expr.span,
+                        type_info,
+                        errors,
+                        warnings,
+                    );
+
+                    if let Some(typ) = filter_type {
+                        if typ != InputType::Bool {
+                            errors.push(SemError::TypeMismatch {
+                                span: filter_expr.span.clone(),
+                                expected: InputType::Bool,
+                                found: typ,
+                                context: "forall filter must be a boolean expression".to_string(),
+                            });
+                        }
+                    }
+                }
+
+                // Check body constraint
+                self.check_constraint(global_env, &body.node, type_info, errors, warnings);
+
+                self.pop_scope();
+            }
+
+            Constraint::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                // Check condition is Bool
+                let cond_type = self.check_computable(
+                    global_env,
+                    &condition.node,
+                    &condition.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                if let Some(typ) = cond_type {
+                    if typ != InputType::Bool {
+                        errors.push(SemError::TypeMismatch {
+                            span: condition.span.clone(),
+                            expected: InputType::Bool,
+                            found: typ,
+                            context: "if condition must be a boolean expression".to_string(),
+                        });
+                    }
+                }
+
+                // Check both branches
+                self.check_constraint(global_env, &then_expr.node, type_info, errors, warnings);
+                self.check_constraint(global_env, &else_expr.node, type_info, errors, warnings);
+            }
+
+            Constraint::FnCall { name, args } => {
+                // Look up function
+                match global_env.lookup_fn(&name.node) {
+                    None => {
+                        errors.push(SemError::UnknownIdentifer {
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                        });
+                    }
+                    Some((fn_type, _)) => {
+                        // Check it returns Constraint
+                        if fn_type.output != OutputType::Constraint {
+                            errors.push(SemError::FunctionTypeMismatch {
+                                identifier: name.node.clone(),
+                                span: name.span.clone(),
+                                expected: FunctionType {
+                                    output: OutputType::Constraint,
+                                    ..fn_type.clone()
+                                },
+                                found: fn_type.clone(),
+                            });
+                        }
+
+                        // Check argument count
+                        if args.len() != fn_type.args.len() {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: name.node.clone(),
+                                span: args
+                                    .last()
+                                    .map(|a| a.span.clone())
+                                    .unwrap_or_else(|| Span { start: 0, end: 0 }),
+                                expected: fn_type.args.len(),
+                                found: args.len(),
+                            });
+                        }
+
+                        // Check argument types
+                        for (i, (arg, expected_type)) in
+                            args.iter().zip(fn_type.args.iter()).enumerate()
+                        {
+                            let arg_type = self.check_computable(
+                                global_env, &arg.node, &arg.span, type_info, errors, warnings,
+                            );
+
+                            if let Some(found_type) = arg_type {
+                                if &found_type != expected_type {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: arg.span.clone(),
+                                        expected: expected_type.clone(),
+                                        found: found_type,
+                                        context: format!(
+                                            "argument {} to function {}",
+                                            i + 1,
+                                            name.node
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn check_collection(
+        &mut self,
+        global_env: &GlobalEnv,
+        collection: &crate::ast::Collection,
+        span: &Span,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) -> Option<InputType> {
+        todo!()
+    }
+
+    fn check_computable(
+        &mut self,
+        global_env: &GlobalEnv,
+        computable: &crate::ast::Computable,
+        span: &Span,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) -> Option<InputType> {
         todo!()
     }
 }

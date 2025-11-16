@@ -115,7 +115,7 @@ fn visitor_handles_forall() {
                 filter,
                 ..
             }) => {
-                assert_eq!(var, "x");
+                assert_eq!(var.node, "x");
                 assert!(matches!(collection.node, Collection::Global(_)));
                 assert!(filter.is_none());
             }
@@ -153,7 +153,7 @@ fn visitor_handles_sum() {
             Expr::LinExpr(LinExpr::Sum {
                 var, collection, ..
             }) => {
-                assert_eq!(var, "x");
+                assert_eq!(var.node, "x");
                 assert!(matches!(collection.node, Collection::Global(_)));
             }
             _ => panic!("Expected Sum"),

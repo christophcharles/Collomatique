@@ -91,7 +91,7 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinExpr {
     Var {
-        name: String,
+        name: Spanned<String>,
         args: Vec<Spanned<Computable>>,
     },
     Constant(Spanned<Computable>),
@@ -102,7 +102,7 @@ pub enum LinExpr {
         expr: Box<Spanned<LinExpr>>,
     },
     Sum {
-        var: String,
+        var: Spanned<String>,
         collection: Spanned<Collection>,
         filter: Option<Spanned<Computable>>,
         body: Box<Spanned<LinExpr>>,
@@ -113,7 +113,7 @@ pub enum LinExpr {
         else_expr: Box<Spanned<LinExpr>>,
     },
     FnCall {
-        name: String,
+        name: Spanned<String>,
         args: Vec<Spanned<Computable>>,
     },
 }
@@ -129,7 +129,7 @@ pub enum Constraint {
     },
     And(Box<Spanned<Constraint>>, Box<Spanned<Constraint>>),
     Forall {
-        var: String,
+        var: Spanned<String>,
         collection: Spanned<Collection>,
         filter: Option<Spanned<Computable>>,
         body: Box<Spanned<Constraint>>,
@@ -140,7 +140,7 @@ pub enum Constraint {
         else_expr: Box<Spanned<Constraint>>,
     },
     FnCall {
-        name: String,
+        name: Spanned<String>,
         args: Vec<Spanned<Computable>>,
     },
 }
@@ -564,9 +564,8 @@ impl Constraint {
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::ident => {
-                    if var.is_none() {
-                        var = Some(inner.as_str().to_string());
-                    }
+                    let var_span = Span::from_pest(&inner);
+                    var = Some(Spanned::new(inner.as_str().to_string(), var_span));
                 }
                 Rule::collection_expr => {
                     let coll_span = Span::from_pest(&inner);
@@ -671,7 +670,8 @@ impl Constraint {
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::ident => {
-                    name = Some(inner.as_str().to_string());
+                    let name_span = Span::from_pest(&inner);
+                    name = Some(Spanned::new(inner.as_str().to_string(), name_span));
                 }
                 Rule::args => {
                     args = parse_args(inner)?;
@@ -832,9 +832,8 @@ impl LinExpr {
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::ident => {
-                    if var.is_none() {
-                        var = Some(inner.as_str().to_string());
-                    }
+                    let var_span = Span::from_pest(&inner);
+                    var = Some(Spanned::new(inner.as_str().to_string(), var_span));
                 }
                 Rule::collection_expr => {
                     let coll_span = Span::from_pest(&inner);
@@ -891,7 +890,8 @@ impl LinExpr {
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::ident => {
-                    name = Some(inner.as_str().to_string());
+                    let name_span = Span::from_pest(&inner);
+                    name = Some(Spanned::new(inner.as_str().to_string(), name_span));
                 }
                 Rule::args => {
                     args = parse_args(inner)?;
@@ -914,7 +914,8 @@ impl LinExpr {
         for inner in pair.into_inner() {
             match inner.as_rule() {
                 Rule::ident => {
-                    name = Some(inner.as_str().to_string());
+                    let name_span = Span::from_pest(&inner);
+                    name = Some(Spanned::new(inner.as_str().to_string(), name_span));
                 }
                 Rule::args => {
                     args = parse_args(inner)?; // Use the same parse_args as Constraint
