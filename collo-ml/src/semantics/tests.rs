@@ -604,3 +604,56 @@ fn test_naming_convention_positive_no_warnings() {
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
 }
+
+#[test]
+fn test_complex_constraint_should_work() {
+    let input = r#"
+        # Function takes a list of Ints
+        pub let f(xs: [Int]) -> Constraint =
+            # For all elements, either they are <= 10 or the sum is bounded
+            forall elem in xs:
+                if elem < 5 {
+                    elem <= 10
+                } else {
+                    sum i in xs: i <= 100
+                };
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_complex_constraint_wrong_collection_type() {
+    let input = r#"
+        pub let f(x: Int) -> Constraint =
+            forall elem in x: elem <= 10; # x is Int, not a collection
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. })),
+        "Expected TypeMismatch error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_complex_constraint_nested_forall_sum_should_work() {
+    let input = r#"
+        pub let f(xs: [Int], ys: [Int]) -> Constraint =
+            forall x in xs:
+                forall y in ys:
+                    sum i in xs: i + y <= 200;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
