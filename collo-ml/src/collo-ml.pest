@@ -63,12 +63,12 @@ and_expr = { forall_expr ~ (and_op ~ forall_expr)* }
 
 // Quantifiers
 forall_expr = { forall | union_expr }
-forall = { "forall" ~ ident ~ "in" ~ expr ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
+forall = { "forall" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 
 // Collection operations
 union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
 inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
-diff_expr = { or_expr ~ (diff_op ~ or_expr)? }
+diff_expr = { or_expr ~ (diff_op ~ or_expr)* }
 
 // Logical OR
 or_expr = { not_expr ~ (or_op ~ not_expr)* }
@@ -100,10 +100,10 @@ primary_expr = {
 }
 
 if_expr = { "if" ~ expr ~ "{" ~ expr ~ "}" ~ "else" ~ "{" ~ expr ~ "}" }
-sum = { "sum" ~ ident ~ "in" ~ expr ~ ("where" ~ expr)? ~ "{" ~ expr ~ "}" }
+sum = { "sum" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
 cardinality = { "|" ~ expr ~ "|" }
 list_literal = { "[" ~ "]" | "[" ~ expr ~ ("," ~ expr)* ~ "]" }
-list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ "in" ~ expr ~ ("where" ~ expr)? ~ "]" }
+list_comprehension = { "[" ~ expr ~ "for" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "]" }
 global_collection = { "@" ~ "[" ~ primitive_type ~ "]" }
 var_call = { "$" ~ ident ~ "(" ~ args? ~ ")" }
 fn_call = { ident ~ "(" ~ args? ~ ")" }
@@ -124,6 +124,8 @@ diff_op = { "\\" }
 or_op = @{ "||" | "or" ~ !ident_char }
 and_op = @{ "&&" | "and" ~ !ident_char }
 not_op = @{ "!" | "not" ~ !ident_char }
+
+where_op = @{ "where" ~ !ident_char }
 
 boolean = @{ "true" ~ !ident_char | "false" ~ !ident_char }
 number = @{ "-"? ~ ASCII_DIGIT+ }
