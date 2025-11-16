@@ -52,13 +52,13 @@ fn ident_rejects_starting_with_digit() {
 }
 
 #[test]
-fn ident_rejects_starting_with_underscore() {
+fn ident_accepts_starting_with_underscore() {
     let cases = vec!["_variable", "_student", "__double", "_123", "_"];
     for case in cases {
         let result = ColloMLParser::parse(Rule::ident_complete, case);
         assert!(
-            result.is_err(),
-            "Should not parse '{}' (starts with underscore): {:?}",
+            result.is_ok(),
+            "Should parse '{}' (starts with underscore): {:?}",
             case,
             result
         );

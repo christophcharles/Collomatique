@@ -16,7 +16,7 @@ docstring_content = { (!EOL ~ ANY)* }
 EOL = _{ "\r\n" | "\n" | "\r" }
 
 ident_char = _{ ASCII_ALPHANUMERIC | "_" }
-ident = @{ !(reserved_keyword ~ !ident_char) ~ ASCII_ALPHA ~ ident_char* }
+ident = @{ !(reserved_keyword ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char* }
 reserved_keyword = { 
     "forall" |  // before "for"
     "inter" |   // before "in"
