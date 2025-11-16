@@ -850,3 +850,85 @@ fn test_variable_name_starting_with_underscore_unused_should_work() {
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
 }
+
+#[test]
+fn test_function_name_only_underscores_should_be_rejected() {
+    let input = r#"
+        let __() -> Constraint = 1 <= 10;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: rejected with a naming convention warning suggesting "__name"
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::FunctionNamingConvention { .. }
+    ));
+
+    if let SemWarning::FunctionNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "__");
+        assert_eq!(suggestion, "__name");
+    }
+}
+
+#[test]
+fn test_parameter_name_only_underscores_should_be_rejected() {
+    let input = r#"
+        pub let f(___: Int) -> Constraint = ___ <= 10;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: rejected with a naming convention warning suggesting "__name"
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::ParameterNamingConvention { .. }
+    ));
+
+    if let SemWarning::ParameterNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "___");
+        assert_eq!(suggestion, "___name");
+    }
+}
+
+#[test]
+fn test_variable_name_only_underscores_should_be_rejected() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $_;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: rejected with a naming convention warning suggesting "_Name"
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        warnings[0],
+        SemWarning::VariableNamingConvention { .. }
+    ));
+
+    if let SemWarning::VariableNamingConvention {
+        identifier,
+        suggestion,
+        ..
+    } = &warnings[0]
+    {
+        assert_eq!(identifier, "_");
+        assert_eq!(suggestion, "_Name");
+    }
+}
