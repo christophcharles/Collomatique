@@ -232,6 +232,10 @@ impl GlobalEnv {
 
         type_info.types.insert(span, args_typ.into());
     }
+
+    fn lookup_field(&self, obj_type: &str, field: &str) -> Option<InputType> {
+        self.defined_types.get(obj_type)?.get(field).cloned()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -287,6 +291,18 @@ pub enum SemError {
         span: Span,
         expected: usize,
         found: usize,
+    },
+    #[error("Unknown field \"{field}\" on type {object_type} at {span:?}")]
+    UnknownField {
+        object_type: String,
+        field: String,
+        span: Span,
+    },
+    #[error("Cannot access field \"{field}\" on non-object type {typ} at {span:?}")]
+    FieldAccessOnNonObject {
+        typ: InputType,
+        field: String,
+        span: Span,
     },
 }
 
@@ -1342,12 +1358,61 @@ impl LocalEnv {
         &mut self,
         global_env: &GlobalEnv,
         path: &crate::ast::Path,
-        span: &Span,
-        type_info: &mut TypeInfo,
+        _span: &Span,
+        _type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
-        warnings: &mut Vec<SemWarning>,
+        _warnings: &mut Vec<SemWarning>,
     ) -> Option<InputType> {
-        todo!()
+        assert!(
+            !path.segments.is_empty(),
+            "Path must have at least one segment"
+        );
+
+        // First segment must be a local identifier
+        let first_segment = &path.segments[0];
+        let mut current_type = match self.lookup_ident(&first_segment.node) {
+            Some((typ, _)) => typ,
+            None => {
+                errors.push(SemError::UnknownIdentifer {
+                    identifier: first_segment.node.clone(),
+                    span: first_segment.span.clone(),
+                });
+                return None;
+            }
+        };
+
+        // Follow the path through fields
+        for segment in &path.segments[1..] {
+            match &current_type {
+                InputType::Object(type_name) => {
+                    // Look up the field in this object type
+                    match global_env.lookup_field(type_name, &segment.node) {
+                        Some(field_type) => {
+                            current_type = field_type;
+                        }
+                        None => {
+                            errors.push(SemError::UnknownField {
+                                object_type: type_name.clone(),
+                                field: segment.node.clone(),
+                                span: segment.span.clone(),
+                            });
+                            return None;
+                        }
+                    }
+                }
+                _ => {
+                    // Can't access fields on non-object types
+                    errors.push(SemError::FieldAccessOnNonObject {
+                        typ: current_type.clone(),
+                        field: segment.node.clone(),
+                        span: segment.span.clone(),
+                    });
+                    return None;
+                }
+            }
+        }
+
+        Some(current_type)
     }
 }
 
