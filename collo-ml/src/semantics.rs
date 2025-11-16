@@ -238,6 +238,8 @@ impl GlobalEnv {
 pub enum SemError {
     #[error("Unknown identifier \"{identifier}\" at {span:?}")]
     UnknownIdentifer { identifier: String, span: Span },
+    #[error("Unknown variable \"{var}\" at {span:?}")]
+    UnknownVariable { var: String, span: Span },
     #[error("Function type mismatch: \"{identifier}\" at {span:?} has type {found} but type {expected} expected.")]
     FunctionTypeMismatch {
         identifier: String,
@@ -394,7 +396,273 @@ impl LocalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) {
-        todo!()
+        use crate::ast::LinExpr;
+
+        match lin_expr {
+            LinExpr::Var { name, args } => {
+                // Look up ILP variable
+                match global_env.lookup_var(&name.node) {
+                    None => {
+                        errors.push(SemError::UnknownVariable {
+                            var: name.node.clone(),
+                            span: name.span.clone(),
+                        });
+                    }
+                    Some((var_args, _)) => {
+                        // Check argument count
+                        if args.len() != var_args.len() {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: name.node.clone(),
+                                span: args
+                                    .last()
+                                    .map(|a| a.span.clone())
+                                    .unwrap_or_else(|| name.span.clone()),
+                                expected: var_args.len(),
+                                found: args.len(),
+                            });
+                        }
+
+                        // Check argument types
+                        for (i, (arg, expected_type)) in
+                            args.iter().zip(var_args.iter()).enumerate()
+                        {
+                            let arg_type = self.check_computable(
+                                global_env, &arg.node, &arg.span, type_info, errors, warnings,
+                            );
+
+                            if let Some(found_type) = arg_type {
+                                if &found_type != expected_type {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: arg.span.clone(),
+                                        expected: expected_type.clone(),
+                                        found: found_type,
+                                        context: format!(
+                                            "argument {} to variable ${}",
+                                            i + 1,
+                                            name.node
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            LinExpr::Constant(comp) => {
+                // Check the computable and ensure it's Int
+                let comp_type = self.check_computable(
+                    global_env, &comp.node, &comp.span, type_info, errors, warnings,
+                );
+
+                if let Some(typ) = comp_type {
+                    if typ != InputType::Int {
+                        errors.push(SemError::TypeMismatch {
+                            span: comp.span.clone(),
+                            expected: InputType::Int,
+                            found: typ,
+                            context: "linear expression constant must be Int".to_string(),
+                        });
+                    }
+                }
+            }
+
+            LinExpr::Add(left, right) | LinExpr::Sub(left, right) => {
+                // Check both sides recursively
+                self.check_lin_expr(global_env, &left.node, type_info, errors, warnings);
+                self.check_lin_expr(global_env, &right.node, type_info, errors, warnings);
+            }
+
+            LinExpr::Mul { coeff, expr } => {
+                // Check coefficient is Int
+                let coeff_type = self.check_computable(
+                    global_env,
+                    &coeff.node,
+                    &coeff.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                if let Some(typ) = coeff_type {
+                    if typ != InputType::Int {
+                        errors.push(SemError::TypeMismatch {
+                            span: coeff.span.clone(),
+                            expected: InputType::Int,
+                            found: typ,
+                            context: "coefficient in linear expression must be Int".to_string(),
+                        });
+                    }
+                }
+
+                // Check the linear expression
+                self.check_lin_expr(global_env, &expr.node, type_info, errors, warnings);
+            }
+
+            LinExpr::Sum {
+                var,
+                collection,
+                filter,
+                body,
+            } => {
+                // Check the collection is valid
+                let element_type = self.check_collection(
+                    global_env,
+                    &collection.node,
+                    &collection.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Check naming convention for loop variable
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &var.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::ParameterNamingConvention {
+                        identifier: var.node.clone(),
+                        span: var.span.clone(),
+                        suggestion,
+                    });
+                }
+
+                // Register loop variable
+                if let Some(elem_type) = element_type {
+                    self.register_identifier(
+                        &var.node,
+                        var.span.clone(),
+                        elem_type,
+                        type_info,
+                        warnings,
+                    );
+                }
+
+                self.push_scope();
+
+                // Check filter if present (must be Bool)
+                if let Some(filter_expr) = filter {
+                    let filter_type = self.check_computable(
+                        global_env,
+                        &filter_expr.node,
+                        &filter_expr.span,
+                        type_info,
+                        errors,
+                        warnings,
+                    );
+
+                    if let Some(typ) = filter_type {
+                        if typ != InputType::Bool {
+                            errors.push(SemError::TypeMismatch {
+                                span: filter_expr.span.clone(),
+                                expected: InputType::Bool,
+                                found: typ,
+                                context: "sum filter must be a boolean expression".to_string(),
+                            });
+                        }
+                    }
+                }
+
+                // Check body is a valid LinExpr
+                self.check_lin_expr(global_env, &body.node, type_info, errors, warnings);
+
+                self.pop_scope();
+            }
+
+            LinExpr::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                // Check condition is Bool
+                let cond_type = self.check_computable(
+                    global_env,
+                    &condition.node,
+                    &condition.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                if let Some(typ) = cond_type {
+                    if typ != InputType::Bool {
+                        errors.push(SemError::TypeMismatch {
+                            span: condition.span.clone(),
+                            expected: InputType::Bool,
+                            found: typ,
+                            context: "if condition must be a boolean expression".to_string(),
+                        });
+                    }
+                }
+
+                // Check both branches
+                self.check_lin_expr(global_env, &then_expr.node, type_info, errors, warnings);
+                self.check_lin_expr(global_env, &else_expr.node, type_info, errors, warnings);
+            }
+
+            LinExpr::FnCall { name, args } => {
+                // Look up function
+                match global_env.lookup_fn(&name.node) {
+                    None => {
+                        errors.push(SemError::UnknownIdentifer {
+                            identifier: name.node.clone(),
+                            span: name.span.clone(),
+                        });
+                    }
+                    Some((fn_type, _)) => {
+                        // Check it returns LinExpr
+                        if fn_type.output != OutputType::LinExpr {
+                            errors.push(SemError::FunctionTypeMismatch {
+                                identifier: name.node.clone(),
+                                span: name.span.clone(),
+                                expected: FunctionType {
+                                    output: OutputType::LinExpr,
+                                    ..fn_type.clone()
+                                },
+                                found: fn_type.clone(),
+                            });
+                        }
+
+                        // Check argument count
+                        if args.len() != fn_type.args.len() {
+                            errors.push(SemError::ArgumentCountMismatch {
+                                identifier: name.node.clone(),
+                                span: args
+                                    .last()
+                                    .map(|a| a.span.clone())
+                                    .unwrap_or_else(|| name.span.clone()),
+                                expected: fn_type.args.len(),
+                                found: args.len(),
+                            });
+                        }
+
+                        // Check argument types
+                        for (i, (arg, expected_type)) in
+                            args.iter().zip(fn_type.args.iter()).enumerate()
+                        {
+                            let arg_type = self.check_computable(
+                                global_env, &arg.node, &arg.span, type_info, errors, warnings,
+                            );
+
+                            if let Some(found_type) = arg_type {
+                                if &found_type != expected_type {
+                                    errors.push(SemError::TypeMismatch {
+                                        span: arg.span.clone(),
+                                        expected: expected_type.clone(),
+                                        found: found_type,
+                                        context: format!(
+                                            "argument {} to function {}",
+                                            i + 1,
+                                            name.node
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn check_constraint(
@@ -552,7 +820,7 @@ impl LocalEnv {
                                 span: args
                                     .last()
                                     .map(|a| a.span.clone())
-                                    .unwrap_or_else(|| Span { start: 0, end: 0 }),
+                                    .unwrap_or_else(|| name.span.clone()),
                                 expected: fn_type.args.len(),
                                 found: args.len(),
                             });
