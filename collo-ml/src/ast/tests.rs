@@ -20,9 +20,9 @@ fn visitor_handles_let_statement() {
             assert_eq!(name.node, "f");
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].name.node, "x");
-            assert!(matches!(params[0].typ.node, InputType::Int));
-            assert_eq!(*output_type, OutputType::LinExpr);
-            assert!(matches!(body.node, Expr::LinExpr(LinExpr::Constant(_))));
+            assert!(matches!(params[0].typ.node, TypeName::Int));
+            assert_eq!(output_type.node, TypeName::LinExpr);
+            assert!(matches!(body.node, Expr::Number(_)));
         }
         _ => panic!("Expected Let statement"),
     }
@@ -36,7 +36,7 @@ fn visitor_handles_arithmetic() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::LinExpr(LinExpr::Add(_, _)) => {
+            Expr::Add(_, _) => {
                 // Correct!
             }
             _ => panic!("Expected Add, got {:?}", body.node),
@@ -72,9 +72,9 @@ fn visitor_handles_nested_types() {
 
     match &file.statements[0].node {
         Statement::Let { params, .. } => match &params[0].typ.node {
-            InputType::List(inner1) => match &**inner1 {
-                InputType::List(inner2) => {
-                    assert!(matches!(**inner2, InputType::Int));
+            TypeName::List(inner1) => match &**inner1 {
+                TypeName::List(inner2) => {
+                    assert!(matches!(**inner2, TypeName::Int));
                 }
                 _ => panic!("Expected nested list"),
             },
@@ -92,8 +92,8 @@ fn visitor_handles_comparison_constraint() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Constraint(Constraint::Comparison { op, .. }) => {
-                assert_eq!(*op, ComparisonOp::LessEq);
+            Expr::Le ( _, _ ) => {
+                // OK
             }
             _ => panic!("Expected Comparison constraint"),
         },
@@ -109,14 +109,14 @@ fn visitor_handles_forall() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Constraint(Constraint::Forall {
+            Expr::Forall {
                 var,
                 collection,
                 filter,
                 ..
-            }) => {
+            } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Collection::Global(_)));
+                assert!(matches!(collection.node, Expr::Global(_)));
                 assert!(filter.is_none());
             }
             _ => panic!("Expected Forall constraint"),
@@ -133,7 +133,7 @@ fn visitor_handles_forall_with_filter() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::Constraint(Constraint::Forall { filter, .. }) => {
+            Expr::Forall { filter, .. } => {
                 assert!(filter.is_some());
             }
             _ => panic!("Expected Forall constraint"),
@@ -150,11 +150,11 @@ fn visitor_handles_sum() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::LinExpr(LinExpr::Sum {
+            Expr::Sum {
                 var, collection, ..
-            }) => {
+            } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Collection::Global(_)));
+                assert!(matches!(collection.node, Expr::Global(_)));
             }
             _ => panic!("Expected Sum"),
         },
@@ -171,24 +171,24 @@ fn visitor_handles_computable_operations() {
     match &file.statements[0].node {
         Statement::Let { body, .. } => {
             match &body.node {
-                Expr::LinExpr(LinExpr::Add(left, right)) => {
-                    // Left should be Mul(Number(2), Constant(Number(3)))
+                Expr::Add(left, right) => {
+                    // Left should be Mul(Number(2), Number(3))
                     match &left.node {
-                        LinExpr::Mul { coeff, expr } => {
-                            assert!(matches!(coeff.node, Computable::Number(2)));
-                            match &expr.node {
-                                LinExpr::Constant(comp) => {
-                                    assert!(matches!(comp.node, Computable::Number(3)));
+                        Expr::Mul ( expr1, expr2 ) => {
+                            assert!(matches!(expr1.node, Expr::Number(2)));
+                            match &expr2.node {
+                                Expr::Number(3) => {
+                                    // OK
                                 }
                                 _ => panic!("Expected second to be Constant(3)"),
                             }
                         }
-                        _ => panic!("Expected left to be Constant(Mul)"),
+                        _ => panic!("Expected left to be (Mul)"),
                     }
-                    // Right should be Constant(4)
+                    // Right should be Number(4)
                     match &right.node {
-                        LinExpr::Constant(comp) => {
-                            assert!(matches!(comp.node, Computable::Number(4)));
+                        Expr::Number(4) => {
+                            // OK
                         }
                         _ => panic!("Expected right to be Constant(4)"),
                     }
@@ -208,19 +208,16 @@ fn visitor_handles_path() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::LinExpr(LinExpr::Constant(comp)) => match &comp.node {
-                Computable::Path(path) => {
-                    assert_eq!(
-                        path.segments
-                            .iter()
-                            .map(|x| x.node.as_str())
-                            .collect::<Vec<_>>(),
-                        vec!["student", "age"]
-                    );
-                }
-                _ => panic!("Expected Path"),
-            },
-            _ => panic!(),
+            Expr::Path(path) => {
+                assert_eq!(
+                    path.segments
+                        .iter()
+                        .map(|x| x.node.as_str())
+                        .collect::<Vec<_>>(),
+                    vec!["student", "age"]
+                );
+            }
+            _ => panic!("Expected Path"),
         },
         _ => panic!(),
     }
@@ -234,13 +231,10 @@ fn visitor_handles_collection_operations() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::LinExpr(LinExpr::Constant(comp)) => match &comp.node {
-                Computable::Cardinality(coll) => {
-                    assert!(matches!(coll.node, Collection::Diff(_, _)));
-                }
-                _ => panic!("Expected Cardinality"),
-            },
-            _ => panic!(),
+            Expr::Cardinality(coll) => {
+                assert!(matches!(coll.node, Expr::Diff(_, _)));
+            }
+            _ => panic!("Expected Cardinality"),
         },
         _ => panic!(),
     }

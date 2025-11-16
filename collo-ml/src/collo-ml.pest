@@ -68,7 +68,7 @@ forall = { "forall" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "
 // Collection operations
 union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
 inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
-diff_expr = { or_expr ~ (diff_op ~ or_expr)* }
+diff_expr = { or_expr ~ (diff_op ~ or_expr)? }
 
 // Logical OR
 or_expr = { not_expr ~ (or_op ~ not_expr)* }
