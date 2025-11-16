@@ -343,12 +343,14 @@ pub enum SemWarning {
         span: Span,
         suggestion: String,
     },
+    #[error("Unused identifier \"{identifier}\" at {span:?}")]
+    UnusedIdentifier { identifier: String, span: Span },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct LocalEnv {
-    scopes: Vec<HashMap<String, (InputType, Span)>>,
-    current_scope: HashMap<String, (InputType, Span)>,
+    scopes: Vec<HashMap<String, (InputType, Span, bool)>>,
+    current_scope: HashMap<String, (InputType, Span, bool)>,
 }
 
 impl LocalEnv {
@@ -357,16 +359,19 @@ impl LocalEnv {
     }
 
     fn lookup_in_current_scope(&self, ident: &str) -> Option<(InputType, Span)> {
-        self.current_scope.get(ident).cloned()
+        self.current_scope
+            .get(ident)
+            .map(|(typ, span, _used)| (typ.clone(), span.clone()))
     }
 
-    fn lookup_ident(&self, ident: &str) -> Option<(InputType, Span)> {
+    fn lookup_ident(&mut self, ident: &str) -> Option<(InputType, Span)> {
         // We don't look in current scope as these variables are not yet accessible
-        for scope in self.scopes.iter().rev() {
-            let Some(val) = scope.get(ident) else {
+        for scope in self.scopes.iter_mut().rev() {
+            let Some((typ, span, used)) = scope.get_mut(ident) else {
                 continue;
             };
-            return Some(val.clone());
+            *used = true;
+            return Some((typ.clone(), span.clone()));
         }
         None
     }
@@ -378,9 +383,19 @@ impl LocalEnv {
         self.scopes.push(old_scope);
     }
 
-    fn pop_scope(&mut self) {
+    fn pop_scope(&mut self, warnings: &mut Vec<SemWarning>) {
         assert!(!self.scopes.is_empty());
+
         self.current_scope = self.scopes.pop().unwrap();
+
+        for (name, (_typ, span, used)) in &self.current_scope {
+            if !*used {
+                warnings.push(SemWarning::UnusedIdentifier {
+                    identifier: name.clone(),
+                    span: span.clone(),
+                });
+            }
+        }
     }
 
     fn register_identifier(
@@ -402,7 +417,7 @@ impl LocalEnv {
         }
 
         self.current_scope
-            .insert(ident.to_string(), (typ.clone(), span.clone()));
+            .insert(ident.to_string(), (typ.clone(), span.clone(), false)); // Start as unused
         type_info.types.insert(span, typ.into());
     }
 
@@ -584,7 +599,7 @@ impl LocalEnv {
                 // Check body is a valid LinExpr
                 self.check_lin_expr(global_env, &body.node, type_info, errors, warnings);
 
-                self.pop_scope();
+                self.pop_scope(warnings);
             }
 
             LinExpr::If {
@@ -774,7 +789,7 @@ impl LocalEnv {
                 // Check body constraint
                 self.check_constraint(global_env, &body.node, type_info, errors, warnings);
 
-                self.pop_scope();
+                self.pop_scope(warnings);
             }
 
             Constraint::If {
@@ -1584,6 +1599,8 @@ impl GlobalEnv {
                         local_env.check_constraint(self, constraint, type_info, errors, warnings)
                     }
                 }
+
+                local_env.pop_scope(warnings);
 
                 if !error_in_param_typs {
                     let args = params

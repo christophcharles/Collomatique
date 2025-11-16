@@ -141,3 +141,110 @@ fn test_unknown_field_access() {
         .iter()
         .any(|e| matches!(e, SemError::UnknownField { .. })));
 }
+
+#[test]
+fn test_unused_parameter_warning() {
+    let input = "let f(x: Int, y: Int) -> LinExpr = x;"; // y is unused
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(warnings[0], SemWarning::UnusedIdentifier { .. }));
+    if let SemWarning::UnusedIdentifier { identifier, .. } = &warnings[0] {
+        assert_eq!(identifier, "y");
+    }
+}
+
+#[test]
+fn test_unused_forall_variable() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = "let f() -> Constraint = forall s in @[Student]: 0 <= 1;"; // s unused
+    let (_, _, warnings) = analyze(input, types, HashMap::new());
+
+    assert!(warnings
+        .iter()
+        .any(|w| matches!(w, SemWarning::UnusedIdentifier { .. })));
+}
+
+#[test]
+fn test_unused_sum_variable() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = "let f() -> LinExpr = sum s in @[Student]: 5;"; // s unused
+    let (_, _, warnings) = analyze(input, types, HashMap::new());
+
+    assert!(warnings
+        .iter()
+        .any(|w| matches!(w, SemWarning::UnusedIdentifier { .. })));
+    if let Some(SemWarning::UnusedIdentifier { identifier, .. }) = warnings
+        .iter()
+        .find(|w| matches!(w, SemWarning::UnusedIdentifier { .. }))
+    {
+        assert_eq!(identifier, "s");
+    }
+}
+
+#[test]
+fn test_no_warning_when_parameter_used() {
+    let input = "let f(x: Int, y: Int) -> LinExpr = x + y;"; // Both used
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Should only have warnings for naming conventions, not unused
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::UnusedIdentifier { .. })),
+        "Should not warn about unused when all parameters are used: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_no_warning_when_forall_variable_used() {
+    let mut types = HashMap::new();
+    let mut student_fields = HashMap::new();
+    student_fields.insert("age".to_string(), InputType::Int);
+    types.insert("Student".to_string(), student_fields);
+
+    let mut vars = HashMap::new();
+    vars.insert(
+        "V".to_string(),
+        vec![InputType::Object("Student".to_string())],
+    );
+
+    let input = "let f() -> Constraint = forall s in @[Student]: $V(s) >= 0;"; // s is used
+    let (_, _, warnings) = analyze(input, types, vars);
+
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::UnusedIdentifier { .. })),
+        "Should not warn about unused when forall variable is used: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_no_warning_when_sum_variable_used() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let mut vars = HashMap::new();
+    vars.insert(
+        "V".to_string(),
+        vec![InputType::Object("Student".to_string())],
+    );
+
+    let input = "let f() -> LinExpr = sum s in @[Student]: $V(s);"; // s is used
+    let (_, _, warnings) = analyze(input, types, vars);
+
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| matches!(w, SemWarning::UnusedIdentifier { .. })),
+        "Should not warn about unused when sum variable is used: {:?}",
+        warnings
+    );
+}
