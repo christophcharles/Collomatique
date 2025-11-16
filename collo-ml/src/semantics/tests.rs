@@ -933,3 +933,54 @@ fn test_variable_name_only_underscores_should_be_rejected() {
         assert_eq!(suggestion, "_Name");
     }
 }
+
+#[test]
+fn test_path_on_list_field() {
+    // student.courses where courses is [Course]
+    let mut types = HashMap::new();
+    let mut student_fields = HashMap::new();
+    student_fields.insert(
+        "courses".to_string(),
+        InputType::List(Box::new(InputType::Object("Course".to_string()))),
+    );
+    types.insert("Student".to_string(), student_fields);
+    types.insert("Course".to_string(), HashMap::new());
+
+    let input = "pub let f(s: Student) -> Constraint = forall c in s.courses: 0 <= 1;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_nested_path() {
+    // student.address.city
+    let mut types = HashMap::new();
+    let mut address_fields = HashMap::new();
+    address_fields.insert("city".to_string(), InputType::Object("City".to_string()));
+    types.insert("Address".to_string(), address_fields);
+
+    let mut student_fields = HashMap::new();
+    student_fields.insert(
+        "address".to_string(),
+        InputType::Object("Address".to_string()),
+    );
+    types.insert("Student".to_string(), student_fields);
+    types.insert("City".to_string(), HashMap::new());
+
+    let input = "pub let f(s: Student, allowed_cities: [City]) -> LinExpr = if s.address.city in allowed_cities { 1 } else { 0 };";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_cardinality_returns_int() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = "pub let f() -> LinExpr = |@[Student]|;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(errors.is_empty());
+}
