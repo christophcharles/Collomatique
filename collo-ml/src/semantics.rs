@@ -350,7 +350,7 @@ pub enum SemWarning {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct LocalEnv {
     scopes: Vec<HashMap<String, (InputType, Span, bool)>>,
-    current_scope: HashMap<String, (InputType, Span, bool)>,
+    pending_scope: HashMap<String, (InputType, Span, bool)>,
 }
 
 impl LocalEnv {
@@ -358,14 +358,14 @@ impl LocalEnv {
         LocalEnv::default()
     }
 
-    fn lookup_in_current_scope(&self, ident: &str) -> Option<(InputType, Span)> {
-        self.current_scope
+    fn lookup_in_pending_scope(&self, ident: &str) -> Option<(InputType, Span)> {
+        self.pending_scope
             .get(ident)
             .map(|(typ, span, _used)| (typ.clone(), span.clone()))
     }
 
     fn lookup_ident(&mut self, ident: &str) -> Option<(InputType, Span)> {
-        // We don't look in current scope as these variables are not yet accessible
+        // We don't look in pending scope as these variables are not yet accessible
         for scope in self.scopes.iter_mut().rev() {
             let Some((typ, span, used)) = scope.get_mut(ident) else {
                 continue;
@@ -378,7 +378,7 @@ impl LocalEnv {
 
     fn push_scope(&mut self) {
         let mut old_scope = HashMap::new();
-        std::mem::swap(&mut old_scope, &mut self.current_scope);
+        std::mem::swap(&mut old_scope, &mut self.pending_scope);
 
         self.scopes.push(old_scope);
     }
@@ -386,9 +386,9 @@ impl LocalEnv {
     fn pop_scope(&mut self, warnings: &mut Vec<SemWarning>) {
         assert!(!self.scopes.is_empty());
 
-        self.current_scope = self.scopes.pop().unwrap();
+        self.pending_scope = self.scopes.pop().unwrap();
 
-        for (name, (_typ, span, used)) in &self.current_scope {
+        for (name, (_typ, span, used)) in &self.pending_scope {
             if !*used {
                 warnings.push(SemWarning::UnusedIdentifier {
                     identifier: name.clone(),
@@ -406,7 +406,7 @@ impl LocalEnv {
         type_info: &mut TypeInfo,
         warnings: &mut Vec<SemWarning>,
     ) {
-        assert!(!self.current_scope.contains_key(ident));
+        assert!(!self.pending_scope.contains_key(ident));
 
         if let Some((_typ, old_span)) = self.lookup_ident(ident) {
             warnings.push(SemWarning::IdentifierShadowed {
@@ -416,7 +416,7 @@ impl LocalEnv {
             });
         }
 
-        self.current_scope
+        self.pending_scope
             .insert(ident.to_string(), (typ.clone(), span.clone(), false)); // Start as unused
         type_info.types.insert(span, typ.into());
     }
@@ -1536,7 +1536,7 @@ impl GlobalEnv {
                         });
                         error_in_param_typs = true;
                     } else if let Some((_typ, span)) =
-                        local_env.lookup_in_current_scope(&param.name.node)
+                        local_env.lookup_in_pending_scope(&param.name.node)
                     {
                         errors.push(SemError::ParameterAlreadyDefined {
                             identifier: param.name.node.clone(),
