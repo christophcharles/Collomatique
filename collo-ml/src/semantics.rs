@@ -274,6 +274,43 @@ pub enum SemError {
     },
 }
 
+#[derive(Debug, Error)]
+pub enum SemWarning {
+    #[error("Identifier \"{identifier}\" at {span:?} shadows previous definition at {previous:?}")]
+    IdentifierShadowed {
+        identifier: String,
+        span: Span,
+        previous: Span,
+    },
+
+    #[error(
+        "Function \"{identifier}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
+    )]
+    FunctionNamingConvention {
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
+
+    #[error(
+        "Variable \"{identifier}\" at {span:?} should use PascalCase (consider \"{suggestion}\")"
+    )]
+    VariableNamingConvention {
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
+
+    #[error(
+        "Parameter \"{identifier}\" at {span:?} should use snake_case (consider \"{suggestion}\")"
+    )]
+    ParameterNamingConvention {
+        identifier: String,
+        span: Span,
+        suggestion: String,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct LocalEnv {
     scopes: Vec<HashMap<String, (InputType, Span)>>,
@@ -318,8 +355,17 @@ impl LocalEnv {
         span: Span,
         typ: InputType,
         type_info: &mut TypeInfo,
+        warnings: &mut Vec<SemWarning>,
     ) {
         assert!(!self.current_scope.contains_key(ident));
+
+        if let Some((_typ, old_span)) = self.lookup_ident(ident) {
+            warnings.push(SemWarning::IdentifierShadowed {
+                identifier: ident.to_string(),
+                span: span.clone(),
+                previous: old_span,
+            });
+        }
 
         self.current_scope
             .insert(ident.to_string(), (typ.clone(), span.clone()));
@@ -332,6 +378,7 @@ impl LocalEnv {
         lin_expr: &crate::ast::LinExpr,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         todo!()
     }
@@ -342,6 +389,7 @@ impl LocalEnv {
         constraint_expr: &crate::ast::Constraint,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         todo!()
     }
@@ -354,15 +402,19 @@ impl TypeInfo {
 }
 
 impl GlobalEnv {
-    pub fn expand(&mut self, file: &crate::ast::File) -> (TypeInfo, Vec<SemError>) {
+    pub fn expand(
+        &mut self,
+        file: &crate::ast::File,
+    ) -> (TypeInfo, Vec<SemError>, Vec<SemWarning>) {
         let mut type_info = TypeInfo::new();
         let mut errors = vec![];
+        let mut warnings = vec![];
 
         for statement in &file.statements {
-            self.expand_with_statement(&statement.node, &mut type_info, &mut errors);
+            self.expand_with_statement(&statement.node, &mut type_info, &mut errors, &mut warnings);
         }
 
-        (type_info, errors)
+        (type_info, errors, warnings)
     }
 
     fn expand_with_statement(
@@ -370,6 +422,7 @@ impl GlobalEnv {
         statement: &crate::ast::Statement,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         match statement {
             crate::ast::Statement::Let {
@@ -387,12 +440,19 @@ impl GlobalEnv {
                 body,
                 type_info,
                 errors,
+                warnings,
             ),
             crate::ast::Statement::Reify {
                 docstring: _,
                 constraint_name,
                 var_name,
-            } => self.expand_with_reify_statement(constraint_name, var_name, type_info, errors),
+            } => self.expand_with_reify_statement(
+                constraint_name,
+                var_name,
+                type_info,
+                errors,
+                warnings,
+            ),
         }
     }
 
@@ -405,6 +465,7 @@ impl GlobalEnv {
         body: &Spanned<Expr>,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         match self.lookup_fn(&name.node) {
             Some((_fn_type, span)) => {
@@ -415,6 +476,17 @@ impl GlobalEnv {
                 });
             }
             None => {
+                if let Some(suggestion) = string_case::generate_suggestion_for_naming_convention(
+                    &name.node,
+                    string_case::NamingConvention::SnakeCase,
+                ) {
+                    warnings.push(SemWarning::FunctionNamingConvention {
+                        identifier: name.node.clone(),
+                        span: name.span.clone(),
+                        suggestion,
+                    });
+                }
+
                 let mut local_env = LocalEnv::new();
                 let mut error_in_param_typs = false;
                 for param in params {
@@ -434,11 +506,24 @@ impl GlobalEnv {
                             here: span,
                         });
                     } else {
+                        if let Some(suggestion) =
+                            string_case::generate_suggestion_for_naming_convention(
+                                &param.node.name,
+                                string_case::NamingConvention::SnakeCase,
+                            )
+                        {
+                            warnings.push(SemWarning::ParameterNamingConvention {
+                                identifier: param.node.name.clone(),
+                                span: param.span.clone(),
+                                suggestion,
+                            });
+                        }
                         local_env.register_identifier(
                             &param.node.name,
                             param.span.clone(),
                             param_typ,
                             type_info,
+                            warnings,
                         );
                     }
                 }
@@ -470,10 +555,10 @@ impl GlobalEnv {
 
                 match &body.node {
                     Expr::LinExpr(lin_expr) => {
-                        local_env.check_lin_expr(self, lin_expr, type_info, errors)
+                        local_env.check_lin_expr(self, lin_expr, type_info, errors, warnings)
                     }
                     Expr::Constraint(constraint) => {
-                        local_env.check_constraint(self, constraint, type_info, errors)
+                        local_env.check_constraint(self, constraint, type_info, errors, warnings)
                     }
                 }
 
@@ -499,6 +584,7 @@ impl GlobalEnv {
         var_name: &Spanned<String>,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
     ) {
         match self.lookup_fn(&constraint_name.node) {
             None => errors.push(SemError::UnknownIdentifer {
@@ -525,6 +611,18 @@ impl GlobalEnv {
                         here: span_opt,
                     }),
                     None => {
+                        if let Some(suggestion) =
+                            string_case::generate_suggestion_for_naming_convention(
+                                &var_name.node,
+                                string_case::NamingConvention::PascalCase,
+                            )
+                        {
+                            warnings.push(SemWarning::VariableNamingConvention {
+                                identifier: var_name.node.clone(),
+                                span: var_name.span.clone(),
+                                suggestion,
+                            });
+                        }
                         self.register_var(
                             &var_name.node,
                             fn_type.0.args.clone(),
