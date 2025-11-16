@@ -326,7 +326,12 @@ fn visitor_handles_list_comprehension() {
 
     match &file.statements[0].node {
         Statement::Let { body, .. } => match &body.node {
-            Expr::ListComprehension { var, collection, filter, .. } => {
+            Expr::ListComprehension {
+                var,
+                collection,
+                filter,
+                ..
+            } => {
                 assert_eq!(var.node, "x");
                 assert!(matches!(collection.node, Expr::Global(_)));
                 assert!(filter.is_none());

@@ -465,9 +465,9 @@ impl Expr {
 
         match inner.as_rule() {
             Rule::forall => Self::from_forall(inner),
-            Rule::union_expr => Self::from_union_expr(inner),
+            Rule::or_expr => Self::from_or_expr(inner),
             _ => Err(AstError::UnexpectedRule {
-                expected: "forall or union_expr",
+                expected: "forall or or_expr",
                 found: inner.as_rule(),
                 span: Span::from_pest(&inner),
             }),
@@ -561,12 +561,12 @@ impl Expr {
         let mut inner = pair.into_inner();
 
         let first = inner.next().unwrap();
-        let mut result = Self::from_or_expr(first)?;
+        let mut result = Self::from_relational_expr(first)?;
 
         // diff can only appear once (based on grammar: (diff_op ~ collection)? )
         if let Some(_diff_op) = inner.next() {
             let right_pair = inner.next().unwrap();
-            let right = Self::from_or_expr(right_pair)?;
+            let right = Self::from_relational_expr(right_pair)?;
 
             let result_span = span.clone();
             result = Expr::Diff(
@@ -628,7 +628,7 @@ impl Expr {
 
         match first.as_rule() {
             Rule::in_expr => Self::from_in_expr(first),
-            Rule::relational_expr => Self::from_relational_expr(first),
+            Rule::union_expr => Self::from_union_expr(first),
             _ => Err(AstError::UnexpectedRule {
                 expected: "in_expr or relational_expr",
                 found: first.as_rule(),
@@ -642,13 +642,13 @@ impl Expr {
 
         let item_pair = inner.next().unwrap();
         let item_span = Span::from_pest(&item_pair);
-        let item = Box::new(Spanned::new(Self::from_add_sub_expr(item_pair)?, item_span));
+        let item = Box::new(Spanned::new(Self::from_union_expr(item_pair)?, item_span));
 
         let _in_op = inner.next().unwrap(); // consume "in"
 
         let coll_pair = inner.next().unwrap();
         let coll_span = Span::from_pest(&coll_pair);
-        let collection = Box::new(Spanned::new(Expr::from_pest(coll_pair)?, coll_span));
+        let collection = Box::new(Spanned::new(Self::from_union_expr(coll_pair)?, coll_span));
 
         Ok(Expr::In { item, collection })
     }

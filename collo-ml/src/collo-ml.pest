@@ -62,21 +62,22 @@ expr = { and_expr }
 and_expr = { forall_expr ~ (and_op ~ forall_expr)* }
 
 // Quantifiers
-forall_expr = { forall | union_expr }
+forall_expr = { forall | or_expr }
 forall = { "forall" ~ ident ~ in_op ~ expr ~ (where_op ~ expr)? ~ "{" ~ expr ~ "}" }
-
-// Collection operations
-union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
-inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
-diff_expr = { or_expr ~ (diff_op ~ or_expr)? }
 
 // Logical OR
 or_expr = { not_expr ~ (or_op ~ not_expr)* }
 not_expr = { not_op ~ not_expr | comparison_expr }
 
 // Comparisons and membership
-comparison_expr = { in_expr | relational_expr }
-in_expr = { relational_expr ~ in_op ~ expr }
+comparison_expr = { in_expr | union_expr }
+in_expr = { union_expr ~ in_op ~ union_expr }
+
+// Collection operations
+union_expr = { inter_expr ~ (union_op ~ inter_expr)* }
+inter_expr = { diff_expr ~ (inter_op ~ diff_expr)* }
+diff_expr = { relational_expr ~ (diff_op ~ relational_expr)? }
+
 relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
 
 // Arithmetic
