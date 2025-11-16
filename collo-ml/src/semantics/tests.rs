@@ -248,3 +248,65 @@ fn test_no_warning_when_sum_variable_used() {
         warnings
     );
 }
+
+#[test]
+fn test_unused_function_warning() {
+    let input = "let foo(x: Int) -> LinExpr = x;"; // foo is never called
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(warnings[0], SemWarning::UnusedFunction { .. }));
+    if let SemWarning::UnusedFunction { identifier, .. } = &warnings[0] {
+        assert_eq!(identifier, "foo");
+    }
+}
+
+#[test]
+fn test_multiple_unused_functions_warning() {
+    let input = r#"
+        let f(x: Int) -> LinExpr = x;
+        let g(y: Int) -> LinExpr = y;
+    "#; // both f and g are unused
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 2);
+    assert!(warnings
+        .iter()
+        .all(|w| matches!(w, SemWarning::UnusedFunction { .. })));
+
+    let identifiers: Vec<_> = warnings
+        .iter()
+        .filter_map(|w| {
+            if let SemWarning::UnusedFunction { identifier, .. } = w {
+                Some(identifier.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(identifiers.contains(&"f"));
+    assert!(identifiers.contains(&"g"));
+}
+
+#[test]
+fn test_function_used_no_warning() {
+    let input = r#"
+        let f(x: Int) -> LinExpr = x;
+        pub let g(y: Int) -> LinExpr = f(y);
+    "#; // f is used inside g, so only g is unused
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 0);
+}
+
+#[test]
+fn test_function_used_in_constraint_no_warning() {
+    let input = r#"
+        let f(x: Int) -> LinExpr = x;
+        pub let c(y: Int) -> Constraint = f(y) == y;
+    "#; // f is used in c, so only c is unused
+    let (_, _, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert_eq!(warnings.len(), 0);
+}
