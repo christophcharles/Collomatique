@@ -807,3 +807,46 @@ fn test_variable_name_starting_with_underscore_should_work() {
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
 }
+
+#[test]
+fn test_function_name_starting_with_underscore_unused_should_work() {
+    let input = r#"
+        # Function is defined but never called
+        let _f(x: Int) -> Constraint = x <= 10;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: no errors, no warnings (even if unused)
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_parameter_name_starting_with_underscore_unused_should_work() {
+    let input = r#"
+        # Parameter _x is never used in the body
+        pub let f(_x: Int) -> Constraint = 1 <= 10;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: no errors, no warnings (even if unused)
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_variable_name_starting_with_underscore_unused_should_work() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $_Var;
+        # $_Var is never used
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: no errors, no warnings (even if unused)
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
