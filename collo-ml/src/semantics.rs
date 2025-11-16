@@ -1026,7 +1026,316 @@ impl LocalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<InputType> {
-        todo!()
+        use crate::ast::Computable;
+
+        match computable {
+            Computable::Number(_) => {
+                // Numbers are always Int
+                Some(InputType::Int)
+            }
+
+            Computable::Path(path) => {
+                // Check the path and return its type
+                self.check_path(global_env, path, span, type_info, errors, warnings)
+            }
+
+            // Arithmetic operations - all require Int operands and return Int
+            Computable::Add(left, right)
+            | Computable::Sub(left, right)
+            | Computable::Mul(left, right)
+            | Computable::Div(left, right)
+            | Computable::Mod(left, right) => {
+                let left_type = self.check_computable(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_type = self.check_computable(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Check both are Int
+                if let Some(typ) = left_type {
+                    if typ != InputType::Int {
+                        errors.push(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: InputType::Int,
+                            found: typ,
+                            context: "arithmetic operation requires Int operands".to_string(),
+                        });
+                    }
+                }
+
+                if let Some(typ) = right_type {
+                    if typ != InputType::Int {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: InputType::Int,
+                            found: typ,
+                            context: "arithmetic operation requires Int operands".to_string(),
+                        });
+                    }
+                }
+
+                // Result is Int
+                Some(InputType::Int)
+            }
+
+            // Comparison operations - operands must be same type, result is Bool
+            Computable::Eq(left, right) | Computable::Ne(left, right) => {
+                let left_type = self.check_computable(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_type = self.check_computable(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Check types match
+                if let (Some(l), Some(r)) = (left_type, right_type) {
+                    if l != r {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: l,
+                            found: r,
+                            context: "equality comparison requires matching types".to_string(),
+                        });
+                    }
+                }
+
+                // Result is Bool
+                Some(InputType::Bool)
+            }
+
+            // Relational comparisons - require Int operands, result is Bool
+            Computable::Lt(left, right)
+            | Computable::Le(left, right)
+            | Computable::Gt(left, right)
+            | Computable::Ge(left, right) => {
+                let left_type = self.check_computable(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_type = self.check_computable(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Check both are Int
+                if let Some(typ) = left_type {
+                    if typ != InputType::Int {
+                        errors.push(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: InputType::Int,
+                            found: typ,
+                            context: "relational comparison requires Int operands".to_string(),
+                        });
+                    }
+                }
+
+                if let Some(typ) = right_type {
+                    if typ != InputType::Int {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: InputType::Int,
+                            found: typ,
+                            context: "relational comparison requires Int operands".to_string(),
+                        });
+                    }
+                }
+
+                // Result is Bool
+                Some(InputType::Bool)
+            }
+
+            // Boolean operations - require Bool operands, return Bool
+            Computable::And(left, right) | Computable::Or(left, right) => {
+                let left_type = self.check_computable(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_type = self.check_computable(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Check both are Bool
+                if let Some(typ) = left_type {
+                    if typ != InputType::Bool {
+                        errors.push(SemError::TypeMismatch {
+                            span: left.span.clone(),
+                            expected: InputType::Bool,
+                            found: typ,
+                            context: "boolean operation requires Bool operands".to_string(),
+                        });
+                    }
+                }
+
+                if let Some(typ) = right_type {
+                    if typ != InputType::Bool {
+                        errors.push(SemError::TypeMismatch {
+                            span: right.span.clone(),
+                            expected: InputType::Bool,
+                            found: typ,
+                            context: "boolean operation requires Bool operands".to_string(),
+                        });
+                    }
+                }
+
+                // Result is Bool
+                Some(InputType::Bool)
+            }
+
+            Computable::Not(expr) => {
+                let expr_type = self.check_computable(
+                    global_env, &expr.node, &expr.span, type_info, errors, warnings,
+                );
+
+                // Check it's Bool
+                if let Some(typ) = expr_type {
+                    if typ != InputType::Bool {
+                        errors.push(SemError::TypeMismatch {
+                            span: expr.span.clone(),
+                            expected: InputType::Bool,
+                            found: typ,
+                            context: "not operation requires Bool operand".to_string(),
+                        });
+                    }
+                }
+
+                // Result is Bool
+                Some(InputType::Bool)
+            }
+
+            Computable::In { item, collection } => {
+                // Check item type
+                let item_type = self.check_computable(
+                    global_env, &item.node, &item.span, type_info, errors, warnings,
+                );
+
+                // Check collection and get element type
+                let elem_type = self.check_collection(
+                    global_env,
+                    &collection.node,
+                    &collection.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Verify item type matches collection element type
+                if let (Some(item_t), Some(elem_t)) = (item_type, elem_type) {
+                    if item_t != elem_t {
+                        errors.push(SemError::TypeMismatch {
+                            span: item.span.clone(),
+                            expected: elem_t,
+                            found: item_t,
+                            context: "item type must match collection element type".to_string(),
+                        });
+                    }
+                }
+
+                // Result is Bool
+                Some(InputType::Bool)
+            }
+
+            Computable::Cardinality(collection) => {
+                // Check the collection is valid
+                self.check_collection(
+                    global_env,
+                    &collection.node,
+                    &collection.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Cardinality always returns Int
+                Some(InputType::Int)
+            }
+
+            Computable::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                // Check condition is Bool
+                let cond_type = self.check_computable(
+                    global_env,
+                    &condition.node,
+                    &condition.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                if let Some(typ) = cond_type {
+                    if typ != InputType::Bool {
+                        errors.push(SemError::TypeMismatch {
+                            span: condition.span.clone(),
+                            expected: InputType::Bool,
+                            found: typ,
+                            context: "if condition must be Bool".to_string(),
+                        });
+                    }
+                }
+
+                // Check both branches
+                let then_type = self.check_computable(
+                    global_env,
+                    &then_expr.node,
+                    &then_expr.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                let else_type = self.check_computable(
+                    global_env,
+                    &else_expr.node,
+                    &else_expr.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                // Both branches must have same type
+                match (then_type, else_type) {
+                    (Some(then_t), Some(else_t)) => {
+                        if then_t == else_t {
+                            Some(then_t)
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: else_expr.span.clone(),
+                                expected: then_t.clone(),
+                                found: else_t,
+                                context: "if branches must have the same type".to_string(),
+                            });
+                            Some(then_t) // Return then type as fallback
+                        }
+                    }
+                    (Some(t), None) | (None, Some(t)) => Some(t),
+                    (None, None) => None,
+                }
+            }
+        }
     }
 
     fn check_path(
