@@ -198,7 +198,7 @@ pub enum Computable {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Collection {
-    Global(String),
+    Global(Spanned<String>),
     Path(Path),
     Union(Box<Spanned<Collection>>, Box<Spanned<Collection>>),
     Inter(Box<Spanned<Collection>>, Box<Spanned<Collection>>),
@@ -209,7 +209,7 @@ pub enum Collection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
-    pub segments: Vec<String>, // ["student", "age"] for student.age
+    pub segments: Vec<Spanned<String>>, // ["student", "age"] for student.age
 }
 
 // ============= Error Type =============
@@ -1336,7 +1336,8 @@ impl Collection {
             Rule::primitive_input_type => {
                 // Global collection: @[Type]
                 let type_name = inner.as_str().to_string();
-                Ok(Collection::Global(type_name))
+                let type_span = Span::from_pest(&inner);
+                Ok(Collection::Global(Spanned::new(type_name, type_span)))
             }
             Rule::path => Ok(Collection::Path(Path::from_pest(inner)?)),
             Rule::collection_expr => {
@@ -1366,7 +1367,8 @@ impl Path {
         let mut segments = Vec::new();
         for inner in pair.into_inner() {
             if inner.as_rule() == Rule::ident {
-                segments.push(inner.as_str().to_string());
+                let segment_span = Span::from_pest(&inner);
+                segments.push(Spanned::new(inner.as_str().to_string(), segment_span));
             }
         }
 

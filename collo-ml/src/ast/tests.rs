@@ -210,7 +210,13 @@ fn visitor_handles_path() {
         Statement::Let { body, .. } => match &body.node {
             Expr::LinExpr(LinExpr::Constant(comp)) => match &comp.node {
                 Computable::Path(path) => {
-                    assert_eq!(path.segments, vec!["student", "age"]);
+                    assert_eq!(
+                        path.segments
+                            .iter()
+                            .map(|x| x.node.as_str())
+                            .collect::<Vec<_>>(),
+                        vec!["student", "age"]
+                    );
                 }
                 _ => panic!("Expected Path"),
             },

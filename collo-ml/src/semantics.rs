@@ -676,7 +676,7 @@ impl LocalEnv {
         use crate::ast::Constraint;
 
         match constraint_expr {
-            Constraint::Comparison { left, op, right } => {
+            Constraint::Comparison { left, op: _, right } => {
                 // Check both sides are valid LinExpr
                 self.check_lin_expr(global_env, &left.node, type_info, errors, warnings);
                 self.check_lin_expr(global_env, &right.node, type_info, errors, warnings);
@@ -864,13 +864,175 @@ impl LocalEnv {
         errors: &mut Vec<SemError>,
         warnings: &mut Vec<SemWarning>,
     ) -> Option<InputType> {
-        todo!()
+        use crate::ast::Collection;
+
+        match collection {
+            Collection::Global(type_name) => {
+                // @[Student] - global collection of a type
+                // Verify the type exists
+                let obj_type = InputType::Object(type_name.node.clone());
+                if !global_env.validate_type(&obj_type) {
+                    errors.push(SemError::UnknownInputType {
+                        typ: type_name.node.clone(),
+                        span: type_name.span.clone(),
+                    });
+                    None
+                } else {
+                    // Return the element type (the object type itself)
+                    Some(obj_type)
+                }
+            }
+
+            Collection::Path(path) => {
+                // a field that should be a list
+                let path_type =
+                    self.check_path(global_env, path, span, type_info, errors, warnings);
+
+                match path_type {
+                    Some(InputType::List(inner)) => {
+                        // It's a list, return the element type
+                        Some(*inner)
+                    }
+                    Some(other) => {
+                        // It's not a list!
+                        errors.push(SemError::TypeMismatch {
+                            span: span.clone(),
+                            expected: InputType::List(Box::new(other.clone())), // Placeholder
+                            found: other,
+                            context: "collection must be a list type".to_string(),
+                        });
+                        None
+                    }
+                    None => {
+                        // Error already reported by check_path
+                        None
+                    }
+                }
+            }
+
+            Collection::Union(left, right) => {
+                // left | right - both must be collections of the same type
+                let left_elem = self.check_collection(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_elem = self.check_collection(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                match (left_elem, right_elem) {
+                    (Some(left_type), Some(right_type)) => {
+                        if left_type == right_type {
+                            Some(left_type)
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: left_type.clone(),
+                                found: right_type,
+                                context: "union operands must have the same element type"
+                                    .to_string(),
+                            });
+                            Some(left_type) // Return left type as fallback
+                        }
+                    }
+                    (Some(t), None) | (None, Some(t)) => Some(t), // One side errored, use the other
+                    (None, None) => None,                         // Both errored
+                }
+            }
+
+            Collection::Inter(left, right) => {
+                // left & right - both must be collections of the same type
+                let left_elem = self.check_collection(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_elem = self.check_collection(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                match (left_elem, right_elem) {
+                    (Some(left_type), Some(right_type)) => {
+                        if left_type == right_type {
+                            Some(left_type)
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: left_type.clone(),
+                                found: right_type,
+                                context: "intersection operands must have the same element type"
+                                    .to_string(),
+                            });
+                            Some(left_type)
+                        }
+                    }
+                    (Some(t), None) | (None, Some(t)) => Some(t),
+                    (None, None) => None,
+                }
+            }
+
+            Collection::Diff(left, right) => {
+                // left \ right - both must be collections of the same type
+                let left_elem = self.check_collection(
+                    global_env, &left.node, &left.span, type_info, errors, warnings,
+                );
+
+                let right_elem = self.check_collection(
+                    global_env,
+                    &right.node,
+                    &right.span,
+                    type_info,
+                    errors,
+                    warnings,
+                );
+
+                match (left_elem, right_elem) {
+                    (Some(left_type), Some(right_type)) => {
+                        if left_type == right_type {
+                            Some(left_type)
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: left_type.clone(),
+                                found: right_type,
+                                context: "difference operands must have the same element type"
+                                    .to_string(),
+                            });
+                            Some(left_type)
+                        }
+                    }
+                    (Some(t), None) | (None, Some(t)) => Some(t),
+                    (None, None) => None,
+                }
+            }
+        }
     }
 
     fn check_computable(
         &mut self,
         global_env: &GlobalEnv,
         computable: &crate::ast::Computable,
+        span: &Span,
+        type_info: &mut TypeInfo,
+        errors: &mut Vec<SemError>,
+        warnings: &mut Vec<SemWarning>,
+    ) -> Option<InputType> {
+        todo!()
+    }
+
+    fn check_path(
+        &mut self,
+        global_env: &GlobalEnv,
+        path: &crate::ast::Path,
         span: &Span,
         type_info: &mut TypeInfo,
         errors: &mut Vec<SemError>,
