@@ -731,3 +731,38 @@ fn test_reify_variable_call_wrong_argument_count_should_fail() {
         errors
     );
 }
+
+#[test]
+fn test_function_call_correct_should_work() {
+    let input = r#"
+        # Function f takes an Int and returns a Constraint
+        pub let f(x: Int) -> Constraint = x <= 10;
+
+        # Function g calls f with the correct type and arity
+        pub let g(y: Int) -> Constraint = f(y);
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_reify_variable_call_correct_should_work() {
+    let input = r#"
+        # Function f takes an Int and returns a Constraint
+        let f(x: Int) -> Constraint = x <= 10;
+
+        # Reify f as a variable
+        reify f as $MyVar;
+
+        # Public function g calls the reified variable with the correct type
+        pub let g(y: Int) -> Constraint = $MyVar(y) == 1;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
