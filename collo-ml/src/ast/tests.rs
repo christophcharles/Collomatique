@@ -269,3 +269,115 @@ fn visitor_handles_pub_modifier() {
         _ => panic!(),
     }
 }
+
+#[test]
+fn visitor_handles_boolean_literals() {
+    let input = "let f() -> Bool = true;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => {
+            assert!(matches!(body.node, Expr::Boolean(Boolean::True)));
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn visitor_handles_list_literal() {
+    let input = "let f() -> [Int] = [1, 2, 3];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListLiteral { elements } => {
+                assert_eq!(elements.len(), 3);
+            }
+            _ => panic!("Expected ListLiteral"),
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn visitor_handles_empty_list() {
+    let input = "let f() -> [Int] = [];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListLiteral { elements } => {
+                assert_eq!(elements.len(), 0);
+            }
+            _ => panic!("Expected ListLiteral"),
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn visitor_handles_list_comprehension() {
+    let input = "let f() -> [Int] = [x for x in @[Student]];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListComprehension { var, collection, filter, .. } => {
+                assert_eq!(var.node, "x");
+                assert!(matches!(collection.node, Expr::Global(_)));
+                assert!(filter.is_none());
+            }
+            _ => panic!("Expected ListComprehension"),
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn visitor_handles_list_comprehension_with_filter() {
+    let input = "let f() -> [Int] = [s.age for s in @[Student] where s.age > 18];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => match &body.node {
+            Expr::ListComprehension { filter, .. } => {
+                assert!(filter.is_some());
+            }
+            _ => panic!("Expected ListComprehension"),
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn visitor_handles_union_and_inter() {
+    let input = "let f() -> [Student] = @[Student] union @[Teacher];";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => {
+            assert!(matches!(body.node, Expr::Union(_, _)));
+        }
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn visitor_handles_logical_operators() {
+    let input = "let f() -> Bool = x > 5 or y < 3;";
+    let pairs = ColloMLParser::parse(Rule::file, input).unwrap();
+    let file = File::from_pest(pairs.into_iter().next().unwrap()).unwrap();
+
+    match &file.statements[0].node {
+        Statement::Let { body, .. } => {
+            assert!(matches!(body.node, Expr::Or(_, _)));
+        }
+        _ => panic!(),
+    }
+}
