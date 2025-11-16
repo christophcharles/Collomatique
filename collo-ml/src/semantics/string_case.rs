@@ -55,8 +55,19 @@ fn is_pascal_case(s: &str) -> bool {
 }
 
 fn to_snake_case(s: &str) -> String {
+    // If the whole string is underscores
+    if s.chars().all(|c| c == '_') {
+        return s.to_string() + "name";
+    }
+
+    // Count leading underscores
+    let leading_count = s.chars().take_while(|&c| c == '_').count();
+
+    // Trim leading underscores
+    let trimmed = s.trim_start_matches('_');
+
     let mut result = String::new();
-    for (i, c) in s.chars().enumerate() {
+    for (i, c) in trimmed.chars().enumerate() {
         if c.is_uppercase() {
             if i > 0 {
                 result.push('_');
@@ -68,16 +79,18 @@ fn to_snake_case(s: &str) -> String {
     }
 
     // Normalize: remove leading/trailing underscores and collapse double underscores
-    normalize_snake_case(&result)
+    // Prepend the original leading underscores
+    "_".repeat(leading_count) + &normalize_snake_case(&result)
 }
 
 fn normalize_snake_case(s: &str) -> String {
-    let s = s.trim_start_matches('_').trim_end_matches('_');
-
     let mut result = String::new();
     let mut prev_was_underscore = false;
 
-    for c in s.chars() {
+    // Trim trailing underscores
+    let trimmed = s.trim_end_matches('_');
+
+    for c in trimmed.chars() {
         if c == '_' {
             if !prev_was_underscore {
                 result.push(c);
@@ -93,9 +106,20 @@ fn normalize_snake_case(s: &str) -> String {
 }
 
 fn to_pascal_case(s: &str) -> String {
+    // If the whole string is underscores
+    if s.chars().all(|c| c == '_') {
+        return s.to_string() + "Name";
+    }
+
+    // Count leading underscores
+    let leading_count = s.chars().take_while(|&c| c == '_').count();
+
+    // Trim leading underscores
+    let trimmed = s.trim_start_matches('_');
+
     let mut result = String::new();
     let mut capitalize_next = true;
-    for c in s.chars() {
+    for c in trimmed.chars() {
         if c == '_' {
             capitalize_next = true;
         } else if capitalize_next {
@@ -105,7 +129,8 @@ fn to_pascal_case(s: &str) -> String {
             result.push(c);
         }
     }
-    result
+    // Prepend the original leading underscores
+    "_".repeat(leading_count) + &result
 }
 
 #[cfg(test)]
@@ -352,9 +377,9 @@ mod tests {
     }
 
     #[test]
-    fn to_snake_case_removes_leading_underscore() {
-        assert_eq!(to_snake_case("_hello"), "hello");
-        assert_eq!(to_snake_case("__world"), "world");
+    fn to_snake_case_does_not_remove_leading_underscore() {
+        assert_eq!(to_snake_case("_hello"), "_hello");
+        assert_eq!(to_snake_case("__world"), "__world");
     }
 
     #[test]
@@ -371,6 +396,28 @@ mod tests {
 
     #[test]
     fn to_snake_case_fixes_multiple_issues() {
-        assert_eq!(to_snake_case("_Hello__World_"), "hello_world");
+        assert_eq!(to_snake_case("_Hello__World_"), "_hello_world");
+    }
+
+    #[test]
+    fn test_to_snake_case_only_underscores() {
+        let input = "__";
+        let output = to_snake_case(input);
+        assert_eq!(
+            output, "__name",
+            "Expected '__name' for input '__', got {}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_to_pascal_case_only_underscores() {
+        let input = "__";
+        let output = to_pascal_case(input);
+        assert_eq!(
+            output, "__Name",
+            "Expected '__Name' for input '__', got {}",
+            output
+        );
     }
 }
