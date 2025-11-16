@@ -402,3 +402,84 @@ fn test_variable_then_reify_shadowing_should_fail() {
         errors
     );
 }
+
+#[test]
+fn test_function_shadowing_same_signature_should_fail() {
+    let input = r#"
+        # define f once
+        let f(x: Int) -> Constraint = x <= 10;
+        # redefine f with the same signature
+        let f(x: Int) -> Constraint = x >= 0;
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FunctionAlreadyDefined { .. })),
+        "Expected FunctionAlreadyDefined error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_shadowing_different_signature_should_fail() {
+    let input = r#"
+        # first definition of f
+        let f(x: Int) -> Constraint = x <= 10;
+        # second definition of f with different parameter/return type
+        let f(y: Int) -> LinExpr = y;
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FunctionAlreadyDefined { .. })),
+        "Expected FunctionAlreadyDefined error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_shadowing_public_first_should_fail() {
+    let input = r#"
+        # public function
+        pub let f(x: Int) -> Constraint = x <= 10;
+        # attempt to redefine locally
+        let f(x: Int) -> Constraint = x >= 0;
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FunctionAlreadyDefined { .. })),
+        "Expected FunctionAlreadyDefined error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_shadowing_after_use_should_fail() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        # use f in another function to ensure it's referenced
+        let g(y: Int) -> Constraint = f(y);
+        # redefine f later
+        let f(z: Int) -> Constraint = z >= 0;
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::FunctionAlreadyDefined { .. })),
+        "Expected FunctionAlreadyDefined error, got: {:?}",
+        errors
+    );
+}
