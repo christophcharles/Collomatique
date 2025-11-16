@@ -7,7 +7,7 @@ fn let_accepts_lin_expr_output() {
         "let compute(x: Student) -> LinExpr = $Var(x);",
         "let sum_vars(x: Int) -> LinExpr = $V1(x) + $V2(x);",
         "let weighted(s: Student) -> LinExpr = 2 * $Assigned(s);",
-        "let total() -> LinExpr = sum x in @[Student]: $V(x);",
+        "let total() -> LinExpr = sum x in @[Student] { $V(x) };",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -20,8 +20,8 @@ fn let_accepts_constraint_output() {
     let cases = vec![
         "let rule() -> Constraint = $V(x) <= 10;",
         "let enforce(s: Student) -> Constraint = $Assigned(s) == 1;",
-        "let capacity(r: Room) -> Constraint = sum x in @[X]: $InRoom(x, r) <= r.capacity;",
-        "let check() -> Constraint = forall x in @[X]: $V(x) >= 0;",
+        "let capacity(r: Room) -> Constraint = sum x in @[X] { $InRoom(x, r) <= r.capacity };",
+        "let check() -> Constraint = forall x in @[X] { $V(x) >= 0 };",
         "let combined() -> Constraint = $V1(x) <= 10 and $V2(y) >= 0;",
     ];
     for case in cases {
@@ -84,7 +84,7 @@ fn let_accepts_no_parameters() {
 fn let_accepts_complex_lin_expr() {
     let cases = vec![
         "let f(x: Student) -> LinExpr = 2 * $V1(x) + 3 * $V2(x) + 5;",
-        "let g(s: Student) -> LinExpr = sum w in @[Week]: $HasColle(s, w);",
+        "let g(s: Student) -> LinExpr = sum w in @[Week] { $HasColle(s, w) };",
         "let h(x: Int) -> LinExpr = if x > 5 { 10 } else { 0 };",
         "let i(s: Student) -> LinExpr = (|@[Week]|) * $V(s);",
         "let j(x: Student) -> LinExpr = $V(x) + compute_other(x);",
@@ -98,10 +98,10 @@ fn let_accepts_complex_lin_expr() {
 #[test]
 fn let_accepts_complex_constraint() {
     let cases = vec![
-        "let rule(s: Student) -> Constraint = forall w in @[Week]: $HasColle(s, w) <= 1;",
+        "let rule(s: Student) -> Constraint = forall w in @[Week] { $HasColle(s, w) <= 1 };",
         "let check(x: Int) -> Constraint = $V1(x) <= 10 and $V2(x) >= 0;",
         "let enforce(s: Student) -> Constraint = if s.is_active { $Assigned(s) == 1 } else { $Assigned(s) == 0 };",
-        "let capacity() -> Constraint = (sum x in @[X]: $V(x)) <= 100;",
+        "let capacity() -> Constraint = sum x in @[X] { $V(x) } <= 100;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
@@ -123,21 +123,16 @@ fn let_accepts_docstrings() {
 }
 
 #[test]
-fn let_rejects_invalid_output_types() {
+fn let_accepts_bool_and_int_output_types() {
+    // Now that we have unified expressions, Bool and Int are valid return types
     let cases = vec![
         "let f() -> Bool = true;",
-        "let g() -> Int = 5;",
-        "let h() -> Student = x;",
-        "let i() -> [Subject] = pairing;",
+        "let g() -> Int = 42;",
+        "let h(x: Int) -> Bool = x > 5;",
     ];
     for case in cases {
         let result = ColloMLParser::parse(Rule::let_statement_complete, case);
-        assert!(
-            result.is_err(),
-            "Should not parse '{}' (invalid output type): {:?}",
-            case,
-            result
-        );
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
 

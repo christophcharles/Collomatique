@@ -10,7 +10,7 @@ fn fn_call_accepts_valid_calls() {
         "func123(x, y)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::fn_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -19,7 +19,7 @@ fn fn_call_accepts_valid_calls() {
 fn fn_call_accepts_no_arguments() {
     let cases = vec!["compute()", "get_value()"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::fn_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -32,7 +32,7 @@ fn fn_call_accepts_paths_as_arguments() {
         "func(a.b.c)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::fn_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -40,7 +40,6 @@ fn fn_call_accepts_paths_as_arguments() {
 #[test]
 fn fn_call_rejects_invalid_syntax() {
     let cases = vec![
-        "compute",      // missing parentheses
         "compute[x]",   // wrong brackets
         "compute(x, )", // trailing comma
         "compute(, x)", // leading comma
@@ -49,7 +48,7 @@ fn fn_call_rejects_invalid_syntax() {
         "compute(x",    // missing closing paren
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::fn_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
@@ -64,7 +63,7 @@ fn var_call_accepts_valid_calls() {
         "$MyVar123(param)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::var_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -73,7 +72,7 @@ fn var_call_accepts_valid_calls() {
 fn var_call_accepts_no_arguments() {
     let cases = vec!["$Var()", "$Flag()"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::var_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
@@ -86,20 +85,8 @@ fn var_call_accepts_paths_as_arguments() {
         "$Value(a.b.c)",
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::var_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
-    }
-}
-
-#[test]
-fn var_call_rejects_missing_dollar_sign() {
-    let cases = vec![
-        "Var(x)", // missing $
-        "StudentInSlot(s, sl, w)",
-    ];
-    for case in cases {
-        let result = ColloMLParser::parse(Rule::var_call_complete, case);
-        assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
 
@@ -114,7 +101,7 @@ fn var_call_rejects_invalid_syntax() {
         "$Var(x y)",  // missing comma
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::var_call_complete, case);
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
@@ -159,34 +146,34 @@ fn path_rejects_invalid_syntax() {
 }
 
 #[test]
-fn input_type_accepts_simple_types() {
+fn type_accepts_simple_types() {
     let cases = vec!["Int", "Bool", "Student", "Week", "MyType"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::input_type_name_complete, case);
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
 
 #[test]
-fn input_type_accepts_list_types() {
+fn type_accepts_list_types() {
     let cases = vec!["[Student]", "[Int]", "[Week]", "[MyType]"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::input_type_name_complete, case);
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
 
 #[test]
-fn input_type_accepts_nested_list_types() {
+fn type_accepts_nested_list_types() {
     let cases = vec!["[[Student]]", "[[[Int]]]", "[[Week]]", "[[MyType]]"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::input_type_name_complete, case);
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
 
 #[test]
-fn input_type_rejects_invalid_syntax() {
+fn type_rejects_invalid_syntax() {
     let cases = vec![
         "[Student",        // missing closing bracket
         "Student]",        // missing opening bracket
@@ -195,16 +182,16 @@ fn input_type_rejects_invalid_syntax() {
         "Student Week",    // space
     ];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::input_type_name_complete, case);
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
 
 #[test]
-fn input_type_accepts_deeply_nested_lists() {
+fn type_accepts_deeply_nested_lists() {
     let cases = vec!["[[[[Int]]]]", "[[[Student]]]"];
     for case in cases {
-        let result = ColloMLParser::parse(Rule::input_type_name_complete, case);
+        let result = ColloMLParser::parse(Rule::type_name_complete, case);
         assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
     }
 }
