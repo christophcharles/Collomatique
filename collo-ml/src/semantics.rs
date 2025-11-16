@@ -212,8 +212,14 @@ impl GlobalEnv {
     ) {
         assert!(!self.functions.contains_key(name));
 
-        self.functions
-            .insert(name.to_string(), (fn_typ.clone(), span.clone(), false)); // Initially not used
+        self.functions.insert(
+            name.to_string(),
+            (
+                fn_typ.clone(),
+                span.clone(),
+                should_be_used_by_default(name),
+            ),
+        );
 
         type_info.types.insert(span, fn_typ.into());
     }
@@ -242,8 +248,11 @@ impl GlobalEnv {
 
         self.variables.insert(
             name.to_string(),
-            (args_typ.clone(), Some((span.clone(), false))),
-        ); // Initially not used
+            (
+                args_typ.clone(),
+                Some((span.clone(), should_be_used_by_default(name))),
+            ),
+        );
 
         type_info.types.insert(span, args_typ.into());
     }
@@ -370,6 +379,12 @@ struct LocalEnv {
     pending_scope: HashMap<String, (InputType, Span, bool)>,
 }
 
+fn should_be_used_by_default(ident: &str) -> bool {
+    assert!(ident.len() > 0);
+
+    ident.chars().next().unwrap() == '_'
+}
+
 impl LocalEnv {
     fn new() -> Self {
         LocalEnv::default()
@@ -433,8 +448,10 @@ impl LocalEnv {
             });
         }
 
-        self.pending_scope
-            .insert(ident.to_string(), (typ.clone(), span.clone(), false)); // Start as unused
+        self.pending_scope.insert(
+            ident.to_string(),
+            (typ.clone(), span.clone(), should_be_used_by_default(ident)),
+        );
         type_info.types.insert(span, typ.into());
     }
 
