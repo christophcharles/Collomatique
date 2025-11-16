@@ -766,3 +766,44 @@ fn test_reify_variable_call_correct_should_work() {
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
 }
+
+#[test]
+fn test_function_name_starting_with_underscore_should_work() {
+    let input = r#"
+        pub let _f(x: Int) -> Constraint = x <= 10;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: no errors, no warnings
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_parameter_name_starting_with_underscore_should_work() {
+    let input = r#"
+        pub let f(_x: Int) -> Constraint = _x <= 10;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: no errors, no warnings
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn test_variable_name_starting_with_underscore_should_work() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $_Var;
+        pub let g(xs: [Int]) -> Constraint = $_Var(xs) == 1;
+    "#;
+
+    let (_, errors, warnings) = analyze(input, HashMap::new(), HashMap::new());
+
+    // Final desired behavior: no errors, no warnings
+    assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+    assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+}
