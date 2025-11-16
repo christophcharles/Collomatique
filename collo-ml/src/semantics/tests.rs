@@ -657,3 +657,77 @@ fn test_complex_constraint_nested_forall_sum_should_work() {
     assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
     assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
 }
+
+#[test]
+fn test_function_call_wrong_type_should_fail() {
+    let input = r#"
+        pub let f(x: Int) -> Constraint = x <= 10;
+        pub let g(s: Bool) -> Constraint = f(s); # wrong type: f expects Int, got Bool
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. })),
+        "Expected TypeMismatch error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_call_wrong_argument_count_should_fail() {
+    let input = r#"
+        pub let f(x: Int, y: Int) -> Constraint = x <= y;
+        pub let g(z: Int) -> Constraint = f(z); # wrong number: expected 2 args, got 1
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })),
+        "Expected ArgumentCountMismatch error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_reify_variable_call_wrong_type_should_fail() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <= 10;
+        reify f as $MyVar;
+        pub let g(b: Bool) -> Constraint = $MyVar(b); # wrong type: expects Int, got Bool
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::TypeMismatch { .. })),
+        "Expected TypeMismatch error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_reify_variable_call_wrong_argument_count_should_fail() {
+    let input = r#"
+        let f(x: Int, y: Int) -> Constraint = x <= y;
+        reify f as $MyVar;
+        pub let g(z: Int) -> Constraint = $MyVar(z); # wrong number: expected 2 args, got 1
+    "#;
+
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemError::ArgumentCountMismatch { .. })),
+        "Expected ArgumentCountMismatch error, got: {:?}",
+        errors
+    );
+}
