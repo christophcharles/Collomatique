@@ -70,7 +70,7 @@ fn test_unknown_variable_in_linexpr() {
 #[test]
 fn test_variable_argument_type_mismatch() {
     let mut vars = HashMap::new();
-    vars.insert("MyVar".to_string(), vec![InputType::Int]);
+    vars.insert("MyVar".to_string(), vec![ExprType::Int]);
 
     let mut types = HashMap::new();
     types.insert("Student".to_string(), HashMap::new());
@@ -116,7 +116,7 @@ fn test_naming_convention_warnings() {
 fn test_path_field_access() {
     let mut types = HashMap::new();
     let mut student_fields = HashMap::new();
-    student_fields.insert("age".to_string(), InputType::Int);
+    student_fields.insert("age".to_string(), ExprType::Int);
     types.insert("Student".to_string(), student_fields);
 
     let input = "pub let f(s: Student) -> LinExpr = s.age;";
@@ -206,13 +206,13 @@ fn test_no_warning_when_parameter_used() {
 fn test_no_warning_when_forall_variable_used() {
     let mut types = HashMap::new();
     let mut student_fields = HashMap::new();
-    student_fields.insert("age".to_string(), InputType::Int);
+    student_fields.insert("age".to_string(), ExprType::Int);
     types.insert("Student".to_string(), student_fields);
 
     let mut vars = HashMap::new();
     vars.insert(
         "V".to_string(),
-        vec![InputType::Object("Student".to_string())],
+        vec![ExprType::Object("Student".to_string())],
     );
 
     let input = "pub let f() -> Constraint = forall s in @[Student]: $V(s) >= 0;"; // s is used
@@ -235,7 +235,7 @@ fn test_no_warning_when_sum_variable_used() {
     let mut vars = HashMap::new();
     vars.insert(
         "V".to_string(),
-        vec![InputType::Object("Student".to_string())],
+        vec![ExprType::Object("Student".to_string())],
     );
 
     let input = "pub let f() -> LinExpr = sum s in @[Student]: $V(s);"; // s is used
@@ -386,7 +386,7 @@ fn test_reify_variable_shadowing_should_fail() {
 #[test]
 fn test_variable_then_reify_shadowing_should_fail() {
     let mut vars = HashMap::new();
-    vars.insert("MyVar".to_string(), vec![InputType::Int]); // already defined externally
+    vars.insert("MyVar".to_string(), vec![ExprType::Int]); // already defined externally
 
     let input = r#"
         let f(x: Int) -> Constraint = x <= 10;
@@ -941,7 +941,7 @@ fn test_path_on_list_field() {
     let mut student_fields = HashMap::new();
     student_fields.insert(
         "courses".to_string(),
-        InputType::List(Box::new(InputType::Object("Course".to_string()))),
+        ExprType::List(Box::new(ExprType::Object("Course".to_string()))),
     );
     types.insert("Student".to_string(), student_fields);
     types.insert("Course".to_string(), HashMap::new());
@@ -957,13 +957,13 @@ fn test_nested_path() {
     // student.address.city
     let mut types = HashMap::new();
     let mut address_fields = HashMap::new();
-    address_fields.insert("city".to_string(), InputType::Object("City".to_string()));
+    address_fields.insert("city".to_string(), ExprType::Object("City".to_string()));
     types.insert("Address".to_string(), address_fields);
 
     let mut student_fields = HashMap::new();
     student_fields.insert(
         "address".to_string(),
-        InputType::Object("Address".to_string()),
+        ExprType::Object("Address".to_string()),
     );
     types.insert("Student".to_string(), student_fields);
     types.insert("City".to_string(), HashMap::new());
