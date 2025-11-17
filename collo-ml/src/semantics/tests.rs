@@ -655,7 +655,7 @@ fn test_complex_constraint_nested_forall_sum_should_work() {
         pub let f(xs: [Int], ys: [Int]) -> Constraint =
             forall x in xs {
                 forall y in ys {
-                    sum i in xs { i + x + y <= 200 }
+                    sum i in xs { i + x + y } <= 200
                 }
             };
     "#;
