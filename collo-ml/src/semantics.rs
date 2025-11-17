@@ -966,23 +966,37 @@ impl LocalEnv {
                 }
 
                 // Extract element type from List
-                if elem_type == Some(ExprType::EmptyList) {
-                    errors.push(SemError::TypeMismatch {
-                        span: collection.span.clone(),
-                        expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
-                        found: ExprType::EmptyList,
-                        context: "forall collection must have a known type (empty list are forbidden and useless)".to_string(),
-                    });
-                    return Some(ExprType::Constraint);
-                }
-                if let Some(ExprType::List(inner)) = elem_type {
-                    self.register_identifier(
-                        &var.node,
-                        var.span.clone(),
-                        *inner,
-                        type_info,
-                        warnings,
-                    );
+                match elem_type {
+                    Some(ExprType::EmptyList) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
+                            found: ExprType::EmptyList,
+                            context: "forall collection must have a known type (empty list are forbidden and useless)".to_string(),
+                        });
+                        return Some(ExprType::Constraint);
+                    }
+                    Some(t) => {
+                        let elem_type = if let ExprType::List(inner) = t.clone() {
+                            *inner
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: collection.span.clone(),
+                                expected: ExprType::List(Box::new(t.clone())), // placeholder
+                                found: t.clone(),
+                                context: "forall collection must be a list".to_string(),
+                            });
+                            t
+                        };
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            elem_type,
+                            type_info,
+                            warnings,
+                        );
+                    }
+                    None => return None,
                 }
 
                 self.push_scope();
@@ -1046,23 +1060,37 @@ impl LocalEnv {
                 }
 
                 // Extract element type from List
-                if elem_type == Some(ExprType::EmptyList) {
-                    errors.push(SemError::TypeMismatch {
-                        span: collection.span.clone(),
-                        expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
-                        found: ExprType::EmptyList,
-                        context: "sum collection must have a known type (empty list are forbidden and useless)".to_string(),
-                    });
-                    return None;
-                }
-                if let Some(ExprType::List(inner)) = elem_type {
-                    self.register_identifier(
-                        &var.node,
-                        var.span.clone(),
-                        *inner,
-                        type_info,
-                        warnings,
-                    );
+                match elem_type {
+                    Some(ExprType::EmptyList) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
+                            found: ExprType::EmptyList,
+                            context: "sum collection must have a known type (empty list are forbidden and useless)".to_string(),
+                        });
+                        return None;
+                    }
+                    Some(t) => {
+                        let elem_type = if let ExprType::List(inner) = t.clone() {
+                            *inner
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: collection.span.clone(),
+                                expected: ExprType::List(Box::new(t.clone())), // placeholder
+                                found: t.clone(),
+                                context: "sum collection must be a list".to_string(),
+                            });
+                            t
+                        };
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            elem_type,
+                            type_info,
+                            warnings,
+                        );
+                    }
+                    None => return None,
                 }
 
                 self.push_scope();
@@ -1382,23 +1410,37 @@ impl LocalEnv {
                 }
 
                 // Extract element type
-                if coll_type == Some(ExprType::EmptyList) {
-                    errors.push(SemError::TypeMismatch {
-                        span: collection.span.clone(),
-                        expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
-                        found: ExprType::EmptyList,
-                        context: "list comprehension collection must have a known type (empty list are forbidden and useless)".to_string(),
-                    });
-                    return None;
-                }
-                if let Some(ExprType::List(inner)) = coll_type {
-                    self.register_identifier(
-                        &var.node,
-                        var.span.clone(),
-                        *inner,
-                        type_info,
-                        warnings,
-                    );
+                match coll_type {
+                    Some(ExprType::EmptyList) => {
+                        errors.push(SemError::TypeMismatch {
+                            span: collection.span.clone(),
+                            expected: ExprType::List(Box::new(ExprType::Int)), // placeholder
+                            found: ExprType::EmptyList,
+                            context: "list comprehension collection must have a known type (empty list are forbidden and useless)".to_string(),
+                        });
+                        return Some(ExprType::Constraint);
+                    }
+                    Some(t) => {
+                        let elem_type = if let ExprType::List(inner) = t.clone() {
+                            *inner
+                        } else {
+                            errors.push(SemError::TypeMismatch {
+                                span: collection.span.clone(),
+                                expected: ExprType::List(Box::new(t.clone())), // placeholder
+                                found: t.clone(),
+                                context: "forall collection must be a list".to_string(),
+                            });
+                            t
+                        };
+                        self.register_identifier(
+                            &var.node,
+                            var.span.clone(),
+                            elem_type,
+                            type_info,
+                            warnings,
+                        );
+                    }
+                    None => return None,
                 }
 
                 self.push_scope();
