@@ -991,3 +991,537 @@ fn test_cardinality_returns_int() {
 
     assert!(errors.is_empty());
 }
+
+// ========== Type Coercion Tests ==========
+
+#[test]
+fn test_int_coerces_to_linexpr_in_addition() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> LinExpr = $V(x) + 5;"; // 5 coerces to LinExpr
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Int should coerce to LinExpr: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_int_coerces_to_linexpr_in_comparison() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Constraint = $V(x) <== 10;"; // 10 coerces to LinExpr
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Int should coerce to LinExpr in comparison: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_int_coerces_to_linexpr_in_multiplication() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> LinExpr = 5 * $V(x);"; // 5 coerces to LinExpr
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Int should coerce to LinExpr in multiplication: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_int_coerces_to_linexpr_in_function_return() {
+    let input = "pub let f() -> LinExpr = 42;"; // 42 coerces to LinExpr
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Int should coerce to LinExpr in return: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_bool_does_not_coerce_to_constraint_in_forall() {
+    let input = r#"
+        pub let f() -> Constraint = 
+            forall x in [1, 2, 3] { x > 0 }; # x > 0 is Bool, should not coerce to Constraint
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Bool should not coerce to Constraint in forall: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_bool_does_not_coerce_to_constraint_in_function_return() {
+    let input = "pub let f() -> Constraint = 5 > 3;"; // Bool should not coerce to Constraint
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        !errors.is_empty(),
+        "Bool should not coerce to Constraint in return: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_no_coercion_linexpr_to_int() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Int = $V(x);"; // LinExpr cannot coerce to Int
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(!errors.is_empty(), "LinExpr should NOT coerce to Int");
+    assert!(matches!(errors[0], SemError::BodyTypeMismatch { .. }));
+}
+
+#[test]
+fn test_no_coercion_constraint_to_bool() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = "pub let f(x: Int) -> Bool = $V(x) <== 10;"; // Constraint cannot coerce to Bool
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(!errors.is_empty(), "Constraint should NOT coerce to Bool");
+    assert!(matches!(errors[0], SemError::BodyTypeMismatch { .. }));
+}
+
+// ========== Functions Returning Different Types ==========
+
+#[test]
+fn test_function_returning_int() {
+    let input = "pub let count(xs: [Int]) -> Int = |xs|;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should return Int: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_returning_bool() {
+    let input = "pub let is_valid(x: Int) -> Bool = x > 0;";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should return Bool: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_returning_list() {
+    let input = "pub let get_filtered(xs: [Int]) -> [Int] = [x for x in xs where x > 0];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should return [Int]: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_returning_object() {
+    let mut types = HashMap::new();
+    let mut student_fields = HashMap::new();
+    student_fields.insert("id".to_string(), ExprType::Int);
+    types.insert("Student".to_string(), student_fields);
+
+    let input = "pub let get_student(s: Student) -> Student = s;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should return Student: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_chain_different_types() {
+    let input = r#"
+        let get_count(xs: [Int]) -> Int = |xs|;
+        let is_large(n: Int) -> Bool = n > 10;
+        pub let check(xs: [Int]) -> Bool = is_large(get_count(xs));
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function chain should work: {:?}",
+        errors
+    );
+}
+
+// ========== List Literals and Comprehensions ==========
+
+#[test]
+fn test_list_literal_empty() {
+    let input = "pub let f() -> [Int] = [];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "Empty list should coerce to output type");
+}
+
+#[test]
+fn test_list_literal_integers() {
+    let input = "pub let f() -> [Int] = [1, 2, 3, 4, 5];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(errors.is_empty(), "List literal should work: {:?}", errors);
+}
+
+#[test]
+fn test_list_literal_mixed_types_should_fail() {
+    let input = "pub let f() -> [Int] = [1, 2, 5 > 3, 4];"; // Bool in Int list
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Mixed types should fail");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn test_list_comprehension_simple() {
+    let input = "pub let f() -> [Int] = [x for x in [1, 2, 3]];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "List comprehension should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_list_comprehension_with_filter() {
+    let input = "pub let f() -> [Int] = [x for x in [1, 2, 3, 4, 5] where x > 2];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Filtered comprehension should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_list_comprehension_with_transformation() {
+    let input = "pub let f() -> [Int] = [x * 2 for x in [1, 2, 3]];";
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Comprehension with transformation should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_list_comprehension_from_global_collection() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = "pub let f() -> [Student] = [s for s in @[Student] where 5 > 3];";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Comprehension from global collection should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_list_comprehension_wrong_filter_type_should_fail() {
+    let input = "pub let f() -> [Int] = [x for x in [1, 2, 3] where x];"; // x is Int, not Bool
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Filter must be Bool");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+// ========== Collection Operations ==========
+
+#[test]
+fn test_collection_union() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input =
+        "pub let f(group_a: [Student], group_b: [Student]) -> [Student] = group_a union group_b;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(errors.is_empty(), "Union should work: {:?}", errors);
+}
+
+#[test]
+fn test_collection_intersection() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = "pub let f(all: [Student], active: [Student]) -> [Student] = all inter active;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(errors.is_empty(), "Intersection should work: {:?}", errors);
+}
+
+#[test]
+fn test_collection_difference() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = r#"pub let f(all: [Student], excluded: [Student]) -> [Student] = all \ excluded;"#;
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(errors.is_empty(), "Difference should work: {:?}", errors);
+}
+
+#[test]
+fn test_collection_operations_type_mismatch_should_fail() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+    types.insert("Teacher".to_string(), HashMap::new());
+
+    let input = "pub let f(students: [Student], teachers: [Teacher]) -> [Student] = students union teachers;";
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(!errors.is_empty(), "Union of different types should fail");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::TypeMismatch { .. })));
+}
+
+#[test]
+fn test_collection_complex_operations() {
+    let mut types = HashMap::new();
+    types.insert("Student".to_string(), HashMap::new());
+
+    let input = r#"
+        pub let f(all: [Student], group_a: [Student], group_b: [Student], excluded: [Student]) -> [Student] = 
+            (all \ excluded) inter (group_a union group_b);
+    "#;
+    let (_, errors, _) = analyze(input, types, HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Complex collection operations should work: {:?}",
+        errors
+    );
+}
+
+// ========== Reification Tests ==========
+
+#[test]
+fn test_reify_non_constraint_function_should_fail() {
+    let input = r#"
+        let f(x: Int) -> Int = x + 5;
+        reify f as $MyVar;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Cannot reify non-Constraint function");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. })));
+}
+
+#[test]
+fn test_reify_linexpr_function_should_fail() {
+    let input = r#"
+        let f(x: Int) -> LinExpr = x + 5;
+        reify f as $MyVar;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Cannot reify LinExpr function");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. })));
+}
+
+#[test]
+fn test_reify_bool_function_should_fail() {
+    let input = r#"
+        let f(x: Int) -> Bool = x > 5;
+        reify f as $MyVar;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(!errors.is_empty(), "Cannot reify Bool function");
+    assert!(errors
+        .iter()
+        .any(|e| matches!(e, SemError::FunctionTypeMismatch { .. })));
+}
+
+#[test]
+fn test_reify_constraint_function_should_work() {
+    let input = r#"
+        let f(x: Int) -> Constraint = x <== 10;
+        reify f as $MyVar;
+        pub let g(y: Int) -> Constraint = $MyVar(y) === 1;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Should reify Constraint function: {:?}",
+        errors
+    );
+}
+
+// ========== Functions Taking LinExpr/Constraint Parameters ==========
+
+#[test]
+fn test_function_taking_linexpr_parameter() {
+    let input = r#"
+        pub let double(e: LinExpr) -> LinExpr = e + e;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should take LinExpr parameter: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_taking_constraint_parameter() {
+    let input = r#"
+        pub let negate(c: Constraint) -> Constraint = c;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should take Constraint parameter: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_call_with_linexpr_argument() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = r#"
+        let double(e: LinExpr) -> LinExpr = e + e;
+        pub let f(x: Int) -> LinExpr = double($V(x));
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Should pass LinExpr to function: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_call_with_constraint_argument() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = r#"
+        let combine(c1: Constraint, c2: Constraint) -> Constraint = c1 and c2;
+        pub let f(x: Int) -> Constraint = combine($V(x) >== 0, $V(x) <== 10);
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "Should pass Constraint to function: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_taking_list_of_linexpr() {
+    let input = r#"
+        pub let sum_all(exprs: [LinExpr]) -> LinExpr = 
+            sum e in exprs { e };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function should take [LinExpr]: {:?}",
+        errors
+    );
+}
+
+// ========== Complex Mixed-Type Scenarios ==========
+
+#[test]
+fn test_if_expression_returning_different_expr_types() {
+    let mut vars = HashMap::new();
+    vars.insert("V".to_string(), vec![ExprType::Int]);
+
+    let input = r#"
+        pub let f(x: Int, use_var: Bool) -> LinExpr = 
+            if use_var { $V(x) } else { x };
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), vars);
+
+    assert!(
+        errors.is_empty(),
+        "If with Int/LinExpr should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_sum_returning_int_in_condition() {
+    let input = r#"
+        pub let f(xs: [Int]) -> Bool = 
+            (sum x in xs { 1 }) > 10;
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Sum of Int should work in condition: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_function_composition_across_types() {
+    let input = r#"
+        let count(xs: [Int]) -> Int = |xs|;
+        let is_large(n: Int) -> Bool = n > 10;
+        let as_int(b: Bool) -> Int = if b { 1 } else { 0 };
+        pub let check(xs: [Int]) -> Int = as_int(is_large(count(xs)));
+    "#;
+    let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
+
+    assert!(
+        errors.is_empty(),
+        "Function composition should work: {:?}",
+        errors
+    );
+}
