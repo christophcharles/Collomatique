@@ -1137,32 +1137,25 @@ impl LocalEnv {
                 match (then_type, else_type) {
                     (Some(t), Some(e)) => {
                         // Allow coercion: Int -> LinExpr, Bool -> Constraint
-                        let (types_match, coercion) = match (t.clone(), e.clone()) {
-                            (a, b) if a == b => (true, Some(a.clone())),
-                            (ExprType::LinExpr, ExprType::Int) => (true, Some(ExprType::LinExpr)), // Coerce Int to LinExpr
-                            (ExprType::Int, ExprType::LinExpr) => (true, Some(ExprType::LinExpr)), // Coerce Int to LinExpr
-                            (ExprType::Constraint, ExprType::Bool) => {
-                                (true, Some(ExprType::Constraint))
-                            } // Coerce Bool to Constraint
-                            (ExprType::Bool, ExprType::Constraint) => {
-                                (true, Some(ExprType::Constraint))
-                            } // Coerce Bool to Constraint
-                            _ => (false, None),
+                        let coerced_type = match (&t, &e) {
+                            // Borrow instead of clone
+                            (a, b) if a == b => Some(t), // Already same, use t
+                            (ExprType::LinExpr, ExprType::Int)
+                            | (ExprType::Int, ExprType::LinExpr) => Some(ExprType::LinExpr),
+                            (ExprType::Constraint, ExprType::Bool)
+                            | (ExprType::Bool, ExprType::Constraint) => Some(ExprType::Constraint),
+                            _ => {
+                                errors.push(SemError::TypeMismatch {
+                                    span: else_expr.span.clone(),
+                                    expected: t.clone(),
+                                    found: e.clone(),
+                                    context: "if branches must have the same type".to_string(),
+                                });
+                                Some(t) // Fallback to then type
+                            }
                         };
 
-                        if !types_match {
-                            errors.push(SemError::TypeMismatch {
-                                span: else_expr.span.clone(),
-                                expected: t.clone(),
-                                found: e,
-                                context: "if branches must have the same type".to_string(),
-                            });
-                        }
-
-                        match coercion {
-                            Some(typ) => Some(typ),
-                            None => Some(t),
-                        }
+                        coerced_type
                     }
                     (Some(t), None) | (None, Some(t)) => Some(t),
                     (None, None) => None,
