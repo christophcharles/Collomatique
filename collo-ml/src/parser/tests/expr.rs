@@ -1351,3 +1351,246 @@ fn expr_rejects_malformed_arg_lists() {
         assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
     }
 }
+
+// ========== Constraint Operator Tests ==========
+
+#[test]
+fn expr_accepts_constraint_equality() {
+    let cases = vec![
+        "$Var(x) === 10",
+        "$V1(x) === $V2(y)",
+        "2 * $V(x) === 5",
+        "$V(x) + $V(y) === 10",
+        "sum x in @[X] { $V(x) } === |@[X]|",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_constraint_le() {
+    let cases = vec![
+        "$Var(x) <== 10",
+        "$V1(x) + $V2(y) <== 5",
+        "2 * $V(x) <== |@[Student]|",
+        "sum x in @[X] { $V(x) } <== 100",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_constraint_ge() {
+    let cases = vec![
+        "$Var(x) >== 0",
+        "$V1(x) - $V2(y) >== -5",
+        "sum x in @[X] { $V(x) } >== 1",
+        "$V(x) * 2 >== student.min_value",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_mixed_constraint_and_regular_operators() {
+    let cases = vec![
+        "($V(x) === 1) and ($V(y) === 1)",               // constraint and
+        "x == y and $V(z) === 1",                        // bool and constraint
+        "if x > 5 { $V(x) === 1 } else { $V(x) === 0 }", // if with constraints
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_constraint_operators_in_forall() {
+    let cases = vec![
+        "forall x in @[X] { $V(x) === 1 }",
+        "forall x in @[X] { $V(x) <== 10 }",
+        "forall x in @[X] { $V(x) >== 0 }",
+        "forall x in @[X] { $V(x) <== 10 and $V(x) >== 0 }",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_distinguishes_constraint_from_regular_operators() {
+    // These should all parse (semantics will determine validity)
+    let cases = vec![
+        "$V(x) === 10", // constraint equality
+        "$V(x) == 10",  // regular equality (will be Bool in semantics)
+        "$V(x) <== 10", // constraint le
+        "$V(x) <= 10",  // regular le (will be Bool in semantics)
+        "$V(x) >== 10", // constraint ge
+        "$V(x) >= 10",  // regular ge (will be Bool in semantics)
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+// ========== Type Annotation (as) Tests ==========
+
+#[test]
+fn expr_accepts_simple_type_annotations() {
+    let cases = vec![
+        "[] as [Int]",
+        "[] as [Student]",
+        "x as Int",
+        "compute() as Bool",
+        "$V(x) as LinExpr",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_nested_list_type_annotations() {
+    let cases = vec![
+        "[] as [[Int]]",
+        "[[]] as [[Student]]",
+        "nested_list as [[[Bool]]]",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_type_annotations_in_expressions() {
+    let cases = vec![
+        "([] as [Int]) union [1, 2, 3]",
+        "[x for x in ([] as [Student])]",
+        "|([] as [Int])|",
+        "sum x in ([] as [Int]) { x }",
+        "if flag { [] as [Int] } else { [1, 2] }",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_type_annotations_with_parentheses() {
+    let cases = vec![
+        "([] as [Int])",
+        "(([] as [Student]))",
+        "(x as Int) + 5",
+        "2 * (value as Int)",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_type_annotations_in_function_args() {
+    let cases = vec![
+        "process([] as [Int])",
+        "compute(x as Int, y as Bool)",
+        "func(([] as [Student]), value as Int)",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_as_binds_tighter_than_arithmetic() {
+    // as should bind tighter than +, -, *, etc.
+    let cases = vec![
+        "x as Int + 5",        // (x as Int) + 5, not x as (Int + 5)
+        "2 * value as Int",    // 2 * (value as Int)
+        "a as Int + b as Int", // (a as Int) + (b as Int)
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_rejects_type_annotation_without_type() {
+    let cases = vec![
+        "x as",     // missing type
+        "[] as",    // missing type
+        "as [Int]", // missing expression
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_err(), "Should not parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_complex_type_annotations() {
+    let cases = vec![
+        "[] as [Int]",
+        "[] as [Student]",
+        "[] as [[Int]]",
+        "value as LinExpr",
+        "constraint as Constraint",
+        "flag as Bool",
+        "collection as [Student]",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_accepts_type_annotations_in_list_literals() {
+    let cases = vec!["[([] as [Int]), [1, 2]]", "[x as Int, y as Int, z as Int]"];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+// ========== Combined Tests ==========
+
+#[test]
+fn expr_accepts_constraint_operators_with_type_annotations() {
+    let cases = vec![
+        "([] as [Int]) === []", // Might not be semantically valid, but should parse
+        "$V(x as Int) <== 10",
+        "sum x in ([] as [Student]) { $V(x) } >== 0",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}
+
+#[test]
+fn expr_operator_precedence_constraint_vs_regular() {
+    // All comparison operators have same precedence
+    let cases = vec![
+        "x == 5 and $V(y) === 1",
+        "x <= 5 and $V(y) <== 10",
+        "x >= 0 and $V(y) >== 0",
+    ];
+    for case in cases {
+        let result = ColloMLParser::parse(Rule::expr_complete, case);
+        assert!(result.is_ok(), "Should parse '{}': {:?}", case, result);
+    }
+}

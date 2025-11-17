@@ -82,7 +82,9 @@ relational_expr = { add_sub_expr ~ (comp_op ~ add_sub_expr)? }
 
 // Arithmetic
 add_sub_expr = { mul_div_mod_expr ~ ((add_op | sub_op) ~ mul_div_mod_expr)* }
-mul_div_mod_expr = { primary_expr ~ ((mul_op | div_op | mod_op) ~ primary_expr)* }
+mul_div_mod_expr = { explicit_type ~ ((mul_op | div_op | mod_op) ~ explicit_type)* }
+
+explicit_type = { primary_expr ~ ( "as" ~ type_name)? }
 
 // Primary expressions
 primary_expr = {
@@ -117,7 +119,7 @@ sub_op = { "-" }
 mul_op = { "*" }
 div_op = { "//" }
 mod_op = { "%" }
-comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
+comp_op = { "===" | "<==" | ">==" | "==" | "!=" | "<=" | ">=" | "<" | ">" }
 in_op = @{ "in" ~ !ident_char }
 union_op = @{ "union" ~ !ident_char }
 inter_op = @{ "inter" ~ !ident_char }

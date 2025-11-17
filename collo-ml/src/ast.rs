@@ -133,6 +133,11 @@ pub enum Expr {
     Gt(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Ge(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
 
+    // Constraint building
+    ConstraintEq(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
+    ConstraintLe(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
+    ConstraintGe(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
+
     // Boolean operations
     And(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Or(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
@@ -159,6 +164,12 @@ pub enum Expr {
     },
 
     Cardinality(Box<Spanned<Expr>>),
+
+    // Typed term
+    ExplicitType {
+        expr: Box<Spanned<Expr>>,
+        typ: Spanned<TypeName>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -677,6 +688,9 @@ impl Expr {
             let right_spanned = Box::new(Spanned::new(right, result_span));
 
             match op_pair.as_str() {
+                "===" => Ok(Expr::ConstraintEq(left_spanned, right_spanned)),
+                "<==" => Ok(Expr::ConstraintLe(left_spanned, right_spanned)),
+                ">==" => Ok(Expr::ConstraintGe(left_spanned, right_spanned)),
                 "==" => Ok(Expr::Eq(left_spanned, right_spanned)),
                 "!=" => Ok(Expr::Ne(left_spanned, right_spanned)),
                 "<" => Ok(Expr::Lt(left_spanned, right_spanned)),
@@ -734,11 +748,11 @@ impl Expr {
         let mut inner = pair.into_inner();
 
         let first = inner.next().unwrap();
-        let mut result = Self::from_primary_expr(first)?;
+        let mut result = Self::from_explicit_type(first)?;
 
         while let Some(op_pair) = inner.next() {
             let right_pair = inner.next().unwrap();
-            let right = Self::from_primary_expr(right_pair)?;
+            let right = Self::from_explicit_type(right_pair)?;
 
             let result_span = span.clone();
             result = match op_pair.as_rule() {
@@ -767,7 +781,40 @@ impl Expr {
         Ok(result)
     }
 
-    pub fn from_primary_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
+    fn from_explicit_type(pair: Pair<Rule>) -> Result<Self, AstError> {
+        let span = Span::from_pest(&pair);
+        if pair.as_rule() != Rule::explicit_type {
+            return Err(AstError::UnexpectedRule {
+                expected: "explicit_type",
+                found: pair.as_rule(),
+                span,
+            });
+        }
+
+        let mut inner = pair.into_inner();
+
+        // First is always primary_expr
+        let expr_pair = inner.next().unwrap();
+        let expr_span = Span::from_pest(&expr_pair);
+        let expr = Self::from_primary_expr(expr_pair)?;
+
+        // Check if there's a type annotation
+        if let Some(type_pair) = inner.next() {
+            // This is the type_name after "as"
+            let type_span = Span::from_pest(&type_pair);
+            let typ = TypeName::from_pest(type_pair)?;
+
+            Ok(Expr::ExplicitType {
+                expr: Box::new(Spanned::new(expr, expr_span)),
+                typ: Spanned::new(typ, type_span),
+            })
+        } else {
+            // No type annotation, just return the expression
+            Ok(expr)
+        }
+    }
+
+    fn from_primary_expr(pair: Pair<Rule>) -> Result<Self, AstError> {
         let span = Span::from_pest(&pair);
         if pair.as_rule() != Rule::primary_expr {
             return Err(AstError::UnexpectedRule {
