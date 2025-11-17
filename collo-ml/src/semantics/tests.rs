@@ -620,7 +620,7 @@ fn test_complex_constraint_should_work() {
                 if elem < 5 {
                     elem <= 10
                 } else {
-                    sum i in xs { i <= 100 }
+                    sum i in xs { i } <= 100
                 }
             };
     "#;
