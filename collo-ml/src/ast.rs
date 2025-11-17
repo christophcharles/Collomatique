@@ -17,6 +17,13 @@ impl Span {
             end: span.end(),
         }
     }
+
+    pub fn merge(&self, other: &Span) -> Span {
+        Span {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,8 +116,7 @@ pub enum Expr {
     // Elements
     Number(i32),
     Boolean(Boolean),
-    Path(Path),
-    Global(Spanned<String>),
+    Path(Spanned<Path>),
 
     // Arithmetic
     Add(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
@@ -141,6 +147,7 @@ pub enum Expr {
     Inter(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
     Diff(Box<Spanned<Expr>>, Box<Spanned<Expr>>),
 
+    GlobalList(Spanned<String>),
     ListLiteral {
         elements: Vec<Spanned<Expr>>,
     },
@@ -795,7 +802,10 @@ impl Expr {
                     })?;
                 Ok(Expr::Number(value))
             }
-            Rule::path => Ok(Expr::Path(Path::from_pest(inner)?)),
+            Rule::path => {
+                let path_span = Span::from_pest(&inner);
+                Ok(Expr::Path(Spanned::new(Path::from_pest(inner)?, path_span)))
+            }
             Rule::expr => {
                 // Parenthesized expr
                 Self::from_pest(inner)
@@ -960,7 +970,7 @@ impl Expr {
         let type_name = type_pair.as_str().to_string();
         let type_span = Span::from_pest(&type_pair);
 
-        Ok(Expr::Global(Spanned::new(type_name, type_span)))
+        Ok(Expr::GlobalList(Spanned::new(type_name, type_span)))
     }
 
     fn from_var_call(pair: Pair<Rule>) -> Result<Self, AstError> {

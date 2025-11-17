@@ -116,7 +116,7 @@ fn visitor_handles_forall() {
                 ..
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::Global(_)));
+                assert!(matches!(collection.node, Expr::GlobalList(_)));
                 assert!(filter.is_none());
             }
             _ => panic!("Expected Forall constraint"),
@@ -154,7 +154,7 @@ fn visitor_handles_sum() {
                 var, collection, ..
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::Global(_)));
+                assert!(matches!(collection.node, Expr::GlobalList(_)));
             }
             _ => panic!("Expected Sum"),
         },
@@ -210,7 +210,8 @@ fn visitor_handles_path() {
         Statement::Let { body, .. } => match &body.node {
             Expr::Path(path) => {
                 assert_eq!(
-                    path.segments
+                    path.node
+                        .segments
                         .iter()
                         .map(|x| x.node.as_str())
                         .collect::<Vec<_>>(),
@@ -333,7 +334,7 @@ fn visitor_handles_list_comprehension() {
                 ..
             } => {
                 assert_eq!(var.node, "x");
-                assert!(matches!(collection.node, Expr::Global(_)));
+                assert!(matches!(collection.node, Expr::GlobalList(_)));
                 assert!(filter.is_none());
             }
             _ => panic!("Expected ListComprehension"),

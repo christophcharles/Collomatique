@@ -32,7 +32,7 @@ fn test_unknown_type_in_parameter() {
     let (_, errors, _) = analyze(input, HashMap::new(), HashMap::new());
 
     assert_eq!(errors.len(), 1);
-    assert!(matches!(errors[0], SemError::UnknownInputType { .. }));
+    assert!(matches!(errors[0], SemError::UnknownType { .. }));
 }
 
 #[test]
