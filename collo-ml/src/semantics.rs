@@ -24,6 +24,67 @@ impl ExprType {
             _ => false,
         }
     }
+
+    /// Checks if type is valid for arithmetic operations
+    pub fn is_arithmetic(&self) -> bool {
+        matches!(self, ExprType::Int | ExprType::LinExpr)
+    }
+
+    /// Checks if self can be coerced to target type.
+    /// This is DIRECTIONAL: Int can coerce to LinExpr, but not vice versa.
+    pub fn can_coerce_to(&self, target: &ExprType) -> bool {
+        match (self, target) {
+            // Exact match always works
+            (a, b) if a == b => true,
+
+            // Int → LinExpr (but NOT LinExpr → Int)
+            (ExprType::Int, ExprType::LinExpr) => true,
+
+            // Bool → Constraint (but NOT Constraint → Bool)
+            (ExprType::Bool, ExprType::Constraint) => true,
+
+            // EmptyList → [T] for any T (but NOT [T] → EmptyList)
+            (ExprType::EmptyList, ExprType::List(_)) => true,
+
+            // Recursive: [A] → [B] if A can coerce to B
+            (ExprType::List(a), ExprType::List(b)) => a.can_coerce_to(b),
+
+            // Everything else: no coercion
+            _ => false,
+        }
+    }
+
+    /// Finds a common type that both left and right can coerce to.
+    /// This is BIDIRECTIONAL and SYMMETRIC.
+    pub fn unify(left: &ExprType, right: &ExprType) -> Option<ExprType> {
+        match (left, right) {
+            // Exact match (including both EmptyList)
+            (a, b) if a == b => Some(a.clone()),
+
+            // EmptyList unifies with any List (bidirectional)
+            (ExprType::EmptyList, ExprType::List(t)) | (ExprType::List(t), ExprType::EmptyList) => {
+                Some(ExprType::List(t.clone()))
+            }
+
+            // Int/LinExpr unify to LinExpr (bidirectional)
+            (ExprType::Int, ExprType::LinExpr) | (ExprType::LinExpr, ExprType::Int) => {
+                Some(ExprType::LinExpr)
+            }
+
+            // Bool/Constraint unify to Constraint (bidirectional)
+            (ExprType::Bool, ExprType::Constraint) | (ExprType::Constraint, ExprType::Bool) => {
+                Some(ExprType::Constraint)
+            }
+
+            // Lists: unify element types recursively
+            (ExprType::List(l), ExprType::List(r)) => {
+                Self::unify(l, r).map(|unified| ExprType::List(Box::new(unified)))
+            }
+
+            // No unification possible
+            _ => None,
+        }
+    }
 }
 
 impl From<crate::ast::TypeName> for ExprType {
@@ -147,7 +208,7 @@ impl GlobalEnv {
             ExprType::Int => true,
             ExprType::LinExpr => true,
             ExprType::Constraint => true,
-            ExprType::EmptyList => false, // GenericList is used internally but is not a valid type
+            ExprType::EmptyList => false, // Emptylist is used internally but is not a valid type
             ExprType::List(sub_typ) => self.validate_type(sub_typ.as_ref()),
             ExprType::Object(typ_name) => self.defined_types.contains_key(typ_name),
         }
@@ -441,86 +502,40 @@ impl LocalEnv {
                 let right_type =
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
-                match (left_type, right_type) {
-                    (Some(ExprType::Int), Some(ExprType::Int)) => Some(ExprType::Int),
-                    (Some(ExprType::LinExpr), Some(ExprType::Int))
-                    | (Some(ExprType::Int), Some(ExprType::LinExpr))
-                    | (Some(ExprType::LinExpr), Some(ExprType::LinExpr)) => Some(ExprType::LinExpr),
-                    (Some(l), Some(r)) if l == ExprType::Int || l == ExprType::LinExpr => {
+                match (left_type.clone(), right_type) {
+                    (Some(l), Some(r)) => match ExprType::unify(&l, &r) {
+                        Some(unified) if unified.is_arithmetic() => Some(unified),
+                        _ => {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: l.clone(),
+                                found: r.clone(),
+                                context: format!(
+                                    "addition/subtraction requires Int or LinExpr, got {} and {}",
+                                    l, r
+                                ),
+                            });
+                            None
+                        }
+                    },
+                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() => Some(t),
+                    (Some(t), None) | (None, Some(t)) => {
+                        let span = if left_type.is_some() {
+                            left.span.clone()
+                        } else {
+                            right.span.clone()
+                        };
                         errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: l.clone(),
-                            found: r.clone(),
-                            context: format!(
-                                "addition/subtraction requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        Some(l) // Fallback
-                    }
-                    (Some(l), Some(r)) if r == ExprType::Int || r == ExprType::LinExpr => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: r.clone(),
-                            found: l.clone(),
-                            context: format!(
-                                "addition/subtraction requires Int or LinExpr operands, got {}",
-                                l
-                            ),
-                        });
-                        Some(r) // Fallback
-                    }
-                    (Some(l), Some(r)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
+                            span,
                             expected: ExprType::Int,
-                            found: l.clone(),
-                            context: format!(
-                                "addition/subtraction requires Int or LinExpr operands, got {}",
-                                l
-                            ),
+                            found: t.clone(),
+                            context: "addition/subtraction requires Int or LinExpr".to_string(),
                         });
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Int,
-                            found: r.clone(),
-                            context: format!(
-                                "addition/subtraction requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        Some(l) // Fallback
-                    }
-                    (Some(l), None) if l == ExprType::Int || l == ExprType::LinExpr => Some(l),
-                    (Some(l), None) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: ExprType::Int,
-                            found: l.clone(),
-                            context: format!(
-                                "addition/subtraction requires Int or LinExpr operands, got {}",
-                                l
-                            ),
-                        });
-                        Some(l) // Fallback
-                    }
-                    (None, Some(r)) if r == ExprType::Int || r == ExprType::LinExpr => Some(r),
-                    (None, Some(r)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Int,
-                            found: r.clone(),
-                            context: format!(
-                                "addition/subtraction requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        Some(r) // Fallback
+                        None
                     }
                     (None, None) => None,
                 }
             }
-
             // Multiplication: Int * Int -> Int, Int * LinExpr -> LinExpr, LinExpr * Int -> LinExpr
             // But NOT LinExpr * LinExpr (non-linear!)
             Expr::Mul(left, right) => {
@@ -529,95 +544,59 @@ impl LocalEnv {
                 let right_type =
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
-                match (left_type, right_type) {
-                    (Some(ExprType::Int), Some(ExprType::Int)) => Some(ExprType::Int),
-                    (Some(ExprType::LinExpr), Some(ExprType::Int))
-                    | (Some(ExprType::Int), Some(ExprType::LinExpr)) => Some(ExprType::LinExpr),
-                    (Some(ExprType::LinExpr), Some(ExprType::LinExpr)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: ExprType::Int,
-                            found: ExprType::LinExpr,
-                            context: "cannot multiply two linear expressions (non-linear)"
-                                .to_string(),
-                        });
-                        Some(ExprType::LinExpr) // Fallback
-                    }
-                    (Some(l), Some(r)) if l == ExprType::Int || l == ExprType::LinExpr => {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: l.clone(),
-                            found: r.clone(),
-                            context: format!(
-                                "multiplication requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        Some(l) // Fallback
-                    }
-                    (Some(l), Some(r)) if r == ExprType::Int || r == ExprType::LinExpr => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: r.clone(),
-                            found: l.clone(),
-                            context: format!(
-                                "multiplication requires Int or LinExpr operands, got {}",
-                                l
-                            ),
-                        });
-                        Some(r) // Fallback
-                    }
+                match (left_type.clone(), right_type) {
                     (Some(l), Some(r)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: ExprType::Int,
-                            found: l.clone(),
-                            context: format!(
-                                "multiplication requires Int or LinExpr operands, got {}",
-                                l
-                            ),
-                        });
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Int,
-                            found: r.clone(),
-                            context: format!(
-                                "multiplication requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        Some(l) // Fallback
+                        // Special case: LinExpr * LinExpr is non-linear
+                        if l == ExprType::LinExpr && r == ExprType::LinExpr {
+                            errors.push(SemError::TypeMismatch {
+                                span: left.span.clone(),
+                                expected: ExprType::Int,
+                                found: ExprType::LinExpr,
+                                context: "cannot multiply two linear expressions (non-linear)"
+                                    .to_string(),
+                            });
+                            return Some(ExprType::LinExpr); // Fallback
+                        }
+
+                        // Try to unify (handles Int * Int, Int * LinExpr, LinExpr * Int)
+                        match ExprType::unify(&l, &r) {
+                            Some(unified) if unified.is_arithmetic() => Some(unified),
+                            _ => {
+                                errors.push(SemError::TypeMismatch {
+                                    span: right.span.clone(),
+                                    expected: l.clone(),
+                                    found: r.clone(),
+                                    context: format!(
+                                        "multiplication requires Int or LinExpr, got {} and {}",
+                                        l, r
+                                    ),
+                                });
+                                if l.is_arithmetic() {
+                                    Some(l)
+                                } else {
+                                    Some(ExprType::Int)
+                                }
+                            }
+                        }
                     }
-                    (Some(l), None) if l == ExprType::Int || l == ExprType::LinExpr => Some(l),
-                    (Some(l), None) => {
+                    (Some(t), None) | (None, Some(t)) if t.is_arithmetic() => Some(t),
+                    (Some(t), None) | (None, Some(t)) => {
+                        let span = if left_type.is_some() {
+                            left.span.clone()
+                        } else {
+                            right.span.clone()
+                        };
                         errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
+                            span,
                             expected: ExprType::Int,
-                            found: l.clone(),
-                            context: format!(
-                                "multiplication requires Int or LinExpr operands, got {}",
-                                l
-                            ),
+                            found: t.clone(),
+                            context: "multiplication requires Int or LinExpr".to_string(),
                         });
-                        Some(l) // Fallback
-                    }
-                    (None, Some(r)) if r == ExprType::Int || r == ExprType::LinExpr => Some(r),
-                    (None, Some(r)) => {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Int,
-                            found: r.clone(),
-                            context: format!(
-                                "multiplication requires Int or LinExpr operands, got {}",
-                                r
-                            ),
-                        });
-                        Some(r) // Fallback
+                        Some(t) // Fallback
                     }
                     (None, None) => None,
                 }
             }
-
             // Division and modulo: Int // Int -> Int, Int % Int -> Int
             // These are NOT allowed on LinExpr
             Expr::Div(left, right) | Expr::Mod(left, right) => {
@@ -626,32 +605,63 @@ impl LocalEnv {
                 let right_type =
                     self.check_expr(global_env, &right.node, type_info, errors, warnings);
 
-                if let Some(typ) = &left_type {
-                    if *typ != ExprType::Int {
-                        errors.push(SemError::TypeMismatch {
-                            span: left.span.clone(),
-                            expected: ExprType::Int,
-                            found: typ.clone(),
-                            context: "division/modulo requires Int operands".to_string(),
-                        });
-                    }
-                }
+                match (left_type, right_type) {
+                    (Some(l), Some(r)) => {
+                        // Check if both can coerce to Int
+                        let l_ok = l.can_coerce_to(&ExprType::Int);
+                        let r_ok = r.can_coerce_to(&ExprType::Int);
 
-                if let Some(typ) = &right_type {
-                    if *typ != ExprType::Int {
-                        errors.push(SemError::TypeMismatch {
-                            span: right.span.clone(),
-                            expected: ExprType::Int,
-                            found: typ.clone(),
-                            context: "division/modulo requires Int operands".to_string(),
-                        });
-                    }
-                }
+                        if !l_ok {
+                            errors.push(SemError::TypeMismatch {
+                                span: left.span.clone(),
+                                expected: ExprType::Int,
+                                found: l.clone(),
+                                context: "division/modulo requires Int operands".to_string(),
+                            });
+                        }
+                        if !r_ok {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: ExprType::Int,
+                                found: r.clone(),
+                                context: "division/modulo requires Int operands".to_string(),
+                            });
+                        }
 
-                match (&left_type, &right_type) {
-                    (Some(l), _) => Some(l.clone()),
-                    (_, Some(r)) => Some(r.clone()),
-                    _ => None,
+                        // Always return Int
+                        if l_ok || r_ok {
+                            Some(ExprType::Int)
+                        } else {
+                            None
+                        }
+                    }
+                    (Some(t), None) => {
+                        if !t.can_coerce_to(&ExprType::Int) {
+                            errors.push(SemError::TypeMismatch {
+                                span: left.span.clone(),
+                                expected: ExprType::Int,
+                                found: t.clone(),
+                                context: "division/modulo requires Int operands".to_string(),
+                            });
+                            None
+                        } else {
+                            Some(ExprType::Int)
+                        }
+                    }
+                    (None, Some(t)) => {
+                        if !t.can_coerce_to(&ExprType::Int) {
+                            errors.push(SemError::TypeMismatch {
+                                span: right.span.clone(),
+                                expected: ExprType::Int,
+                                found: t.clone(),
+                                context: "division/modulo requires Int operands".to_string(),
+                            });
+                            None
+                        } else {
+                            Some(ExprType::Int)
+                        }
+                    }
+                    (None, None) => None,
                 }
             }
 
@@ -1763,11 +1773,12 @@ impl GlobalEnv {
                 if let Some(body_type) = body_type_opt {
                     let out_typ = ExprType::from(output_type.clone());
 
-                    // Allow coercion: Int -> LinExpr, Bool -> Constraint
+                    // Allow coercion: Int -> LinExpr, Bool -> Constraint, EmptyList -> List
                     let types_match = match (out_typ.clone(), body_type.clone()) {
                         (a, b) if a == b => true,
                         (ExprType::LinExpr, ExprType::Int) => true, // Coerce Int to LinExpr
                         (ExprType::Constraint, ExprType::Bool) => true, // Coerce Bool to Constraint
+                        (ExprType::List(_), ExprType::EmptyList) => true, // Coerce EmptyList to typed list
                         _ => false,
                     };
 
